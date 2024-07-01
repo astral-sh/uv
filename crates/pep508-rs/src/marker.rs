@@ -681,7 +681,6 @@ impl MarkerEnvironment {
         python_version,
         sys_platform
     ))]
-    #[allow(clippy::too_many_arguments)]
     fn py_new(
         implementation_name: &str,
         implementation_version: &str,

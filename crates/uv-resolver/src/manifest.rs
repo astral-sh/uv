@@ -50,7 +50,6 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Constraints,

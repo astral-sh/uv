@@ -25,7 +25,6 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
     command: ExternalCommand,
     python: Option<String>,

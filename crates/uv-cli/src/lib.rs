@@ -1205,6 +1205,9 @@ pub struct PipUninstallArgs {
     /// Uninstall packages from the specified `--prefix` directory.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
+
+    #[command(flatten)]
+    pub compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -1255,6 +1258,9 @@ pub struct PipFreezeArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    #[command(flatten)]
+    pub compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -1407,6 +1413,9 @@ pub struct PipShowArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    #[command(flatten)]
+    pub compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -1473,6 +1482,9 @@ pub struct PipTreeArgs {
 
     #[arg(long, overrides_with("system"))]
     pub no_system: bool,
+
+    #[command(flatten)]
+    pub compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]

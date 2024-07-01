@@ -921,6 +921,7 @@ impl PipUninstallSettings {
             no_break_system_packages,
             target,
             prefix,
+            compat_args: _,
         } = args;
 
         Self {
@@ -960,6 +961,7 @@ impl PipFreezeSettings {
             python,
             system,
             no_system,
+            compat_args: _,
         } = args;
 
         Self {
@@ -1040,6 +1042,7 @@ impl PipShowSettings {
             python,
             system,
             no_system,
+            compat_args: _,
         } = args;
 
         Self {
@@ -1082,6 +1085,7 @@ impl PipTreeSettings {
             python,
             system,
             no_system,
+            compat_args: _,
         } = args;
 
         Self {

@@ -50,7 +50,6 @@ impl<'a> Planner<'a> {
     /// The install plan will also respect the required hashes, such that it will never return a
     /// cached distribution that does not match the required hash. Like pip, though, it _will_
     /// return an _installed_ distribution that does not match the required hash.
-    #[allow(clippy::too_many_arguments)]
     pub fn build(
         self,
         mut site_packages: SitePackages,
