@@ -23,9 +23,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, enabled, instrument, trace, warn, Level};
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist,
-    VersionOrUrlRef,
+    BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
+    IncompatibleWheel, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist,
+    ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -155,7 +155,6 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             database,
             flat_index,
             tags,
-            python_requirement.clone(),
             AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
@@ -921,6 +920,77 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )));
             }
         };
+
+        let incompatibility = match dist {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. }
+            | CompatibleDist::IncompatibleWheel { sdist, .. } => {
+                // Source distributions must meet both the _target_ Python version and the
+                // _installed_ Python version (to build successfully).
+                sdist
+                    .file
+                    .requires_python
+                    .as_ref()
+                    .and_then(|requires_python| {
+                        if let Some(target) = self.python_requirement.target() {
+                            if !target.is_compatible_with(requires_python) {
+                                return Some(IncompatibleDist::Source(
+                                    IncompatibleSource::RequiresPython(
+                                        requires_python.clone(),
+                                        PythonRequirementKind::Target,
+                                    ),
+                                ));
+                            }
+                        }
+                        if !requires_python.contains(self.python_requirement.installed()) {
+                            return Some(IncompatibleDist::Source(
+                                IncompatibleSource::RequiresPython(
+                                    requires_python.clone(),
+                                    PythonRequirementKind::Installed,
+                                ),
+                            ));
+                        }
+                        None
+                    })
+            }
+            CompatibleDist::CompatibleWheel { wheel, .. } => {
+                // Wheels must meet the _target_ Python version.
+                wheel
+                    .file
+                    .requires_python
+                    .as_ref()
+                    .and_then(|requires_python| {
+                        if let Some(target) = self.python_requirement.target() {
+                            if !target.is_compatible_with(requires_python) {
+                                return Some(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::RequiresPython(
+                                        requires_python.clone(),
+                                        PythonRequirementKind::Target,
+                                    ),
+                                ));
+                            }
+                        } else {
+                            if !requires_python.contains(self.python_requirement.installed()) {
+                                return Some(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::RequiresPython(
+                                        requires_python.clone(),
+                                        PythonRequirementKind::Installed,
+                                    ),
+                                ));
+                            }
+                        }
+                        None
+                    })
+            }
+        };
+
+        // The version is incompatible due to its Python requirement.
+        if let Some(incompatibility) = incompatibility {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::IncompatibleDist(incompatibility),
+            )));
+        }
 
         let filename = match dist.for_installation() {
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
