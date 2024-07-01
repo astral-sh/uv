@@ -20,7 +20,7 @@ fn get_tool_version(
 ) -> Result<String, Box<dyn std::error::Error>> {
     let tool_path = installed_tools.root().join(name);
     let cache = Cache::from_path(installed_tools.root());
-    let env = PythonEnvironment::from_root(&tool_path, &cache)
+    let env = PythonEnvironment::from_root(tool_path, &cache)
         .map_err(|_| "Failed to get python environment")?;
     let name_ = PackageName::from_str(name).map_err(|_| "Failed to convert name to PackageName")?;
     let packages = SitePackages::from_environment(&env)
