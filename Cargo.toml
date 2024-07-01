@@ -104,7 +104,7 @@ pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "b4435e2f3af10dab2336a0345b35dcd622699d06" }
-pyo3 = { version = "0.21.0" }
+pyo3 = { version = "0.22.0" }
 pyo3-log = { version = "0.10.0" }
 quote = { version = "1.0.36" }
 rayon = { version = "1.8.0" }
