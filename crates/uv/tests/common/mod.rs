@@ -376,6 +376,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv toolchain dir` command with options shared across scenarios.
+    pub fn toolchain_dir(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("toolchain").arg("dir");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> Command {
         let mut command = Command::new(get_bin());
@@ -416,6 +424,14 @@ impl TestContext {
     pub fn tool_list(&self) -> std::process::Command {
         let mut command = std::process::Command::new(get_bin());
         command.arg("tool").arg("list");
+        self.add_shared_args(&mut command);
+        command
+    }
+
+    /// Create a `uv tool dir` command with options shared across scenarios.
+    pub fn tool_dir(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("tool").arg("dir");
         self.add_shared_args(&mut command);
         command
     }

@@ -1889,6 +1889,8 @@ pub enum ToolCommand {
     List(ToolListArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
+    /// Show the tools directory.
+    Dir,
 }
 
 #[derive(Args)]
@@ -2013,6 +2015,9 @@ pub enum ToolchainCommand {
     /// Search for a toolchain
     #[command(disable_version_flag = true)]
     Find(ToolchainFindArgs),
+
+    /// Show the toolchains directory.
+    Dir,
 }
 
 #[derive(Args)]
