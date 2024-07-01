@@ -171,3 +171,95 @@ fn run_args() -> Result<()> {
 
     Ok(())
 }
+
+/// Run a PEP 723-compatible script. The script should take precedence over the workspace
+/// dependencies.
+#[test]
+fn run_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        Prepared 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + iniconfig==2.0.0
+        "###);
+
+    // Otherwise, the script requirements should _not_ be available, but the project requirements
+    // should.
+    let test_non_script = context.temp_dir.child("main.py");
+    test_non_script.write_str(indoc! { r"
+        import iniconfig
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import iniconfig
+    ModuleNotFoundError: No module named 'iniconfig'
+    "###);
+
+    // But the script should be runnable.
+    let test_non_script = context.temp_dir.child("main.py");
+    test_non_script.write_str(indoc! { r#"
+        import idna
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "###);
+
+    Ok(())
+}

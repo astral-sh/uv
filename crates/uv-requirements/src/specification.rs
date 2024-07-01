@@ -321,4 +321,15 @@ impl RequirementsSpecification {
     ) -> Result<Self> {
         Self::from_sources(requirements, &[], &[], client_builder).await
     }
+
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].
+    pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            ..Self::default()
+        }
+    }
 }

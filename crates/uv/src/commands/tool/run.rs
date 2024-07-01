@@ -11,9 +11,9 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
-use uv_requirements::RequirementsSource;
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_toolchain::{
     EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
 };
@@ -60,6 +60,13 @@ pub(crate) async fn run(
         .chain(with.into_iter().map(RequirementsSource::from_package))
         .collect::<Vec<_>>();
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let spec =
+        RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
@@ -93,7 +100,7 @@ pub(crate) async fn run(
     let ephemeral_env = Some(
         update_environment(
             venv,
-            &requirements,
+            spec,
             &settings,
             preview,
             connectivity,
