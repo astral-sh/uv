@@ -27,8 +27,9 @@ uv-warnings = { workspace = true }
 dirs-sys = { workspace = true }
 fs-err = { workspace = true }
 path-slash = { workspace = true }
+pathdiff = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-toml = { workspace = true } 
-toml_edit = { workspace = true } 
+toml = { workspace = true }
+toml_edit = { workspace = true }
 tracing = { workspace = true }

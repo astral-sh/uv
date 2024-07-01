@@ -17,7 +17,6 @@ use zip::ZipWriter;
 use pypi_types::DirectUrl;
 use uv_fs::{relative_to, Simplified};
 
-use crate::linker::entrypoint_path;
 use crate::record::RecordEntry;
 use crate::script::Script;
 use crate::{Error, Layout};
@@ -244,6 +243,24 @@ fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
             .unwrap_or_else(|| python_executable.to_path_buf())
     } else {
         python_executable.to_path_buf()
+    }
+}
+
+/// Determine the absolute path to an entrypoint script.
+fn entrypoint_path(entrypoint: &Script, layout: &Layout) -> PathBuf {
+    if cfg!(windows) {
+        // On windows we actually build an .exe wrapper
+        let script_name = entrypoint
+            .name
+            // FIXME: What are the in-reality rules here for names?
+            .strip_suffix(".py")
+            .unwrap_or(&entrypoint.name)
+            .to_string()
+            + ".exe";
+
+        layout.scheme.scripts.join(script_name)
+    } else {
+        layout.scheme.scripts.join(&entrypoint.name)
     }
 }
 
@@ -632,7 +649,7 @@ pub(crate) fn extra_dist_info(
 
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
-pub(crate) fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
+pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
     csv::ReaderBuilder::new()
         .has_headers(false)
         .escape(Some(b'"'))
