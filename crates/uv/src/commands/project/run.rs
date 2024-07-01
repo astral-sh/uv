@@ -425,7 +425,7 @@ impl From<ExternalCommand> for RunCommand {
         let target_path = PathBuf::from(&target);
         if target_path
             .extension()
-            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
             && target_path.exists()
         {
             Self::Python(target_path, args.to_vec())

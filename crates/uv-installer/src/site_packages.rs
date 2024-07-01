@@ -52,9 +52,10 @@ impl SitePackages {
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
-                                    || entry.path().extension().map_or(false, |ext| {
-                                        ext == "egg-link" || ext == "egg-info"
-                                    }))
+                                    || entry
+                                        .path()
+                                        .extension()
+                                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
                                 .then_some(Ok(entry.path())),
                                 Err(err) => Some(Err(err)),
                             },
