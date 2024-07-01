@@ -555,7 +555,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     .map(ToString::to_string)
                                     .join(", ")
                             );
-                            assert!(forks.len() >= 2);
+
                             // This is a somewhat tortured technique to ensure
                             // that our resolver state is only cloned as much
                             // as it needs to be. We basically move the state
@@ -2422,7 +2422,6 @@ impl Dependencies {
                     continue;
                 }
             };
-            assert!(fork_groups.forks.len() >= 2, "expected definitive fork");
             let mut new_forks: Vec<Fork> = vec![];
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
@@ -2600,7 +2599,7 @@ impl<'a> PossibleForks<'a> {
         let PossibleForks::PossiblyForking(ref fork_groups) = *self else {
             return false;
         };
-        fork_groups.forks.len() > 1
+        fork_groups.has_fork()
     }
 
     /// Consumes this possible set of forks and converts a "possibly forking"
@@ -2613,9 +2612,8 @@ impl<'a> PossibleForks<'a> {
         let PossibleForks::PossiblyForking(ref fork_groups) = self else {
             return self;
         };
-        if fork_groups.forks.len() == 1 {
+        if !fork_groups.has_fork() {
             self.make_no_forks_possible();
-            return self;
         }
         self
     }
@@ -2677,6 +2675,23 @@ impl<'a> PossibleForkGroups<'a> {
         self.forks
             .iter_mut()
             .find(|fork| fork.is_overlapping(marker))
+    }
+
+    /// Returns `true` if the fork group has a fork.
+    fn has_fork(&self) -> bool {
+        if self.forks.len() > 1 {
+            return true;
+        }
+
+        if self.forks.iter().any(|fork| {
+            fork.packages
+                .iter()
+                .any(|(_, markers)| requires_python_marker(markers).is_some())
+        }) {
+            return true;
+        }
+
+        false
     }
 }
 
