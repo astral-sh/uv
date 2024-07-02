@@ -5,7 +5,7 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{Workspace, DEV_DEPENDENCIES};
+use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_git::ResolvedRepositoryReference;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
@@ -36,11 +36,11 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
+    let project = VirtualProject::discover(&std::env::current_dir()?, None).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(
-        &workspace,
+        &project,
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
         toolchain_fetch,
@@ -54,7 +54,7 @@ pub(crate) async fn lock(
 
     // Perform the lock operation.
     match do_lock(
-        &workspace,
+        &project,
         &interpreter,
         settings.as_ref(),
         &SharedState::default(),
@@ -82,7 +82,7 @@ pub(crate) async fn lock(
 
 /// Lock the project requirements into a lockfile.
 pub(super) async fn do_lock(
-    workspace: &Workspace,
+    project: &VirtualProject,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
@@ -108,12 +108,12 @@ pub(super) async fn do_lock(
     } = settings;
 
     // When locking, include the project itself (as editable).
-    let requirements = workspace
+    let requirements = project
         .members_as_requirements()
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
         .collect();
-    let overrides = workspace
+    let overrides = project
         .overrides()
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
@@ -124,7 +124,7 @@ pub(super) async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    let requires_python = find_requires_python(workspace)?;
+    let requires_python = find_requires_python(project)?;
 
     let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {
@@ -178,7 +178,7 @@ pub(super) async fn do_lock(
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = read_lockfile(workspace, upgrade).await?;
+    let LockedRequirements { preferences, git } = read_lockfile(project, upgrade).await?;
 
     // Populate the Git resolver.
     for ResolvedRepositoryReference { reference, sha } in git {
@@ -240,7 +240,7 @@ pub(super) async fn do_lock(
     // Write the lockfile to disk.
     let lock = Lock::from_resolution_graph(&resolution)?;
     let encoded = lock.to_toml()?;
-    fs_err::tokio::write(workspace.root().join("uv.lock"), encoded.as_bytes()).await?;
+    fs_err::tokio::write(project.lockfile(), encoded.as_bytes()).await?;
 
     Ok(lock)
 }

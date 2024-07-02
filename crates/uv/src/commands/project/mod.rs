@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, Workspace};
+use uv_distribution::{DistributionDatabase, VirtualProject};
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -78,23 +78,29 @@ pub(crate) enum ProjectError {
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
 pub(crate) fn find_requires_python(
-    workspace: &Workspace,
+    project: &VirtualProject,
 ) -> Result<Option<RequiresPython>, uv_resolver::RequiresPythonError> {
-    RequiresPython::union(workspace.packages().values().filter_map(|member| {
-        member
-            .pyproject_toml()
-            .project
-            .as_ref()
-            .and_then(|project| project.requires_python.as_ref())
-    }))
+    RequiresPython::union(
+        project
+            .workspace()
+            .packages()
+            .values()
+            .filter_map(|member| {
+                member
+                    .pyproject_toml()
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.requires_python.as_ref())
+            }),
+    )
 }
 
 /// Find the virtual environment for the current project.
 fn find_environment(
-    workspace: &Workspace,
+    project: &VirtualProject,
     cache: &Cache,
 ) -> Result<PythonEnvironment, uv_toolchain::Error> {
-    PythonEnvironment::from_root(workspace.venv(), cache)
+    PythonEnvironment::from_root(project.venv(), cache)
 }
 
 /// Check if the given interpreter satisfies the project's requirements.
@@ -124,7 +130,7 @@ pub(crate) enum FoundInterpreter {
 impl FoundInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
-        workspace: &Workspace,
+        project: &VirtualProject,
         python_request: Option<ToolchainRequest>,
         toolchain_preference: ToolchainPreference,
         toolchain_fetch: ToolchainFetch,
@@ -133,7 +139,7 @@ impl FoundInterpreter {
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
-        let requires_python = find_requires_python(workspace)?;
+        let requires_python = find_requires_python(project)?;
 
         // (1) Explicit request from user
         let python_request = if let Some(request) = python_request {
@@ -152,7 +158,7 @@ impl FoundInterpreter {
         };
 
         // Read from the virtual environment first.
-        match find_environment(workspace, cache) {
+        match find_environment(project, cache) {
             Ok(venv) => {
                 if interpreter_meets_requirements(
                     venv.interpreter(),
@@ -221,7 +227,7 @@ impl FoundInterpreter {
 
 /// Initialize a virtual environment for the current project.
 pub(crate) async fn get_or_init_environment(
-    workspace: &Workspace,
+    project: &VirtualProject,
     python: Option<ToolchainRequest>,
     toolchain_preference: ToolchainPreference,
     toolchain_fetch: ToolchainFetch,
@@ -231,7 +237,7 @@ pub(crate) async fn get_or_init_environment(
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
     match FoundInterpreter::discover(
-        workspace,
+        project,
         python,
         toolchain_preference,
         toolchain_fetch,
@@ -247,7 +253,7 @@ pub(crate) async fn get_or_init_environment(
 
         // Otherwise, create a virtual environment with the discovered interpreter.
         FoundInterpreter::Interpreter(interpreter) => {
-            let venv = workspace.venv();
+            let venv = project.venv();
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
             match fs_err::remove_dir_all(&venv) {

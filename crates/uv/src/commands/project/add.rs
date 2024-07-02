@@ -52,7 +52,7 @@ pub(crate) async fn add(
     }
 
     // Find the project in the workspace.
-    let project = if let Some(package) = package {
+    let project_workspace = if let Some(package) = package {
         Workspace::discover(&std::env::current_dir()?, None)
             .await?
             .with_current_project(package.clone())
@@ -61,9 +61,11 @@ pub(crate) async fn add(
         ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
     };
 
+    let project = &VirtualProject::Project(project_workspace);
+
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
-        project.workspace(),
+        project,
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
         toolchain_fetch,
@@ -151,7 +153,7 @@ pub(crate) async fn add(
     .await?;
 
     // Add the requirements to the `pyproject.toml`.
-    let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
+    let mut pyproject = PyProjectTomlMut::from_toml(project.project().unwrap().pyproject_toml())?;
     for mut req in requirements {
         // Add the specified extras.
         req.extras.extend(extras.iter().cloned());
@@ -204,7 +206,7 @@ pub(crate) async fn add(
 
     // Save the modified `pyproject.toml`.
     fs_err::write(
-        project.current_project().root().join("pyproject.toml"),
+        project.project().unwrap().root().join("pyproject.toml"),
         pyproject.to_string(),
     )?;
 
@@ -213,7 +215,7 @@ pub(crate) async fn add(
 
     // Lock and sync the environment.
     let lock = project::lock::do_lock(
-        project.workspace(),
+        project,
         venv.interpreter(),
         settings.as_ref().into(),
         &state,
@@ -232,7 +234,7 @@ pub(crate) async fn add(
     let dev = true;
 
     project::sync::do_sync(
-        &VirtualProject::Project(project),
+        project,
         &venv,
         &lock,
         extras,

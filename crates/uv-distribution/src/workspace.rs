@@ -171,86 +171,10 @@ impl Workspace {
         })
     }
 
-    /// Returns the set of requirements that include all packages in the workspace.
-    pub fn members_as_requirements(&self) -> Vec<Requirement> {
-        self.packages
-            .values()
-            .filter_map(|member| {
-                let project = member.pyproject_toml.project.as_ref()?;
-                // Extract the extras available in the project.
-                let extras = project
-                    .optional_dependencies
-                    .as_ref()
-                    .map(|optional_dependencies| {
-                        // It's a `BTreeMap` so the keys are sorted.
-                        optional_dependencies.keys().cloned().collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-
-                let url = VerbatimUrl::from_path(&member.root)
-                    .expect("path is valid URL")
-                    .with_given(member.root.to_string_lossy());
-                Some(Requirement {
-                    name: project.name.clone(),
-                    extras,
-                    marker: None,
-                    source: RequirementSource::Directory {
-                        install_path: member.root.clone(),
-                        lock_path: member
-                            .root
-                            .strip_prefix(&self.root)
-                            .expect("Project must be below workspace root")
-                            .to_path_buf(),
-                        editable: true,
-                        url,
-                    },
-                    origin: None,
-                })
-            })
-            .collect()
-    }
-
-    /// Returns the set of overrides for the workspace.
-    pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.root())
-        else {
-            return vec![];
-        };
-
-        let Some(overrides) = workspace_package
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.override_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        overrides
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
-    }
-
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn root(&self) -> &PathBuf {
         &self.root
-    }
-
-    /// The path to the workspace virtual environment.
-    pub fn venv(&self) -> PathBuf {
-        self.root.join(".venv")
     }
 
     /// The members of the workspace.
@@ -987,6 +911,99 @@ impl VirtualProject {
             VirtualProject::Project(project) => Some(project.project_name()),
             VirtualProject::Virtual(_) => None,
         }
+    }
+
+    /// Return the [`WorkspaceMember`] of the project, if it's not a virtual workspace.
+    pub fn project(&self) -> Option<&WorkspaceMember> {
+        match self {
+            VirtualProject::Project(project) => {
+                self.workspace().packages.get(project.project_name())
+            }
+            VirtualProject::Virtual(_) => None,
+        }
+    }
+
+    /// Returns the set of requirements that include all packages in the workspace.
+    pub fn members_as_requirements(&self) -> Vec<Requirement> {
+        self.workspace()
+            .packages
+            .values()
+            .filter_map(|member| {
+                let project = member.pyproject_toml.project.as_ref()?;
+                // Extract the extras available in the project.
+                let extras = project
+                    .optional_dependencies
+                    .as_ref()
+                    .map(|optional_dependencies| {
+                        // It's a `BTreeMap` so the keys are sorted.
+                        optional_dependencies.keys().cloned().collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+
+                let url = VerbatimUrl::from_path(&member.root)
+                    .expect("path is valid URL")
+                    .with_given(member.root.to_string_lossy());
+                Some(Requirement {
+                    name: project.name.clone(),
+                    extras,
+                    marker: None,
+                    source: RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        lock_path: member
+                            .root
+                            .strip_prefix(&self.workspace().root)
+                            .expect("Project must be below workspace root")
+                            .to_path_buf(),
+                        editable: true,
+                        url,
+                    },
+                    origin: None,
+                })
+            })
+            .collect()
+    }
+
+    /// Returns the set of overrides for the workspace.
+    pub fn overrides(&self) -> Vec<Requirement> {
+        let Some(workspace_package) = self
+            .workspace()
+            .packages
+            .values()
+            .find(|workspace_package| workspace_package.root() == self.workspace().root())
+        else {
+            return vec![];
+        };
+
+        let Some(overrides) = workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.override_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        overrides
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
+            })
+            .collect()
+    }
+
+    /// The path to the workspace virtual environment.
+    pub fn venv(&self) -> PathBuf {
+        self.workspace().root().join(".venv")
+    }
+
+    /// The path to the workspace lockfile
+    pub fn lockfile(&self) -> PathBuf {
+        self.workspace().root().join("uv.lock")
     }
 }
 
