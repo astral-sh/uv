@@ -250,7 +250,7 @@ fn noop() -> Result<()> {
     Ok(())
 }
 
-/// Attempt to sync an empty set of requirements
+/// Attempt to sync an empty set of requirements.
 #[test]
 fn pip_sync_empty() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -258,7 +258,7 @@ fn pip_sync_empty() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
@@ -270,7 +270,7 @@ fn pip_sync_empty() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--allow-empty-requirements"), @r###"
     success: true
@@ -284,16 +284,17 @@ fn pip_sync_empty() -> Result<()> {
     "###
     );
 
-    // Install a package
+    // Install a package.
     requirements_txt.write_str("iniconfig==2.0.0")?;
-    sync_without_exclude_newer(&context)
+    context
+        .pip_sync()
         .arg("requirements.txt")
         .assert()
         .success();
 
-    // Now, syncing should remove the package
+    // Now, syncing should remove the package.
     requirements_txt.write_str("")?;
-    uv_snapshot!(sync_without_exclude_newer(&context)
+    uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--allow-empty-requirements"), @r###"
     success: true
