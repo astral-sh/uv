@@ -4,7 +4,7 @@ use anyhow::Result;
 use axoupdater::{AxoUpdater, AxoupdateError};
 use owo_colors::OwoColorize;
 use tracing::debug;
-use uv_client::BetterReqwestError;
+use uv_client::WrappedReqwestError;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -103,7 +103,7 @@ pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
         }
         Err(err) => {
             return Err(if let AxoupdateError::Reqwest(err) = err {
-                BetterReqwestError::from(err).into()
+                WrappedReqwestError::from(err).into()
             } else {
                 err.into()
             });

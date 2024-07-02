@@ -3118,8 +3118,7 @@ dependencies = [
 [[package]]
 name = "reqwest-middleware"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39346a33ddfe6be00cbc17a34ce996818b97b230b87229f10114693becca1268"
+source = "git+https://github.com/konstin/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe#21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3132,9 +3131,8 @@ dependencies = [
 
 [[package]]
 name = "reqwest-retry"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf2a94ba69ceb30c42079a137e2793d6d0f62e581a24c06cd4e9bb32e973c7da"
+version = "0.7.0"
+source = "git+https://github.com/konstin/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe#21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3147,6 +3145,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "retry-policies",
+ "thiserror",
  "tokio",
  "tracing",
  "wasm-timer",

@@ -8,7 +8,7 @@ use crate::metadata::MetadataError;
 use distribution_filename::WheelFilenameError;
 use pep440_rs::Version;
 use pypi_types::HashDigest;
-use uv_client::BetterReqwestError;
+use uv_client::WrappedReqwestError;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
@@ -31,7 +31,7 @@ pub enum Error {
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
-    Reqwest(#[from] BetterReqwestError),
+    Reqwest(#[from] WrappedReqwestError),
     #[error(transparent)]
     Client(#[from] uv_client::Error),
 
@@ -130,7 +130,7 @@ pub enum Error {
 
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
-        Self::Reqwest(BetterReqwestError::from(error))
+        Self::Reqwest(WrappedReqwestError::from(error))
     }
 }
 
@@ -139,7 +139,7 @@ impl From<reqwest_middleware::Error> for Error {
         match error {
             reqwest_middleware::Error::Middleware(error) => Self::ReqwestMiddlewareError(error),
             reqwest_middleware::Error::Reqwest(error) => {
-                Self::Reqwest(BetterReqwestError::from(error))
+                Self::Reqwest(WrappedReqwestError::from(error))
             }
         }
     }

@@ -10,7 +10,7 @@ use crate::platform::{self, Arch, Libc, Os};
 use crate::toolchain::ToolchainKey;
 use crate::{Interpreter, PythonVersion, ToolchainRequest, VersionRequest};
 use thiserror::Error;
-use uv_client::BetterReqwestError;
+use uv_client::WrappedReqwestError;
 
 use futures::TryStreamExt;
 
@@ -30,7 +30,7 @@ pub enum Error {
     #[error("Invalid request key, too many parts: {0}")]
     TooManyParts(String),
     #[error("Download failed")]
-    NetworkError(#[from] BetterReqwestError),
+    NetworkError(#[from] WrappedReqwestError),
     #[error("Download failed")]
     NetworkMiddlewareError(#[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
@@ -450,7 +450,7 @@ impl PythonDownload {
 
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
-        Self::NetworkError(BetterReqwestError::from(error))
+        Self::NetworkError(WrappedReqwestError::from(error))
     }
 }
 
@@ -459,7 +459,7 @@ impl From<reqwest_middleware::Error> for Error {
         match error {
             reqwest_middleware::Error::Middleware(error) => Self::NetworkMiddlewareError(error),
             reqwest_middleware::Error::Reqwest(error) => {
-                Self::NetworkError(BetterReqwestError::from(error))
+                Self::NetworkError(WrappedReqwestError::from(error))
             }
         }
     }
