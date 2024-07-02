@@ -111,7 +111,7 @@ fn tool_list_bad_environment() -> Result<()> {
         .success();
 
     // Remove the python interpreter for black
-    fs::remove_dir_all(tool_dir.path().join("black/bin").as_os_str())?;
+    fs::remove_dir_all(tool_dir.path().join("black").join("bin").as_os_str())?;
 
     uv_snapshot!(context.filters(), context.tool_list()
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
