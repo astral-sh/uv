@@ -160,6 +160,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -287,6 +288,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -415,6 +417,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -575,6 +578,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -681,6 +685,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -819,6 +824,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -994,6 +1000,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -1168,6 +1175,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -1315,6 +1323,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -1443,6 +1452,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -1609,6 +1619,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -1758,6 +1769,138 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow `--trusted-host` in configuration files.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_trusted_host() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a `pyproject.toml` file to the directory.
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+
+        [tool.uv.pip]
+        trusted-host = "pypi.org test.pypi.org"
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("tqdm")?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("--show-settings")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        connectivity: Online,
+        isolated: false,
+        show_settings: true,
+        preview: Disabled,
+        toolchain_preference: OnlySystem,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        overrides_from_workspace: [],
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                index: None,
+                extra_index: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            output_file: None,
+            no_strip_extras: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            setup_py: Pep517,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            require_hashes: false,
+            upgrade: None,
+            reinstall: None,
+            concurrency: Concurrency {
+                downloads: 50,
+                builds: 16,
+                installs: 8,
+            },
+            trusted_host: Some(
+                "pypi.org test.pypi.org",
+            ),
         },
     }
 
@@ -1886,6 +2029,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -1997,6 +2141,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -2108,6 +2253,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 
@@ -2221,6 +2367,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 builds: 16,
                 installs: 8,
             },
+            trusted_host: None,
         },
     }
 

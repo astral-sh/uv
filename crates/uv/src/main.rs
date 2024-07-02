@@ -426,6 +426,7 @@ async fn run() -> Result<ExitStatus> {
                 cache,
                 args.dry_run,
                 printer,
+                args.settings.trusted_host,
             )
             .await
         }

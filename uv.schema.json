@@ -238,6 +238,12 @@
         }
       ]
     },
+    "trusted-host": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "upgrade": {
       "type": [
         "boolean",
@@ -767,6 +773,12 @@
           ]
         },
         "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trusted-host": {
           "type": [
             "string",
             "null"

@@ -74,6 +74,7 @@ pub(crate) async fn pip_install(
     cache: Cache,
     dry_run: bool,
     printer: Printer,
+    trusted_host: Option<String>,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -259,6 +260,7 @@ pub(crate) async fn pip_install(
         .keyring(keyring_provider)
         .markers(&markers)
         .platform(interpreter.platform())
+        .trusted_host(trusted_host.as_deref())
         .build();
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.

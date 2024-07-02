@@ -1007,6 +1007,7 @@ impl VenvSettings {
             exclude_newer,
             link_mode,
             compat_args: _,
+            trusted_host,
         } = args;
 
         Self {
@@ -1046,6 +1047,7 @@ pub(crate) struct InstallerSettings {
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: Reinstall,
     pub(crate) build_options: BuildOptions,
+    pub(crate) trusted_host: Option<String>,
 }
 
 impl InstallerSettings {
@@ -1072,6 +1074,7 @@ impl InstallerSettings {
             no_build_package,
             no_binary,
             no_binary_package,
+            trusted_host,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1123,6 +1126,7 @@ impl InstallerSettings {
                         .unwrap_or_default(),
                 ),
             ),
+            trusted_host: args.trusted_host.combine(trusted_host),
         }
     }
 }
@@ -1144,6 +1148,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: Upgrade,
     pub(crate) build_options: BuildOptions,
+    pub(crate) trusted_host: Option<String>,
 }
 
 impl ResolverSettings {
@@ -1170,6 +1175,7 @@ impl ResolverSettings {
             no_build_package,
             no_binary,
             no_binary_package,
+            trusted_host,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1220,6 +1226,7 @@ impl ResolverSettings {
                         .unwrap_or_default(),
                 ),
             ),
+            trusted_host: args.trusted_host.combine(trusted_host),
         }
     }
 }
@@ -1244,6 +1251,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
     pub(crate) build_options: BuildOptions,
+    pub(crate) trusted_host: Option<String>,
 }
 
 impl ResolverInstallerSettings {
@@ -1273,6 +1281,7 @@ impl ResolverInstallerSettings {
             no_build_package,
             no_binary,
             no_binary_package,
+            trusted_host,
         } = filesystem
             .map(FilesystemOptions::into_options)
             .map(|options| options.top_level)
@@ -1333,6 +1342,7 @@ impl ResolverInstallerSettings {
                         .unwrap_or_default(),
                 ),
             ),
+            trusted_host: args.trusted_host.combine(trusted_host),
         }
     }
 }
@@ -1382,6 +1392,7 @@ pub(crate) struct PipSettings {
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
     pub(crate) concurrency: Concurrency,
+    pub(crate) trusted_host: Option<String>,
 }
 
 impl PipSettings {
@@ -1440,6 +1451,7 @@ impl PipSettings {
             concurrent_builds,
             concurrent_downloads,
             concurrent_installs,
+            trusted_host,
         } = pip.unwrap_or_default();
 
         let ResolverInstallerOptions {
@@ -1463,6 +1475,7 @@ impl PipSettings {
             no_build_package: top_level_no_build_package,
             no_binary: top_level_no_binary,
             no_binary_package: top_level_no_binary_package,
+            trusted_host: top_level_trusted_host,
         } = top_level;
 
         // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
@@ -1485,6 +1498,7 @@ impl PipSettings {
         let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
         let reinstall = reinstall.combine(top_level_reinstall);
         let reinstall_package = reinstall_package.combine(top_level_reinstall_package);
+        let trusted_host = trusted_host.combine(top_level_trusted_host);
 
         Self {
             index_locations: IndexLocations::new(
@@ -1632,6 +1646,7 @@ impl PipSettings {
                     top_level_no_build_package.unwrap_or_default(),
                 )),
             ),
+            trusted_host: args.trusted_host.combine(trusted_host),
         }
     }
 }
@@ -1711,6 +1726,7 @@ impl From<ResolverArgs> for PipOptions {
             config_setting,
             exclude_newer,
             link_mode,
+            trusted_host,
         } = args;
 
         Self {
@@ -1746,6 +1762,7 @@ impl From<InstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode,
             no_compile_bytecode,
+            ..
         } = args;
 
         Self {
@@ -1782,6 +1799,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode,
             no_compile_bytecode,
+            trusted_host,
         } = args;
 
         Self {
@@ -1844,6 +1862,7 @@ fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -> In
         link_mode,
         compile_bytecode,
         no_compile_bytecode,
+        trusted_host,
     } = installer_args;
 
     let BuildArgs {
@@ -1881,6 +1900,7 @@ fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -> In
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
         no_binary_package: Some(no_binary_package),
+        trusted_host,
     }
 }
 
@@ -1899,6 +1919,7 @@ fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> Resol
         config_setting,
         exclude_newer,
         link_mode,
+        trusted_host,
     } = resolver_args;
 
     let BuildArgs {
@@ -1942,6 +1963,7 @@ fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> Resol
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
         no_binary_package: Some(no_binary_package),
+        trusted_host,
     }
 }
 
@@ -1968,6 +1990,7 @@ fn resolver_installer_options(
         link_mode,
         compile_bytecode,
         no_compile_bytecode,
+        trusted_host,
     } = resolver_installer_args;
 
     let BuildArgs {
@@ -2014,5 +2037,6 @@ fn resolver_installer_options(
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
         no_binary_package: Some(no_binary_package),
+        trusted_host,
     }
 }

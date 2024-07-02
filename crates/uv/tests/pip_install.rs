@@ -1364,6 +1364,38 @@ fn install_extra_index_url_has_priority() {
     context.assert_command("import flask").failure();
 }
 
+/// Install a package via --trusted-host.
+/// Install a package while ignoring SSL certificate errors for the given host.
+/// TODO: Make this test actually test the SSL certificate error ignoring.
+#[test]
+fn install_trusted_host() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.install()
+        .arg("Flask")
+        .arg("--trusted-host")
+        .arg("pypi.org"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    context.assert_command("import flask").success();
+}
+
 /// Install a package from a public GitHub repository
 #[test]
 #[cfg(feature = "git")]

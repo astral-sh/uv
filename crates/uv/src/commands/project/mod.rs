@@ -304,6 +304,7 @@ pub(crate) async fn update_environment(
         upgrade,
         reinstall,
         build_options,
+        trusted_host,
     } = settings;
 
     let client_builder = BaseClientBuilder::new()

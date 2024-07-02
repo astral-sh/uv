@@ -83,6 +83,7 @@ pub struct InstallerOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub trusted_host: Option<String>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -108,6 +109,7 @@ pub struct ResolverOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub trusted_host: Option<String>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -137,6 +139,7 @@ pub struct ResolverInstallerOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub trusted_host: Option<String>,
 }
 
 /// A `[tool.uv.pip]` section.
@@ -193,4 +196,5 @@ pub struct PipOptions {
     pub concurrent_downloads: Option<NonZeroUsize>,
     pub concurrent_builds: Option<NonZeroUsize>,
     pub concurrent_installs: Option<NonZeroUsize>,
+    pub trusted_host: Option<String>,
 }

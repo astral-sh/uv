@@ -1424,6 +1424,10 @@ pub(crate) struct VenvArgs {
     #[command(flatten)]
     pub(crate) index_args: IndexArgs,
 
+    // Mark a host as trusted, even if it doesn't have valid or any HTTPS.
+    #[arg(long, env = "UV_TRUSTED_HOST", value_delimiter = ' ')]
+    pub(crate) trusted_host: Option<String>,
+
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
@@ -1938,6 +1942,10 @@ pub(crate) struct InstallerArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
 
+    // Mark a host as trusted, even if it doesn't have valid or any HTTPS.
+    #[arg(long, env = "UV_TRUSTED_HOST", value_delimiter = ' ')]
+    pub(crate) trusted_host: Option<String>,
+
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
@@ -2006,6 +2014,10 @@ pub(crate) struct ResolverArgs {
     /// file.
     #[arg(long, short = 'P')]
     pub(crate) upgrade_package: Vec<PackageName>,
+
+    // Mark a host as trusted, even if it doesn't have valid or any HTTPS.
+    #[arg(long, env = "UV_TRUSTED_HOST", value_delimiter = ' ')]
+    pub(crate) trusted_host: Option<String>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
@@ -2093,6 +2105,10 @@ pub(crate) struct ResolverInstallerArgs {
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
+
+    // Mark a host as trusted, even if it doesn't have valid or any HTTPS.
+    #[arg(long, env = "UV_TRUSTED_HOST", value_delimiter = ' ')]
+    pub(crate) trusted_host: Option<String>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///

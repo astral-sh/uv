@@ -45,6 +45,7 @@ pub struct RegistryClientBuilder<'a> {
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
+    trusted_host: Option<&'a str>,
 }
 
 impl RegistryClientBuilder<'_> {
@@ -60,6 +61,7 @@ impl RegistryClientBuilder<'_> {
             client: None,
             markers: None,
             platform: None,
+            trusted_host: None,
         }
     }
 }
@@ -125,6 +127,12 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn trusted_host(mut self, trusted_host: Option<&'a str>) -> Self {
+        self.trusted_host = trusted_host;
+        self
+    }
+
     pub fn build(self) -> RegistryClient {
         // Build a base client
         let mut builder = BaseClientBuilder::new();
@@ -154,6 +162,8 @@ impl<'a> RegistryClientBuilder<'a> {
         // Wrap in the cache middleware.
         let client = CachedClient::new(client);
 
+        let trusted_host_owned: Option<String> = self.trusted_host.map(|host| host.to_string());
+
         RegistryClient {
             index_urls: self.index_urls,
             index_strategy: self.index_strategy,
@@ -161,6 +171,7 @@ impl<'a> RegistryClientBuilder<'a> {
             connectivity,
             client,
             timeout,
+            trusted_host: trusted_host_owned,
         }
     }
 }
@@ -180,6 +191,8 @@ pub struct RegistryClient {
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
     timeout: u64,
+    // The host to trust, even though it does not have valid or any HTTPS.
+    trusted_host: Option<String>,
 }
 
 impl RegistryClient {
