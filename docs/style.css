@@ -12,15 +12,17 @@ html {
 }
 .chapter li.chapter-item {
     margin-left: 1em;
-    margin-block-start: 0.3em;
+    margin-block-start: 0.2em;
     font-weight: 300;
-    margin-block-end: 0.5em
+    margin-block-end: 0.4em;
+    line-height: 1.2em;
+    font-size: 1.05em;
 }
 .chapter li.chapter-item a:hover {
     text-decoration: underline;
 }
 .chapter li.part-title {
-    margin: 10px 0 0px 0;
+    margin: 0 0 0 0;
     font-weight: 500;
     font-size: 1.3em;
 }
