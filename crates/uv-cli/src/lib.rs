@@ -13,7 +13,7 @@ use uv_configuration::{
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::{PythonVersion, ToolchainPreference};
+use uv_toolchain::{PythonVersion, ToolchainFetch, ToolchainPreference};
 
 pub mod compat;
 pub mod options;
@@ -118,9 +118,13 @@ pub struct GlobalArgs {
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
 
-    /// Whether to use system or uv-managed Python toolchains.
+    /// Whether to prefer Python toolchains from uv or on the system.
     #[arg(global = true, long)]
     pub toolchain_preference: Option<ToolchainPreference>,
+
+    /// Whether to automatically download Python toolchains when required.
+    #[arg(global = true, long)]
+    pub toolchain_fetch: Option<ToolchainFetch>,
 
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]

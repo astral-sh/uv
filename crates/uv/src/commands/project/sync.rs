@@ -7,7 +7,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_installer::SitePackages;
 use uv_resolver::{FlatIndex, Lock};
-use uv_toolchain::{PythonEnvironment, ToolchainPreference, ToolchainRequest};
+use uv_toolchain::{PythonEnvironment, ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user_once;
 
@@ -24,6 +24,7 @@ pub(crate) async fn sync(
     modifications: Modifications,
     python: Option<String>,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     settings: InstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -44,6 +45,7 @@ pub(crate) async fn sync(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
+        toolchain_fetch,
         connectivity,
         native_tls,
         cache,

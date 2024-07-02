@@ -31,7 +31,7 @@ use uv_settings::{
     Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
     ResolverOptions,
 };
-use uv_toolchain::{Prefix, PythonVersion, Target, ToolchainPreference};
+use uv_toolchain::{Prefix, PythonVersion, Target, ToolchainFetch, ToolchainPreference};
 
 use crate::commands::pip::operations::Modifications;
 
@@ -48,6 +48,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
     pub(crate) toolchain_preference: ToolchainPreference,
+    pub(crate) toolchain_fetch: ToolchainFetch,
 }
 
 impl GlobalSettings {
@@ -114,6 +115,10 @@ impl GlobalSettings {
                 .toolchain_preference
                 .combine(workspace.and_then(|workspace| workspace.globals.toolchain_preference))
                 .unwrap_or(default_toolchain_preference),
+            toolchain_fetch: args
+                .toolchain_fetch
+                .combine(workspace.and_then(|workspace| workspace.globals.toolchain_fetch))
+                .unwrap_or_default(),
         }
     }
 }

@@ -448,7 +448,6 @@ fn prune() {
     └── threadpoolctl v3.4.0
 
     ----- stderr -----
-
     "###
     );
 
@@ -472,7 +471,6 @@ fn prune() {
     └── threadpoolctl v3.4.0
 
     ----- stderr -----
-
     "###
     );
 
@@ -495,7 +493,6 @@ fn prune() {
     └── threadpoolctl v3.4.0
 
     ----- stderr -----
-
     "###
     );
 }
@@ -1350,7 +1347,6 @@ fn with_editable() {
     └── iniconfig v2.0.1.dev6+g9cae431
 
     ----- stderr -----
-
     "###
     );
 }

@@ -57,18 +57,29 @@ pub enum ToolchainRequest {
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum ToolchainPreference {
-    /// Only use managed interpreters, never use system interpreters.
+    /// Only use managed toolchains, never use system toolchains.
     OnlyManaged,
-    /// Prefer installed managed interpreters, but use system interpreters if not found.
-    /// If neither can be found, download a managed interpreter.
+    /// Prefer installed toolchains, only download managed toolchains if no system toolchain is found.
     #[default]
-    PreferInstalledManaged,
-    /// Prefer managed interpreters, even if one needs to be downloaded, but use system interpreters if found.
+    Installed,
+    /// Prefer managed toolchains over system toolchains, even if one needs to be downloaded.
     PreferManaged,
-    /// Prefer system interpreters, only use managed interpreters if no system interpreter is found.
+    /// Prefer system toolchains, only use managed toolchains if no system toolchain is found.
     PreferSystem,
-    /// Only use system interpreters, never use managed interpreters.
+    /// Only use system toolchains, never use managed toolchains.
     OnlySystem,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum ToolchainFetch {
+    /// Automatically fetch managed toolchains when needed.
+    #[default]
+    Automatic,
+    /// Do not automatically fetch managed toolchains; require explicit installation.
+    Manual,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -302,12 +313,7 @@ fn python_executables_from_installed<'a>(
 
     match preference {
         ToolchainPreference::OnlyManaged => Box::new(from_managed_toolchains),
-        ToolchainPreference::PreferInstalledManaged => Box::new(
-            from_managed_toolchains
-                .chain(from_search_path)
-                .chain(from_py_launcher),
-        ),
-        ToolchainPreference::PreferManaged => Box::new(
+        ToolchainPreference::PreferManaged | ToolchainPreference::Installed => Box::new(
             from_managed_toolchains
                 .chain(from_search_path)
                 .chain(from_py_launcher),
@@ -1147,9 +1153,7 @@ impl ToolchainPreference {
 
         match self {
             ToolchainPreference::OnlyManaged => matches!(source, ToolchainSource::Managed),
-            ToolchainPreference::PreferInstalledManaged
-            | Self::PreferManaged
-            | Self::PreferSystem => matches!(
+            Self::PreferManaged | Self::PreferSystem | Self::Installed => matches!(
                 source,
                 ToolchainSource::Managed
                     | ToolchainSource::SearchPath
@@ -1179,8 +1183,14 @@ impl ToolchainPreference {
     pub(crate) fn allows_managed(self) -> bool {
         matches!(
             self,
-            Self::PreferManaged | Self::PreferInstalledManaged | Self::OnlyManaged
+            Self::PreferManaged | Self::OnlyManaged | Self::Installed
         )
+    }
+}
+
+impl ToolchainFetch {
+    pub fn is_automatic(self) -> bool {
+        matches!(self, Self::Automatic)
     }
 }
 
@@ -1481,7 +1491,7 @@ impl fmt::Display for ToolchainPreference {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let s = match self {
             Self::OnlyManaged => "managed toolchains",
-            Self::PreferManaged | Self::PreferInstalledManaged | Self::PreferSystem => {
+            Self::PreferManaged | Self::Installed | Self::PreferSystem => {
                 if cfg!(windows) {
                     "managed toolchains, system path, or `py` launcher"
                 } else {

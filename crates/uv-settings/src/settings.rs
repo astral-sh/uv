@@ -11,7 +11,7 @@ use uv_configuration::{
 use uv_macros::CombineOptions;
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::{PythonVersion, ToolchainPreference};
+use uv_toolchain::{PythonVersion, ToolchainFetch, ToolchainPreference};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -60,6 +60,7 @@ pub struct GlobalOptions {
     pub cache_dir: Option<PathBuf>,
     pub preview: Option<bool>,
     pub toolchain_preference: Option<ToolchainPreference>,
+    pub toolchain_fetch: Option<ToolchainFetch>,
 }
 
 /// Settings relevant to all installer operations.

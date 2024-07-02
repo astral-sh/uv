@@ -7,7 +7,7 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::pyproject::DependencyType;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::{ProjectWorkspace, VirtualProject, Workspace};
-use uv_toolchain::{ToolchainPreference, ToolchainRequest};
+use uv_toolchain::{ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::pip::operations::Modifications;
@@ -23,6 +23,7 @@ pub(crate) async fn remove(
     package: Option<PackageName>,
     python: Option<String>,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -86,6 +87,7 @@ pub(crate) async fn remove(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
+        toolchain_fetch,
         connectivity,
         native_tls,
         cache,

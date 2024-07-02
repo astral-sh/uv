@@ -125,32 +125,38 @@ impl PythonDownloadRequest {
         self
     }
 
+    /// Construct a new [`PythonDownloadRequest`] from a [`ToolchainRequest`] if possible.
+    ///
+    /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
+    /// a request for a specific directory or executable name.
+    pub fn try_from_request(request: &ToolchainRequest) -> Option<Self> {
+        Self::from_request(request).ok()
+    }
+
     /// Construct a new [`PythonDownloadRequest`] from a [`ToolchainRequest`].
-    pub fn from_request(request: ToolchainRequest) -> Result<Self, Error> {
-        let result = match request {
-            ToolchainRequest::Version(version) => Self::default().with_version(version),
+    pub fn from_request(request: &ToolchainRequest) -> Result<Self, Error> {
+        match request {
+            ToolchainRequest::Version(version) => Ok(Self::default().with_version(version.clone())),
             ToolchainRequest::Implementation(implementation) => {
-                Self::default().with_implementation(implementation)
+                Ok(Self::default().with_implementation(*implementation))
             }
-            ToolchainRequest::ImplementationVersion(implementation, version) => Self::default()
-                .with_implementation(implementation)
-                .with_version(version),
-            ToolchainRequest::Key(request) => request,
-            ToolchainRequest::Any => Self::default(),
+            ToolchainRequest::ImplementationVersion(implementation, version) => Ok(Self::default()
+                .with_implementation(*implementation)
+                .with_version(version.clone())),
+            ToolchainRequest::Key(request) => Ok(request.clone()),
+            ToolchainRequest::Any => Ok(Self::default()),
             // We can't download a toolchain for these request kinds
             ToolchainRequest::Directory(_)
             | ToolchainRequest::ExecutableName(_)
-            | ToolchainRequest::File(_) => {
-                return Err(Error::InvalidRequestKind(request));
-            }
-        };
-        Ok(result)
+            | ToolchainRequest::File(_) => Err(Error::InvalidRequestKind(request.clone())),
+        }
     }
 
     /// Fill empty entries with default values.
     ///
     /// Platform information is pulled from the environment.
-    pub fn fill(mut self) -> Result<Self, Error> {
+    #[must_use]
+    pub fn fill(mut self) -> Self {
         if self.implementation.is_none() {
             self.implementation = Some(ImplementationName::CPython);
         }
@@ -163,7 +169,7 @@ impl PythonDownloadRequest {
         if self.libc.is_none() {
             self.libc = Some(Libc::from_env());
         }
-        Ok(self)
+        self
     }
 
     /// Construct a new [`PythonDownloadRequest`] with platform information from the environment.
