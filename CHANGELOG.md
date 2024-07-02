@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.20
+
+- Fix issue where the standalone installer failed due to a missing `uvx` binary ([#4743](https://github.com/astral-sh/uv/pull/4743))
+
 ## 0.2.19
 
 ### Enhancements
