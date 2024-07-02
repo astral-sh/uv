@@ -147,6 +147,10 @@ impl InstalledTools {
     /// Remove the environment for a tool.
     ///
     /// Does not remove the tool's entrypoints.
+    ///
+    /// # Errors
+    ///
+    /// If no such environment exists for the tool.
     pub fn remove_environment(&self, name: &PackageName) -> Result<(), Error> {
         let _lock = self.acquire_lock();
         let environment_path = self.root.join(name.to_string());
@@ -161,23 +165,45 @@ impl InstalledTools {
         Ok(())
     }
 
-    /// Return the [`PythonEnvironment`] for a given tool.
-    pub fn environment(
+    /// Return the [`PythonEnvironment`] for a given tool, if it exists.
+    pub fn get_environment(
         &self,
         name: &PackageName,
-        remove_existing: bool,
-        interpreter: Interpreter,
         cache: &Cache,
-    ) -> Result<PythonEnvironment, Error> {
+    ) -> Result<Option<PythonEnvironment>, Error> {
         let _lock = self.acquire_lock();
         let environment_path = self.root.join(name.to_string());
 
-        if !remove_existing && environment_path.exists() {
+        if environment_path.is_dir() {
             debug!(
                 "Using existing environment for tool `{name}` at `{}`.",
                 environment_path.user_display()
             );
-            return Ok(PythonEnvironment::from_root(environment_path, cache)?);
+            Ok(Some(PythonEnvironment::from_root(environment_path, cache)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Create the [`PythonEnvironment`] for a given tool, removing any existing environments.
+    pub fn create_environment(
+        &self,
+        name: &PackageName,
+        interpreter: Interpreter,
+    ) -> Result<PythonEnvironment, Error> {
+        let _lock = self.acquire_lock();
+        let environment_path = self.root.join(name.to_string());
+
+        // Remove any existing environment.
+        match fs_err::remove_dir_all(&environment_path) {
+            Ok(()) => {
+                debug!(
+                    "Removed existing environment for tool `{name}` at `{}`.",
+                    environment_path.user_display()
+                );
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err.into()),
         }
 
         debug!(
