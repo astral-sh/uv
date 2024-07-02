@@ -75,6 +75,7 @@ pub(crate) async fn tree(
     )
     .await?;
 
+    // Read packages from the lockfile.
     let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();
     for dist in lock.into_distributions() {
         let name = dist.name().clone();
@@ -82,6 +83,7 @@ pub(crate) async fn tree(
         packages.entry(name).or_default().push(metadata);
     }
 
+    // Render the tree.
     let rendered_tree = DisplayDependencyGraph::new(
         depth.into(),
         prune,

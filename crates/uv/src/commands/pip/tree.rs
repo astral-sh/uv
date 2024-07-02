@@ -48,7 +48,7 @@ pub(crate) fn pip_tree(
         environment.python_executable().user_display().cyan()
     );
 
-    // Build the installed index.
+    // Read packages from the virtual environment.
     let site_packages = SitePackages::from_environment(&environment)?;
     let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();
     for package in site_packages.iter() {
@@ -59,6 +59,7 @@ pub(crate) fn pip_tree(
             .push(metadata);
     }
 
+    // Render the tree.
     let rendered_tree = DisplayDependencyGraph::new(
         depth.into(),
         prune,
