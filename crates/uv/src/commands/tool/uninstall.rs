@@ -25,7 +25,22 @@ pub(crate) async fn uninstall(
 
     let installed_tools = InstalledTools::from_settings()?;
     let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
-        bail!("Tool `{}` is not installed", name);
+        // If the tool is not installed, attempt to remove the environment anyway.
+        match installed_tools.remove_environment(&name) {
+            Ok(()) => {
+                writeln!(
+                    printer.stderr(),
+                    "Removed dangling environment for tool: `{name}` (missing receipt)"
+                )?;
+                return Ok(ExitStatus::Success);
+            }
+            Err(uv_tool::Error::IO(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!("Tool `{name}` is not installed");
+            }
+            Err(err) => {
+                return Err(err.into());
+            }
+        }
     };
 
     // Remove the tool itself.
