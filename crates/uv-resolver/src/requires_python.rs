@@ -1,4 +1,6 @@
+use std::cmp::Ordering;
 use std::collections::Bound;
+use std::ops::Deref;
 
 use itertools::Itertools;
 use pubgrub::range::Range;
@@ -24,7 +26,7 @@ pub enum RequiresPythonError {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequiresPython {
     specifiers: VersionSpecifiers,
-    bound: Bound<Version>,
+    bound: RequiresPythonBound,
 }
 
 impl RequiresPython {
@@ -34,7 +36,7 @@ impl RequiresPython {
             specifiers: VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(
                 version.clone(),
             )),
-            bound: Bound::Included(version),
+            bound: RequiresPythonBound(Bound::Included(version)),
         }
     }
 
@@ -61,11 +63,13 @@ impl RequiresPython {
         };
 
         // Extract the lower bound.
-        let bound = range
-            .iter()
-            .next()
-            .map(|(lower, _)| lower.clone())
-            .unwrap_or(Bound::Unbounded);
+        let bound = RequiresPythonBound(
+            range
+                .iter()
+                .next()
+                .map(|(lower, _)| lower.clone())
+                .unwrap_or(Bound::Unbounded),
+        );
 
         // Convert back to PEP 440 specifiers.
         let specifiers = range
@@ -74,6 +78,16 @@ impl RequiresPython {
             .collect();
 
         Ok(Some(Self { specifiers, bound }))
+    }
+
+    /// Narrow the [`RequiresPython`] to the given version, if it's stricter (i.e., greater) than
+    /// the current target.
+    pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
+        let target = VersionSpecifiers::from(VersionSpecifier::from_lower_bound(target)?);
+        Self::union(std::iter::once(&target))
+            .ok()
+            .flatten()
+            .filter(|next| next.bound > self.bound)
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version.
@@ -140,7 +154,7 @@ impl RequiresPython {
         // Alternatively, we could vary the semantics depending on whether or not the user included
         // a pre-release in their specifier, enforcing pre-release compatibility only if the user
         // explicitly requested it.
-        match (target, &self.bound) {
+        match (target, self.bound.as_ref()) {
             (Bound::Included(target_lower), Bound::Included(requires_python_lower)) => {
                 target_lower.release() <= requires_python_lower.release()
             }
@@ -166,9 +180,9 @@ impl RequiresPython {
         &self.specifiers
     }
 
-    /// Returns the lower [`Bound`] for the `Requires-Python` specifier.
-    pub fn bound(&self) -> &Bound<Version> {
-        &self.bound
+    /// Returns `true` if the `Requires-Python` specifier is unbounded.
+    pub fn is_unbounded(&self) -> bool {
+        self.bound.as_ref() == Bound::Unbounded
     }
 
     /// Returns this `Requires-Python` specifier as an equivalent marker
@@ -184,16 +198,14 @@ impl RequiresPython {
     /// returns a marker tree that evaluates to `true` for all possible marker
     /// environments.
     pub fn to_marker_tree(&self) -> MarkerTree {
-        let (op, version) = match self.bound {
+        let (op, version) = match self.bound.as_ref() {
             // If we see this anywhere, then it implies the marker
             // tree we would generate would always evaluate to
             // `true` because every possible Python version would
             // satisfy it.
             Bound::Unbounded => return MarkerTree::And(vec![]),
-            Bound::Excluded(ref version) => {
-                (Operator::GreaterThan, version.clone().without_local())
-            }
-            Bound::Included(ref version) => {
+            Bound::Excluded(version) => (Operator::GreaterThan, version.clone().without_local()),
+            Bound::Included(version) => {
                 (Operator::GreaterThanEqual, version.clone().without_local())
             }
         };
@@ -247,12 +259,50 @@ impl serde::Serialize for RequiresPython {
 impl<'de> serde::Deserialize<'de> for RequiresPython {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let specifiers = VersionSpecifiers::deserialize(deserializer)?;
-        let bound = crate::pubgrub::PubGrubSpecifier::try_from(&specifiers)
-            .map_err(serde::de::Error::custom)?
-            .iter()
-            .next()
-            .map(|(lower, _)| lower.clone())
-            .unwrap_or(Bound::Unbounded);
+        let bound = RequiresPythonBound(
+            crate::pubgrub::PubGrubSpecifier::try_from(&specifiers)
+                .map_err(serde::de::Error::custom)?
+                .iter()
+                .next()
+                .map(|(lower, _)| lower.clone())
+                .unwrap_or(Bound::Unbounded),
+        );
         Ok(Self { specifiers, bound })
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct RequiresPythonBound(Bound<Version>);
+
+impl RequiresPythonBound {
+    pub fn new(bound: Bound<Version>) -> Self {
+        Self(bound)
+    }
+}
+
+impl Deref for RequiresPythonBound {
+    type Target = Bound<Version>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl PartialOrd for RequiresPythonBound {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RequiresPythonBound {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self.as_ref(), other.as_ref()) {
+            (Bound::Included(a), Bound::Included(b)) => a.cmp(b),
+            (Bound::Included(_), Bound::Excluded(_)) => Ordering::Less,
+            (Bound::Excluded(_), Bound::Included(_)) => Ordering::Greater,
+            (Bound::Excluded(a), Bound::Excluded(b)) => a.cmp(b),
+            (Bound::Unbounded, _) => Ordering::Less,
+            (_, Bound::Unbounded) => Ordering::Greater,
+        }
     }
 }
