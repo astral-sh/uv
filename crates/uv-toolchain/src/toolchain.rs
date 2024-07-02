@@ -88,9 +88,7 @@ impl Toolchain {
         let request = request.unwrap_or_default();
 
         // Perform a fetch aggressively if managed toolchains are preferred
-        if matches!(preference, ToolchainPreference::PreferManaged)
-            && toolchain_fetch.is_automatic()
-        {
+        if matches!(preference, ToolchainPreference::Managed) && toolchain_fetch.is_automatic() {
             if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
                 return Self::fetch(request, client_builder, cache).await;
             }
