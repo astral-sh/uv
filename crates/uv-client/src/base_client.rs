@@ -11,7 +11,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
 };
-use rustls::crypto::aws_lc_rs;
+use rustls::crypto::{aws_lc_rs, CryptoProvider};
 use tracing::debug;
 
 use pep508_rs::MarkerEnvironment;
@@ -137,10 +137,13 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Initialize the base client.
         let client = self.client.clone().unwrap_or_else(|| {
-            // Use aws_lc_rs as the default TLS provider to support more SSL cert algorithms
-            aws_lc_rs::default_provider()
-                .install_default()
-                .expect("failed to install aws_lc_rs as default TLS provider");
+            match CryptoProvider::get_default() {
+                // Use aws_lc_rs as the default TLS provider to support more SSL cert algorithms
+                None => aws_lc_rs::default_provider()
+                    .install_default()
+                    .expect("failed to install aws_lc_rs as default TLS provider"),
+                _ => (),
+            };
 
             // Check for the presence of an `SSL_CERT_FILE`.
             let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
