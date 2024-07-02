@@ -96,8 +96,8 @@ impl InstalledTools {
     }
 
     /// Get the receipt for the given tool.
-    pub fn get_tool_receipt(&self, name: &str) -> Result<Option<Tool>, Error> {
-        let path = self.root.join(name).join("uv-receipt.toml");
+    pub fn get_tool_receipt(&self, name: &PackageName) -> Result<Option<Tool>, Error> {
+        let path = self.root.join(name.to_string()).join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
             Err(Error::IO(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -114,8 +114,8 @@ impl InstalledTools {
     }
 
     /// Lock a tool directory.
-    fn acquire_tool_lock(&self, name: &str) -> Result<LockedFile, Error> {
-        let path = self.root.join(name);
+    fn acquire_tool_lock(&self, name: &PackageName) -> Result<LockedFile, Error> {
+        let path = self.root.join(name.to_string());
         Ok(LockedFile::acquire(
             path.join(".lock"),
             path.user_display(),
@@ -125,11 +125,11 @@ impl InstalledTools {
     /// Add a receipt for a tool.
     ///
     /// Any existing receipt will be replaced.
-    pub fn add_tool_receipt(&self, name: &str, tool: Tool) -> Result<(), Error> {
+    pub fn add_tool_receipt(&self, name: &PackageName, tool: Tool) -> Result<(), Error> {
         let _lock = self.acquire_tool_lock(name);
 
         let tool_receipt = ToolReceipt::from(tool);
-        let path = self.root.join(name).join("uv-receipt.toml");
+        let path = self.root.join(name.to_string()).join("uv-receipt.toml");
 
         debug!(
             "Adding metadata entry for tool `{name}` at {}",
@@ -147,9 +147,9 @@ impl InstalledTools {
     /// Remove the environment for a tool.
     ///
     /// Does not remove the tool's entrypoints.
-    pub fn remove_environment(&self, name: &str) -> Result<(), Error> {
+    pub fn remove_environment(&self, name: &PackageName) -> Result<(), Error> {
         let _lock = self.acquire_lock();
-        let environment_path = self.root.join(name);
+        let environment_path = self.root.join(name.to_string());
 
         debug!(
             "Deleting environment for tool `{name}` at {}",
@@ -161,15 +161,16 @@ impl InstalledTools {
         Ok(())
     }
 
+    /// Return the [`PythonEnvironment`] for a given tool.
     pub fn environment(
         &self,
-        name: &str,
+        name: &PackageName,
         remove_existing: bool,
         interpreter: Interpreter,
         cache: &Cache,
     ) -> Result<PythonEnvironment, Error> {
         let _lock = self.acquire_lock();
-        let environment_path = self.root.join(name);
+        let environment_path = self.root.join(name.to_string());
 
         if !remove_existing && environment_path.exists() {
             debug!(

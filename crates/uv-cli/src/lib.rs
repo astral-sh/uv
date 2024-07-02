@@ -2014,7 +2014,8 @@ pub struct ToolListArgs;
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolUninstallArgs {
-    pub name: String,
+    /// The name of the tool to uninstall.
+    pub name: PackageName,
 }
 
 #[derive(Args)]
