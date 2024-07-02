@@ -101,6 +101,7 @@ pub struct ToolUv {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvWorkspace {
     pub members: Option<Vec<SerdePattern>>,
+    pub projects: Option<Vec<SerdePattern>>,
     pub exclude: Option<Vec<SerdePattern>>,
 }
 
