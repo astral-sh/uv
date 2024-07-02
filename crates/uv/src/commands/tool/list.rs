@@ -32,13 +32,8 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
         writeln!(printer.stdout(), "{name}")?;
 
         // Output tool entrypoints
-        for entrypoint in tool
-            .entrypoints()
-            .iter()
-            .map(|entry| entry.name.clone())
-            .collect::<Vec<String>>()
-        {
-            writeln!(printer.stdout(), "    {entrypoint}")?;
+        for entrypoint in tool.entrypoints() {
+            writeln!(printer.stdout(), "    {}", &entrypoint.name)?;
         }
     }
 
