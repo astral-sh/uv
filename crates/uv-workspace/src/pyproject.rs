@@ -370,6 +370,19 @@ pub struct ToolUvWorkspace {
         "#
     )]
     pub members: Option<Vec<SerdePattern>>,
+    /// Packages to include as workspace private members.
+    ///
+    /// Supports both globs and explicit paths.
+    ///
+    /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[str]",
+        example = r#"
+            private-members = ["project1", "path/to/project2", "projects/*"]
+        "#
+    )]
+    pub private_members: Option<Vec<SerdePattern>>,
     /// Packages to exclude as workspace members. If a package matches both `members` and
     /// `exclude`, it will be excluded.
     ///
