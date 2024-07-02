@@ -254,9 +254,9 @@ pub enum PipCommand {
     Install(PipInstallArgs),
     /// Uninstall packages from an environment.
     Uninstall(PipUninstallArgs),
-    /// Enumerate the installed packages in an environment.
+    /// List, in requirements format, packages installed in an environment.
     Freeze(PipFreezeArgs),
-    /// Enumerate the installed packages in an environment.
+    /// List, in tabular format, packages installed in an environment.
     List(PipListArgs),
     /// Show information about one or more installed packages.
     Show(PipShowArgs),
