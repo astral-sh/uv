@@ -63,7 +63,7 @@ impl Error {
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            ErrorKind::ReqwestError(err) => {
+            ErrorKind::WrappedReqwestError(err) => {
                 if let Some(status) = err.status() {
                     // If the server doesn't support HEAD requests, we can't check for range
                     // requests.
@@ -169,15 +169,9 @@ pub enum ErrorKind {
     #[error("Metadata file `{0}` was not found in {1}")]
     MetadataNotFound(WheelFilename, String),
 
-    /// A generic request error happened while making a request. Refer to the
-    /// error message for more details.
+    /// An error that happened while making a request or in a reqwest middleware.
     #[error(transparent)]
-    ReqwestError(#[from] BetterReqwestError),
-
-    /// A generic request middleware error happened while making a request.
-    /// Refer to the error message for more details.
-    #[error(transparent)]
-    ReqwestMiddlewareError(#[from] anyhow::Error),
+    WrappedReqwestError(#[from] WrappedReqwestError),
 
     #[error("Received some unexpected JSON from {url}")]
     BadJson { source: serde_json::Error, url: Url },
@@ -233,59 +227,91 @@ pub enum ErrorKind {
 
 impl From<reqwest::Error> for ErrorKind {
     fn from(error: reqwest::Error) -> Self {
-        Self::ReqwestError(BetterReqwestError::from(error))
+        Self::WrappedReqwestError(WrappedReqwestError::from(error))
     }
 }
 
 impl From<reqwest_middleware::Error> for ErrorKind {
-    fn from(error: reqwest_middleware::Error) -> Self {
-        if let reqwest_middleware::Error::Middleware(ref underlying) = error {
+    fn from(err: reqwest_middleware::Error) -> Self {
+        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(err) = underlying.downcast_ref::<OfflineError>() {
                 return Self::Offline(err.url().to_string());
             }
         }
 
-        match error {
-            reqwest_middleware::Error::Middleware(err) => Self::ReqwestMiddlewareError(err),
-            reqwest_middleware::Error::Reqwest(err) => Self::from(err),
-        }
+        Self::WrappedReqwestError(WrappedReqwestError(err))
     }
 }
 
 /// Handle the case with no internet by explicitly telling the user instead of showing an obscure
 /// DNS error.
+///
+/// Wraps a [`reqwest_middleware::Error`] instead of an [`reqwest::Error`] since the actual reqwest
+/// error may be below some context in the [`anyhow::Error`].
 #[derive(Debug)]
-pub struct BetterReqwestError(reqwest::Error);
+pub struct WrappedReqwestError(reqwest_middleware::Error);
 
-impl BetterReqwestError {
+impl WrappedReqwestError {
+    /// Check if the error chain contains a reqwest error that looks like this:
+    /// * error sending request for url (...)
+    /// * client error (Connect)
+    /// * dns error: failed to lookup address information: Name or service not known
+    /// * failed to lookup address information: Name or service not known
     fn is_likely_offline(&self) -> bool {
-        if !self.0.is_connect() {
-            return false;
+        let reqwest_err = match &self.0 {
+            reqwest_middleware::Error::Reqwest(err) => Some(err),
+            reqwest_middleware::Error::Middleware(err) => err.chain().find_map(|err| {
+                if let Some(err) = err.downcast_ref::<reqwest::Error>() {
+                    Some(err)
+                } else if let Some(reqwest_middleware::Error::Reqwest(err)) =
+                    err.downcast_ref::<reqwest_middleware::Error>()
+                {
+                    Some(err)
+                } else {
+                    None
+                }
+            }),
+        };
+
+        if let Some(reqwest_err) = reqwest_err {
+            if !reqwest_err.is_connect() {
+                return false;
+            }
+            // Self is "error sending request for url", the first source is "error trying to connect",
+            // the second source is "dns error". We have to check for the string because hyper errors
+            // are opaque.
+            if std::error::Error::source(&reqwest_err)
+                .and_then(|err| err.source())
+                .is_some_and(|err| err.to_string().starts_with("dns error: "))
+            {
+                return true;
+            }
         }
-        // Self is "error sending request for url", the first source is "error trying to connect",
-        // the second source is "dns error". We have to check for the string because hyper errors
-        // are opaque.
-        std::error::Error::source(&self.0)
-            .and_then(|err| err.source())
-            .is_some_and(|err| err.to_string().starts_with("dns error: "))
+        false
     }
 }
 
-impl From<reqwest::Error> for BetterReqwestError {
+impl From<reqwest::Error> for WrappedReqwestError {
     fn from(error: reqwest::Error) -> Self {
+        Self(error.into())
+    }
+}
+
+impl From<reqwest_middleware::Error> for WrappedReqwestError {
+    fn from(error: reqwest_middleware::Error) -> Self {
         Self(error)
     }
 }
 
-impl Deref for BetterReqwestError {
-    type Target = reqwest::Error;
+impl Deref for WrappedReqwestError {
+    type Target = reqwest_middleware::Error;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl Display for BetterReqwestError {
+impl Display for WrappedReqwestError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.is_likely_offline() {
             f.write_str("Could not connect, are you offline?")
@@ -295,10 +321,13 @@ impl Display for BetterReqwestError {
     }
 }
 
-impl std::error::Error for BetterReqwestError {
+impl std::error::Error for WrappedReqwestError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         if self.is_likely_offline() {
-            Some(&self.0)
+            match &self.0 {
+                reqwest_middleware::Error::Middleware(err) => Some(err.as_ref()),
+                reqwest_middleware::Error::Reqwest(err) => Some(err),
+            }
         } else {
             self.0.source()
         }
