@@ -37,11 +37,8 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
-    keyring: KeyringProviderType,
-    native_tls: bool,
-    retries: u32,
-    connectivity: Connectivity,
     cache: Cache,
+    base_client_builder: BaseClientBuilder<'a>,
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
@@ -52,11 +49,8 @@ impl RegistryClientBuilder<'_> {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            keyring: KeyringProviderType::default(),
-            native_tls: false,
             cache,
-            connectivity: Connectivity::Online,
-            retries: 3,
+            base_client_builder: BaseClientBuilder::new(),
             client: None,
             markers: None,
             platform: None,
@@ -79,25 +73,25 @@ impl<'a> RegistryClientBuilder<'a> {
 
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
-        self.keyring = keyring_type;
+        self.base_client_builder = self.base_client_builder.keyring(keyring_type);
         self
     }
 
     #[must_use]
     pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
-        self.connectivity = connectivity;
+        self.base_client_builder = self.base_client_builder.connectivity(connectivity);
         self
     }
 
     #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
-        self.retries = retries;
+        self.base_client_builder = self.base_client_builder.retries(retries);
         self
     }
 
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.native_tls = native_tls;
+        self.base_client_builder = self.base_client_builder.native_tls(native_tls);
         self
     }
 
@@ -127,7 +121,7 @@ impl<'a> RegistryClientBuilder<'a> {
 
     pub fn build(self) -> RegistryClient {
         // Build a base client
-        let mut builder = BaseClientBuilder::new();
+        let mut builder = self.base_client_builder;
 
         if let Some(client) = self.client {
             builder = builder.client(client);
@@ -141,12 +135,7 @@ impl<'a> RegistryClientBuilder<'a> {
             builder = builder.platform(platform);
         }
 
-        let client = builder
-            .retries(self.retries)
-            .connectivity(self.connectivity)
-            .native_tls(self.native_tls)
-            .keyring(self.keyring)
-            .build();
+        let client = builder.build();
 
         let timeout = client.timeout();
         let connectivity = client.connectivity();
@@ -161,6 +150,20 @@ impl<'a> RegistryClientBuilder<'a> {
             connectivity,
             client,
             timeout,
+        }
+    }
+}
+
+impl<'a> From<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
+    fn from(value: BaseClientBuilder) -> Self {
+        Self {
+            index_urls: IndexUrls::default(),
+            index_strategy: IndexStrategy::default(),
+            cache: Cache::temp().unwrap(),
+            base_client_builder: value,
+            client: None,
+            markers: None,
+            platform: None,
         }
     }
 }
@@ -362,8 +365,8 @@ impl RegistryClient {
                 };
                 OwnedArchive::from_unarchived(&unarchived)
             }
-            .boxed_local()
-            .instrument(info_span!("parse_simple_api", package = %package_name))
+                .boxed_local()
+                .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         self.cached_client()
             .get_cacheable(
@@ -473,7 +476,7 @@ impl RegistryClient {
                     &wheel.url,
                     WheelCache::Url(&wheel.url),
                 )
-                .await?
+                    .await?
             }
             BuiltDist::Path(wheel) => {
                 let file = fs_err::tokio::File::open(&wheel.path)
@@ -599,8 +602,8 @@ impl RegistryClient {
                     url.clone(),
                     headers,
                 )
-                .await
-                .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                    .await
+                    .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
                 let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
@@ -612,8 +615,8 @@ impl RegistryClient {
                 })?;
                 Ok::<Metadata23, CachedClientError<Error>>(metadata)
             }
-            .boxed_local()
-            .instrument(info_span!("read_metadata_range_request", wheel = %filename))
+                .boxed_local()
+                .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 
         let result = self
@@ -664,7 +667,7 @@ impl RegistryClient {
 
                 read_metadata_async_stream(filename, url.to_string(), reader).await
             }
-            .instrument(info_span!("read_metadata_stream", wheel = %filename))
+                .instrument(info_span!("read_metadata_stream", wheel = %filename))
         };
 
         self.cached_client()
@@ -708,7 +711,7 @@ async fn read_metadata_async_seek(
             .enumerate()
             .filter_map(|(index, entry)| Some((index, entry.filename().as_str().ok()?))),
     )
-    .map_err(ErrorKind::DistInfo)?;
+        .map_err(ErrorKind::DistInfo)?;
 
     // Read the contents of the `METADATA` file.
     let mut contents = Vec::new();
