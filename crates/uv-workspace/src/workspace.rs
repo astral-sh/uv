@@ -9,12 +9,12 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 
 use pep508_rs::{RequirementOrigin, VerbatimUrl};
-use pypi_types::{Requirement, RequirementSource};
+use pypi_types::{Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_fs::{absolutize_path, normalize_path, relative_to, Simplified};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::warn_user;
 
-use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
+use crate::pyproject::{Project, PyProjectToml, Source, ToolUv, ToolUvWorkspace};
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -537,7 +537,6 @@ pub struct WorkspaceMember {
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pyproject_toml: PyProjectToml,
     /// does this member require a private lock
-    #[allow(dead_code)]
     private_lock: bool,
 }
 
@@ -1287,7 +1286,17 @@ impl VirtualProject {
 
     /// Returns the set of requirements that include all packages in the workspace.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.workspace().packages.values().filter_map(|member| {
+        let packages = if let Some(member) = self.private_project() {
+            Either::Left(std::iter::once(member))
+        } else {
+            Either::Right(
+                self.workspace()
+                    .packages
+                    .values()
+                    .filter(|member| !member.private_lock),
+            )
+        };
+        packages.filter_map(|member| {
             let project = member.pyproject_toml.project.as_ref()?;
             // Extract the extras available in the project.
             let extras = project
@@ -1333,78 +1342,84 @@ impl VirtualProject {
 
     /// Returns the set of overrides for the workspace.
     pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .workspace()
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.workspace().install_path())
-        else {
-            return vec![];
-        };
-
-        let Some(overrides) = workspace_package
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.override_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        overrides
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
+        self.uv_dependencies(|uv| uv.override_dependencies.as_ref())
     }
 
     /// Returns the set of constraints for the workspace.
     pub fn constraints(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .workspace()
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.workspace().install_path())
-        else {
-            return vec![];
-        };
-
-        let Some(constraints) = workspace_package
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.constraint_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        constraints
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
+        self.uv_dependencies(|uv| uv.constraint_dependencies.as_ref())
     }
 
     /// The path to the workspace virtual environment.
     pub fn venv(&self) -> PathBuf {
-        self.workspace().install_path().join(".venv")
+        if let Some(private_project) = self.private_project() {
+            private_project.root.join(".venv")
+        } else {
+            self.workspace().install_path().join(".venv")
+        }
     }
 
     /// The path to the workspace lockfile
     pub fn lockfile(&self) -> PathBuf {
-        self.workspace().install_path().join("uv.lock")
+        if let Some(private_project) = self.private_project() {
+            private_project.root.join("uv.lock")
+        } else {
+            self.workspace().install_path().join("uv.lock")
+        }
+    }
+
+    fn private_project(&self) -> Option<&WorkspaceMember> {
+        if let VirtualProject::Project(project) = self {
+            if project.current_project().private_lock {
+                return Some(project.current_project());
+            }
+        }
+        None
+    }
+
+    /// Gets dependencies defined in `[tool.uv]`
+    /// Tries private project first, then defaults to workspace.
+    fn uv_dependencies(
+        &self,
+        func: fn(&ToolUv) -> Option<&Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+    ) -> Vec<Requirement> {
+        let dependencies_and_origin = if let Some(private_project) = self.private_project() {
+            private_project
+                .pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(func)
+                .map(|dependencies| {
+                    (
+                        dependencies,
+                        RequirementOrigin::Project(
+                            private_project.root.clone(),
+                            private_project.project.name.clone(),
+                        ),
+                    )
+                })
+        } else {
+            None
+        }
+        .or(self
+            .workspace()
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(func)
+            .map(|dependencies| (dependencies, RequirementOrigin::Workspace)));
+
+        if let Some((dependencies, origin)) = dependencies_and_origin {
+            return dependencies
+                .iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.clone().with_origin(origin.clone()))
+                })
+                .collect();
+        }
+        vec![]
     }
 }
 
