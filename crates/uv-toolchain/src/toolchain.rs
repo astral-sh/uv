@@ -14,7 +14,9 @@ use crate::downloads::{DownloadResult, PythonDownload, PythonDownloadRequest};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{InstalledToolchain, InstalledToolchains};
 use crate::platform::{Arch, Libc, Os};
-use crate::{Error, Interpreter, PythonVersion, ToolchainPreference, ToolchainSource};
+use crate::{
+    Error, Interpreter, PythonVersion, ToolchainFetch, ToolchainPreference, ToolchainSource,
+};
 
 /// A Python interpreter and accompanying tools.
 #[derive(Clone, Debug)]
@@ -79,18 +81,36 @@ impl Toolchain {
         request: Option<ToolchainRequest>,
         environments: EnvironmentPreference,
         preference: ToolchainPreference,
-        client_builder: BaseClientBuilder<'a>,
+        toolchain_fetch: ToolchainFetch,
+        client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or_default();
-        // Perform a find first
+
+        // Perform a fetch aggressively if managed toolchains are preferred
+        if matches!(preference, ToolchainPreference::PreferManaged)
+            && toolchain_fetch.is_automatic()
+        {
+            if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
+                return Self::fetch(request, client_builder, cache).await;
+            }
+        }
+
+        // Search for the toolchain
         match Self::find(&request, environments, preference, cache) {
             Ok(venv) => Ok(venv),
-            Err(Error::MissingToolchain(_))
-                if preference.allows_managed() && client_builder.connectivity.is_online() =>
+            // If missing and allowed, perform a fetch
+            err @ Err(Error::MissingToolchain(_))
+                if preference.allows_managed()
+                    && toolchain_fetch.is_automatic()
+                    && client_builder.connectivity.is_online() =>
             {
-                debug!("Requested Python not found, checking for available download...");
-                Self::fetch(request, client_builder, cache).await
+                if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
+                    debug!("Requested Python not found, checking for available download...");
+                    Self::fetch(request, client_builder, cache).await
+                } else {
+                    err
+                }
             }
             Err(err) => Err(err),
         }
@@ -98,14 +118,13 @@ impl Toolchain {
 
     /// Download and install the requested toolchain.
     pub async fn fetch<'a>(
-        request: ToolchainRequest,
-        client_builder: BaseClientBuilder<'a>,
+        request: PythonDownloadRequest,
+        client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
     ) -> Result<Self, Error> {
         let toolchains = InstalledToolchains::from_settings()?.init()?;
         let toolchain_dir = toolchains.root();
 
-        let request = PythonDownloadRequest::from_request(request)?.fill()?;
         let download = PythonDownload::from_request(&request)?;
         let client = client_builder.build();
 

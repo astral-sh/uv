@@ -20,7 +20,8 @@ use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_toolchain::{
-    EnvironmentPreference, Interpreter, Toolchain, ToolchainPreference, ToolchainRequest,
+    EnvironmentPreference, Interpreter, Toolchain, ToolchainFetch, ToolchainPreference,
+    ToolchainRequest,
 };
 use uv_warnings::warn_user_once;
 
@@ -39,6 +40,7 @@ pub(crate) async fn install(
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
+    _toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -49,6 +51,7 @@ pub(crate) async fn install(
         warn_user_once!("`uv tool install` is experimental and may change without warning.");
     }
 
+    // TODO(zanieb): Use `find_or_fetch` here
     let interpreter = Toolchain::find(
         &python
             .as_deref()

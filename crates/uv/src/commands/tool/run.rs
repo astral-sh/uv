@@ -16,7 +16,8 @@ use uv_configuration::{Concurrency, PreviewMode};
 use uv_normalize::PackageName;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_toolchain::{
-    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
+    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainFetch, ToolchainPreference,
+    ToolchainRequest,
 };
 use uv_warnings::warn_user_once;
 
@@ -35,6 +36,7 @@ pub(crate) async fn run(
     _isolated: bool,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
+    _toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -76,6 +78,7 @@ pub(crate) async fn run(
 
     // Discover an interpreter.
     // Note we force preview on during `uv tool run` for now since the entire interface is in preview
+    // TODO(zanieb): We should use `find_or_fetch` here
     let interpreter = Toolchain::find(
         &python
             .as_deref()

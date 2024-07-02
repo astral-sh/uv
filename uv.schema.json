@@ -235,6 +235,16 @@
         "$ref": "#/definitions/Source"
       }
     },
+    "toolchain-fetch": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ToolchainFetch"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "toolchain-preference": {
       "anyOf": [
         {
@@ -1187,38 +1197,56 @@
         }
       }
     },
+    "ToolchainFetch": {
+      "oneOf": [
+        {
+          "description": "Automatically fetch managed toolchains when needed.",
+          "type": "string",
+          "enum": [
+            "automatic"
+          ]
+        },
+        {
+          "description": "Do not automatically fetch managed toolchains; require explicit installation.",
+          "type": "string",
+          "enum": [
+            "manual"
+          ]
+        }
+      ]
+    },
     "ToolchainPreference": {
       "oneOf": [
         {
-          "description": "Only use managed interpreters, never use system interpreters.",
+          "description": "Only use managed toolchains, never use system toolchains.",
           "type": "string",
           "enum": [
             "only-managed"
           ]
         },
         {
-          "description": "Prefer installed managed interpreters, but use system interpreters if not found. If neither can be found, download a managed interpreter.",
+          "description": "Prefer installed toolchains, only download managed toolchains if no system toolchain is found.",
           "type": "string",
           "enum": [
-            "prefer-installed-managed"
+            "installed"
           ]
         },
         {
-          "description": "Prefer managed interpreters, even if one needs to be downloaded, but use system interpreters if found.",
+          "description": "Prefer managed toolchains over system toolchains, even if one needs to be downloaded.",
           "type": "string",
           "enum": [
             "prefer-managed"
           ]
         },
         {
-          "description": "Prefer system interpreters, only use managed interpreters if no system interpreter is found.",
+          "description": "Prefer system toolchains, only use managed toolchains if no system toolchain is found.",
           "type": "string",
           "enum": [
             "prefer-system"
           ]
         },
         {
-          "description": "Only use system interpreters, never use managed interpreters.",
+          "description": "Only use system toolchains, never use managed toolchains.",
           "type": "string",
           "enum": [
             "only-system"

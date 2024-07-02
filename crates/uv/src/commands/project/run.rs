@@ -16,7 +16,7 @@ use uv_normalize::PackageName;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_toolchain::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
-    ToolchainPreference, ToolchainRequest, VersionRequest,
+    ToolchainFetch, ToolchainPreference, ToolchainRequest, VersionRequest,
 };
 use uv_warnings::warn_user_once;
 
@@ -38,6 +38,7 @@ pub(crate) async fn run(
     isolated: bool,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -89,7 +90,8 @@ pub(crate) async fn run(
                 python_request,
                 EnvironmentPreference::Any,
                 toolchain_preference,
-                client_builder,
+                toolchain_fetch,
+                &client_builder,
                 cache,
             )
             .await?
@@ -170,6 +172,7 @@ pub(crate) async fn run(
                 project.workspace(),
                 python.as_deref().map(ToolchainRequest::parse),
                 toolchain_preference,
+                toolchain_fetch,
                 connectivity,
                 native_tls,
                 cache,
@@ -222,7 +225,8 @@ pub(crate) async fn run(
                 // No opt-in is required for system environments, since we are not mutating it.
                 EnvironmentPreference::Any,
                 toolchain_preference,
-                client_builder,
+                toolchain_fetch,
+                &client_builder,
                 cache,
             )
             .await?;
@@ -261,7 +265,8 @@ pub(crate) async fn run(
                 python.as_deref().map(ToolchainRequest::parse),
                 EnvironmentPreference::Any,
                 toolchain_preference,
-                client_builder,
+                toolchain_fetch,
+                &client_builder,
                 cache,
             )
             .await?

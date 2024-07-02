@@ -1,6 +1,5 @@
 use anyhow::Result;
 use futures::StreamExt;
-use itertools::Itertools;
 use std::fmt::Write;
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -48,7 +47,7 @@ pub(crate) async fn install(
 
     let download_requests = requests
         .iter()
-        .map(|request| PythonDownloadRequest::from_request(request.clone()))
+        .map(PythonDownloadRequest::from_request)
         .collect::<Result<Vec<_>, downloads::Error>>()?;
 
     let installed_toolchains: Vec<_> = toolchains.find_all()?.collect();
@@ -105,8 +104,7 @@ pub(crate) async fn install(
         .into_iter()
         // Populate the download requests with defaults
         .map(PythonDownloadRequest::fill)
-        .map(|request| request.map(|inner| PythonDownload::from_request(&inner)))
-        .flatten_ok()
+        .map(|request| PythonDownload::from_request(&request))
         .collect::<Result<Vec<_>, uv_toolchain::downloads::Error>>()?;
 
     // Construct a client

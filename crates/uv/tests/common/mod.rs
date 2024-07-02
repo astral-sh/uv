@@ -711,7 +711,7 @@ pub fn python_toolchains_for_versions(
             if let Ok(toolchain) = Toolchain::find(
                 &ToolchainRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
-                ToolchainPreference::PreferInstalledManaged,
+                ToolchainPreference::PreferManaged,
                 &cache,
             ) {
                 toolchain.into_interpreter().sys_executable().to_owned()

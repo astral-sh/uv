@@ -58,6 +58,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -188,6 +189,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -319,6 +321,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -482,6 +485,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -614,6 +618,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -732,6 +737,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -887,6 +893,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1042,6 +1049,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1242,6 +1250,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1391,6 +1400,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1515,6 +1525,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1667,6 +1678,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1843,6 +1855,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1957,6 +1970,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2071,6 +2085,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2187,6 +2202,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2328,6 +2344,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,

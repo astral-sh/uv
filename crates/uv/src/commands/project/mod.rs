@@ -19,7 +19,7 @@ use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, RequiresPython};
 use uv_toolchain::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
-    ToolchainPreference, ToolchainRequest, VersionRequest,
+    ToolchainFetch, ToolchainPreference, ToolchainRequest, VersionRequest,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -127,6 +127,7 @@ impl FoundInterpreter {
         workspace: &Workspace,
         python_request: Option<ToolchainRequest>,
         toolchain_preference: ToolchainPreference,
+        toolchain_fetch: ToolchainFetch,
         connectivity: Connectivity,
         native_tls: bool,
         cache: &Cache,
@@ -183,7 +184,8 @@ impl FoundInterpreter {
             python_request,
             EnvironmentPreference::OnlySystem,
             toolchain_preference,
-            client_builder,
+            toolchain_fetch,
+            &client_builder,
             cache,
         )
         .await?
@@ -222,6 +224,7 @@ pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
     python: Option<ToolchainRequest>,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
@@ -231,6 +234,7 @@ pub(crate) async fn get_or_init_environment(
         workspace,
         python,
         toolchain_preference,
+        toolchain_fetch,
         connectivity,
         native_tls,
         cache,
