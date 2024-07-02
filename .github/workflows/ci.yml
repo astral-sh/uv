@@ -88,7 +88,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: "${{ github.workspace}}/.xwin"
-          key: cargo-xwin
+          key: cargo-xwin-x86_64
       - name: Load rust cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -274,57 +274,65 @@ jobs:
   windows-trampoline:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: windows-latest
-    name: "check windows trampoline"
+    runs-on: ubuntu-latest
+    name: "check windows trampoline | ${{ matrix.target-arch }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        target-arch: ["x86_64", "i686", "aarch64"]
     steps:
-      - name: Create Dev Drive using ReFS
-        run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
-
       - uses: actions/checkout@v4
 
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
-
       - name: "Install Rust toolchain"
-        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        working-directory: ${{ github.workspace }}/crates/uv-trampoline
         run: |
-          rustup target add x86_64-pc-windows-msvc
-          rustup component add clippy rust-src --toolchain nightly-2024-06-08-x86_64-pc-windows-msvc
+          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
+
+      - name: Load xwin cache
+        uses: actions/cache@v4
+        with:
+          path: "${{ github.workspace }}/.xwin"
+          key: cargo-xwin-${{ matrix.target-arch }}
 
       - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+          workspaces: ${{ github.workspace }}/crates/uv-trampoline
+
+      - name: "Install cargo-xwin and cargo-bloat"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-xwin,cargo-bloat
+
+      - name: "Install xwin dependencies"
+        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
 
       - name: "Clippy"
-        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        if: matrix.target-arch == 'x86_64'
+        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
         env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
+          XWIN_ARCH: "x86_64"
+          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+
+      - name: "Bloat Check"
+        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        if: matrix.target-arch == 'x86_64'
+        run: |
+          cargo xwin bloat --release --target x86_64-pc-windows-msvc | \
+          grep -q -E 'core::fmt|std::panicking|std::backtrace_rs' && exit 1 || exit 0
+        env:
+          XWIN_ARCH: "x86_64"
+          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
 
       - name: "Build"
-        working-directory: ${{ env.DEV_DRIVE }}/uv/crates/uv-trampoline
+        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        run: cargo xwin build --release --target ${{ matrix.target-arch }}-pc-windows-msvc
         env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: cargo build --release --target x86_64-pc-windows-msvc
+          XWIN_ARCH: "${{ matrix.target-arch == 'i686' && 'x86' || matrix.target-arch }}"
+          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
 
   typos:
     runs-on: ubuntu-latest
