@@ -21,6 +21,7 @@ use uv_toolchain::{
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::SharedState;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -49,6 +50,9 @@ pub(crate) async fn run(
 
     // Parse the input command.
     let command = RunCommand::from(command);
+
+    // Initialize any shared state.
+    let state = SharedState::default();
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -106,6 +110,7 @@ pub(crate) async fn run(
                 venv,
                 spec,
                 &settings,
+                &state,
                 preview,
                 connectivity,
                 concurrency,
@@ -177,6 +182,7 @@ pub(crate) async fn run(
                 project.workspace(),
                 venv.interpreter(),
                 settings.as_ref().into(),
+                &state,
                 preview,
                 connectivity,
                 concurrency,
@@ -193,6 +199,7 @@ pub(crate) async fn run(
                 dev,
                 Modifications::Sufficient,
                 settings.as_ref().into(),
+                &state,
                 preview,
                 connectivity,
                 concurrency,
@@ -289,6 +296,7 @@ pub(crate) async fn run(
                 venv,
                 spec,
                 &settings,
+                &state,
                 preview,
                 connectivity,
                 concurrency,

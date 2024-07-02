@@ -11,6 +11,7 @@ use uv_toolchain::{ToolchainPreference, ToolchainRequest};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::SharedState;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettings, ResolverSettings};
@@ -95,11 +96,15 @@ pub(crate) async fn remove(
     // Use the default settings.
     let settings = ResolverSettings::default();
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Lock and sync the environment.
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref(),
+        &state,
         preview,
         connectivity,
         concurrency,
@@ -123,6 +128,7 @@ pub(crate) async fn remove(
         dev,
         Modifications::Exact,
         settings.as_ref(),
+        &state,
         preview,
         connectivity,
         concurrency,

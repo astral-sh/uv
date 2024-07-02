@@ -5,15 +5,14 @@ use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
-use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
+use uv_resolver::{FlatIndex, Lock};
 use uv_toolchain::{PythonEnvironment, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::ProjectError;
+use crate::commands::project::{ProjectError, SharedState};
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettings, InstallerSettingsRef};
@@ -68,6 +67,7 @@ pub(crate) async fn sync(
         dev,
         modifications,
         settings.as_ref(),
+        &SharedState::default(),
         preview,
         connectivity,
         concurrency,
@@ -89,6 +89,7 @@ pub(super) async fn do_sync(
     dev: bool,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
+    state: &SharedState,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -143,9 +144,7 @@ pub(super) async fn do_sync(
         .build();
 
     // Initialize any shared state.
-    let git = GitResolver::default();
     let in_flight = InFlight::default();
-    let index = InMemoryIndex::default();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -169,8 +168,8 @@ pub(super) async fn do_sync(
         venv.interpreter(),
         index_locations,
         &flat_index,
-        &index,
-        &git,
+        &state.index,
+        &state.git,
         &in_flight,
         index_strategy,
         setup_py,
