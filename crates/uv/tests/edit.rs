@@ -186,7 +186,7 @@ fn add_git() -> Result<()> {
     Installed 2 packages in [TIME]
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -264,7 +264,7 @@ fn add_git() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        source = { git = "https://github.com/astral-test/uv-public-pypackage", revision = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979", tag = "0.0.1" }
         "###
         );
     });
@@ -335,7 +335,7 @@ fn add_git_raw() -> Result<()> {
     Installed 2 packages in [TIME]
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -410,7 +410,7 @@ fn add_git_raw() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        source = { git = "https://github.com/astral-test/uv-public-pypackage", revision = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "###
         );
     });
@@ -454,7 +454,7 @@ fn add_unnamed() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -500,7 +500,7 @@ fn add_unnamed() -> Result<()> {
         [[distribution]]
         name = "uv-public-pypackage"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        source = { git = "https://github.com/astral-test/uv-public-pypackage", revision = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979", tag = "0.0.1" }
         "###
         );
     });
@@ -1315,7 +1315,7 @@ fn update() -> Result<()> {
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
-     + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068?tag=v2.32.3#0e322af87745eff34caffe4df68456ebc20d9068)
+     + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -1496,7 +1496,7 @@ fn update() -> Result<()> {
         [[distribution]]
         name = "requests"
         version = "2.32.3"
-        source = { git = "https://github.com/psf/requests?tag=v2.32.3#0e322af87745eff34caffe4df68456ebc20d9068" }
+        source = { git = "https://github.com/psf/requests", revision = "0e322af87745eff34caffe4df68456ebc20d9068", tag = "v2.32.3" }
         dependencies = [
             { name = "certifi" },
             { name = "charset-normalizer" },
