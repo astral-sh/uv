@@ -1,0 +1,34 @@
+[package]
+name = "uv-tool"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+install-wheel-rs = { workspace = true }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+uv-cache = { workspace = true }
+uv-fs = { workspace = true }
+uv-state = { workspace = true }
+uv-toolchain = { workspace = true }
+uv-virtualenv = { workspace = true }
+uv-warnings = { workspace = true }
+
+dirs-sys = { workspace = true }
+fs-err = { workspace = true }
+path-slash = { workspace = true }
+pathdiff = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+tracing = { workspace = true }

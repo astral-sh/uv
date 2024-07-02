@@ -17,6 +17,7 @@ use pep440_rs::Version;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::fork_urls::ForkUrls;
 use crate::python_requirement::{PythonRequirement, PythonTarget};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 use crate::RequiresPython;
@@ -407,19 +408,21 @@ impl PubGrubReportFormatter<'_> {
         index_locations: &Option<IndexLocations>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        fork_urls: &ForkUrls,
     ) -> IndexSet<PubGrubHint> {
         let mut hints = IndexSet::default();
         match derivation_tree {
             DerivationTree::External(
                 External::Custom(package, set, _) | External::NoVersions(package, set),
             ) => {
-                if let PubGrubPackageInner::Package {
-                    name, url: None, ..
-                } = &**package
-                {
+                if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
                     if let Some(selector) = selector {
-                        self.prerelease_available_hint(package, name, set, selector, &mut hints);
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_available_hint(
+                                package, name, set, selector, &mut hints,
+                            );
+                        }
                     }
                 }
 
@@ -470,6 +473,7 @@ impl PubGrubReportFormatter<'_> {
                     index_locations,
                     unavailable_packages,
                     incomplete_packages,
+                    fork_urls,
                 ));
                 hints.extend(self.hints(
                     &derived.cause2,
@@ -477,6 +481,7 @@ impl PubGrubReportFormatter<'_> {
                     index_locations,
                     unavailable_packages,
                     incomplete_packages,
+                    fork_urls,
                 ));
             }
         }
@@ -826,7 +831,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The `Requires-Python` requirement ({}) defined in your `pyproject.toml` includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `Requires-Python` requirement (like {}).",
+                    "{}{} The `Requires-Python` requirement ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `Requires-Python` requirement (like {}).",
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.bold(),

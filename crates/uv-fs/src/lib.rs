@@ -48,8 +48,20 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink.
 ///
 /// On Windows, this uses the `junction` crate to create a junction point.
+/// Note because junctions are used, the source must be a directory.
 #[cfg(windows)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // If the source is a file, we can't create a junction
+    if src.as_ref().is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Cannot create a junction for {}: is not a directory",
+                src.as_ref().display()
+            ),
+        ));
+    }
+
     // Remove the existing symlink, if any.
     match junction::delete(dunce::simplified(dst.as_ref())) {
         Ok(()) => match fs_err::remove_dir_all(dst.as_ref()) {
@@ -189,11 +201,7 @@ pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
                 None
             }
         })
-        .filter(|entry| {
-            entry
-                .file_type()
-                .map_or(false, |file_type| file_type.is_dir())
-        })
+        .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_dir()))
         .map(|entry| entry.path())
 }
 
@@ -216,7 +224,7 @@ pub fn symlinks(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
         .filter(|entry| {
             entry
                 .file_type()
-                .map_or(false, |file_type| file_type.is_symlink())
+                .is_ok_and(|file_type| file_type.is_symlink())
         })
         .map(|entry| entry.path())
 }
@@ -237,11 +245,7 @@ pub fn files(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
                 None
             }
         })
-        .filter(|entry| {
-            entry
-                .file_type()
-                .map_or(false, |file_type| file_type.is_file())
-        })
+        .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_file()))
         .map(|entry| entry.path())
 }
 

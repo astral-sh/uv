@@ -29,19 +29,10 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("--index-url")
         .arg("{{index_url}}")
         .arg("--find-links")
-        .arg("{{vendor_links}}")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", python_path)
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
+        .arg("{{vendor_links}}");
+    context.add_shared_args(&mut command);
+    command.env_remove("UV_EXCLUDE_NEWER");
+    command.env("UV_TEST_PYTHON_PATH", python_path);
 
     command
 }

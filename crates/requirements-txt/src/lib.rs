@@ -550,27 +550,45 @@ fn parse_entry(
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
-        let url = VerbatimUrl::parse_url(expanded.as_ref())
-            .map(|url| url.with_given(given.to_owned()))
-            .map_err(|err| RequirementsTxtParserError::Url {
+        let url = if let Ok(path) = Path::new(expanded.as_ref()).canonicalize() {
+            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
                 source: err,
                 url: given.to_string(),
                 start,
                 end: s.cursor(),
-            })?;
-        RequirementsTxtStatement::IndexUrl(url)
+            })?
+        } else {
+            VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
+                RequirementsTxtParserError::Url {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
+            })?
+        };
+        RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
-        let url = VerbatimUrl::parse_url(expanded.as_ref())
-            .map(|url| url.with_given(given.to_owned()))
-            .map_err(|err| RequirementsTxtParserError::Url {
+        let url = if let Ok(path) = Path::new(expanded.as_ref()).canonicalize() {
+            VerbatimUrl::from_path(path).map_err(|err| RequirementsTxtParserError::VerbatimUrl {
                 source: err,
                 url: given.to_string(),
                 start,
                 end: s.cursor(),
-            })?;
-        RequirementsTxtStatement::ExtraIndexUrl(url)
+            })?
+        } else {
+            VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
+                RequirementsTxtParserError::Url {
+                    source: err,
+                    url: given.to_string(),
+                    start,
+                    end: s.cursor(),
+                }
+            })?
+        };
+        RequirementsTxtStatement::ExtraIndexUrl(url.with_given(given))
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
@@ -856,6 +874,8 @@ pub enum RequirementsTxtParserError {
     VerbatimUrl {
         source: pep508_rs::VerbatimUrlError,
         url: String,
+        start: usize,
+        end: usize,
     },
     UrlConversion(String),
     UnsupportedUrl(String),
@@ -923,8 +943,8 @@ impl Display for RequirementsTxtParserError {
             Self::FileUrl { url, start, .. } => {
                 write!(f, "Invalid file URL at position {start}: `{url}`")
             }
-            Self::VerbatimUrl { source, url } => {
-                write!(f, "Invalid URL: `{url}`: {source}")
+            Self::VerbatimUrl { url, start, .. } => {
+                write!(f, "Invalid URL at position {start}: `{url}`")
             }
             Self::UrlConversion(given) => {
                 write!(f, "Unable to convert URL to path: {given}")
@@ -1025,8 +1045,12 @@ impl Display for RequirementsTxtFileError {
                     self.file.user_display(),
                 )
             }
-            RequirementsTxtParserError::VerbatimUrl { url, .. } => {
-                write!(f, "Invalid URL in `{}`: `{url}`", self.file.user_display())
+            RequirementsTxtParserError::VerbatimUrl { url, start, .. } => {
+                write!(
+                    f,
+                    "Invalid URL in `{}` at position {start}: `{url}`",
+                    self.file.user_display(),
+                )
             }
             RequirementsTxtParserError::UrlConversion(given) => {
                 write!(
@@ -1177,7 +1201,7 @@ fn calculate_row_column(content: &str, position: usize) -> (usize, usize) {
                 // If the next character is a newline, skip it.
                 if chars
                     .peek()
-                    .map_or(false, |&(_, next_char)| next_char == '\n')
+                    .is_some_and(|&(_, next_char)| next_char == '\n')
                 {
                     chars.next();
                 }

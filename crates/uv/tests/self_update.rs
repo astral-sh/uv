@@ -1,11 +1,13 @@
 #![cfg(feature = "self-update")]
 
-use crate::common::get_bin;
+use std::process::Command;
+
 use axoupdater::{
     test::helpers::{perform_runtest, RuntestArgs},
     ReleaseSourceType,
 };
-use std::process::Command;
+
+use crate::common::get_bin;
 
 mod common;
 

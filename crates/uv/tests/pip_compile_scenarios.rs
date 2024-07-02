@@ -29,19 +29,10 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("--index-url")
         .arg("https://astral-sh.github.io/packse/0.3.29/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.29/vendor/links.html")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", python_path)
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.29/vendor/links.html");
+    context.add_shared_args(&mut command);
+    command.env_remove("UV_EXCLUDE_NEWER");
+    command.env("UV_TEST_PYTHON_PATH", python_path);
 
     command
 }

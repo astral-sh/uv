@@ -1,34 +1,30 @@
-use std::path::Path;
-
 use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{ProjectWorkspace, DEV_DEPENDENCIES};
-use uv_git::GitResolver;
+use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
-use uv_resolver::{FlatIndex, InMemoryIndex, Lock};
-use uv_toolchain::{PythonEnvironment, ToolchainPreference, ToolchainRequest};
+use uv_resolver::{FlatIndex, Lock};
+use uv_toolchain::{PythonEnvironment, ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::ProjectError;
+use crate::commands::project::{ProjectError, SharedState};
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettings, InstallerSettingsRef};
 
 /// Sync the project environment.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn sync(
     extras: ExtrasSpecification,
     dev: bool,
     modifications: Modifications,
     python: Option<String>,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     settings: InstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -38,17 +34,18 @@ pub(crate) async fn sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv sync` is experimental and may change without warning.");
+        warn_user_once!("`uv sync` is experimental and may change without warning.");
     }
 
-    // Find the project requirements.
-    let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
+    // Identify the project
+    let project = VirtualProject::discover(&std::env::current_dir()?, None).await?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(
+    let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
+        toolchain_fetch,
         connectivity,
         native_tls,
         cache,
@@ -65,14 +62,14 @@ pub(crate) async fn sync(
 
     // Perform the sync operation.
     do_sync(
-        project.project_name(),
-        project.workspace().root(),
+        &project,
         &venv,
         &lock,
         extras,
         dev,
         modifications,
         settings.as_ref(),
+        &SharedState::default(),
         preview,
         connectivity,
         concurrency,
@@ -86,16 +83,15 @@ pub(crate) async fn sync(
 }
 
 /// Sync a lockfile with an environment.
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn do_sync(
-    project_name: &PackageName,
-    workspace_root: &Path,
+    project: &VirtualProject,
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: ExtrasSpecification,
     dev: bool,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
+    state: &SharedState,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -118,7 +114,7 @@ pub(super) async fn do_sync(
     // Validate that the Python version is supported by the lockfile.
     if let Some(requires_python) = lock.requires_python() {
         if !requires_python.contains(venv.interpreter().python_version()) {
-            return Err(ProjectError::PythonIncompatibility(
+            return Err(ProjectError::LockedPythonIncompatibility(
                 venv.interpreter().python_version().clone(),
                 requires_python.clone(),
             ));
@@ -136,8 +132,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution =
-        lock.to_resolution(workspace_root, markers, tags, project_name, &extras, &dev)?;
+    let resolution = lock.to_resolution(project, markers, tags, &extras, &dev)?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -151,9 +146,7 @@ pub(super) async fn do_sync(
         .build();
 
     // Initialize any shared state.
-    let git = GitResolver::default();
     let in_flight = InFlight::default();
-    let index = InMemoryIndex::default();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -177,8 +170,8 @@ pub(super) async fn do_sync(
         venv.interpreter(),
         index_locations,
         &flat_index,
-        &index,
-        &git,
+        &state.index,
+        &state.git,
         &in_flight,
         index_strategy,
         setup_py,

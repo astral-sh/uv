@@ -1,26 +1,29 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
+use uv_distribution::pyproject::DependencyType;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
-use uv_distribution::ProjectWorkspace;
-use uv_toolchain::{ToolchainPreference, ToolchainRequest};
-use uv_warnings::warn_user;
+use uv_distribution::{ProjectWorkspace, VirtualProject, Workspace};
+use uv_toolchain::{ToolchainFetch, ToolchainPreference, ToolchainRequest};
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::SharedState;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettings, ResolverSettings};
 
 /// Remove one or more packages from the project requirements.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn remove(
     requirements: Vec<PackageName>,
-    dev: bool,
+    dependency_type: DependencyType,
+    package: Option<PackageName>,
     python: Option<String>,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -29,51 +32,48 @@ pub(crate) async fn remove(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv remove` is experimental and may change without warning.");
+        warn_user_once!("`uv remove` is experimental and may change without warning.");
     }
 
-    // Find the project requirements.
-    let project = ProjectWorkspace::discover(&std::env::current_dir()?, None).await?;
+    // Find the project in the workspace.
+    let project = if let Some(package) = package {
+        Workspace::discover(&std::env::current_dir()?, None)
+            .await?
+            .with_current_project(package.clone())
+            .with_context(|| format!("Package `{package}` not found in workspace"))?
+    } else {
+        ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
+    };
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
     for req in requirements {
-        if dev {
-            let deps = pyproject.remove_dev_dependency(&req)?;
-            if deps.is_empty() {
-                // Check if there is a matching regular dependency.
-                if pyproject
-                    .remove_dependency(&req)
-                    .ok()
-                    .filter(|deps| !deps.is_empty())
-                    .is_some()
-                {
-                    uv_warnings::warn_user!("`{req}` is not a development dependency; try calling `uv remove` without the `--dev` flag");
+        match dependency_type {
+            DependencyType::Production => {
+                let deps = pyproject.remove_dependency(&req)?;
+                if deps.is_empty() {
+                    warn_if_present(&req, &pyproject);
+                    anyhow::bail!("The dependency `{req}` could not be found in `dependencies`");
                 }
-
-                anyhow::bail!("The dependency `{req}` could not be found in `dev-dependencies`");
             }
-
-            continue;
-        }
-
-        let deps = pyproject.remove_dependency(&req)?;
-        if deps.is_empty() {
-            // Check if there is a matching development dependency.
-            if pyproject
-                .remove_dev_dependency(&req)
-                .ok()
-                .filter(|deps| !deps.is_empty())
-                .is_some()
-            {
-                uv_warnings::warn_user!(
-                    "`{req}` is a development dependency; try calling `uv remove --dev`"
-                );
+            DependencyType::Dev => {
+                let deps = pyproject.remove_dev_dependency(&req)?;
+                if deps.is_empty() {
+                    warn_if_present(&req, &pyproject);
+                    anyhow::bail!(
+                        "The dependency `{req}` could not be found in `dev-dependencies`"
+                    );
+                }
             }
-
-            anyhow::bail!("The dependency `{req}` could not be found in `dependencies`");
+            DependencyType::Optional(ref group) => {
+                let deps = pyproject.remove_optional_dependency(&req, group)?;
+                if deps.is_empty() {
+                    warn_if_present(&req, &pyproject);
+                    anyhow::bail!(
+                        "The dependency `{req}` could not be found in `optional-dependencies`"
+                    );
+                }
+            }
         }
-
-        continue;
     }
 
     // Save the modified `pyproject.toml`.
@@ -83,10 +83,11 @@ pub(crate) async fn remove(
     )?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(
+    let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
+        toolchain_fetch,
         connectivity,
         native_tls,
         cache,
@@ -97,11 +98,15 @@ pub(crate) async fn remove(
     // Use the default settings.
     let settings = ResolverSettings::default();
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Lock and sync the environment.
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref(),
+        &state,
         preview,
         connectivity,
         concurrency,
@@ -118,14 +123,14 @@ pub(crate) async fn remove(
     let dev = true;
 
     project::sync::do_sync(
-        project.project_name(),
-        project.workspace().root(),
+        &VirtualProject::Project(project),
         &venv,
         &lock,
         extras,
         dev,
         Modifications::Exact,
         settings.as_ref(),
+        &state,
         preview,
         connectivity,
         concurrency,
@@ -136,4 +141,26 @@ pub(crate) async fn remove(
     .await?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Emit a warning if a dependency with the given name is present as any dependency type.
+///
+/// This is useful when a dependency of the user-specified type was not found, but it may be present
+/// elsewhere.
+fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
+    for dep_ty in pyproject.find_dependency(name) {
+        match dep_ty {
+            DependencyType::Production => {
+                warn_user!("`{name}` is a production dependency");
+            }
+            DependencyType::Dev => {
+                warn_user!("`{name}` is a development dependency; try calling `uv remove --dev`");
+            }
+            DependencyType::Optional(group) => {
+                warn_user!(
+                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`"
+                );
+            }
+        }
+    }
 }

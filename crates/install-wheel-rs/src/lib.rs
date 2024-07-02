@@ -14,6 +14,7 @@ use pypi_types::Scheme;
 pub use uninstall::{uninstall_egg, uninstall_legacy_editable, uninstall_wheel, Uninstall};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+pub use wheel::{parse_wheel_file, read_record_file, LibKind};
 
 pub mod linker;
 pub mod metadata;

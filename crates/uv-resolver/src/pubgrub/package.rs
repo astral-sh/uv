@@ -3,10 +3,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use pep508_rs::MarkerTree;
-use pypi_types::VerbatimParsedUrl;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-
-use crate::resolver::Urls;
 
 /// [`Arc`] wrapper around [`PubGrubPackageInner`] to make cloning (inside PubGrub) cheap.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -51,43 +48,6 @@ pub enum PubGrubPackageInner {
         extra: Option<ExtraName>,
         dev: Option<GroupName>,
         marker: Option<MarkerTree>,
-        /// The URL of the package, if it was specified in the requirement.
-        ///
-        /// There are a few challenges that come with URL-based packages, and how they map to
-        /// PubGrub.
-        ///
-        /// If the user declares a direct URL dependency, and then a transitive dependency
-        /// appears for the same package, we need to ensure that the direct URL dependency can
-        /// "satisfy" that requirement. So if the user declares a URL dependency on Werkzeug, and a
-        /// registry dependency on Flask, we need to ensure that Flask's dependency on Werkzeug
-        /// is resolved by the URL dependency. This means: (1) we need to avoid adding a second
-        /// Werkzeug variant from PyPI; and (2) we need to error if the Werkzeug version requested
-        /// by Flask doesn't match that of the URL dependency.
-        ///
-        /// Additionally, we need to ensure that we disallow multiple versions of the same package,
-        /// even if requested from different URLs.
-        ///
-        /// To enforce this requirement, we require that all possible URL dependencies are
-        /// defined upfront, as `requirements.txt` or `constraints.txt` or similar. Otherwise,
-        /// solving these graphs becomes far more complicated -- and the "right" behavior isn't
-        /// even clear. For example, imagine that you define a direct dependency on Werkzeug, and
-        /// then one of your other direct dependencies declares a dependency on Werkzeug at some
-        /// URL. Which is correct? By requiring direct dependencies, the semantics are at least
-        /// clear.
-        ///
-        /// With the list of known URLs available upfront, we then only need to do two things:
-        ///
-        /// 1. When iterating over the dependencies for a single package, ensure that we respect
-        ///    URL variants over registry variants, if the package declares a dependency on both
-        ///    `Werkzeug==2.0.0` _and_ `Werkzeug @ https://...` , which is strange but possible.
-        ///    This is enforced by [`crate::pubgrub::dependencies::PubGrubDependencies`].
-        /// 2. Reject any URL dependencies that aren't known ahead-of-time.
-        ///
-        /// Eventually, we could relax this constraint, in favor of something more lenient, e.g., if
-        /// we're going to have a dependency that's provided as a URL, we _need_ to visit the URL
-        /// version before the registry version. So we could just error if we visit a URL variant
-        /// _after_ a registry variant.
-        url: Option<VerbatimParsedUrl>,
     },
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
     ///
@@ -106,7 +66,6 @@ pub enum PubGrubPackageInner {
         name: PackageName,
         extra: ExtraName,
         marker: Option<MarkerTree>,
-        url: Option<VerbatimParsedUrl>,
     },
     /// A proxy package to represent an enabled "dependency group" (e.g., development dependencies).
     ///
@@ -117,7 +76,6 @@ pub enum PubGrubPackageInner {
         name: PackageName,
         dev: GroupName,
         marker: Option<MarkerTree>,
-        url: Option<VerbatimParsedUrl>,
     },
     /// A proxy package for a base package with a marker (e.g., `black; python_version >= "3.6"`).
     ///
@@ -126,51 +84,15 @@ pub enum PubGrubPackageInner {
     Marker {
         name: PackageName,
         marker: MarkerTree,
-        url: Option<VerbatimParsedUrl>,
     },
 }
 
 impl PubGrubPackage {
-    /// Create a [`PubGrubPackage`] from a package name and version.
+    /// Create a [`PubGrubPackage`] from a package name and extra.
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
         mut marker: Option<MarkerTree>,
-        urls: &Urls,
-    ) -> Self {
-        let url = urls.get(&name).cloned();
-        // Remove all extra expressions from the marker, since we track extras
-        // separately. This also avoids an issue where packages added via
-        // extras end up having two distinct marker expressions, which in turn
-        // makes them two distinct packages. This results in PubGrub being
-        // unable to unify version constraints across such packages.
-        marker = marker.and_then(|m| m.simplify_extras_with(|_| true));
-        if let Some(extra) = extra {
-            Self(Arc::new(PubGrubPackageInner::Extra {
-                name,
-                extra,
-                marker,
-                url,
-            }))
-        } else if let Some(marker) = marker {
-            Self(Arc::new(PubGrubPackageInner::Marker { name, marker, url }))
-        } else {
-            Self(Arc::new(PubGrubPackageInner::Package {
-                name,
-                extra,
-                dev: None,
-                marker,
-                url,
-            }))
-        }
-    }
-
-    /// Create a [`PubGrubPackage`] from a package name and URL.
-    pub(crate) fn from_url(
-        name: PackageName,
-        extra: Option<ExtraName>,
-        mut marker: Option<MarkerTree>,
-        url: VerbatimParsedUrl,
     ) -> Self {
         // Remove all extra expressions from the marker, since we track extras
         // separately. This also avoids an issue where packages added via
@@ -183,21 +105,15 @@ impl PubGrubPackage {
                 name,
                 extra,
                 marker,
-                url: Some(url),
             }))
         } else if let Some(marker) = marker {
-            Self(Arc::new(PubGrubPackageInner::Marker {
-                name,
-                marker,
-                url: Some(url),
-            }))
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
         } else {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
                 extra,
                 dev: None,
                 marker,
-                url: Some(url),
             }))
         }
     }
@@ -210,6 +126,18 @@ impl PubGrubPackage {
             PubGrubPackageInner::Root(None) | PubGrubPackageInner::Python(_) => None,
             PubGrubPackageInner::Root(Some(name))
             | PubGrubPackageInner::Package { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. }
+            | PubGrubPackageInner::Marker { name, .. } => Some(name),
+        }
+    }
+
+    /// Returns the name of this PubGrub package, if it is not the root package or a Python version
+    /// constraint.
+    pub(crate) fn name_no_root(&self) -> Option<&PackageName> {
+        match &**self {
+            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => None,
+            PubGrubPackageInner::Package { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Dev { name, .. }
             | PubGrubPackageInner::Marker { name, .. } => Some(name),

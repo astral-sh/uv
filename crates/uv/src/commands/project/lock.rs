@@ -8,27 +8,25 @@ use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
-use uv_git::GitResolver;
+use uv_git::ResolvedRepositoryReference;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
-use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython,
-};
-use uv_toolchain::{Interpreter, ToolchainPreference, ToolchainRequest};
+use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
+use uv_toolchain::{Interpreter, ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::project::{find_requires_python, ProjectError};
-use crate::commands::{pip, project, ExitStatus};
+use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
+use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
 /// Resolve the project requirements into a lockfile.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn lock(
     python: Option<String>,
     settings: ResolverSettings,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -36,29 +34,32 @@ pub(crate) async fn lock(
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv lock` is experimental and may change without warning.");
+        warn_user_once!("`uv lock` is experimental and may change without warning.");
     }
 
     // Find the project requirements.
     let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
 
     // Find an interpreter for the project
-    let interpreter = project::find_interpreter(
+    let interpreter = FoundInterpreter::discover(
         &workspace,
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
+        toolchain_fetch,
         connectivity,
         native_tls,
         cache,
         printer,
     )
-    .await?;
+    .await?
+    .into_interpreter();
 
     // Perform the lock operation.
     match do_lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        &SharedState::default(),
         preview,
         connectivity,
         concurrency,
@@ -82,11 +83,11 @@ pub(crate) async fn lock(
 }
 
 /// Lock the project requirements into a lockfile.
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
+    state: &SharedState,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -164,7 +165,6 @@ pub(super) async fn do_lock(
 
     // Initialize any shared state.
     let in_flight = InFlight::default();
-    let index = InMemoryIndex::default();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -182,8 +182,10 @@ pub(super) async fn do_lock(
     // If an existing lockfile exists, build up a set of preferences.
     let LockedRequirements { preferences, git } = read_lockfile(workspace, upgrade).await?;
 
-    // Create the Git resolver.
-    let git = GitResolver::from_refs(git);
+    // Populate the Git resolver.
+    for ResolvedRepositoryReference { reference, sha } in git {
+        state.git.insert(reference, sha);
+    }
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -192,8 +194,8 @@ pub(super) async fn do_lock(
         interpreter,
         index_locations,
         &flat_index,
-        &index,
-        &git,
+        &state.index,
+        &state.git,
         &in_flight,
         index_strategy,
         setup_py,
@@ -225,7 +227,7 @@ pub(super) async fn do_lock(
         python_requirement,
         &client,
         &flat_index,
-        &index,
+        &state.index,
         &build_dispatch,
         concurrency,
         options,

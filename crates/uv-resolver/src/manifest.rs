@@ -50,7 +50,6 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Constraints,
@@ -99,6 +98,16 @@ impl Manifest {
         markers: Option<&'a MarkerEnvironment>,
         mode: DependencyMode,
     ) -> impl Iterator<Item = &Requirement> + 'a {
+        self.requirements_no_overrides(markers, mode)
+            .chain(self.overrides(markers, mode))
+    }
+
+    /// Like [`Self::requirements`], but without the overrides.
+    pub fn requirements_no_overrides<'a>(
+        &'a self,
+        markers: Option<&'a MarkerEnvironment>,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = &Requirement> + 'a {
         match mode {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left(
@@ -120,11 +129,6 @@ impl Manifest {
                         self.constraints
                             .requirements()
                             .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
-                    )
-                    .chain(
-                        self.overrides
-                            .requirements()
-                            .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
                     ),
             ),
             // Include direct requirements, with constraints and overrides applied.
@@ -132,7 +136,28 @@ impl Manifest {
                 self.overrides
                     .apply(&self.requirements)
                     .chain(self.constraints.requirements())
-                    .chain(self.overrides.requirements())
+                    .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+            ),
+        }
+    }
+
+    /// Only the overrides from [`Self::requirements`].
+    pub fn overrides<'a>(
+        &'a self,
+        markers: Option<&'a MarkerEnvironment>,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = &Requirement> + 'a {
+        match mode {
+            // Include all direct and transitive requirements, with constraints and overrides applied.
+            DependencyMode::Transitive => Either::Left(
+                self.overrides
+                    .requirements()
+                    .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+            ),
+            // Include direct requirements, with constraints and overrides applied.
+            DependencyMode::Direct => Either::Right(
+                self.overrides
+                    .requirements()
                     .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
             ),
         }

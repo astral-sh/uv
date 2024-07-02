@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.18
+
+### Preview features
+
+- Add `uv tool list` ([#4630](https://github.com/astral-sh/uv/pull/4630))
+- Add `uv tool uninstall` ([#4641](https://github.com/astral-sh/uv/pull/4641))
+- Add support for specifying `name@version` in `uv tool run` ([#4572](https://github.com/astral-sh/uv/pull/4572))
+- Allow `uv add` to specify optional dependency groups ([#4607](https://github.com/astral-sh/uv/pull/4607))
+- Allow the package spec to be passed positionally in `uv tool install` ([#4564](https://github.com/astral-sh/uv/pull/4564))
+- Avoid infinite loop for cyclic installs ([#4633](https://github.com/astral-sh/uv/pull/4633))
+- Indent wheels like dependencies in the lockfile ([#4582](https://github.com/astral-sh/uv/pull/4582))
+- Sync all packages in a virtual workspace ([#4636](https://github.com/astral-sh/uv/pull/4636))
+- Use inline table for dependencies in lockfile ([#4581](https://github.com/astral-sh/uv/pull/4581))
+- Make `source` field in lock file more structured ([#4627](https://github.com/astral-sh/uv/pull/4627))
+
+## 0.2.17
+
+### Preview features
+
+- Add `--extra` to `uv add` and enable fine-grained updates ([#4566](https://github.com/astral-sh/uv/pull/4566))
+
+## 0.2.16
+
+### Preview features
+
+- Add `--package` argument to `uv add` and `uv remove` ([#4556](https://github.com/astral-sh/uv/pull/4556))
+- Add `uv tool install` ([#4492](https://github.com/astral-sh/uv/pull/4492))
+- Fallback to interpreter discovery in `uv run` ([#4549](https://github.com/astral-sh/uv/pull/4549))
+- Make `uv.sources` without `--preview` non-fatal ([#4558](https://github.com/astral-sh/uv/pull/4558))
+- Remove non-existent extras from lockfile ([#4479](https://github.com/astral-sh/uv/pull/4479))
+- Support conflicting URL in separate forks ([#4435](https://github.com/astral-sh/uv/pull/4435))
+- Automatically detect workspace packages in `uv add` ([#4557](https://github.com/astral-sh/uv/pull/4557))
+- Omit `distribution.sdist` from lockfile when it is redundant ([#4528](https://github.com/astral-sh/uv/pull/4528))
+- Remove `source` and `version` from lock file when unambiguous ([#4513](https://github.com/astral-sh/uv/pull/4513))
+- Allow `uv lock` to read overrides from `tool.uv` (#4108) ([#4369](https://github.com/astral-sh/uv/pull/4369))
+
 ## 0.2.15
 
 <!-- No changes -->
@@ -140,7 +176,6 @@
 
 <!-- No changes -->
 
-
 ## 0.2.3
 
 ### Preview features
@@ -150,7 +185,6 @@
 ## 0.2.2
 
 <!-- No changes -->
-
 
 ## 0.2.1
 
@@ -188,7 +222,6 @@
 
 <!-- No changes -->
 
-
 ## 0.1.43
 
 ### Preview features
@@ -209,7 +242,6 @@
 ## 0.1.41
 
 <!-- No changes -->
-
 
 ## 0.1.40
 

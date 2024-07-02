@@ -92,7 +92,7 @@ impl InstalledToolchains {
     pub fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
-        // Create the cache directory, if it doesn't exist.
+        // Create the toolchain directory, if it doesn't exist.
         fs::create_dir_all(root)?;
 
         // Add a .gitignore.
@@ -204,7 +204,7 @@ Error=This toolchain is managed by uv and should not be modified.
 ";
 
 /// A uv-managed Python toolchain installed on the current system..
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct InstalledToolchain {
     /// The path to the top-level directory of the installed toolchain.
     path: PathBuf,
@@ -263,7 +263,7 @@ impl InstalledToolchain {
             ToolchainRequest::ExecutableName(name) => self
                 .executable()
                 .file_name()
-                .map_or(false, |filename| filename.to_string_lossy() == *name),
+                .is_some_and(|filename| filename.to_string_lossy() == *name),
             ToolchainRequest::Implementation(implementation) => {
                 implementation == self.implementation()
             }

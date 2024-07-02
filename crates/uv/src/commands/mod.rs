@@ -24,10 +24,16 @@ pub(crate) use project::run::run;
 pub(crate) use project::sync::sync;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
-pub(crate) use tool::run::run as run_tool;
+pub(crate) use tool::dir::dir as tool_dir;
+pub(crate) use tool::install::install as tool_install;
+pub(crate) use tool::list::list as tool_list;
+pub(crate) use tool::run::run as tool_run;
+pub(crate) use tool::uninstall::uninstall as tool_uninstall;
+pub(crate) use toolchain::dir::dir as toolchain_dir;
 pub(crate) use toolchain::find::find as toolchain_find;
 pub(crate) use toolchain::install::install as toolchain_install;
 pub(crate) use toolchain::list::list as toolchain_list;
+pub(crate) use toolchain::uninstall::uninstall as toolchain_uninstall;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;

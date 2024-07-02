@@ -1,36 +1,42 @@
+use std::borrow::Cow;
+use std::ffi::OsString;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+use pep440_rs::Version;
 use tokio::process::Command;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
-use uv_requirements::RequirementsSource;
+use uv_normalize::PackageName;
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_toolchain::{
-    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
+    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainFetch, ToolchainPreference,
+    ToolchainRequest,
 };
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
-use crate::commands::project::update_environment;
+use crate::commands::project::{update_environment, SharedState};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
     command: ExternalCommand,
-    python: Option<String>,
     from: Option<String>,
     with: Vec<String>,
+    python: Option<String>,
     settings: ResolverInstallerSettings,
     _isolated: bool,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -38,7 +44,7 @@ pub(crate) async fn run(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv tool run` is experimental and may change without warning.");
+        warn_user_once!("`uv tool run` is experimental and may change without warning.");
     }
 
     let (target, args) = command.split();
@@ -46,19 +52,23 @@ pub(crate) async fn run(
         return Err(anyhow::anyhow!("No tool command provided"));
     };
 
-    let from = if let Some(from) = from {
-        from
+    let (target, from) = if let Some(from) = from {
+        (Cow::Borrowed(target), Cow::Owned(from))
     } else {
-        let Some(target) = target.to_str() else {
-            return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
-        };
-        target.to_string()
+        parse_target(target)?
     };
 
-    let requirements = [RequirementsSource::from_package(from)]
+    let requirements = [RequirementsSource::from_package(from.to_string())]
         .into_iter()
         .chain(with.into_iter().map(RequirementsSource::from_package))
         .collect::<Vec<_>>();
+
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let spec =
+        RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
@@ -67,16 +77,15 @@ pub(crate) async fn run(
     debug!("Syncing ephemeral environment.");
 
     // Discover an interpreter.
-    // Note we force preview on during `uv tool run` for now since the entire interface is in preview
-    let interpreter = Toolchain::find(
-        &python
-            .as_deref()
-            .map(ToolchainRequest::parse)
-            .unwrap_or_default(),
+    let interpreter = Toolchain::find_or_fetch(
+        python.as_deref().map(ToolchainRequest::parse),
         EnvironmentPreference::OnlySystem,
         toolchain_preference,
+        toolchain_fetch,
+        &client_builder,
         cache,
-    )?
+    )
+    .await?
     .into_interpreter();
 
     // Create a virtual environment.
@@ -93,8 +102,9 @@ pub(crate) async fn run(
     let ephemeral_env = Some(
         update_environment(
             venv,
-            &requirements,
+            spec,
             &settings,
+            &SharedState::default(),
             preview,
             connectivity,
             concurrency,
@@ -109,7 +119,7 @@ pub(crate) async fn run(
     let command = target;
 
     // Construct the command
-    let mut process = Command::new(command);
+    let mut process = Command::new(command.as_ref());
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -166,4 +176,40 @@ pub(crate) async fn run(
     } else {
         Ok(ExitStatus::Failure)
     }
+}
+
+/// Parse a target into a command name and a requirement.
+fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
+    let Some(target_str) = target.to_str() else {
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+    };
+
+    // e.g. `uv`, no special handling
+    let Some((name, version)) = target_str.split_once('@') else {
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    };
+
+    // e.g. `uv@`, warn and treat the whole thing as the command
+    if version.is_empty() {
+        debug!("Ignoring empty version request in command");
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    }
+
+    // e.g. ignore `git+https://github.com/uv/uv.git@main`
+    if PackageName::from_str(name).is_err() {
+        debug!("Ignoring non-package name `{}` in command", name);
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    }
+
+    // e.g. `uv@0.1.0`, convert to `uv==0.1.0`
+    if let Ok(version) = Version::from_str(version) {
+        return Ok((
+            Cow::Owned(OsString::from(name)),
+            Cow::Owned(format!("{name}=={version}")),
+        ));
+    }
+
+    // e.g. `uv@invalid`, warn and treat the whole thing as the command
+    debug!("Ignoring invalid version request `{}` in command", version);
+    Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)))
 }

@@ -74,7 +74,11 @@ pub struct Tool {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
     pub sources: Option<BTreeMap<PackageName, Source>>,
+    /// The workspace definition for the project, if any.
     pub workspace: Option<ToolUvWorkspace>,
+    /// Whether the project is managed by `uv`. If `false`, `uv` will ignore the project when
+    /// `uv run` is invoked.
+    pub managed: Option<bool>,
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -194,14 +198,19 @@ pub enum Source {
 
 #[derive(Error, Debug)]
 pub enum SourceError {
-    #[error("Cannot resolve git reference `{0}`.")]
+    #[error("Cannot resolve git reference `{0}`")]
     UnresolvedReference(String),
-    #[error("Workspace dependency must be a local path.")]
-    InvalidWorkspaceRequirement,
+    #[error("Workspace dependency `{0}` must refer to local directory, not a Git repository")]
+    WorkspacePackageGit(String),
+    #[error("Workspace dependency `{0}` must refer to local directory, not a URL")]
+    WorkspacePackageUrl(String),
+    #[error("Workspace dependency `{0}` must refer to local directory, not a file")]
+    WorkspacePackageFile(String),
 }
 
 impl Source {
     pub fn from_requirement(
+        name: &PackageName,
         source: RequirementSource,
         workspace: bool,
         editable: Option<bool>,
@@ -210,15 +219,23 @@ impl Source {
         branch: Option<String>,
     ) -> Result<Option<Source>, SourceError> {
         if workspace {
-            match source {
-                RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {}
-                _ => return Err(SourceError::InvalidWorkspaceRequirement),
-            }
-
-            return Ok(Some(Source::Workspace {
-                editable,
-                workspace: true,
-            }));
+            return match source {
+                RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
+                    Ok(Some(Source::Workspace {
+                        editable,
+                        workspace: true,
+                    }))
+                }
+                RequirementSource::Url { .. } => {
+                    Err(SourceError::WorkspacePackageUrl(name.to_string()))
+                }
+                RequirementSource::Git { .. } => {
+                    Err(SourceError::WorkspacePackageGit(name.to_string()))
+                }
+                RequirementSource::Path { .. } => {
+                    Err(SourceError::WorkspacePackageFile(name.to_string()))
+                }
+            };
         }
 
         let source = match source {
@@ -274,6 +291,17 @@ impl Source {
 
         Ok(Some(source))
     }
+}
+
+/// The type of a dependency in a `pyproject.toml`.
+#[derive(Debug, Clone)]
+pub enum DependencyType {
+    /// A dependency in `project.dependencies`.
+    Production,
+    /// A dependency in `tool.uv.dev-dependencies`.
+    Dev,
+    /// A dependency in `project.optional-dependencies.{0}`.
+    Optional(ExtraName),
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>

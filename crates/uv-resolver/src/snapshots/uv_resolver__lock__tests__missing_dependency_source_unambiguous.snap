@@ -1,0 +1,206 @@
+---
+source: crates/uv-resolver/src/lock.rs
+expression: result
+---
+Ok(
+    Lock {
+        version: 1,
+        distributions: [
+            Distribution {
+                id: DistributionId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: "0.1.0",
+                    source: Registry(
+                        Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "pypi.org",
+                                ),
+                            ),
+                            port: None,
+                            path: "/simple",
+                            query: None,
+                            fragment: None,
+                        },
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "example.com",
+                                ),
+                            ),
+                            port: None,
+                            path: "/",
+                            query: None,
+                            fragment: None,
+                        },
+                        metadata: SourceDistMetadata {
+                            hash: Hash(
+                                HashDigest {
+                                    algorithm: Sha256,
+                                    digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                },
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                wheels: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dev_dependencies: {},
+            },
+            Distribution {
+                id: DistributionId {
+                    name: PackageName(
+                        "b",
+                    ),
+                    version: "0.1.0",
+                    source: Registry(
+                        Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "pypi.org",
+                                ),
+                            ),
+                            port: None,
+                            path: "/simple",
+                            query: None,
+                            fragment: None,
+                        },
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "example.com",
+                                ),
+                            ),
+                            port: None,
+                            path: "/",
+                            query: None,
+                            fragment: None,
+                        },
+                        metadata: SourceDistMetadata {
+                            hash: Hash(
+                                HashDigest {
+                                    algorithm: Sha256,
+                                    digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                },
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                wheels: [],
+                dependencies: [
+                    Dependency {
+                        distribution_id: DistributionId {
+                            name: PackageName(
+                                "a",
+                            ),
+                            version: "0.1.0",
+                            source: Registry(
+                                Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                            ),
+                        },
+                        extra: None,
+                        marker: None,
+                    },
+                ],
+                optional_dependencies: {},
+                dev_dependencies: {},
+            },
+        ],
+        requires_python: None,
+        by_id: {
+            DistributionId {
+                name: PackageName(
+                    "a",
+                ),
+                version: "0.1.0",
+                source: Registry(
+                    Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "pypi.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/simple",
+                        query: None,
+                        fragment: None,
+                    },
+                ),
+            }: 0,
+            DistributionId {
+                name: PackageName(
+                    "b",
+                ),
+                version: "0.1.0",
+                source: Registry(
+                    Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "pypi.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/simple",
+                        query: None,
+                        fragment: None,
+                    },
+                ),
+            }: 1,
+        },
+    },
+)

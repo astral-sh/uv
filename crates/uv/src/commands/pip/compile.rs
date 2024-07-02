@@ -1,6 +1,5 @@
 use std::env;
 use std::io::stdout;
-use std::ops::Deref;
 use std::path::Path;
 
 use anstream::{eprint, AutoStream, StripStream};
@@ -29,7 +28,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
-    InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
+    InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, RequiresPython,
+    ResolutionMode,
 };
 use uv_toolchain::{
     EnvironmentPreference, PythonEnvironment, PythonVersion, Toolchain, ToolchainPreference,
@@ -58,6 +58,7 @@ pub(crate) async fn pip_compile(
     generate_hashes: bool,
     no_emit_packages: Vec<PackageName>,
     include_extras: bool,
+    include_markers: bool,
     include_annotations: bool,
     include_header: bool,
     custom_compile_command: Option<String>,
@@ -76,6 +77,7 @@ pub(crate) async fn pip_compile(
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    universal: bool,
     exclude_newer: Option<ExcludeNewer>,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
@@ -205,20 +207,35 @@ pub(crate) async fn pip_compile(
     // distributions will be built against the installed version, and so the index may contain
     // different package priorities than in the top-level resolution.
     let top_level_index = if python_version.is_some() {
-        InMemoryIndexRef::Owned(InMemoryIndex::default())
+        InMemoryIndex::default()
     } else {
-        InMemoryIndexRef::Borrowed(&source_index)
+        source_index.clone()
     };
 
     // Determine the Python requirement, if the user requested a specific version.
-    let python_requirement = if let Some(python_version) = python_version.as_ref() {
+    let python_requirement = if universal {
+        let requires_python = RequiresPython::greater_than_equal_version(
+            if let Some(python_version) = python_version.as_ref() {
+                python_version.version.clone()
+            } else {
+                interpreter.python_version().clone()
+            },
+        );
+        PythonRequirement::from_requires_python(&interpreter, &requires_python)
+    } else if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(&interpreter, python_version)
     } else {
         PythonRequirement::from_interpreter(&interpreter)
     };
 
     // Determine the environment for the resolution.
-    let (tags, markers) = resolution_environment(python_version, python_platform, &interpreter)?;
+    let (tags, markers) = if universal {
+        (None, None)
+    } else {
+        let (tags, markers) =
+            resolution_environment(python_version, python_platform, &interpreter)?;
+        (Some(tags), Some(markers))
+    };
 
     // Generate, but don't enforce hashes for the requirements.
     let hasher = if generate_hashes {
@@ -246,7 +263,7 @@ pub(crate) async fn pip_compile(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(&markers)
+        .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
@@ -261,7 +278,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -318,8 +335,8 @@ pub(crate) async fn pip_compile(
         &hasher,
         &Reinstall::None,
         &upgrade,
-        Some(&tags),
-        Some(&markers),
+        tags.as_deref(),
+        markers.as_deref(),
         python_requirement,
         &client,
         &flat_index,
@@ -367,13 +384,15 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        let relevant_markers = resolution.marker_tree(&top_level_index, &markers)?;
-        writeln!(
-            writer,
-            "{}",
-            "# Pinned dependencies known to be valid for:".green()
-        )?;
-        writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
+        if let Some(markers) = markers.as_deref() {
+            let relevant_markers = resolution.marker_tree(&top_level_index, markers)?;
+            writeln!(
+                writer,
+                "{}",
+                "# Pinned dependencies known to be valid for:".green()
+            )?;
+            writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
+        }
     }
 
     let mut wrote_preamble = false;
@@ -438,10 +457,11 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
-            Some(&markers),
+            markers.as_deref(),
             &no_emit_packages,
             generate_hashes,
             include_extras,
+            include_markers || universal,
             include_annotations,
             include_index_annotation,
             annotation_style,
@@ -584,22 +604,5 @@ impl OutputWriter {
         }
 
         Ok(())
-    }
-}
-
-/// An owned or unowned [`InMemoryIndex`].
-enum InMemoryIndexRef<'a> {
-    Owned(InMemoryIndex),
-    Borrowed(&'a InMemoryIndex),
-}
-
-impl Deref for InMemoryIndexRef<'_> {
-    type Target = InMemoryIndex;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Owned(index) => index,
-            Self::Borrowed(index) => index,
-        }
     }
 }

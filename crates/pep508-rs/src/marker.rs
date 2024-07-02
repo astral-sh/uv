@@ -681,7 +681,6 @@ impl MarkerEnvironment {
         python_version,
         sys_platform
     ))]
-    #[allow(clippy::too_many_arguments)]
     fn py_new(
         implementation_name: &str,
         implementation_version: &str,
@@ -1584,6 +1583,11 @@ impl MarkerTree {
         reporter: &mut impl Reporter,
     ) -> Result<Self, Pep508Error> {
         parse_markers(markers, reporter)
+    }
+
+    /// Whether the marker is `MarkerTree::And(Vec::new())`.
+    pub fn is_universal(&self) -> bool {
+        self == &MarkerTree::And(Vec::new())
     }
 
     /// Does this marker apply in the given environment?

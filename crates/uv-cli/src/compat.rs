@@ -177,18 +177,25 @@ impl CompatArgs for PipCompileCompatArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipListCompatArgs {
     #[clap(long, hide = true)]
+    disable_pip_version_check: bool,
+
+    #[clap(long, hide = true)]
     outdated: bool,
 }
 
-impl CompatArgs for crate::compat::PipListCompatArgs {
+impl CompatArgs for PipListCompatArgs {
     /// Validate the arguments passed for `pip list` compatibility.
     ///
     /// This method will warn when an argument is passed that has no effect but matches uv's
     /// behavior. If an argument is passed that does _not_ match uv's behavior (e.g.,
     /// `--outdated`), this method will return an error.
     fn validate(&self) -> Result<()> {
+        if self.disable_pip_version_check {
+            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+        }
+
         if self.outdated {
-            return Err(anyhow!("pip list's `--outdated` is unsupported."));
+            return Err(anyhow!("pip's `--outdated` is unsupported."));
         }
 
         Ok(())
@@ -359,6 +366,9 @@ impl CompatArgs for VenvCompatArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipInstallCompatArgs {
+    #[clap(long, hide = true)]
+    disable_pip_version_check: bool,
+
     #[clap(long, hide = false)]
     user: bool,
 }
@@ -370,11 +380,41 @@ impl CompatArgs for PipInstallCompatArgs {
     /// behavior. If an argument is passed that does _not_ match uv's behavior, this method will
     /// return an error.
     fn validate(&self) -> Result<()> {
+        if self.disable_pip_version_check {
+            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+        }
+
         if self.user {
             return Err(anyhow!(
-                "pip install's `--user` is unsupported (use a virtual environment instead)."
+                "pip's `--user` is unsupported (use a virtual environment instead)."
             ));
         }
+
+        Ok(())
+    }
+}
+
+/// Arguments for generic `pip` command compatibility.
+///
+/// These represent a subset of the `pip` interface that exists on all commands.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PipGlobalCompatArgs {
+    #[clap(long, hide = true)]
+    disable_pip_version_check: bool,
+}
+
+impl CompatArgs for PipGlobalCompatArgs {
+    /// Validate the arguments passed for `pip` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches uv's
+    /// behavior. If an argument is passed that does _not_ match uv's behavior, this method will
+    /// return an error.
+    fn validate(&self) -> Result<()> {
+        if self.disable_pip_version_check {
+            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+        }
+
         Ok(())
     }
 }

@@ -11,7 +11,7 @@ mod common;
 /// Create a `pip compile` command, overwriting defaults for any settings that vary based on machine
 /// and operating system.
 fn command(context: &TestContext) -> Command {
-    let mut command = context.compile();
+    let mut command = context.pip_compile();
     command
         .env("UV_LINK_MODE", "clone")
         .env("UV_CONCURRENT_DOWNLOADS", "50")
@@ -58,6 +58,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -129,6 +130,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -139,6 +141,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -186,6 +189,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -257,6 +261,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -267,6 +272,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -315,6 +321,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -386,6 +393,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -396,6 +404,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -476,6 +485,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -547,6 +557,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -557,6 +568,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -606,6 +618,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -654,6 +667,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -664,6 +678,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -722,6 +737,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -793,6 +809,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -803,6 +820,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -875,6 +893,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -969,6 +988,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -979,6 +999,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1028,6 +1049,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1144,6 +1166,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -1154,6 +1177,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1226,6 +1250,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1292,6 +1317,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -1302,6 +1328,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1373,6 +1400,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1421,6 +1449,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -1431,6 +1460,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1495,6 +1525,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1588,6 +1619,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -1598,6 +1630,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1645,6 +1678,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1738,6 +1772,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -1748,6 +1783,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1819,6 +1855,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1867,6 +1904,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -1877,6 +1915,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -1931,6 +1970,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1979,6 +2019,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -1989,6 +2030,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -2043,6 +2085,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2091,6 +2134,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -2101,6 +2145,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,
@@ -2157,6 +2202,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2205,6 +2251,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             output_file: None,
             no_strip_extras: false,
+            no_strip_markers: false,
             no_annotate: false,
             no_header: false,
             custom_compile_command: None,
@@ -2215,6 +2262,149 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
             python_version: None,
             python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            require_hashes: false,
+            upgrade: None,
+            reinstall: None,
+            concurrency: Concurrency {
+                downloads: 50,
+                builds: 16,
+                installs: 8,
+            },
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+/// Read from a `pyproject.toml` file in the current directory. In this case, the `pyproject.toml`
+/// file uses the Poetry schema.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_poetry_toml() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a `uv.toml` file to the directory.
+    let config = context.temp_dir.child("pyproject.toml");
+    config.write_str(indoc::indoc! {r#"
+        [tool.poetry]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.poetry.dependencies]
+        python = "^3.10"
+        rich = "^13.7.1"
+
+        [build-system]
+        requires = ["poetry-core"]
+        build-backend = "poetry.core.masonry.api"
+
+        [tool.uv.pip]
+        resolution = "lowest-direct"
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    // Resolution should use the lowest direct version, and generate hashes.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("--show-settings")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        connectivity: Online,
+        isolated: false,
+        show_settings: true,
+        preview: Disabled,
+        toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        overrides_from_workspace: [],
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                index: None,
+                extra_index: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: LowestDirect,
+            prerelease: IfNecessaryOrExplicit,
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            setup_py: Pep517,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
             exclude_newer: Some(
                 ExcludeNewer(
                     2024-03-25T00:00:00Z,

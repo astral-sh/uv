@@ -402,7 +402,3 @@ By default, uv does not write any index URLs to the output file, while `pip-comp
 `--index-url` or `--extra-index-url` that does not match the default (PyPI). To include index URLs
 in the output file, pass the `--emit-index-url` flag to `uv pip compile`. Unlike `pip-compile`,
 uv will include all index URLs when `--emit-index-url` is passed, including the default index URL.
-
-By default, uv does not write any `--no-build` or `--only-binary` options to the output file, unlike
-`pip-compile`. To include these options in the output file, pass the `--emit-build-options` flag to
-`uv pip compile`.

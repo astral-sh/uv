@@ -2,7 +2,7 @@
 use thiserror::Error;
 
 pub use crate::discovery::{
-    find_toolchains, EnvironmentPreference, Error as DiscoveryError, SystemPython,
+    find_toolchains, EnvironmentPreference, Error as DiscoveryError, SystemPython, ToolchainFetch,
     ToolchainNotFound, ToolchainPreference, ToolchainRequest, ToolchainSource, VersionRequest,
 };
 pub use crate::environment::PythonEnvironment;
@@ -70,7 +70,10 @@ pub enum Error {
     KeyError(#[from] toolchain::ToolchainKeyError),
 
     #[error(transparent)]
-    NotFound(#[from] ToolchainNotFound),
+    MissingToolchain(#[from] ToolchainNotFound),
+
+    #[error(transparent)]
+    MissingEnvironment(#[from] environment::EnvironmentNotFound),
 }
 
 // The mock interpreters are not valid on Windows so we don't have unit test coverage there
@@ -99,7 +102,7 @@ mod tests {
     use crate::{
         implementation::ImplementationName, managed::InstalledToolchains, toolchain::Toolchain,
         virtualenv::virtualenv_python_executable, PythonVersion, ToolchainNotFound,
-        ToolchainRequest, ToolchainSource, VersionRequest,
+        ToolchainRequest, ToolchainSource,
     };
 
     struct TestContext {
@@ -410,7 +413,7 @@ mod tests {
             )
         });
         assert!(
-            matches!(result, Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))),
+            matches!(result, Ok(Err(ToolchainNotFound { .. }))),
             "With an empty path, no Python installation should be detected got {result:?}"
         );
 
@@ -424,7 +427,7 @@ mod tests {
             )
         });
         assert!(
-            matches!(result, Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))),
+            matches!(result, Ok(Err(ToolchainNotFound { .. }))),
             "With an unset path, no Python installation should be detected got {result:?}"
         );
 
@@ -450,7 +453,7 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Ok(Err(ToolchainNotFound::NoPythonInstallation(..)))
+                Ok(Err(ToolchainNotFound { .. }))
             ),
             "With an non-executable Python, no Python installation should be detected; got {result:?}"
         );
@@ -563,7 +566,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::NoPythonInstallation(..))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             // TODO(zanieb): We could improve the error handling to hint this to the user
             "If only Python 2 is available, we should not find a toolchain; got {result:?}"
         );
@@ -789,13 +792,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(
-                result,
-                Err(ToolchainNotFound::NoMatchingVersion(
-                    _,
-                    VersionRequest::MajorMinor(3, 9)
-                ))
-            ),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find a toolchain; got {result:?}"
         );
 
@@ -816,13 +813,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(
-                result,
-                Err(ToolchainNotFound::NoMatchingVersion(
-                    _,
-                    VersionRequest::MajorMinorPatch(3, 11, 9)
-                ))
-            ),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find a toolchain; got {result:?}"
         );
 
@@ -1298,14 +1289,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(
-                result,
-                Err(ToolchainNotFound::NoPythonInstallation(
-                    // TODO(zanieb): We need the environment preference in the error
-                    ToolchainPreference::OnlySystem,
-                    None
-                ))
-            ),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find an toolchain; got {result:?}"
         );
 
@@ -1322,13 +1306,7 @@ mod tests {
             },
         )?;
         assert!(
-            matches!(
-                result,
-                Err(ToolchainNotFound::NoMatchingVersion(
-                    ToolchainPreference::OnlySystem,
-                    VersionRequest::MajorMinorPatch(3, 12, 3)
-                ))
-            ),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find an toolchain; got {result:?}"
         );
         Ok(())
@@ -1362,7 +1340,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::NoPythonInstallation(..))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find it without a specific request"
         );
 
@@ -1375,7 +1353,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::NoMatchingVersion(..))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find it via a matching version request"
         );
 
@@ -1569,7 +1547,7 @@ mod tests {
         assert_eq!(
             toolchain.interpreter().python_full_version().to_string(),
             "3.10.0",
-            "We should prefer the requested directory over the system and active virtul toolchains"
+            "We should prefer the requested directory over the system and active virtual environments"
         );
 
         Ok(())
@@ -1589,7 +1567,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::FileNotFound(_))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not find the file; got {result:?}"
         );
 
@@ -1639,7 +1617,7 @@ mod tests {
             )
         })?;
         assert!(
-            matches!(result, Err(ToolchainNotFound::NoPythonInstallation(..))),
+            matches!(result, Err(ToolchainNotFound { .. })),
             "We should not the pypy interpreter if not named `python` or requested; got {result:?}"
         );
 

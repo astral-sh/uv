@@ -1,6 +1,5 @@
 use anyhow::Result;
 use futures::StreamExt;
-use itertools::Itertools;
 use std::fmt::Write;
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -9,13 +8,12 @@ use uv_fs::Simplified;
 use uv_toolchain::downloads::{self, DownloadResult, PythonDownload, PythonDownloadRequest};
 use uv_toolchain::managed::{InstalledToolchain, InstalledToolchains};
 use uv_toolchain::{requests_from_version_file, ToolchainRequest};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Download and install a Python toolchain.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     targets: Vec<String>,
     force: bool,
@@ -26,7 +24,7 @@ pub(crate) async fn install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv toolchain install` is experimental and may change without warning.");
+        warn_user_once!("`uv toolchain install` is experimental and may change without warning.");
     }
 
     let start = std::time::Instant::now();
@@ -49,7 +47,7 @@ pub(crate) async fn install(
 
     let download_requests = requests
         .iter()
-        .map(|request| PythonDownloadRequest::from_request(request.clone()))
+        .map(PythonDownloadRequest::from_request)
         .collect::<Result<Vec<_>, downloads::Error>>()?;
 
     let installed_toolchains: Vec<_> = toolchains.find_all()?.collect();
@@ -65,7 +63,7 @@ pub(crate) async fn install(
         {
             writeln!(
                 printer.stderr(),
-                "Found installed toolchain '{}' that satisfies {request}",
+                "Found installed toolchain `{}` that satisfies {request}",
                 toolchain.key()
             )?;
             if force {
@@ -106,8 +104,7 @@ pub(crate) async fn install(
         .into_iter()
         // Populate the download requests with defaults
         .map(PythonDownloadRequest::fill)
-        .map(|request| request.map(|inner| PythonDownload::from_request(&inner)))
-        .flatten_ok()
+        .map(|request| PythonDownload::from_request(&request))
         .collect::<Result<Vec<_>, uv_toolchain::downloads::Error>>()?;
 
     // Construct a client

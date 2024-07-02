@@ -11,7 +11,7 @@ use uv_configuration::{
 use uv_macros::CombineOptions;
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::{PythonVersion, ToolchainPreference};
+use uv_toolchain::{PythonVersion, ToolchainFetch, ToolchainPreference};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -60,6 +60,7 @@ pub struct GlobalOptions {
     pub cache_dir: Option<PathBuf>,
     pub preview: Option<bool>,
     pub toolchain_preference: Option<ToolchainPreference>,
+    pub toolchain_fetch: Option<ToolchainFetch>,
 }
 
 /// Settings relevant to all installer operations.
@@ -169,6 +170,7 @@ pub struct PipOptions {
     pub prerelease: Option<PreReleaseMode>,
     pub output_file: Option<PathBuf>,
     pub no_strip_extras: Option<bool>,
+    pub no_strip_markers: Option<bool>,
     pub no_annotate: Option<bool>,
     pub no_header: Option<bool>,
     pub custom_compile_command: Option<String>,
@@ -177,6 +179,7 @@ pub struct PipOptions {
     pub config_settings: Option<ConfigSettings>,
     pub python_version: Option<PythonVersion>,
     pub python_platform: Option<TargetTriple>,
+    pub universal: Option<bool>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub no_emit_package: Option<Vec<PackageName>>,
     pub emit_index_url: Option<bool>,

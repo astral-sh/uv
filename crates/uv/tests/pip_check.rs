@@ -6,45 +6,15 @@ use assert_fs::fixture::PathChild;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext, EXCLUDE_NEWER};
+use crate::common::{get_bin, TestContext};
 
 mod common;
-
-/// Create a `pip install` command with options shared across scenarios.
-fn install_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("install")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
-
-    command
-}
 
 /// Create a `pip check` command with options shared across scenarios.
 fn check_command(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("check")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
+    command.arg("pip").arg("check");
+    context.add_shared_args(&mut command);
     command
 }
 
@@ -55,7 +25,8 @@ fn check_compatible_packages() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -98,7 +69,8 @@ fn check_incompatible_packages() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -121,7 +93,8 @@ fn check_incompatible_packages() -> Result<()> {
     let requirements_txt_idna = context.temp_dir.child("requirements_idna.txt");
     requirements_txt_idna.write_str("idna==2.4")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements_idna.txt")
         .arg("--strict"), @r###"
@@ -165,7 +138,8 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -188,7 +162,8 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     let requirements_txt_two = context.temp_dir.child("requirements_two.txt");
     requirements_txt_two.write_str("idna==2.4\nurllib3==1.20")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context
+        .pip_install()
         .arg("-r")
         .arg("requirements_two.txt")
         .arg("--strict"), @r###"
