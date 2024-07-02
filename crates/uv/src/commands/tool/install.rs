@@ -122,11 +122,9 @@ pub(crate) async fn install(
         .unwrap()
     };
 
-    let name = from.name.to_string();
-
     let installed_tools = InstalledTools::from_settings()?;
 
-    let existing_tool_receipt = installed_tools.get_tool_receipt(&name)?;
+    let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
     // TODO(zanieb): Automatically replace an existing tool if the request differs
     let reinstall_entry_points = if existing_tool_receipt.is_some() {
         if force {
@@ -142,7 +140,11 @@ pub(crate) async fn install(
                 Reinstall::Packages(ref packages) => packages.contains(&from.name),
                 // If not reinstalling... then we're done
                 Reinstall::None => {
-                    writeln!(printer.stderr(), "Tool `{name}` is already installed")?;
+                    writeln!(
+                        printer.stderr(),
+                        "Tool `{}` is already installed",
+                        from.name
+                    )?;
                     return Ok(ExitStatus::Failure);
                 }
             }
@@ -176,7 +178,7 @@ pub(crate) async fn install(
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory
     // This lets us confirm the environment is valid before removing an existing install
     let environment = installed_tools.environment(
-        &name,
+        &from.name,
         // Do not remove the existing environment if we're reinstalling a subset of packages
         !matches!(settings.reinstall, Reinstall::Packages(_)),
         interpreter,
@@ -208,7 +210,11 @@ pub(crate) async fn install(
     // Exit early if we're not supposed to be reinstalling entry points
     // e.g. `--reinstall-package` was used for some dependency
     if existing_tool_receipt.is_some() && !reinstall_entry_points {
-        writeln!(printer.stderr(), "Updated environment for tool `{name}`")?;
+        writeln!(
+            printer.stderr(),
+            "Updated environment for tool `{}`",
+            from.name
+        )?;
         return Ok(ExitStatus::Success);
     }
 
@@ -246,9 +252,9 @@ pub(crate) async fn install(
 
     if target_entry_points.is_empty() {
         // Clean up the environment we just created
-        installed_tools.remove_environment(&name)?;
+        installed_tools.remove_environment(&from.name)?;
 
-        bail!("No entry points found for tool `{name}`");
+        bail!("No entry points found for tool `{}`", from.name);
     }
 
     // Check if they exist, before installing
@@ -266,7 +272,7 @@ pub(crate) async fn install(
         }
     } else if existing_entry_points.peek().is_some() {
         // Clean up the environment we just created
-        installed_tools.remove_environment(&name)?;
+        installed_tools.remove_environment(&from.name)?;
 
         let existing_entry_points = existing_entry_points
             // SAFETY: We know the target has a filename because we just constructed it above
@@ -300,7 +306,7 @@ pub(crate) async fn install(
             .join(", ")
     )?;
 
-    debug!("Adding receipt for tool `{name}`");
+    debug!("Adding receipt for tool `{}`", from.name);
     let installed_tools = installed_tools.init()?;
     let tool = Tool::new(
         requirements
@@ -312,7 +318,7 @@ pub(crate) async fn install(
             .into_iter()
             .map(|(name, _, target_path)| ToolEntrypoint::new(name, target_path)),
     );
-    installed_tools.add_tool_receipt(&name, tool)?;
+    installed_tools.add_tool_receipt(&from.name, tool)?;
 
     Ok(ExitStatus::Success)
 }

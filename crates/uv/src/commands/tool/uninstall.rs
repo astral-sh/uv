@@ -6,6 +6,7 @@ use itertools::Itertools;
 use tracing::debug;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
+use uv_normalize::PackageName;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
@@ -14,7 +15,7 @@ use crate::printer::Printer;
 
 /// Uninstall a tool.
 pub(crate) async fn uninstall(
-    name: String,
+    name: PackageName,
     preview: PreviewMode,
     printer: Printer,
 ) -> Result<ExitStatus> {

@@ -300,7 +300,7 @@ impl ToolListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUninstallSettings {
-    pub(crate) name: String,
+    pub(crate) name: PackageName,
 }
 
 impl ToolUninstallSettings {
