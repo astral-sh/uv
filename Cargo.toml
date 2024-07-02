@@ -159,7 +159,7 @@ ignored = ["flate2"]
 # For pyproject-toml
 pep440_rs = { path = "crates/pep440-rs" }
 pep508_rs = { path = "crates/pep508-rs" }
-reqwest-middleware = { git = "https://github.com/konstin/reqwest-middleware", rev = "21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe" }
+reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"
