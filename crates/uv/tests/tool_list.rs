@@ -1,11 +1,11 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::fs;
+use fs_err as fs;
 
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 use common::{uv_snapshot, TestContext};
-
 mod common;
 
 #[test]
@@ -87,7 +87,7 @@ fn tool_list_missing_receipt() {
 }
 
 #[test]
-fn tool_list_bad_environment() {
+fn tool_list_bad_environment() -> Result<()> {
     let context = TestContext::new("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -111,7 +111,7 @@ fn tool_list_bad_environment() {
         .success();
 
     // Remove the python interpreter for black
-    fs::remove_dir_all(tool_dir.path().join("black/bin").as_os_str()).unwrap();
+    fs::remove_dir_all(tool_dir.path().join("black/bin").as_os_str())?;
 
     uv_snapshot!(context.filters(), context.tool_list()
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -125,4 +125,6 @@ fn tool_list_bad_environment() {
     warning: `uv tool list` is experimental and may change without warning.
     Python interpreter not found at `[TEMP_DIR]/tools/black/bin/python3`
     "###);
+
+    Ok(())
 }
