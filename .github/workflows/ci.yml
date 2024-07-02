@@ -203,7 +203,7 @@ jobs:
     steps:
       - name: Create Dev Drive using ReFS
         run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 12GB |
+          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 14GB |
                     Mount-VHD -Passthru |
                     Initialize-Disk -Passthru |
                     New-Partition -AssignDriveLetter -UseMaximumSize |
