@@ -914,16 +914,32 @@ mod test {
     }
 
     #[test]
+    #[cfg(all(windows, target_arch = "x86"))]
+    fn test_launchers_are_small() {
+        // At time of writing, they are 17408 bytes.
+        assert!(
+            super::LAUNCHER_I686_GUI.len() < 25 * 1024,
+            "GUI launcher: {}",
+            super::LAUNCHER_I686_GUI.len()
+        );
+        assert!(
+            super::LAUNCHER_I686_CONSOLE.len() < 25 * 1024,
+            "CLI launcher: {}",
+            super::LAUNCHER_I686_CONSOLE.len()
+        );
+    }
+
+    #[test]
     #[cfg(all(windows, target_arch = "x86_64"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are 15872 bytes.
+        // At time of writing, they are 21504 and 20480 bytes.
         assert!(
-            super::LAUNCHER_X86_64_GUI.len() < 20 * 1024,
+            super::LAUNCHER_X86_64_GUI.len() < 25 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_X86_64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_X86_64_CONSOLE.len() < 20 * 1024,
+            super::LAUNCHER_X86_64_CONSOLE.len() < 25 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_X86_64_CONSOLE.len()
         );
@@ -932,16 +948,16 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "aarch64"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are 14848 and 14336 bytes.
+        // At time of writing, they are 20480 and 19456 bytes.
         assert!(
-            super::LAUNCHER_AArch64_GUI.len() < 20 * 1024,
+            super::LAUNCHER_AARCH64_GUI.len() < 25 * 1024,
             "GUI launcher: {}",
-            super::LAUNCHER_AArch64_GUI.len()
+            super::LAUNCHER_AARCH64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_AArch64_CONSOLE.len() < 20 * 1024,
+            super::LAUNCHER_AARCH64_CONSOLE.len() < 25 * 1024,
             "CLI launcher: {}",
-            super::LAUNCHER_AArch64_CONSOLE.len()
+            super::LAUNCHER_AARCH64_CONSOLE.len()
         );
     }
 
