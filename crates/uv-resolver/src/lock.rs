@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -19,12 +19,16 @@ use distribution_types::{
     GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
 };
-use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
+use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::{
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, VerbatimUrl, VerbatimUrlError,
+};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
-use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl};
+use pypi_types::{
+    HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
+};
 use uv_configuration::ExtrasSpecification;
-use uv_distribution::VirtualProject;
+use uv_distribution::{Metadata, VirtualProject};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
@@ -573,12 +577,7 @@ impl Distribution {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let path_dist = PathBuiltDist {
                         filename,
-                        url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                            LockErrorKind::VerbatimUrl {
-                                id: self.id.clone(),
-                                err,
-                            }
-                        })?,
+                        url: verbatim_url(workspace_root.join(path), &self.id)?,
                         path: path.clone(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
@@ -620,12 +619,7 @@ impl Distribution {
             Source::Path(path) => {
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
-                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                        LockErrorKind::VerbatimUrl {
-                            id: self.id.clone(),
-                            err,
-                        }
-                    })?,
+                    url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
                 };
@@ -635,12 +629,7 @@ impl Distribution {
             Source::Directory(path) => {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                        LockErrorKind::VerbatimUrl {
-                            id: self.id.clone(),
-                            err,
-                        }
-                    })?,
+                    url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
                     editable: false,
@@ -651,12 +640,7 @@ impl Distribution {
             Source::Editable(path) => {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: VerbatimUrl::from_path(workspace_root.join(path)).map_err(|err| {
-                        LockErrorKind::VerbatimUrl {
-                            id: self.id.clone(),
-                            err,
-                        }
-                    })?,
+                    url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
                     editable: true,
@@ -738,6 +722,84 @@ impl Distribution {
             id: self.id.clone(),
         }
         .into())
+    }
+
+    /// Convert the [`Distribution`] to [`Metadata`] that can be used for resolution.
+    pub fn into_metadata(self, workspace_root: &Path) -> Result<Metadata, LockError> {
+        let name = self.name().clone();
+        let version = self.id.version.clone();
+        let provides_extras = self.optional_dependencies.keys().cloned().collect();
+
+        let mut dependency_extras = HashMap::new();
+        let mut requires_dist = self
+            .dependencies
+            .into_iter()
+            .filter_map(|dep| {
+                dep.into_requirement(workspace_root, &mut dependency_extras)
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>, LockError>>()?;
+
+        // Denormalize optional dependencies.
+        for (extra, deps) in self.optional_dependencies {
+            for dep in deps {
+                if let Some(mut dep) =
+                    dep.into_requirement(workspace_root, &mut dependency_extras)?
+                {
+                    // Add back the extra marker expression.
+                    let marker = MarkerTree::Expression(MarkerExpression::Extra {
+                        operator: ExtraOperator::Equal,
+                        name: extra.clone(),
+                    });
+                    match dep.marker {
+                        Some(ref mut tree) => tree.and(marker),
+                        None => dep.marker = Some(marker),
+                    }
+
+                    requires_dist.push(dep);
+                }
+            }
+        }
+
+        // Denormalize extras for each dependency.
+        for req in &mut requires_dist {
+            if let Some(extras) = dependency_extras.remove(&req.name) {
+                req.extras = extras;
+            }
+        }
+
+        let dev_dependencies = self
+            .dev_dependencies
+            .into_iter()
+            .map(|(group, deps)| {
+                let mut dependency_extras = HashMap::new();
+                let mut deps = deps
+                    .into_iter()
+                    .filter_map(|dep| {
+                        dep.into_requirement(workspace_root, &mut dependency_extras)
+                            .transpose()
+                    })
+                    .collect::<Result<Vec<_>, LockError>>()?;
+
+                // Denormalize extras for each development dependency.
+                for dep in &mut deps {
+                    if let Some(extras) = dependency_extras.remove(&dep.name) {
+                        dep.extras = extras;
+                    }
+                }
+
+                Ok((group, deps))
+            })
+            .collect::<Result<_, LockError>>()?;
+
+        Ok(Metadata {
+            name,
+            version,
+            requires_dist,
+            dev_dependencies,
+            provides_extras,
+            requires_python: None,
+        })
     }
 
     fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> anyhow::Result<Table> {
@@ -834,6 +896,16 @@ impl Distribution {
             _ => None,
         }
     }
+}
+
+/// Attempts to construct a `VerbatimUrl` from the given `Path`.
+fn verbatim_url(path: PathBuf, id: &DistributionId) -> Result<VerbatimUrl, LockError> {
+    let url = VerbatimUrl::from_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
+        id: id.clone(),
+        err,
+    })?;
+
+    Ok(url)
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -1811,6 +1883,76 @@ impl Dependency {
             extra,
             marker,
         }
+    }
+
+    /// Convert the [`Dependency`] to a [`Requirement`] that can be used for resolution.
+    pub(crate) fn into_requirement(
+        self,
+        workspace_root: &Path,
+        extras: &mut HashMap<PackageName, Vec<ExtraName>>,
+    ) -> Result<Option<Requirement>, LockError> {
+        // Keep track of extras, these will be denormalized later.
+        if let Some(extra) = self.extra {
+            extras
+                .entry(self.distribution_id.name)
+                .or_default()
+                .push(extra);
+
+            return Ok(None);
+        }
+
+        // Reconstruct the `RequirementSource` from the `Source`.
+        let source = match self.distribution_id.source {
+            Source::Registry(_) => RequirementSource::Registry {
+                specifier: VersionSpecifiers::empty(),
+                index: None,
+            },
+            Source::Git(repository, git) => {
+                let git_url =
+                    uv_git::GitUrl::new(repository.clone(), GitReference::from(git.kind.clone()))
+                        .with_precise(git.precise);
+
+                let parsed_url = ParsedUrl::Git(ParsedGitUrl {
+                    url: git_url.clone(),
+                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                });
+                RequirementSource::from_verbatim_parsed_url(parsed_url)
+            }
+            Source::Direct(url, direct) => {
+                let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl {
+                    url: url.clone(),
+                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                });
+                RequirementSource::from_verbatim_parsed_url(parsed_url)
+            }
+            Source::Path(ref path) => RequirementSource::Path {
+                lock_path: path.clone(),
+                install_path: workspace_root.join(path),
+                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+            },
+            Source::Directory(ref path) => RequirementSource::Directory {
+                editable: false,
+                lock_path: path.clone(),
+                install_path: workspace_root.join(path),
+                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+            },
+            Source::Editable(ref path) => RequirementSource::Directory {
+                editable: true,
+                lock_path: path.clone(),
+                install_path: workspace_root.join(path),
+                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+            },
+        };
+
+        let requirement = Requirement {
+            name: self.distribution_id.name.clone(),
+            marker: self.marker,
+            origin: None,
+            extras: Vec::new(),
+            source,
+        };
+
+        Ok(Some(requirement))
     }
 
     /// Returns the TOML representation of this dependency.
