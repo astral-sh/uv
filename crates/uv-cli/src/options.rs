@@ -44,6 +44,7 @@ impl From<ResolverArgs> for PipOptions {
             config_setting,
             exclude_newer,
             link_mode,
+            trusted_host,
         } = args;
 
         Self {
@@ -79,6 +80,7 @@ impl From<InstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode,
             no_compile_bytecode,
+            trusted_host,
         } = args;
 
         Self {
@@ -115,6 +117,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode,
             no_compile_bytecode,
+            trusted_host,
         } = args;
 
         Self {
@@ -177,6 +180,7 @@ pub fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -
         link_mode,
         compile_bytecode,
         no_compile_bytecode,
+        trusted_host,
     } = installer_args;
 
     let BuildArgs {
@@ -214,6 +218,7 @@ pub fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
         no_binary_package: Some(no_binary_package),
+        trusted_host,
     }
 }
 
@@ -232,6 +237,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         config_setting,
         exclude_newer,
         link_mode,
+        trusted_host,
     } = resolver_args;
 
     let BuildArgs {
@@ -275,6 +281,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
         no_binary_package: Some(no_binary_package),
+        trusted_host,
     }
 }
 
@@ -301,6 +308,7 @@ pub fn resolver_installer_options(
         link_mode,
         compile_bytecode,
         no_compile_bytecode,
+        trusted_host,
     } = resolver_installer_args;
 
     let BuildArgs {
@@ -347,5 +355,6 @@ pub fn resolver_installer_options(
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
         no_binary_package: Some(no_binary_package),
+        trusted_host,
     }
 }

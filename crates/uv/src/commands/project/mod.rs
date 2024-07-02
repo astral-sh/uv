@@ -315,6 +315,7 @@ pub(crate) async fn resolve_names(
         upgrade: _,
         reinstall: _,
         build_options,
+        trusted_host,
     } = settings;
 
     // Initialize the registry client.
