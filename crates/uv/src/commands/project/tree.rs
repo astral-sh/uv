@@ -8,7 +8,7 @@ use uv_configuration::{Concurrency, TargetTriple};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
@@ -42,11 +42,11 @@ pub(crate) async fn tree(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Find the project requirements.
-    let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+    let project = VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = ProjectInterpreter::discover(
-        &workspace,
+        &project,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
         python_downloads,
@@ -62,7 +62,7 @@ pub(crate) async fn tree(
     let lock = project::lock::do_safe_lock(
         locked,
         frozen,
-        &workspace,
+        &project,
         &interpreter,
         settings.as_ref(),
         Box::new(DefaultResolveLogger),

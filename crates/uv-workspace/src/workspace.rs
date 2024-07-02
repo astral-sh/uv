@@ -263,47 +263,6 @@ impl Workspace {
             .any(|member| *member.root() == self.install_path)
     }
 
-    /// Returns the set of requirements that include all packages in the workspace.
-    pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.packages.values().filter_map(|member| {
-            let project = member.pyproject_toml.project.as_ref()?;
-            // Extract the extras available in the project.
-            let extras = project
-                .optional_dependencies
-                .as_ref()
-                .map(|optional_dependencies| {
-                    // It's a `BTreeMap` so the keys are sorted.
-                    optional_dependencies.keys().cloned().collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-
-            let url = VerbatimUrl::from_absolute_path(&member.root)
-                .expect("path is valid URL")
-                .with_given(member.root.to_string_lossy());
-            Some(Requirement {
-                name: project.name.clone(),
-                extras,
-                marker: MarkerTree::TRUE,
-                source: if member.pyproject_toml.is_package() {
-                    RequirementSource::Directory {
-                        install_path: member.root.clone(),
-                        editable: true,
-                        r#virtual: false,
-                        url,
-                    }
-                } else {
-                    RequirementSource::Directory {
-                        install_path: member.root.clone(),
-                        editable: false,
-                        r#virtual: true,
-                        url,
-                    }
-                },
-                origin: None,
-            })
-        })
-    }
-
     /// Returns any requirements that are exclusive to the workspace root, i.e., not included in
     /// any of the workspace members.
     ///
@@ -341,152 +300,10 @@ impl Workspace {
         }
     }
 
-    /// Returns the set of overrides for the workspace.
-    pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(overrides) = self
-            .pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.override_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        overrides
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
-    }
-
-    /// Returns the set of supported environments for the workspace.
-    pub fn environments(&self) -> Option<&SupportedEnvironments> {
-        self.pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.environments.as_ref())
-    }
-
-    /// Returns the set of constraints for the workspace.
-    pub fn constraints(&self) -> Vec<Requirement> {
-        let Some(constraints) = self
-            .pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.constraint_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        constraints
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
-    }
-
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn install_path(&self) -> &PathBuf {
         &self.install_path
-    }
-
-    /// The path to the workspace virtual environment.
-    ///
-    /// Uses `.venv` in the install path directory by default.
-    ///
-    /// If `UV_PROJECT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
-    /// it is resolved relative to the install path.
-    pub fn venv(&self) -> PathBuf {
-        /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
-        fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
-            let value = std::env::var_os("UV_PROJECT_ENVIRONMENT")?;
-
-            if value.is_empty() {
-                return None;
-            };
-
-            let path = PathBuf::from(value);
-            if path.is_absolute() {
-                return Some(path);
-            };
-
-            // Resolve the path relative to the install path.
-            Some(workspace.install_path.join(path))
-        }
-
-        // Resolve the `VIRTUAL_ENV` variable, if any.
-        fn from_virtual_env_variable() -> Option<PathBuf> {
-            let value = std::env::var_os("VIRTUAL_ENV")?;
-
-            if value.is_empty() {
-                return None;
-            };
-
-            let path = PathBuf::from(value);
-            if path.is_absolute() {
-                return Some(path);
-            };
-
-            // Resolve the path relative to current directory.
-            // Note this differs from `UV_PROJECT_ENVIRONMENT`
-            Some(CWD.join(path))
-        }
-
-        // Attempt to check if the two paths refer to the same directory.
-        fn is_same_dir(left: &Path, right: &Path) -> Option<bool> {
-            // First, attempt to check directly
-            if let Ok(value) = same_file::is_same_file(left, right) {
-                return Some(value);
-            };
-
-            // Often, one of the directories won't exist yet so perform the comparison up a level
-            if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
-                left.parent(),
-                right.parent(),
-                left.file_name(),
-                right.file_name(),
-            ) {
-                match same_file::is_same_file(left_parent, right_parent) {
-                    Ok(true) => return Some(left_name == right_name),
-                    Ok(false) => return Some(false),
-                    _ => (),
-                }
-            };
-
-            // We couldn't determine if they're the same
-            None
-        }
-
-        // Determine the default value
-        let project_env = from_project_environment_variable(self)
-            .unwrap_or_else(|| self.install_path.join(".venv"));
-
-        // Warn if it conflicts with `VIRTUAL_ENV`
-        if let Some(from_virtual_env) = from_virtual_env_variable() {
-            if !is_same_dir(&from_virtual_env, &project_env).unwrap_or(false) {
-                warn_user_once!(
-                    "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored",
-                    from_virtual_env.user_display(),
-                    project_env.user_display()
-                );
-            }
-        }
-
-        project_env
     }
 
     /// The members of the workspace.
@@ -1439,6 +1256,234 @@ impl VirtualProject {
     /// Returns `true` if the project is a virtual workspace root.
     pub fn is_non_project(&self) -> bool {
         matches!(self, VirtualProject::NonProject(_))
+    }
+
+    pub fn packages_to_resolve(&self) -> impl Iterator<Item = &PackageName> + '_ {
+        self.workspace().packages().keys()
+    }
+
+    pub fn packages_to_lock(&self) -> Vec<PackageName> {
+        let mut members = self.packages_to_resolve().cloned().collect::<Vec<_>>();
+        members.sort();
+
+        // If this is a non-virtual project with a single member, we can omit it from the lockfile.
+        // If any members are added or removed, it will inherently mismatch. If the member is
+        // renamed, it will also mismatch.
+        if members.len() == 1 && !self.workspace().is_non_project() {
+            members.clear();
+        }
+
+        members
+    }
+
+    /// Returns the set of requirements that include all packages in the workspace.
+    pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        self.workspace().packages.values().filter_map(|member| {
+            let project = member.pyproject_toml.project.as_ref()?;
+            // Extract the extras available in the project.
+            let extras = project
+                .optional_dependencies
+                .as_ref()
+                .map(|optional_dependencies| {
+                    // It's a `BTreeMap` so the keys are sorted.
+                    optional_dependencies.keys().cloned().collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            let url = VerbatimUrl::from_absolute_path(&member.root)
+                .expect("path is valid URL")
+                .with_given(member.root.to_string_lossy());
+            Some(Requirement {
+                name: project.name.clone(),
+                extras,
+                marker: MarkerTree::TRUE,
+                source: if member.pyproject_toml.is_package() {
+                    RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        editable: true,
+                        r#virtual: false,
+                        url,
+                    }
+                } else {
+                    RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        editable: false,
+                        r#virtual: true,
+                        url,
+                    }
+                },
+                origin: None,
+            })
+        })
+    }
+
+    /// Returns the set of overrides for the workspace.
+    pub fn overrides(&self) -> Vec<Requirement> {
+        let Some(overrides) = self
+            .workspace()
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.override_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        overrides
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
+            })
+            .collect()
+    }
+
+    /// Returns the set of supported environments for the workspace.
+    pub fn environments(&self) -> Option<&SupportedEnvironments> {
+        self.workspace()
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.environments.as_ref())
+    }
+
+    /// Returns the set of constraints for the workspace.
+    pub fn constraints(&self) -> Vec<Requirement> {
+        let Some(constraints) = self
+            .workspace()
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.constraint_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        constraints
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
+            })
+            .collect()
+    }
+
+    /// The path to the workspace virtual environment.
+    ///
+    /// Uses `.venv` in the install path directory by default.
+    ///
+    /// If `UV_PROJECT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
+    /// it is resolved relative to the install path.
+    pub fn venv(&self) -> PathBuf {
+        /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
+        fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
+            let value = std::env::var_os("UV_PROJECT_ENVIRONMENT")?;
+
+            if value.is_empty() {
+                return None;
+            };
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            };
+
+            // Resolve the path relative to the install path.
+            Some(workspace.install_path.join(path))
+        }
+
+        // Resolve the `VIRTUAL_ENV` variable, if any.
+        fn from_virtual_env_variable() -> Option<PathBuf> {
+            let value = std::env::var_os("VIRTUAL_ENV")?;
+
+            if value.is_empty() {
+                return None;
+            };
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            };
+
+            // Resolve the path relative to current directory.
+            // Note this differs from `UV_PROJECT_ENVIRONMENT`
+            Some(CWD.join(path))
+        }
+
+        // Attempt to check if the two paths refer to the same directory.
+        fn is_same_dir(left: &Path, right: &Path) -> Option<bool> {
+            // First, attempt to check directly
+            if let Ok(value) = same_file::is_same_file(left, right) {
+                return Some(value);
+            };
+
+            // Often, one of the directories won't exist yet so perform the comparison up a level
+            if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
+                left.parent(),
+                right.parent(),
+                left.file_name(),
+                right.file_name(),
+            ) {
+                match same_file::is_same_file(left_parent, right_parent) {
+                    Ok(true) => return Some(left_name == right_name),
+                    Ok(false) => return Some(false),
+                    _ => (),
+                }
+            };
+
+            // We couldn't determine if they're the same
+            None
+        }
+
+        // Determine the default value
+        let project_env = from_project_environment_variable(self.workspace())
+            .unwrap_or_else(|| self.workspace().install_path.join(".venv"));
+
+        // Warn if it conflicts with `VIRTUAL_ENV`
+        if let Some(from_virtual_env) = from_virtual_env_variable() {
+            if !is_same_dir(&from_virtual_env, &project_env).unwrap_or(false) {
+                warn_user_once!(
+                    "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored",
+                    from_virtual_env.user_display(),
+                    project_env.user_display()
+                );
+            }
+        }
+
+        project_env
+    }
+
+    /// The path to the workspace lockfile
+    pub fn lockfile(&self) -> PathBuf {
+        self.workspace().install_path().join("uv.lock")
+    }
+
+    /// Determine a name for the environment, in order of preference:
+    ///
+    /// 1) The name of the project
+    /// 2) The name of the directory at the root of the workspace
+    /// 3) No prompt
+    pub fn venv_name(&self) -> Option<String> {
+        self.workspace()
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .map(|p| p.name.to_string())
+            .or_else(|| {
+                self.workspace()
+                    .install_path()
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+            })
     }
 }
 

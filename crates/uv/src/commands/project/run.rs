@@ -470,7 +470,7 @@ pub(crate) async fn run(
                 // If we're not isolating the environment, reuse the base environment for the
                 // project.
                 project::get_or_init_environment(
-                    project.workspace(),
+                    &project,
                     python.as_deref().map(PythonRequest::parse),
                     python_preference,
                     python_downloads,
@@ -488,16 +488,13 @@ pub(crate) async fn run(
                 // If we're not syncing, we should still attempt to respect the locked preferences
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
-                    lock = project::lock::read(project.workspace())
-                        .await
-                        .ok()
-                        .flatten();
+                    lock = project::lock::read(&project).await.ok().flatten();
                 }
             } else {
                 let result = match project::lock::do_safe_lock(
                     locked,
                     frozen,
-                    project.workspace(),
+                    &project,
                     venv.interpreter(),
                     settings.as_ref().into(),
                     if show_resolution {
