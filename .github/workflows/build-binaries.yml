@@ -92,6 +92,7 @@ jobs:
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -138,6 +139,7 @@ jobs:
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -260,6 +262,7 @@ jobs:
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -332,6 +335,7 @@ jobs:
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -399,6 +403,7 @@ jobs:
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -475,6 +480,7 @@ jobs:
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -537,6 +543,7 @@ jobs:
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -621,6 +628,7 @@ jobs:
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
