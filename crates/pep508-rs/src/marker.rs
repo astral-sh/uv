@@ -15,14 +15,14 @@ use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use pep440_rs::{Operator, Version, VersionParseError, VersionPattern, VersionSpecifier};
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, types::PyAnyMethods, PyResult,
     Python,
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-
-use pep440_rs::{Version, VersionParseError, VersionPattern, VersionSpecifier};
+use serde_json::to_string;
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
@@ -1475,6 +1475,64 @@ impl MarkerExpression {
             MarkerOperator::NotIn => !r_string.contains(l_string),
         }
     }
+
+    /// Return marker(s) that matches the complement of the current marker.
+    ///
+    /// We return a [`MarkerTree`] instead of a [`MarkerExpression`] since there are cases such as
+    /// `python_version ~= "3.11.3"` whose inverse can't be represented in a single
+    /// [`MarkerExpression`] but needs two expressions.
+    pub fn negate(self) -> MarkerTree {
+        match self {
+            MarkerExpression::Version { key, specifier } => {
+                let inverted_specifier = match specifier.operator() {
+                    Operator::Equal => Operator::Equal,
+                    Operator::EqualStar => {
+
+                        return MarkerTree::And(vec![
+                            MarkerTree::Expression(MarkerExpression::Version {
+                                key: key.clone(),
+                                specifier: VersionSpecifier {
+                                    operator: Operator::LessThan,
+                                    version: specifier.version().clone(),
+                                },
+                            }),
+                            MarkerTree::Expression(MarkerExpression::Version {
+                                key: key.clone(),
+                                specifier: VersionSpecifier {
+                                    operator: Operator::LessThan,
+                                    version: specifier.version().,
+                                },
+                            }),
+                        ])
+                    }
+                    Operator::ExactEqual => {}
+                    Operator::NotEqual => {}
+                    Operator::NotEqualStar => {}
+                    Operator::TildeEqual => {}
+                    Operator::LessThan => {}
+                    Operator::LessThanEqual => {}
+                    Operator::GreaterThan => {}
+                    Operator::GreaterThanEqual => {}
+                };
+                todo!()
+            }
+            MarkerExpression::VersionInverted { .. } => {
+                todo!()
+            }
+            MarkerExpression::String { .. } => {
+                todo!()
+            }
+            MarkerExpression::StringInverted { .. } => {
+                todo!()
+            }
+            MarkerExpression::Extra { .. } => {
+                todo!()
+            }
+            MarkerExpression::Arbitrary { .. } => {
+                todo!()
+            }
+        }
+    }
 }
 
 impl FromStr for MarkerExpression {
@@ -1894,6 +1952,19 @@ impl MarkerTree {
                 exprs.extend(tree);
             } else {
                 exprs.push(tree);
+            }
+        }
+    }
+
+    /// Compute `not(self)` using De Morgan's laws.
+    pub fn negate(self) -> Self {
+        match self {
+            MarkerTree::Expression(expr) => MarkerTree::Expression(expr.negate()),
+            MarkerTree::And(and) => {
+                MarkerTree::Or(and.into_iter().map(MarkerExpression::negate).collect())
+            }
+            MarkerTree::Or(or) => {
+                MarkerTree::And(or.into_iter().map(MarkerExpression::negate).collect())
             }
         }
     }

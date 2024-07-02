@@ -2436,6 +2436,26 @@ impl Dependencies {
             forks = new_forks;
             diverging_packages.push(name.clone());
         }
+        let mut markers_covered = MarkerTree::Or(Vec::new());
+        for fork in &forks {
+            markers_covered.or(fork.markers.clone());
+        }
+        // TODO(konsti): `normalize` should not return `None` for both empty `or` and empty `and`.
+        markers_covered = normalize(markers_covered.clone()).unwrap_or(markers_covered);
+        if !markers_covered.is_universal() {
+            let markers_missing = markers_covered.negate();
+            for (index, dependency) in deps.iter().enumerate() {
+                // A root can never be a dependency of another package,
+                // and a `Python` pubgrub package is never returned by
+                // `get_dependencies`. So a pubgrub package always has a
+                // name in this context.
+                let name = dependency
+                    .package
+                    .name()
+                    .expect("dependency always has a name");
+                let marker = dependency.package.marker();
+            }
+        }
         ForkedDependencies::Forked {
             forks,
             diverging_packages,

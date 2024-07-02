@@ -270,9 +270,9 @@ impl std::error::Error for VersionSpecifiersParseError {}
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct VersionSpecifier {
     /// ~=|==|!=|<=|>=|<|>|===, plus whether the version ended with a star
-    pub(crate) operator: Operator,
+    pub operator: Operator,
     /// The whole version part behind the operator
-    pub(crate) version: Version,
+    pub version: Version,
 }
 
 #[cfg(feature = "pyo3")]
