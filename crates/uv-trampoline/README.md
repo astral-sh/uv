@@ -19,9 +19,9 @@ rustup target add aarch64-pc-windows-msvc
 Then, build the trampolines for both supported architectures:
 
 ```shell
-cargo +nightly-2024-05-27 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
-cargo +nightly-2024-05-27 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2024-05-27 xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2024-06-08 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+cargo +nightly-2024-06-08 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-06-08 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Cross-compiling from macOS
@@ -39,9 +39,9 @@ rustup target add aarch64-pc-windows-msvc
 Then, build the trampolines for both supported architectures:
 
 ```shell
-cargo +nightly-2024-05-27 xwin build --release --target i686-pc-windows-msvc
-cargo +nightly-2024-05-27 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2024-05-27 xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2024-06-08 xwin build --release --target i686-pc-windows-msvc
+cargo +nightly-2024-06-08 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-06-08 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Updating the prebuilt executables
@@ -84,9 +84,8 @@ That's what this does: it's a generic "trampoline" that lets us generate custom
 
 ### How do you use it?
 
-Basically, this looks up `python.exe` (for console programs) or
-`pythonw.exe` (for GUI programs) in the adjacent directory, and invokes
-`python[w].exe path\to\the\<the .exe>`.
+Basically, this looks up `python.exe` (for console programs)
+and invokes `python.exe path\to\the\<the .exe>`.
 
 The intended use is:
 
@@ -124,25 +123,21 @@ is copied more-or-less directly.
 
 ### Anything I should know for hacking on this?
 
-In order to minimize binary size, this uses `#![no_std]`, `panic="abort"`, and
-carefully avoids using `core::fmt`. This removes a bunch of runtime overhead: by
+In order to minimize binary size, this uses, `panic="abort"`, and carefully
+avoids using `core::fmt`. This removes a bunch of runtime overhead: by
 default, Rust "hello world" on Windows is ~150 KB! So these binaries are ~10x
 smaller.
 
-Of course the tradeoff is that `#![no_std]` is an awkward super-limited
-environment. No C runtime, no platform APIs, very few features... you don't even
-get `Vec` or memory allocation or panicking support by default. To work around
-this:
+Of course the tradeoff is that this is an awkward super-limited
+environment. No C runtime and limited platform APIs... you don't
+even panicking support by default. To work around this:
 
-- We use `windows-sys` to access Win32 APIs directly. Who needs a C runtime?
+- We use `windows` to access Win32 APIs directly. Who needs a C runtime?
   Though uh, this does mean that literally all of our code is `unsafe`. Sorry!
 
-- `runtime.rs` has the core glue to get panicking, heap allocation, and linking
-  working.
-
 - `diagnostics.rs` uses `ufmt` and some cute Windows tricks to get a convenient
-  version of `eprintln!` that works without `std`, and automatically prints to
-  either the console if available or pops up a message box if not.
+  version of `eprintln!` that works without `core::fmt`, and automatically prints
+  to either the console if available or pops up a message box if not.
 
 - All the meat is in `bounce.rs`.
 
@@ -164,20 +159,15 @@ Miscellaneous tips:
 Building this can be frustrating, because the low-level compiler/runtime
 machinery have a bunch of implicit assumptions about the environment they'll run
 in, and the facilities it provides for things like `memcpy`, unwinding, etc.
-With `#![no_std]` most of this machinery is missing. So we need to replace the
-bits that we actually need, and which bits we need can change depending on stuff
-like optimization options. For example: we use `panic="abort"`, so we don't
-actually need unwinding support, but at lower optimization levels the compiler
-might not realize that, and still emit references to the unwinding helper
-`__CxxFrameHandler3`. And then the linker blows up because that symbol doesn't
-exist.
+So we need to replace the bits that we actually need, and which bits we need
+can change depending on stuff like optimization options.
+For example: we use `panic="abort"`, so we don't actually need unwinding support,
+but at lower optimization levels the compiler might not realize that, and still
+emit references to the unwinding helper`__CxxFrameHandler3`. And then the linker
+blows up because that symbol doesn't exist.
 
 ```
 cargo build --release --target i686-pc-windows-msvc
 cargo build --release --target x86_64-pc-windows-msvc
 cargo build --release --target aarch64-pc-windows-msvc
 ```
-
-Hopefully in the future as `#![no_std]` develops, this will get smoother.
-
-Also, sometimes it helps to fiddle with optimization levels.

@@ -1,4 +1,4 @@
-use core::mem::size_of;
+use std::mem::size_of;
 
 pub trait SizeOf {
     fn size_of(&self) -> u32;
