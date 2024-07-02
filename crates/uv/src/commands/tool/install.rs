@@ -56,8 +56,12 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
+    let python_request = python.as_deref().map(ToolchainRequest::parse);
+
+    // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
+    // requirements, even if we end up using a different interpreter for the tool install itself.
     let interpreter = Toolchain::find_or_fetch(
-        python.as_deref().map(ToolchainRequest::parse),
+        python_request.clone(),
         EnvironmentPreference::OnlySystem,
         toolchain_preference,
         toolchain_fetch,
@@ -147,21 +151,42 @@ pub(crate) async fn install(
 
     let installed_tools = InstalledTools::from_settings()?;
     let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
+    let existing_environment =
+        installed_tools
+            .get_environment(&from.name, cache)?
+            .filter(|environment| {
+                python_request.as_ref().map_or(true, |python_request| {
+                    if python_request.satisfied(environment.interpreter(), cache) {
+                        debug!("Found existing environment for tool `{}`", from.name);
+                        true
+                    } else {
+                        let _ = writeln!(
+                            printer.stderr(),
+                            "Existing environment for `{}` does not satisfy the requested Python interpreter: `{}`",
+                            from.name,
+                            python_request
+                        );
+                        false
+                    }
+                })
+            });
 
     // If the requested and receipt requirements are the same...
-    if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
-        let receipt = tool_receipt
-            .requirements()
-            .iter()
-            .cloned()
-            .map(Requirement::from)
-            .collect::<Vec<_>>();
-        if requirements == receipt {
-            // And the user didn't request a reinstall or upgrade...
-            if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
-                // We're done.
-                writeln!(printer.stderr(), "Tool `{from}` is already installed")?;
-                return Ok(ExitStatus::Failure);
+    if existing_environment.is_some() {
+        if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
+            let receipt = tool_receipt
+                .requirements()
+                .iter()
+                .cloned()
+                .map(Requirement::from)
+                .collect::<Vec<_>>();
+            if requirements == receipt {
+                // And the user didn't request a reinstall or upgrade...
+                if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
+                    // We're done.
+                    writeln!(printer.stderr(), "Tool `{from}` is already installed")?;
+                    return Ok(ExitStatus::Failure);
+                }
             }
         }
     }
@@ -171,9 +196,15 @@ pub(crate) async fn install(
     // entrypoints (without `--force`).
     let reinstall_entry_points = existing_tool_receipt.is_some();
 
-    // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory
-    // This lets us confirm the environment is valid before removing an existing install
-    let environment = installed_tools.environment(&from.name, force, interpreter, cache)?;
+    // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
+    // This lets us confirm the environment is valid before removing an existing install. However,
+    // entrypoints always contain an absolute path to the relevant Python interpreter, which would
+    // be invalidated by moving the environment.
+    let environment = if let Some(environment) = existing_environment {
+        environment
+    } else {
+        installed_tools.create_environment(&from.name, interpreter)?
+    };
 
     // Install the ephemeral requirements.
     let spec = RequirementsSpecification::from_requirements(requirements.clone());
