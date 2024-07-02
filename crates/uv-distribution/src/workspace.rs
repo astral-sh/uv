@@ -339,7 +339,6 @@ pub struct WorkspaceMember {
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pyproject_toml: PyProjectToml,
     /// does this member require a private lock
-    #[allow(dead_code)]
     private_lock: bool,
 }
 
@@ -937,54 +936,66 @@ impl VirtualProject {
         }
     }
 
-    /// Returns the set of requirements that include all packages in the workspace.
+    /// Returns the set of requirements that include all packages in the workspace using shared lock.
     pub fn members_as_requirements(&self) -> Vec<Requirement> {
-        self.workspace()
-            .packages
-            .values()
-            .filter_map(|member| {
-                let project = member.pyproject_toml.project.as_ref()?;
-                // Extract the extras available in the project.
-                let extras = project
-                    .optional_dependencies
-                    .as_ref()
-                    .map(|optional_dependencies| {
-                        // It's a `BTreeMap` so the keys are sorted.
-                        optional_dependencies.keys().cloned().collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
+        if let Some(member) = self.private_project() {
+            if member.private_lock {
+                return vec![self.member_as_requirement(member).unwrap()];
+            }
+        }
+        let mut requirements = vec![];
+        for member in self.workspace().packages.values() {
+            if !member.private_lock {
+                requirements.push(self.member_as_requirement(member).unwrap());
+            }
+        }
+        requirements
+    }
 
-                let url = VerbatimUrl::from_path(&member.root)
-                    .expect("path is valid URL")
-                    .with_given(member.root.to_string_lossy());
-                Some(Requirement {
-                    name: project.name.clone(),
-                    extras,
-                    marker: None,
-                    source: RequirementSource::Directory {
-                        install_path: member.root.clone(),
-                        lock_path: member
-                            .root
-                            .strip_prefix(&self.workspace().root)
-                            .expect("Project must be below workspace root")
-                            .to_path_buf(),
-                        editable: true,
-                        url,
-                    },
-                    origin: None,
-                })
+    fn member_as_requirement(&self, member: &WorkspaceMember) -> Option<Requirement> {
+        let project = member.pyproject_toml.project.as_ref()?;
+        // Extract the extras available in the project.
+        let extras = project
+            .optional_dependencies
+            .as_ref()
+            .map(|optional_dependencies| {
+                // It's a `BTreeMap` so the keys are sorted.
+                optional_dependencies.keys().cloned().collect::<Vec<_>>()
             })
-            .collect()
+            .unwrap_or_default();
+
+        let url = VerbatimUrl::from_path(&member.root)
+            .expect("path is valid URL")
+            .with_given(member.root.to_string_lossy());
+        Some(Requirement {
+            name: project.name.clone(),
+            extras,
+            marker: None,
+            source: RequirementSource::Directory {
+                install_path: member.root.clone(),
+                lock_path: member
+                    .root
+                    .strip_prefix(&self.workspace().root)
+                    .expect("Project must be below workspace root")
+                    .to_path_buf(),
+                editable: true,
+                url,
+            },
+            origin: None,
+        })
     }
 
     /// Returns the set of overrides for the workspace.
     pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .workspace()
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.workspace().root())
-        else {
+        let override_holder = if let Some(private_project) = self.private_project() {
+            Some(private_project)
+        } else {
+            self.workspace()
+                .packages
+                .values()
+                .find(|workspace_package| workspace_package.root() == self.workspace().root())
+        };
+        let Some(workspace_package) = override_holder else {
             return vec![];
         };
 
@@ -1012,12 +1023,29 @@ impl VirtualProject {
 
     /// The path to the workspace virtual environment.
     pub fn venv(&self) -> PathBuf {
-        self.workspace().root().join(".venv")
+        if let Some(private_project) = self.private_project() {
+            private_project.root.join(".venv")
+        } else {
+            self.workspace().root().join(".venv")
+        }
     }
 
     /// The path to the workspace lockfile
     pub fn lockfile(&self) -> PathBuf {
-        self.workspace().root().join("uv.lock")
+        if let Some(private_project) = self.private_project() {
+            private_project.root.join("uv.lock")
+        } else {
+            self.workspace().root().join("uv.lock")
+        }
+    }
+
+    fn private_project(&self) -> Option<&WorkspaceMember> {
+        if let Some(project) = self.project() {
+            if project.private_lock {
+                return Some(project);
+            }
+        }
+        None
     }
 }
 
