@@ -795,6 +795,13 @@ pub struct PipSyncArgs {
     #[arg(long, conflicts_with = "no_build")]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
+    /// Allow sync of empty requirements, which will clear the environment of all packages.
+    #[arg(long, overrides_with("no_allow_empty_requirements"))]
+    pub allow_empty_requirements: bool,
+
+    #[arg(long, overrides_with("allow_empty_requirements"))]
+    pub no_allow_empty_requirements: bool,
+
     /// The minimum Python version that should be supported by the requirements (e.g.,
     /// `3.7` or `3.7.9`).
     ///
@@ -832,13 +839,6 @@ pub struct PipSyncArgs {
 
     #[command(flatten)]
     pub compat_args: compat::PipSyncCompatArgs,
-
-    /// Allow sync of empty requirements, which will clear the environment of all packages.
-    #[arg(long, overrides_with("no_allow_empty_requirements"))]
-    pub allow_empty_requirements: bool,
-
-    #[arg(long, overrides_with("allow_empty_requirements"))]
-    pub no_allow_empty_requirements: bool,
 }
 
 #[derive(Args)]

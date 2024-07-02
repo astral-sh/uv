@@ -164,6 +164,7 @@ pub struct PipOptions {
     pub extra: Option<Vec<ExtraName>>,
     pub all_extras: Option<bool>,
     pub no_deps: Option<bool>,
+    pub allow_empty_requirements: Option<bool>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PreReleaseMode>,
     pub output_file: Option<PathBuf>,

@@ -607,7 +607,6 @@ pub(crate) struct PipSyncSettings {
     pub(crate) dry_run: bool,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
-    pub(crate) allow_empty_requirements: Option<bool>,
 }
 
 impl PipSyncSettings {
@@ -628,6 +627,8 @@ impl PipSyncSettings {
             no_break_system_packages,
             target,
             prefix,
+            allow_empty_requirements,
+            no_allow_empty_requirements,
             legacy_setup_py,
             no_legacy_setup_py,
             no_build_isolation,
@@ -641,8 +642,6 @@ impl PipSyncSettings {
             strict,
             no_strict,
             dry_run,
-            allow_empty_requirements,
-            no_allow_empty_requirements,
             compat_args: _,
         } = args;
 
@@ -654,7 +653,6 @@ impl PipSyncSettings {
                 .collect(),
             dry_run,
             refresh: Refresh::from(refresh),
-            allow_empty_requirements: flag(allow_empty_requirements, no_allow_empty_requirements),
             settings: PipSettings::combine(
                 PipOptions {
                     python,
@@ -663,16 +661,19 @@ impl PipSyncSettings {
                     exclude_newer,
                     target,
                     prefix,
+                    require_hashes: flag(require_hashes, no_require_hashes),
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
-                    no_build_isolation: flag(no_build_isolation, build_isolation),
-                    strict: flag(strict, no_strict),
+                    allow_empty_requirements: flag(
+                        allow_empty_requirements,
+                        no_allow_empty_requirements,
+                    ),
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
+                    no_build_isolation: flag(no_build_isolation, build_isolation),
                     python_version,
                     python_platform,
-                    require_hashes: flag(require_hashes, no_require_hashes),
-
+                    strict: flag(strict, no_strict),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
@@ -1486,6 +1487,7 @@ pub(crate) struct PipSettings {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) no_build_isolation: bool,
     pub(crate) build_options: BuildOptions,
+    pub(crate) allow_empty_requirements: bool,
     pub(crate) strict: bool,
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
@@ -1543,6 +1545,7 @@ impl PipSettings {
             extra,
             all_extras,
             no_deps,
+            allow_empty_requirements,
             resolution,
             prerelease,
             output_file,
@@ -1662,6 +1665,10 @@ impl PipSettings {
             generate_hashes: args
                 .generate_hashes
                 .combine(generate_hashes)
+                .unwrap_or_default(),
+            allow_empty_requirements: args
+                .allow_empty_requirements
+                .combine(allow_empty_requirements)
                 .unwrap_or_default(),
             setup_py: if args
                 .legacy_setup_py
