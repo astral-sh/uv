@@ -278,14 +278,16 @@ impl InstalledToolchain {
     /// Ensure the toolchain is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
-        let lib = if cfg!(windows) { "Lib" } else { "lib" };
-        let file = self
-            .path
-            .join("install")
-            .join(lib)
-            // Note the Python version must not include the patch.
-            .join(format!("python{}", self.key.version().python_version()))
-            .join("EXTERNALLY-MANAGED");
+        // Construct the path to the `stdlib` directory.
+        let stdlib = if cfg!(windows) {
+            self.path.join("install").join("Lib")
+        } else {
+            self.path
+                .join("install")
+                .join("lib")
+                .join(format!("python{}", self.key.version().python_version()))
+        };
+        let file = stdlib.join("EXTERNALLY-MANAGED");
         fs_err::write(file, EXTERNALLY_MANAGED)?;
         Ok(())
     }
