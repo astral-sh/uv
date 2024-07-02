@@ -4,11 +4,11 @@ use std::fmt::Write;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
-use distribution_types::Name;
 use itertools::Itertools;
-
-use pypi_types::VerbatimParsedUrl;
 use tracing::debug;
+
+use distribution_types::Name;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode, Reinstall};
@@ -16,13 +16,16 @@ use uv_configuration::{Concurrency, PreviewMode, Reinstall};
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
+use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
-use uv_toolchain::{EnvironmentPreference, Toolchain, ToolchainPreference, ToolchainRequest};
+use uv_toolchain::{
+    EnvironmentPreference, Interpreter, Toolchain, ToolchainPreference, ToolchainRequest,
+};
 use uv_warnings::warn_user_once;
 
 use crate::commands::project::{update_environment, SharedState};
-use crate::commands::ExitStatus;
+use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -46,29 +49,71 @@ pub(crate) async fn install(
         warn_user_once!("`uv tool install` is experimental and may change without warning.");
     }
 
+    let interpreter = Toolchain::find(
+        &python
+            .as_deref()
+            .map(ToolchainRequest::parse)
+            .unwrap_or_default(),
+        EnvironmentPreference::OnlySystem,
+        toolchain_preference,
+        cache,
+    )?
+    .into_interpreter();
+
+    // Initialize any shared state.
+    let state = SharedState::default();
+
+    // Resolve the `from` requirement.
     let from = if let Some(from) = from {
-        let from_requirement = pep508_rs::Requirement::<VerbatimParsedUrl>::from_str(&from)?;
-        // Check if the user provided more than just a name positionally or if that name conflicts with `--from`
-        if from_requirement.name.to_string() != package {
-            // Determine if its an entirely different package or a conflicting specification
-            let package_requirement =
-                pep508_rs::Requirement::<VerbatimParsedUrl>::from_str(&package)?;
-            if from_requirement.name == package_requirement.name {
-                bail!(
-                    "Package requirement `{}` provided with `--from` conflicts with install request `{}`",
-                    from,
-                    package
-                );
-            }
+        // Parse the positional name. If the user provided more than a package name, it's an error
+        // (e.g., `uv install foo==1.0 --from foo`).
+        let Ok(package) = PackageName::from_str(&package) else {
+            bail!("Package requirement `{from}` provided with `--from` conflicts with install request `{package}`")
+        };
+
+        let from_requirement = resolve_requirements(
+            std::iter::once(from.as_str()),
+            &interpreter,
+            &settings,
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+        .pop()
+        .unwrap();
+
+        // Check if the positional name conflicts with `--from`.
+        if from_requirement.name != package {
+            // Determine if it's an entirely different package (e.g., `uv install foo --from bar`).
             bail!(
                 "Package name `{}` provided with `--from` does not match install request `{}`",
                 from_requirement.name,
                 package
             );
         }
+
         from_requirement
     } else {
-        pep508_rs::Requirement::<VerbatimParsedUrl>::from_str(&package)?
+        resolve_requirements(
+            std::iter::once(package.as_str()),
+            &interpreter,
+            &settings,
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+        .pop()
+        .unwrap()
     };
 
     let name = from.name.to_string();
@@ -100,36 +145,27 @@ pub(crate) async fn install(
         false
     };
 
-    let requirements = [Ok(from.clone())]
-        .into_iter()
-        .chain(
-            with.iter()
-                .map(|name| pep508_rs::Requirement::from_str(name)),
-        )
-        .collect::<Result<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>, _>>()?;
-
-    let spec = RequirementsSpecification::from_requirements(
+    // Combine the `from` and `with` requirements.
+    let requirements = {
+        let mut requirements = Vec::with_capacity(1 + with.len());
+        requirements.push(from.clone());
+        requirements.extend(
+            resolve_requirements(
+                with.iter().map(String::as_str),
+                &interpreter,
+                &settings,
+                &state,
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?,
+        );
         requirements
-            .iter()
-            .cloned()
-            .map(pypi_types::Requirement::from)
-            .collect(),
-    );
-
-    let Some(from) = requirements.first().cloned() else {
-        bail!("Expected at least one requirement")
     };
-
-    let interpreter = Toolchain::find(
-        &python
-            .as_deref()
-            .map(ToolchainRequest::parse)
-            .unwrap_or_default(),
-        EnvironmentPreference::OnlySystem,
-        toolchain_preference,
-        cache,
-    )?
-    .into_interpreter();
 
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory
     // This lets us confirm the environment is valid before removing an existing install
@@ -142,6 +178,7 @@ pub(crate) async fn install(
     )?;
 
     // Install the ephemeral requirements.
+    let spec = RequirementsSpecification::from_requirements(requirements.clone());
     let environment = update_environment(
         environment,
         spec,
@@ -260,7 +297,10 @@ pub(crate) async fn install(
     debug!("Adding receipt for tool `{name}`");
     let installed_tools = installed_tools.init()?;
     let tool = Tool::new(
-        requirements,
+        requirements
+            .into_iter()
+            .map(pep508_rs::Requirement::from)
+            .collect(),
         python,
         target_entry_points
             .into_iter()
@@ -269,4 +309,42 @@ pub(crate) async fn install(
     installed_tools.add_tool_receipt(&name, tool)?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Resolve any [`UnnamedRequirements`].
+pub(crate) async fn resolve_requirements(
+    requirements: impl Iterator<Item = &str>,
+    interpreter: &Interpreter,
+    settings: &ResolverInstallerSettings,
+    state: &SharedState,
+    preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<Vec<Requirement>> {
+    // Parse the requirements.
+    let requirements = {
+        let mut parsed = vec![];
+        for requirement in requirements {
+            parsed.push(RequirementsSpecification::parse_package(requirement)?);
+        }
+        parsed
+    };
+
+    // Resolve the parsed requirements.
+    project::resolve_names(
+        requirements,
+        interpreter,
+        settings,
+        state,
+        preview,
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await
 }

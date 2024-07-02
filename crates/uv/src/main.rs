@@ -649,12 +649,12 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
-                args.extras,
-                args.dev,
                 args.command,
                 requirements,
-                args.python,
                 args.package,
+                args.extras,
+                args.dev,
+                args.python,
                 args.settings,
                 globals.isolated,
                 globals.preview,
@@ -789,9 +789,9 @@ async fn run() -> Result<ExitStatus> {
 
             commands::tool_run(
                 args.command,
-                args.python,
                 args.from,
                 args.with,
+                args.python,
                 args.settings,
                 globals.isolated,
                 globals.preview,

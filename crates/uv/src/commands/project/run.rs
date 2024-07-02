@@ -28,12 +28,12 @@ use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
 pub(crate) async fn run(
-    extras: ExtrasSpecification,
-    dev: bool,
     command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
-    python: Option<String>,
     package: Option<PackageName>,
+    extras: ExtrasSpecification,
+    dev: bool,
+    python: Option<String>,
     settings: ResolverInstallerSettings,
     isolated: bool,
     preview: PreviewMode,
