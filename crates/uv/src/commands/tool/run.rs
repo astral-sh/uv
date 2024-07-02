@@ -21,6 +21,7 @@ use uv_toolchain::{
 };
 use uv_warnings::warn_user_once;
 
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{update_environment, SharedState};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -103,6 +104,7 @@ pub(crate) async fn run(
         update_environment(
             venv,
             spec,
+            Modifications::Sufficient,
             &settings,
             &SharedState::default(),
             preview,
