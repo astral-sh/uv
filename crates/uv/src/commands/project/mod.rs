@@ -24,6 +24,7 @@ use uv_toolchain::{
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip;
+use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::ResolverReporter;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -375,6 +376,7 @@ pub(crate) async fn resolve_names(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
+    modifications: Modifications,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
     preview: PreviewMode,
@@ -402,7 +404,7 @@ pub(crate) async fn update_environment(
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
-    if spec.source_trees.is_empty() && reinstall.is_none() {
+    if spec.source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() {
         match site_packages.satisfies(&spec.requirements, &spec.constraints)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
@@ -554,7 +556,7 @@ pub(crate) async fn update_environment(
     pip::operations::install(
         &resolution,
         site_packages,
-        pip::operations::Modifications::Sufficient,
+        modifications,
         reinstall,
         build_options,
         *link_mode,

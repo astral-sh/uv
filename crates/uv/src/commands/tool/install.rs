@@ -11,7 +11,7 @@ use distribution_types::Name;
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode, Reinstall};
+use uv_configuration::{Concurrency, PreviewMode};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
@@ -25,6 +25,7 @@ use uv_toolchain::{
 };
 use uv_warnings::warn_user_once;
 
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{update_environment, SharedState};
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
@@ -122,37 +123,6 @@ pub(crate) async fn install(
         .unwrap()
     };
 
-    let installed_tools = InstalledTools::from_settings()?;
-
-    let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
-    // TODO(zanieb): Automatically replace an existing tool if the request differs
-    let reinstall_entry_points = if existing_tool_receipt.is_some() {
-        if force {
-            debug!("Replacing existing tool due to `--force` flag.");
-            true
-        } else {
-            match settings.reinstall {
-                Reinstall::All => {
-                    debug!("Replacing existing tool due to `--reinstall` flag.");
-                    true
-                }
-                // Do not replace the entry points unless the tool is explicitly requested
-                Reinstall::Packages(ref packages) => packages.contains(&from.name),
-                // If not reinstalling... then we're done
-                Reinstall::None => {
-                    writeln!(
-                        printer.stderr(),
-                        "Tool `{}` is already installed",
-                        from.name
-                    )?;
-                    return Ok(ExitStatus::Failure);
-                }
-            }
-        }
-    } else {
-        false
-    };
-
     // Combine the `from` and `with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
@@ -175,23 +145,44 @@ pub(crate) async fn install(
         requirements
     };
 
+    let installed_tools = InstalledTools::from_settings()?;
+    let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
+
+    // If the requested and receipt requirements are the same...
+    if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
+        let receipt = tool_receipt
+            .requirements()
+            .iter()
+            .cloned()
+            .map(Requirement::from)
+            .collect::<Vec<_>>();
+        if requirements == receipt {
+            // And the user didn't request a reinstall or upgrade...
+            if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
+                // We're done.
+                writeln!(printer.stderr(), "Tool `{from}` is already installed")?;
+                return Ok(ExitStatus::Failure);
+            }
+        }
+    }
+
+    // Replace entrypoints if the tool already exists (and we made it this far). If we find existing
+    // entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing the external tool's
+    // entrypoints (without `--force`).
+    let reinstall_entry_points = existing_tool_receipt.is_some();
+
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory
     // This lets us confirm the environment is valid before removing an existing install
-    let environment = installed_tools.environment(
-        &from.name,
-        // Do not remove the existing environment if we're reinstalling a subset of packages
-        !matches!(settings.reinstall, Reinstall::Packages(_)),
-        interpreter,
-        cache,
-    )?;
+    let environment = installed_tools.environment(&from.name, force, interpreter, cache)?;
 
     // Install the ephemeral requirements.
     let spec = RequirementsSpecification::from_requirements(requirements.clone());
     let environment = update_environment(
         environment,
         spec,
+        Modifications::Exact,
         &settings,
-        &SharedState::default(),
+        &state,
         preview,
         connectivity,
         concurrency,
@@ -206,17 +197,6 @@ pub(crate) async fn install(
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
     };
-
-    // Exit early if we're not supposed to be reinstalling entry points
-    // e.g. `--reinstall-package` was used for some dependency
-    if existing_tool_receipt.is_some() && !reinstall_entry_points {
-        writeln!(
-            printer.stderr(),
-            "Updated environment for tool `{}`",
-            from.name
-        )?;
-        return Ok(ExitStatus::Success);
-    }
 
     // Find a suitable path to install into
     // TODO(zanieb): Warn if this directory is not on the PATH
@@ -324,7 +304,7 @@ pub(crate) async fn install(
 }
 
 /// Resolve any [`UnnamedRequirements`].
-pub(crate) async fn resolve_requirements(
+async fn resolve_requirements(
     requirements: impl Iterator<Item = &str>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,

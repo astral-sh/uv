@@ -436,12 +436,19 @@ fn tool_install_already_installed() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
+     - black==24.3.0
      + black==24.3.0
+     - click==8.1.7
      + click==8.1.7
+     - mypy-extensions==1.0.0
      + mypy-extensions==1.0.0
+     - packaging==24.0
      + packaging==24.0
+     - pathspec==0.12.1
      + pathspec==0.12.1
+     - platformdirs==4.2.0
      + platformdirs==4.2.0
     Installed: black, blackd
     "###);
@@ -469,7 +476,7 @@ fn tool_install_already_installed() {
     "###);
 
     // Install `black` again with `--reinstall-package` for a dependency
-    // We should reinstall `click` in the environment but not reinstall the entry points
+    // We should reinstall `click` in the environment but not reinstall `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall-package")
@@ -487,7 +494,7 @@ fn tool_install_already_installed() {
     Installed [N] packages in [TIME]
      - click==8.1.7
      + click==8.1.7
-    Updated environment for tool `black`
+    Installed: black, blackd
     "###);
 }
 
@@ -683,12 +690,19 @@ fn tool_install_entry_point_exists() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
+     - black==24.3.0
      + black==24.3.0
+     - click==8.1.7
      + click==8.1.7
+     - mypy-extensions==1.0.0
      + mypy-extensions==1.0.0
+     - packaging==24.0
      + packaging==24.0
+     - pathspec==0.12.1
      + pathspec==0.12.1
+     - platformdirs==4.2.0
      + platformdirs==4.2.0
     Installed: black, blackd
     "###);
@@ -716,7 +730,7 @@ fn tool_install_entry_point_exists() {
     }, {
         // Should run black in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/black/bin/python
+        #![TEMP_DIR]/tools/black/bin/python3
         # -*- coding: utf-8 -*-
         import re
         import sys
@@ -1164,4 +1178,154 @@ fn tool_install_unnamed_with() {
 
     ----- stderr -----
     "###);
+}
+
+/// Test upgrading an already installed tool.
+#[test]
+fn tool_install_upgrade() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==24.1.1")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.1.1
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["black==24.1.1"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+
+    // Install without the constraint. It should be replaced, but the package shouldn't be installed
+    // since it's already satisfied in the environment.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Installed: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["black"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+
+    // Install with a `with`. It should be added to the environment.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with")
+        .arg("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    Installed: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            "black",
+            "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+
+    // Install with `--upgrade`. `black` should be reinstalled with a more recent version, and
+    // `iniconfig` should be removed.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--upgrade")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - black==24.1.1
+     + black==24.3.0
+     - iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    Installed: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = ["black"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
 }
