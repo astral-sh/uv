@@ -1,0 +1,3 @@
+[tool.uv.workspace]
+members = ["shared_*"]
+private-members = ["app*"]

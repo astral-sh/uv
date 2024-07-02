@@ -14,7 +14,8 @@ use uv_pypi_types::{Requirement, RequirementSource, SupportedEnvironments, Verba
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{
-    Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
+    Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUv, ToolUvSources,
+    ToolUvWorkspace,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -569,6 +570,10 @@ impl Workspace {
             pyproject_toml: workspace_pyproject_toml,
         })
     }
+
+    fn shared_lock_members(&self) -> impl Iterator<Item = &WorkspaceMember> + '_ {
+        self.packages().values().filter(|p| !p.private_lock)
+    }
 }
 
 /// A project in a workspace.
@@ -583,7 +588,6 @@ pub struct WorkspaceMember {
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pyproject_toml: PyProjectToml,
     /// does this member require a private lock
-    #[allow(dead_code)]
     private_lock: bool,
 }
 
@@ -1280,10 +1284,21 @@ impl VirtualProject {
     }
 
     pub fn packages_to_resolve(&self) -> impl Iterator<Item = &PackageName> + '_ {
-        self.workspace().packages().keys()
+        if let Some(project) = self.private_project() {
+            Either::Left(std::iter::once(&project.project.name))
+        } else {
+            Either::Right(
+                self.workspace()
+                    .shared_lock_members()
+                    .map(|p| &p.project.name),
+            )
+        }
     }
 
     pub fn packages_to_lock(&self) -> Vec<PackageName> {
+        if self.private_project().is_some() {
+            return vec![];
+        }
         let mut members = self.packages_to_resolve().cloned().collect::<Vec<_>>();
         members.sort();
 
@@ -1299,7 +1314,12 @@ impl VirtualProject {
 
     /// Returns the set of requirements that include all packages in the workspace.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.workspace().packages.values().filter_map(|member| {
+        let packages = if let Some(member) = self.private_project() {
+            Either::Left(std::iter::once(member))
+        } else {
+            Either::Right(self.workspace().shared_lock_members())
+        };
+        packages.filter_map(|member| {
             let project = member.pyproject_toml.project.as_ref()?;
             // Extract the extras available in the project.
             let extras = project
@@ -1340,27 +1360,7 @@ impl VirtualProject {
 
     /// Returns the set of overrides for the workspace.
     pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(overrides) = self
-            .workspace()
-            .pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.override_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        overrides
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
+        self.uv_dependencies(|uv| uv.override_dependencies.as_ref())
     }
 
     /// Returns the set of supported environments for the workspace.
@@ -1375,27 +1375,7 @@ impl VirtualProject {
 
     /// Returns the set of constraints for the workspace.
     pub fn constraints(&self) -> Vec<Requirement> {
-        let Some(constraints) = self
-            .workspace()
-            .pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.constraint_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        constraints
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
+        self.uv_dependencies(|uv| uv.constraint_dependencies.as_ref())
     }
 
     /// The path to the workspace virtual environment.
@@ -1466,8 +1446,14 @@ impl VirtualProject {
         }
 
         // Determine the default value
-        let project_env = from_project_environment_variable(self.workspace())
-            .unwrap_or_else(|| self.workspace().install_path.join(".venv"));
+        let project_env =
+            from_project_environment_variable(self.workspace()).unwrap_or_else(|| {
+                if let Some(private_project) = self.private_project() {
+                    private_project.root.join(".venv")
+                } else {
+                    self.workspace().install_path().join(".venv")
+                }
+            });
 
         // Warn if it conflicts with `VIRTUAL_ENV`
         if let Some(from_virtual_env) = from_virtual_env_variable() {
@@ -1485,7 +1471,67 @@ impl VirtualProject {
 
     /// The path to the workspace lockfile
     pub fn lockfile(&self) -> PathBuf {
-        self.workspace().install_path().join("uv.lock")
+        if let Some(private_project) = self.private_project() {
+            private_project.root.join("uv.lock")
+        } else {
+            self.workspace().install_path().join("uv.lock")
+        }
+    }
+
+    fn private_project(&self) -> Option<&WorkspaceMember> {
+        if let VirtualProject::Project(project) = self {
+            if let Some(project) = &self.workspace().packages.get(project.project_name()) {
+                if project.private_lock {
+                    return Some(project);
+                }
+            }
+        }
+        None
+    }
+
+    /// Gets dependencies defined in `[tool.uv]`
+    /// Tries private project first, then defaults to workspace.
+    fn uv_dependencies(
+        &self,
+        func: fn(&ToolUv) -> Option<&Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    ) -> Vec<Requirement> {
+        let dependencies_and_origin = if let Some(private_project) = self.private_project() {
+            private_project
+                .pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(func)
+                .map(|dependencies| {
+                    (
+                        dependencies,
+                        RequirementOrigin::Project(
+                            private_project.root.clone(),
+                            private_project.project.name.clone(),
+                        ),
+                    )
+                })
+        } else {
+            None
+        }
+        .or(self
+            .workspace()
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(func)
+            .map(|dependencies| (dependencies, RequirementOrigin::Workspace)));
+
+        if let Some((dependencies, origin)) = dependencies_and_origin {
+            return dependencies
+                .iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.clone().with_origin(origin.clone()))
+                })
+                .collect();
+        }
+        vec![]
     }
 
     /// Determine a name for the environment, in order of preference:
@@ -1494,14 +1540,20 @@ impl VirtualProject {
     /// 2) The name of the directory at the root of the workspace
     /// 3) No prompt
     pub fn venv_name(&self) -> Option<String> {
-        self.workspace()
-            .pyproject_toml()
+        let (pyproject_toml, project_path) = if let Some(private_project) = self.private_project() {
+            (&private_project.pyproject_toml, private_project.root())
+        } else {
+            (
+                self.workspace().pyproject_toml(),
+                self.workspace().install_path(),
+            )
+        };
+        pyproject_toml
             .project
             .as_ref()
             .map(|p| p.name.to_string())
             .or_else(|| {
-                self.workspace()
-                    .install_path()
+                project_path
                     .file_name()
                     .map(|f| f.to_string_lossy().to_string())
             })
@@ -1538,7 +1590,9 @@ impl<'env> InstallTarget<'env> {
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
         match self {
             Self::Project(project) => Either::Left(std::iter::once(project.project_name())),
-            Self::NonProject(workspace) => Either::Right(workspace.packages().keys()),
+            Self::NonProject(workspace) => {
+                Either::Right(workspace.shared_lock_members().map(|p| &p.project.name))
+            }
             Self::FrozenMember(_, package_name) => Either::Left(std::iter::once(*package_name)),
         }
     }

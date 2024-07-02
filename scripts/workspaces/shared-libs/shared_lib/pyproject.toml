@@ -1,0 +1,18 @@
+[project]
+name = "shared_lib"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies=[
+    "six == 1.16.0",
+    "shared_corelib",
+]
+
+[build-system]
+requires = ["hatchling==1.24.2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["shared_lib"]
+
+[tool.uv.sources]
+shared_corelib = { workspace = true }
