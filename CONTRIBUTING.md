@@ -28,6 +28,12 @@ See the [Python](#python) section for instructions on installing the Python vers
 
 You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake`.
 
+Only on Windows, you also need to install the [Netwide Assembler (NASM)](https://nasm.us/) and add its installation directory to your PATH:
+
+```
+set PATH="C:\Program Files\NASM;%PATH%"
+```
+
 ## Testing
 
 For running tests, we recommend [nextest](https://nexte.st/).

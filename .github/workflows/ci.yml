@@ -82,6 +82,8 @@ jobs:
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
+      - name: "Install nasm"
+        uses: ilammy/setup-nasm@v1
       - name: "Install Rust toolchain"
         run: rustup target add x86_64-pc-windows-msvc
       - name: Load xwin cache
@@ -215,6 +217,9 @@ jobs:
       - name: Copy Git Repo to Dev Drive
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+
+      - name: "Install nasm"
+        uses: ilammy/setup-nasm@v1
 
       - name: "Install Rust toolchain"
         working-directory: ${{ env.DEV_DRIVE }}/uv
@@ -428,6 +433,9 @@ jobs:
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
 
       - uses: rui314/setup-mold@v1
+
+      - name: "Install nasm"
+        uses: ilammy/setup-nasm@v1
 
       - uses: Swatinem/rust-cache@v2
         with:
