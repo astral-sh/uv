@@ -10,7 +10,7 @@ use tracing::debug;
 use distribution_types::Name;
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, Reinstall};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
@@ -40,7 +40,7 @@ pub(crate) async fn install(
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
-    _toolchain_fetch: ToolchainFetch,
+    toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -51,16 +51,19 @@ pub(crate) async fn install(
         warn_user_once!("`uv tool install` is experimental and may change without warning.");
     }
 
-    // TODO(zanieb): Use `find_or_fetch` here
-    let interpreter = Toolchain::find(
-        &python
-            .as_deref()
-            .map(ToolchainRequest::parse)
-            .unwrap_or_default(),
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let interpreter = Toolchain::find_or_fetch(
+        python.as_deref().map(ToolchainRequest::parse),
         EnvironmentPreference::OnlySystem,
         toolchain_preference,
+        toolchain_fetch,
+        &client_builder,
         cache,
-    )?
+    )
+    .await?
     .into_interpreter();
 
     // Initialize any shared state.
