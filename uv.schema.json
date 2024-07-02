@@ -449,6 +449,12 @@
             "null"
           ]
         },
+        "allow-empty-requirements": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "annotation-style": {
           "anyOf": [
             {

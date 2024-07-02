@@ -337,6 +337,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
                 args.settings.setup_py,
+                args.settings.allow_empty_requirements,
                 globals.connectivity,
                 &args.settings.config_setting,
                 args.settings.no_build_isolation,
