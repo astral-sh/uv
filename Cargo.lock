@@ -239,7 +239,7 @@ dependencies = [
  "itertools 0.12.1",
  "memmap2 0.9.4",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.2 (git+https://github.com/konstin/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe)",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -3053,7 +3053,7 @@ dependencies = [
  "pypi-types",
  "regex",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe)",
  "tempfile",
  "test-case",
  "thiserror",
@@ -3118,6 +3118,20 @@ dependencies = [
 [[package]]
 name = "reqwest-middleware"
 version = "0.3.2"
+source = "git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe#21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http",
+ "reqwest",
+ "serde",
+ "thiserror",
+ "tower-service",
+]
+
+[[package]]
+name = "reqwest-middleware"
+version = "0.3.2"
 source = "git+https://github.com/konstin/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe#21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe"
 dependencies = [
  "anyhow",
@@ -3132,7 +3146,7 @@ dependencies = [
 [[package]]
 name = "reqwest-retry"
 version = "0.7.0"
-source = "git+https://github.com/konstin/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe#21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe"
+source = "git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe#21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3143,7 +3157,7 @@ dependencies = [
  "hyper",
  "parking_lot 0.11.2",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe)",
  "retry-policies",
  "thiserror",
  "tokio",
@@ -4507,7 +4521,7 @@ dependencies = [
  "once-map",
  "once_cell",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe)",
  "rust-netrc",
  "tempfile",
  "test-log",
@@ -4621,7 +4635,7 @@ dependencies = [
  "platform-tags",
  "pypi-types",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe)",
  "reqwest-retry",
  "rkyv",
  "rmp-serde",
@@ -4753,7 +4767,7 @@ dependencies = [
  "pypi-types",
  "regex",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe)",
  "rmp-serde",
  "rustc-hash 2.0.0",
  "schemars",
@@ -4830,7 +4844,7 @@ dependencies = [
  "dashmap",
  "fs-err",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe)",
  "thiserror",
  "tokio",
  "tracing",
@@ -5073,7 +5087,7 @@ dependencies = [
  "pypi-types",
  "regex",
  "reqwest",
- "reqwest-middleware",
+ "reqwest-middleware 0.3.2 (git+https://github.com/astral-sh/reqwest-middleware?rev=21ceec9a5fd2e8d6f71c3ea2999078fecbd13cbe)",
  "rmp-serde",
  "same-file",
  "schemars",
