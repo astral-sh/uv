@@ -19,7 +19,7 @@ use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::toolchain::{self, ToolchainKey};
 use crate::ToolchainRequest;
-use uv_fs::Simplified;
+use uv_fs::{LockedFile, Simplified};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -63,6 +63,14 @@ impl InstalledToolchains {
     /// A directory for installed toolchains at `root`.
     fn from_path(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
+    }
+
+    /// Lock the toolchains directory.
+    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            self.root.user_display(),
+        )?)
     }
 
     /// Prefer, in order:
@@ -224,6 +232,7 @@ impl InstalledToolchain {
         Ok(Self { path, key })
     }
 
+    /// The path to this toolchain's Python executable.
     pub fn executable(&self) -> PathBuf {
         if cfg!(windows) {
             self.path.join("install").join("python.exe")
@@ -234,6 +243,7 @@ impl InstalledToolchain {
         }
     }
 
+    /// The [`PythonVersion`] of the toolchain.
     pub fn version(&self) -> PythonVersion {
         self.key.version()
     }
