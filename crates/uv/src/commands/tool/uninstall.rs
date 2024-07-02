@@ -23,6 +23,8 @@ pub(crate) async fn uninstall(
     }
 
     let installed_tools = InstalledTools::from_settings()?;
+    let _lock = installed_tools.acquire_lock()?;
+
     let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
         bail!("Tool `{}` is not installed", name);
     };

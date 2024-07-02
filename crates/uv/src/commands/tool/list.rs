@@ -16,6 +16,7 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
     }
 
     let installed_tools = InstalledTools::from_settings()?;
+    let _lock = installed_tools.acquire_lock()?;
 
     let mut tools = installed_tools.tools()?.into_iter().collect::<Vec<_>>();
     tools.sort_by_key(|(name, _)| name.clone());
