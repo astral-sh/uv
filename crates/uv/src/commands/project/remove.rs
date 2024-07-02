@@ -51,6 +51,7 @@ pub(crate) async fn remove(
     };
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
+    let project = VirtualProject::Project(project);
     for req in requirements {
         match dependency_type {
             DependencyType::Production => {
@@ -82,10 +83,7 @@ pub(crate) async fn remove(
     }
 
     // Save the modified `pyproject.toml`.
-    fs_err::write(
-        project.current_project().root().join("pyproject.toml"),
-        pyproject.to_string(),
-    )?;
+    fs_err::write(project.root().join("pyproject.toml"), pyproject.to_string())?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
     // to exist at all.
@@ -95,7 +93,7 @@ pub(crate) async fn remove(
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
-        project.workspace(),
+        &project,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
         python_fetch,
@@ -110,7 +108,7 @@ pub(crate) async fn remove(
     let lock = project::lock::do_safe_lock(
         locked,
         frozen,
-        project.workspace(),
+        &project,
         venv.interpreter(),
         settings.as_ref().into(),
         preview,
@@ -135,7 +133,7 @@ pub(crate) async fn remove(
     let state = SharedState::default();
 
     project::sync::do_sync(
-        &VirtualProject::Project(project),
+        &project,
         &venv,
         &lock.lock,
         &extras,

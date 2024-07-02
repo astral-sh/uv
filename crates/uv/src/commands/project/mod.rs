@@ -29,7 +29,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::Workspace;
+use uv_workspace::{VirtualProject, Workspace};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
@@ -123,10 +123,10 @@ pub(crate) fn find_requires_python(
 
 /// Find the virtual environment for the current project.
 fn find_environment(
-    workspace: &Workspace,
+    project: &VirtualProject,
     cache: &Cache,
 ) -> Result<PythonEnvironment, uv_python::Error> {
-    PythonEnvironment::from_root(workspace.venv(), cache)
+    PythonEnvironment::from_root(project.venv(), cache)
 }
 
 /// Check if the given interpreter satisfies the project's requirements.
@@ -198,7 +198,7 @@ impl WorkspacePython {
 impl FoundInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
-        workspace: &Workspace,
+        project: &VirtualProject,
         python_request: Option<PythonRequest>,
         python_preference: PythonPreference,
         python_fetch: PythonFetch,
@@ -211,10 +211,10 @@ impl FoundInterpreter {
         let WorkspacePython {
             python_request,
             requires_python,
-        } = WorkspacePython::from_request(python_request, workspace).await?;
+        } = WorkspacePython::from_request(python_request, project.workspace()).await?;
 
         // Read from the virtual environment first.
-        match find_environment(workspace, cache) {
+        match find_environment(project, cache) {
             Ok(venv) => {
                 if interpreter_meets_requirements(
                     venv.interpreter(),
@@ -286,7 +286,7 @@ impl FoundInterpreter {
                 // a library in the workspace is compatible with Python >=3.8, the user may attempt
                 // to sync on Python 3.8. This will fail, but we should provide a more helpful error
                 // message.
-                for (name, member) in workspace.packages() {
+                for (name, member) in project.workspace().packages() {
                     let Some(project) = member.pyproject_toml().project.as_ref() else {
                         continue;
                     };
@@ -325,7 +325,7 @@ impl FoundInterpreter {
 
 /// Initialize a virtual environment for the current project.
 pub(crate) async fn get_or_init_environment(
-    workspace: &Workspace,
+    project: &VirtualProject,
     python: Option<PythonRequest>,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
@@ -335,7 +335,7 @@ pub(crate) async fn get_or_init_environment(
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
     match FoundInterpreter::discover(
-        workspace,
+        project,
         python,
         python_preference,
         python_fetch,
@@ -351,7 +351,7 @@ pub(crate) async fn get_or_init_environment(
 
         // Otherwise, create a virtual environment with the discovered interpreter.
         FoundInterpreter::Interpreter(interpreter) => {
-            let venv = workspace.venv();
+            let venv = project.venv();
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
             match fs_err::remove_dir_all(&venv) {

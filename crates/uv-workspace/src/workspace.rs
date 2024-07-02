@@ -246,52 +246,6 @@ impl Workspace {
             .any(|member| *member.root() == self.install_path)
     }
 
-    /// Returns the set of requirements that include all packages in the workspace.
-    pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.packages.values().filter_map(|member| {
-            let project = member.pyproject_toml.project.as_ref()?;
-            // Extract the extras available in the project.
-            let extras = project
-                .optional_dependencies
-                .as_ref()
-                .map(|optional_dependencies| {
-                    // It's a `BTreeMap` so the keys are sorted.
-                    optional_dependencies
-                        .iter()
-                        .filter_map(|(name, dependencies)| {
-                            if dependencies.is_empty() {
-                                None
-                            } else {
-                                Some(name)
-                            }
-                        })
-                        .cloned()
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-
-            let url = VerbatimUrl::from_path(&member.root)
-                .expect("path is valid URL")
-                .with_given(member.root.to_string_lossy());
-            Some(Requirement {
-                name: project.name.clone(),
-                extras,
-                marker: None,
-                source: RequirementSource::Directory {
-                    install_path: member.root.clone(),
-                    lock_path: member
-                        .root
-                        .strip_prefix(&self.install_path)
-                        .expect("Project must be below workspace root")
-                        .to_path_buf(),
-                    editable: true,
-                    url,
-                },
-                origin: None,
-            })
-        })
-    }
-
     /// Returns any requirements that are exclusive to the workspace root, i.e., not included in
     /// any of the workspace members.
     ///
@@ -329,70 +283,6 @@ impl Workspace {
         }
     }
 
-    /// Returns the set of overrides for the workspace.
-    pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.install_path())
-        else {
-            return vec![];
-        };
-
-        let Some(overrides) = workspace_package
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.override_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        overrides
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
-    }
-
-    /// Returns the set of constraints for the workspace.
-    pub fn constraints(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.install_path())
-        else {
-            return vec![];
-        };
-
-        let Some(constraints) = workspace_package
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.constraint_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        constraints
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
-    }
-
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn install_path(&self) -> &PathBuf {
@@ -403,11 +293,6 @@ impl Workspace {
     /// to compute relative paths for workspace-to-workspace dependencies.
     pub fn lock_path(&self) -> &PathBuf {
         &self.lock_path
-    }
-
-    /// The path to the workspace virtual environment.
-    pub fn venv(&self) -> PathBuf {
-        self.install_path.join(".venv")
     }
 
     /// The members of the workspace.
@@ -1384,6 +1269,128 @@ impl VirtualProject {
     /// Returns `true` if the project is a virtual workspace.
     pub fn is_virtual(&self) -> bool {
         matches!(self, VirtualProject::Virtual(_))
+    }
+
+    /// Returns the set of requirements that include all packages in the workspace.
+    pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        self.workspace().packages.values().filter_map(|member| {
+            let project = member.pyproject_toml.project.as_ref()?;
+            // Extract the extras available in the project.
+            let extras = project
+                .optional_dependencies
+                .as_ref()
+                .map(|optional_dependencies| {
+                    // It's a `BTreeMap` so the keys are sorted.
+                    optional_dependencies
+                        .iter()
+                        .filter_map(|(name, dependencies)| {
+                            if dependencies.is_empty() {
+                                None
+                            } else {
+                                Some(name)
+                            }
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            let url = VerbatimUrl::from_path(&member.root)
+                .expect("path is valid URL")
+                .with_given(member.root.to_string_lossy());
+            Some(Requirement {
+                name: project.name.clone(),
+                extras,
+                marker: None,
+                source: RequirementSource::Directory {
+                    install_path: member.root.clone(),
+                    lock_path: member
+                        .root
+                        .strip_prefix(&self.workspace().install_path)
+                        .expect("Project must be below workspace root")
+                        .to_path_buf(),
+                    editable: true,
+                    url,
+                },
+                origin: None,
+            })
+        })
+    }
+
+    /// Returns the set of overrides for the workspace.
+    pub fn overrides(&self) -> Vec<Requirement> {
+        let Some(workspace_package) = self
+            .workspace()
+            .packages
+            .values()
+            .find(|workspace_package| workspace_package.root() == self.workspace().install_path())
+        else {
+            return vec![];
+        };
+
+        let Some(overrides) = workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.override_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        overrides
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
+            })
+            .collect()
+    }
+
+    /// Returns the set of constraints for the workspace.
+    pub fn constraints(&self) -> Vec<Requirement> {
+        let Some(workspace_package) = self
+            .workspace()
+            .packages
+            .values()
+            .find(|workspace_package| workspace_package.root() == self.workspace().install_path())
+        else {
+            return vec![];
+        };
+
+        let Some(constraints) = workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.constraint_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        constraints
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
+            })
+            .collect()
+    }
+
+    /// The path to the workspace virtual environment.
+    pub fn venv(&self) -> PathBuf {
+        self.workspace().install_path().join(".venv")
+    }
+
+    /// The path to the workspace lockfile
+    pub fn lockfile(&self) -> PathBuf {
+        self.workspace().install_path().join("uv.lock")
     }
 }
 

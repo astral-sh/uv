@@ -25,7 +25,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject};
 
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
 use crate::commands::{pip, ExitStatus};
@@ -61,11 +61,11 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
+    let project = VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(
-        &workspace,
+        &project,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
         python_fetch,
@@ -81,7 +81,7 @@ pub(crate) async fn lock(
     match do_safe_lock(
         locked,
         frozen,
-        &workspace,
+        &project,
         &interpreter,
         settings.as_ref(),
         preview,
@@ -114,7 +114,7 @@ pub(crate) async fn lock(
 pub(super) async fn do_safe_lock(
     locked: bool,
     frozen: bool,
-    workspace: &Workspace,
+    project: &VirtualProject,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
     preview: PreviewMode,
@@ -137,7 +137,7 @@ pub(super) async fn do_safe_lock(
 
     if frozen {
         // Read the existing lockfile, but don't attempt to lock the project.
-        let existing = read(workspace)
+        let existing = read(project)
             .await?
             .ok_or_else(|| ProjectError::MissingLockfile)?;
         Ok(LockResult {
@@ -146,13 +146,13 @@ pub(super) async fn do_safe_lock(
         })
     } else if locked {
         // Read the existing lockfile.
-        let existing = read(workspace)
+        let existing = read(project)
             .await?
             .ok_or_else(|| ProjectError::MissingLockfile)?;
 
         // Perform the lock operation, but don't write the lockfile to disk.
         let lock = do_lock(
-            workspace,
+            project,
             interpreter,
             Some(&existing),
             settings,
@@ -177,11 +177,11 @@ pub(super) async fn do_safe_lock(
         })
     } else {
         // Read the existing lockfile.
-        let existing = read(workspace).await?;
+        let existing = read(project).await?;
 
         // Perform the lock operation.
         let lock = do_lock(
-            workspace,
+            project,
             interpreter,
             existing.as_ref(),
             settings,
@@ -196,7 +196,7 @@ pub(super) async fn do_safe_lock(
         .await?;
 
         if !existing.as_ref().is_some_and(|existing| *existing == lock) {
-            commit(&lock, workspace).await?;
+            commit(&lock, project).await?;
         }
 
         Ok(LockResult {
@@ -208,7 +208,7 @@ pub(super) async fn do_safe_lock(
 
 /// Lock the project requirements into a lockfile.
 async fn do_lock(
-    workspace: &Workspace,
+    project: &VirtualProject,
     interpreter: &Interpreter,
     existing_lock: Option<&Lock>,
     settings: ResolverSettingsRef<'_>,
@@ -237,23 +237,23 @@ async fn do_lock(
     } = settings;
 
     // When locking, include the project itself (as editable).
-    let requirements = workspace
+    let requirements = project
         .members_requirements()
-        .chain(workspace.root_requirements())
+        .chain(project.workspace().root_requirements())
         .map(UnresolvedRequirementSpecification::from)
         .collect::<Vec<_>>();
-    let overrides = workspace
+    let overrides = project
         .overrides()
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
         .collect::<Vec<_>>();
-    let constraints = workspace.constraints();
+    let constraints = project.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    let requires_python = find_requires_python(workspace)?;
+    let requires_python = find_requires_python(project.workspace())?;
 
     let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {
@@ -382,7 +382,7 @@ async fn do_lock(
 
     let start = std::time::Instant::now();
 
-    let requires_python = find_requires_python(workspace)?;
+    let requires_python = find_requires_python(project.workspace())?;
     let existing_lock = existing_lock.filter(|lock| {
         match (lock.requires_python(), requires_python.as_ref()) {
             // If the Requires-Python bound in the lockfile is weaker or equivalent to the
@@ -421,7 +421,7 @@ async fn do_lock(
             debug!("Resolving with existing `uv.lock`");
 
             // Prefill the index with the lockfile metadata.
-            let index = lock.to_index(workspace.install_path(), upgrade)?;
+            let index = lock.to_index(project.workspace().install_path(), upgrade)?;
 
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
@@ -565,17 +565,17 @@ async fn do_lock(
 }
 
 /// Write the lockfile to disk.
-pub(crate) async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> {
+pub(crate) async fn commit(lock: &Lock, project: &VirtualProject) -> Result<(), ProjectError> {
     let encoded = lock.to_toml()?;
-    fs_err::tokio::write(workspace.install_path().join("uv.lock"), encoded).await?;
+    fs_err::tokio::write(project.lockfile(), encoded).await?;
     Ok(())
 }
 
 /// Read the lockfile from the workspace.
 ///
 /// Returns `Ok(None)` if the lockfile does not exist.
-pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
-    match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
+pub(crate) async fn read(project: &VirtualProject) -> Result<Option<Lock>, ProjectError> {
+    match fs_err::tokio::read_to_string(&project.lockfile()).await {
         Ok(encoded) => match toml::from_str::<Lock>(&encoded) {
             Ok(lock) => Ok(Some(lock)),
             Err(err) => {
