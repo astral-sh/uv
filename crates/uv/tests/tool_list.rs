@@ -1,6 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-
 use std::fs;
 
 use assert_cmd::assert::OutputAssertExt;
@@ -87,7 +86,6 @@ fn tool_list_missing_receipt() {
     "###);
 }
 
-
 #[test]
 fn tool_list_bad_environment() {
     let context = TestContext::new("3.12");
@@ -105,16 +103,15 @@ fn tool_list_bad_environment() {
 
     // Install `ruff`
     context
-    .tool_install()
-    .arg("ruff==0.3.4")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str())
-    .assert()
-    .success();
-    
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .assert()
+        .success();
+
     // Remove the python interpreter for black
     fs::remove_dir_all(tool_dir.path().join("black/bin").as_os_str()).unwrap();
-
 
     uv_snapshot!(context.filters(), context.tool_list()
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
