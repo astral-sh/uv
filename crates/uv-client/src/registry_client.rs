@@ -155,7 +155,7 @@ impl<'a> RegistryClientBuilder<'a> {
 }
 
 impl<'a> From<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
-    fn from(value: BaseClientBuilder) -> Self {
+    fn from(value: BaseClientBuilder<'a>) -> Self {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
@@ -167,7 +167,6 @@ impl<'a> From<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
         }
     }
 }
-
 
 /// A client for fetching packages from a `PyPI`-compatible index.
 #[derive(Debug, Clone)]
