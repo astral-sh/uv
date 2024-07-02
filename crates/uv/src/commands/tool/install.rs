@@ -18,8 +18,7 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonFetch, PythonInstallation, PythonPreference,
-    PythonRequest,
+    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
@@ -27,7 +26,8 @@ use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::update_environment;
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::tool::common::resolve_requirements;
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -332,42 +332,4 @@ pub(crate) async fn install(
     installed_tools.add_tool_receipt(&from.name, tool)?;
 
     Ok(ExitStatus::Success)
-}
-
-/// Resolve any [`UnnamedRequirements`].
-async fn resolve_requirements(
-    requirements: impl Iterator<Item = &str>,
-    interpreter: &Interpreter,
-    settings: &ResolverInstallerSettings,
-    state: &SharedState,
-    preview: PreviewMode,
-    connectivity: Connectivity,
-    concurrency: Concurrency,
-    native_tls: bool,
-    cache: &Cache,
-    printer: Printer,
-) -> Result<Vec<Requirement>> {
-    // Parse the requirements.
-    let requirements = {
-        let mut parsed = vec![];
-        for requirement in requirements {
-            parsed.push(RequirementsSpecification::parse_package(requirement)?);
-        }
-        parsed
-    };
-
-    // Resolve the parsed requirements.
-    project::resolve_names(
-        requirements,
-        interpreter,
-        settings,
-        state,
-        preview,
-        connectivity,
-        concurrency,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await
 }
