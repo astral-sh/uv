@@ -52,9 +52,10 @@ impl SitePackages {
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
-                                    || entry.path().extension().map_or(false, |ext| {
-                                        ext == "egg-link" || ext == "egg-info"
-                                    }))
+                                    || entry
+                                        .path()
+                                        .extension()
+                                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
                                 .then_some(Ok(entry.path())),
                                 Err(err) => Some(Err(err)),
                             },
@@ -87,15 +88,12 @@ impl SitePackages {
                 // Index the distribution by name.
                 by_name
                     .entry(dist_info.name().clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(idx);
 
                 // Index the distribution by URL.
                 if let InstalledDist::Url(dist) = &dist_info {
-                    by_url
-                        .entry(dist.url.clone())
-                        .or_insert_with(Vec::new)
-                        .push(idx);
+                    by_url.entry(dist.url.clone()).or_default().push(idx);
                 }
 
                 // Add the distribution to the database.
@@ -125,6 +123,13 @@ impl SitePackages {
             .iter()
             .flat_map(|&index| &self.distributions[index])
             .collect()
+    }
+
+    /// Returns `true` if there are any installed distributions with the given package name.
+    pub fn contains_package(&self, name: &PackageName) -> bool {
+        self.by_name
+            .get(name)
+            .is_some_and(|packages| !packages.is_empty())
     }
 
     /// Remove the given packages from the index, returning all installed versions, if any.

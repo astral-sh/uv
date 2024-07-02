@@ -175,7 +175,7 @@ impl GitRepository {
         })
     }
 
-    /// Fetches the object ID of the given `refname`.
+    /// Parses the object ID of the given `refname`.
     fn rev_parse(&self, refname: &str) -> Result<GitOid> {
         let result = ProcessBuilder::new("git")
             .arg("rev-parse")
@@ -295,9 +295,9 @@ impl GitDatabase {
         Ok(result)
     }
 
-    /// Checks if the database contains the object of this `oid`.
+    /// Checks if `oid` resolves to a commit in this database.
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
-        self.repo.rev_parse(oid.as_str()).is_ok()
+        self.repo.rev_parse(&format!("{oid}^0")).is_ok()
     }
 }
 

@@ -7,17 +7,20 @@
 - [Installing uv](installation.md)
 - [First steps](first-steps.md)
 
-# Basic concepts
+# Guides
 
-- [Python environments](pip/environments.md)
-- [Managing packages](pip/packages.md)
-- [Inspecting packages](pip/inspection.md)
-- [Declaring dependencies](pip/dependencies.md)
-- [Locking environments](pip/compile.md)
+- [Installing Python](guides/install-python.md)
+- [Running scripts](guides/scripts.md)
+- [Installing tools](guides/tools.md)
+- [Creating a project](guides/projects.md)
 
-# Advanced concepts
+# Concepts
 
-- [Python discovery](python/discovery.md)
+- [Projects](preview/projects.md)
+- [Command-line tools](preview/tools.md)
+- [Python toolchains](preview/toolchains.md)
+- [Workspaces](preview/workspaces.md)
+- [Dependency sources](preview/dependencies.md)
 - [Resolution](resolution.md)
 - [Caching](cache.md)
 - [Authentication](configuration/authentication.md)
@@ -33,14 +36,13 @@
 - [Using in GitHub Actions](guides/github.md)
 - [Using in pre-commit](guides/pre-commit.md)
 
-# Preview features
+# Low-level operations
 
-- [Introduction](preview/introduction.md)
-- [Projects](preview/projects.md)
-- [Dependency specification](preview/dependencies.md)
-- [Workspaces](preview/workspaces.md)
-- [Command-line tools](preview/tools.md)
-- [Python toolchains](preview/toolchains.md)
+- [Using environments](pip/environments.md)
+- [Managing packages](pip/packages.md)
+- [Inspecting packages](pip/inspection.md)
+- [Declaring dependencies](pip/dependencies.md)
+- [Locking environments](pip/compile.md)
 
 # Policies
 

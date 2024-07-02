@@ -8,10 +8,9 @@ use tracing::instrument;
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    PythonRequirementKind, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::Version;
 use platform_tags::{TagCompatibility, Tags};
 use pypi_types::{HashDigest, Yanked};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
@@ -21,7 +20,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks, ExcludeNewer};
+use crate::{yanks::AllowedYanks, ExcludeNewer};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -45,7 +44,6 @@ impl VersionMap {
         package_name: &PackageName,
         index: &IndexUrl,
         tags: Option<&Tags>,
-        python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
         exclude_newer: Option<&ExcludeNewer>,
@@ -107,7 +105,6 @@ impl VersionMap {
                 no_build: build_options.no_build_package(package_name),
                 index: index.clone(),
                 tags: tags.cloned(),
-                python_requirement: python_requirement.clone(),
                 exclude_newer: exclude_newer.copied(),
                 allowed_yanks,
                 required_hashes,
@@ -285,10 +282,6 @@ struct VersionMapLazy {
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
     tags: Option<Tags>,
-    /// The version of Python active in the current environment. This is used
-    /// to determine whether a package's Python version constraint (if one
-    /// exists) is satisfied or not.
-    python_requirement: PythonRequirement,
     /// Whether files newer than this timestamp should be excluded or not.
     exclude_newer: Option<ExcludeNewer>,
     /// Which yanked versions are allowed
@@ -369,7 +362,6 @@ impl VersionMapLazy {
 
                 // Prioritize amongst all available files.
                 let version = filename.version().clone();
-                let requires_python = file.requires_python.clone();
                 let yanked = file.yanked.clone();
                 let hashes = file.hashes.clone();
                 match filename {
@@ -377,7 +369,6 @@ impl VersionMapLazy {
                         let compatibility = self.wheel_compatibility(
                             &filename,
                             &version,
-                            requires_python,
                             &hashes,
                             yanked,
                             excluded,
@@ -393,7 +384,6 @@ impl VersionMapLazy {
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
                             &version,
-                            requires_python,
                             &hashes,
                             yanked,
                             excluded,
@@ -422,7 +412,6 @@ impl VersionMapLazy {
     fn source_dist_compatibility(
         &self,
         version: &Version,
-        requires_python: Option<VersionSpecifiers>,
         hashes: &[HashDigest],
         yanked: Option<Yanked>,
         excluded: bool,
@@ -444,28 +433,6 @@ impl VersionMapLazy {
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
                 return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(yanked));
-            }
-        }
-
-        // Check if Python version is supported
-        // Source distributions must meet both the _target_ Python version and the
-        // _installed_ Python version (to build successfully)
-        if let Some(requires_python) = requires_python {
-            if let Some(target) = self.python_requirement.target() {
-                if !target.is_compatible_with(&requires_python) {
-                    return SourceDistCompatibility::Incompatible(
-                        IncompatibleSource::RequiresPython(
-                            requires_python,
-                            PythonRequirementKind::Target,
-                        ),
-                    );
-                }
-            }
-            if !requires_python.contains(self.python_requirement.installed()) {
-                return SourceDistCompatibility::Incompatible(IncompatibleSource::RequiresPython(
-                    requires_python,
-                    PythonRequirementKind::Installed,
-                ));
             }
         }
 
@@ -492,7 +459,6 @@ impl VersionMapLazy {
         &self,
         filename: &WheelFilename,
         version: &Version,
-        requires_python: Option<VersionSpecifiers>,
         hashes: &[HashDigest],
         yanked: Option<Yanked>,
         excluded: bool,
@@ -512,25 +478,6 @@ impl VersionMapLazy {
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked));
-            }
-        }
-
-        // Check for a Python version incompatibility
-        if let Some(requires_python) = requires_python {
-            if let Some(target) = self.python_requirement.target() {
-                if !target.is_compatible_with(&requires_python) {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
-                        requires_python,
-                        PythonRequirementKind::Target,
-                    ));
-                }
-            } else {
-                if !requires_python.contains(self.python_requirement.installed()) {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
-                        requires_python,
-                        PythonRequirementKind::Installed,
-                    ));
-                }
             }
         }
 

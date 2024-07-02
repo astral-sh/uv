@@ -347,6 +347,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `pip tree` command for testing.
+    pub fn pip_tree(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("pip").arg("tree");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv sync` command with options shared across scenarios.
     pub fn sync(&self) -> Command {
         let mut command = Command::new(get_bin());
@@ -372,6 +380,14 @@ impl TestContext {
             .env("UV_PREVIEW", "1")
             .env("UV_TOOLCHAIN_DIR", "")
             .current_dir(&self.temp_dir);
+        self.add_shared_args(&mut command);
+        command
+    }
+
+    /// Create a `uv toolchain dir` command with options shared across scenarios.
+    pub fn toolchain_dir(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("toolchain").arg("dir");
         self.add_shared_args(&mut command);
         command
     }
@@ -416,6 +432,14 @@ impl TestContext {
     pub fn tool_list(&self) -> std::process::Command {
         let mut command = std::process::Command::new(get_bin());
         command.arg("tool").arg("list");
+        self.add_shared_args(&mut command);
+        command
+    }
+
+    /// Create a `uv tool dir` command with options shared across scenarios.
+    pub fn tool_dir(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("tool").arg("dir");
         self.add_shared_args(&mut command);
         command
     }
@@ -687,7 +711,7 @@ pub fn python_toolchains_for_versions(
             if let Ok(toolchain) = Toolchain::find(
                 &ToolchainRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
-                ToolchainPreference::PreferInstalledManaged,
+                ToolchainPreference::Managed,
                 &cache,
             ) {
                 toolchain.into_interpreter().sys_executable().to_owned()
@@ -768,9 +792,9 @@ pub fn run_and_format<T: AsRef<str>>(
             // The optional leading +/- is for install logs, the optional next line is for lock files
             let windows_only_deps = [
                 ("( [+-] )?colorama==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
-                ("( [+-] )?colorama==\\d+(\\.[\\d+])+\\s+(# via .*\n)?"),
+                ("( [+-] )?colorama==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),
                 ("( [+-] )?tzdata==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
-                ("( [+-] )?tzdata==\\d+(\\.[\\d+])+\\s+(# via .*\n)?"),
+                ("( [+-] )?tzdata==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),
             ];
             let mut removed_packages = 0;
             for windows_only_dep in windows_only_deps {

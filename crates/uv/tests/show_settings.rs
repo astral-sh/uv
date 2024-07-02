@@ -58,6 +58,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -123,6 +124,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -188,6 +190,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -253,6 +256,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -319,6 +323,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -384,6 +389,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -482,6 +488,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -547,6 +554,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -614,6 +622,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -656,6 +665,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -732,6 +742,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -797,6 +808,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -887,6 +899,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -975,6 +988,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -1042,6 +1056,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1152,6 +1167,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -1242,6 +1258,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1302,6 +1319,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -1391,6 +1409,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1433,6 +1452,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -1515,6 +1535,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1602,6 +1623,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -1667,6 +1689,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1754,6 +1777,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -1843,6 +1867,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1885,6 +1910,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -1957,6 +1983,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1999,6 +2026,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -2071,6 +2099,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2113,6 +2142,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: Highest,
@@ -2187,6 +2217,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2229,6 +2260,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,
@@ -2328,6 +2360,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         toolchain_preference: OnlySystem,
+        toolchain_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2370,6 +2403,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
                 no_binary: None,
                 no_build: None,
             },
+            allow_empty_requirements: false,
             strict: false,
             dependency_mode: Transitive,
             resolution: LowestDirect,

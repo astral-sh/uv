@@ -1,0 +1,12 @@
+[project]
+name = "seeds"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = ["idna==3.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+managed = false

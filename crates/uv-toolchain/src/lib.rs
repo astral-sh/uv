@@ -2,7 +2,7 @@
 use thiserror::Error;
 
 pub use crate::discovery::{
-    find_toolchains, EnvironmentPreference, Error as DiscoveryError, SystemPython,
+    find_toolchains, EnvironmentPreference, Error as DiscoveryError, SystemPython, ToolchainFetch,
     ToolchainNotFound, ToolchainPreference, ToolchainRequest, ToolchainSource, VersionRequest,
 };
 pub use crate::environment::PythonEnvironment;

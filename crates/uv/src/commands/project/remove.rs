@@ -7,10 +7,11 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::pyproject::DependencyType;
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::{ProjectWorkspace, VirtualProject, Workspace};
-use uv_toolchain::{ToolchainPreference, ToolchainRequest};
+use uv_toolchain::{ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::SharedState;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettings, ResolverSettings};
@@ -22,6 +23,7 @@ pub(crate) async fn remove(
     package: Option<PackageName>,
     python: Option<String>,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -81,10 +83,11 @@ pub(crate) async fn remove(
     )?;
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(
+    let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
+        toolchain_fetch,
         connectivity,
         native_tls,
         cache,
@@ -95,11 +98,15 @@ pub(crate) async fn remove(
     // Use the default settings.
     let settings = ResolverSettings::default();
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Lock and sync the environment.
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref(),
+        &state,
         preview,
         connectivity,
         concurrency,
@@ -123,6 +130,7 @@ pub(crate) async fn remove(
         dev,
         Modifications::Exact,
         settings.as_ref(),
+        &state,
         preview,
         connectivity,
         concurrency,

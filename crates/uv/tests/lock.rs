@@ -1650,7 +1650,7 @@ fn lock_requires_python() -> Result<()> {
           And because project==0.1.0 depends on pygls>=1.1.0, we can conclude that project==0.1.0 cannot be used.
           And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
 
-          hint: The `Requires-Python` requirement (>=3.7) defined in your `pyproject.toml` includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `Requires-Python` requirement (like >=3.7.9, <4).
+          hint: The `Requires-Python` requirement (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `Requires-Python` requirement (like >=3.7.9, <4).
     "###);
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
@@ -2039,15 +2039,14 @@ fn lock_requires_python() -> Result<()> {
         .collect();
 
     // Install from the lockfile.
-    // Note we need `--offline` otherwise we'll just fetch a 3.12 interpreter!
-    uv_snapshot!(filters, context38.sync().arg("--offline"), @r###"
+    // Note we need to disable toolchain fetches or we'll just download 3.12
+    uv_snapshot!(filters, context38.sync().arg("--toolchain-fetch").arg("manual"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning.
-    Removing virtual environment at: .venv
     error: No interpreter found for Python >=3.12 in system path
     "###);
 

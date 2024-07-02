@@ -8,8 +8,8 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_toolchain::downloads::PythonDownloadRequest;
 use uv_toolchain::{
-    find_toolchains, DiscoveryError, EnvironmentPreference, Toolchain, ToolchainNotFound,
-    ToolchainPreference, ToolchainRequest, ToolchainSource,
+    find_toolchains, DiscoveryError, EnvironmentPreference, Toolchain, ToolchainFetch,
+    ToolchainNotFound, ToolchainPreference, ToolchainRequest, ToolchainSource,
 };
 use uv_warnings::warn_user_once;
 
@@ -25,11 +25,13 @@ enum Kind {
 }
 
 /// List available toolchains.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn list(
     kinds: ToolchainListKinds,
     all_versions: bool,
     all_platforms: bool,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -40,11 +42,18 @@ pub(crate) async fn list(
 
     let download_request = match kinds {
         ToolchainListKinds::Installed => None,
-        ToolchainListKinds::Default => Some(if all_platforms {
-            PythonDownloadRequest::default()
-        } else {
-            PythonDownloadRequest::from_env()?
-        }),
+        ToolchainListKinds::Default => {
+            if toolchain_fetch.is_automatic() {
+                Some(if all_platforms {
+                    PythonDownloadRequest::default()
+                } else {
+                    PythonDownloadRequest::from_env()?
+                })
+            } else {
+                // If fetching is not automatic, then don't show downloads as available by default
+                None
+            }
+        }
     };
 
     let downloads = download_request

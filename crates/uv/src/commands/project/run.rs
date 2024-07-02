@@ -6,36 +6,39 @@ use anyhow::{Context, Result};
 use tokio::process::Command;
 use tracing::debug;
 
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::{VirtualProject, Workspace, WorkspaceError};
 use uv_normalize::PackageName;
-use uv_requirements::RequirementsSource;
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_toolchain::{
-    EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain, ToolchainPreference,
-    ToolchainRequest,
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
+    ToolchainFetch, ToolchainPreference, ToolchainRequest, VersionRequest,
 };
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::SharedState;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
 pub(crate) async fn run(
-    extras: ExtrasSpecification,
-    dev: bool,
     command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
-    python: Option<String>,
     package: Option<PackageName>,
+    extras: ExtrasSpecification,
+    dev: bool,
+    python: Option<String>,
     settings: ResolverInstallerSettings,
     isolated: bool,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -49,8 +52,89 @@ pub(crate) async fn run(
     // Parse the input command.
     let command = RunCommand::from(command);
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
+    // Determine whether the command to execute is a PEP 723 script.
+    let temp_dir;
+    let script_interpreter = if let RunCommand::Python(target, _) = &command {
+        if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
+            debug!("Found PEP 723 script at: {}", target.display());
+
+            let spec = RequirementsSpecification::from_requirements(
+                metadata
+                    .dependencies
+                    .into_iter()
+                    .map(Requirement::from)
+                    .collect(),
+            );
+
+            // (1) Explicit request from user
+            let python_request = if let Some(request) = python.as_deref() {
+                Some(ToolchainRequest::parse(request))
+                // (2) Request from `.python-version`
+            } else if let Some(request) = request_from_version_file().await? {
+                Some(request)
+                // (3) `Requires-Python` in `pyproject.toml`
+            } else {
+                metadata.requires_python.map(|requires_python| {
+                    ToolchainRequest::Version(VersionRequest::Range(requires_python))
+                })
+            };
+
+            let client_builder = BaseClientBuilder::new()
+                .connectivity(connectivity)
+                .native_tls(native_tls);
+
+            let interpreter = Toolchain::find_or_fetch(
+                python_request,
+                EnvironmentPreference::Any,
+                toolchain_preference,
+                toolchain_fetch,
+                &client_builder,
+                cache,
+            )
+            .await?
+            .into_interpreter();
+
+            // Create a virtual environment
+            temp_dir = cache.environment()?;
+            let venv = uv_virtualenv::create_venv(
+                temp_dir.path(),
+                interpreter,
+                uv_virtualenv::Prompt::None,
+                false,
+                false,
+            )?;
+
+            // Install the script requirements.
+            let environment = project::update_environment(
+                venv,
+                spec,
+                Modifications::Sufficient,
+                &settings,
+                &state,
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            Some(environment.into_interpreter())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Discover and sync the base environment.
-    let base_interpreter = if isolated {
+    let base_interpreter = if let Some(script_interpreter) = script_interpreter {
+        Some(script_interpreter)
+    } else if isolated {
         // package is `None`, isolated and package are marked as conflicting in clap.
         None
     } else {
@@ -67,6 +151,7 @@ pub(crate) async fn run(
             match VirtualProject::discover(&std::env::current_dir()?, None).await {
                 Ok(project) => Some(project),
                 Err(WorkspaceError::MissingPyprojectToml) => None,
+                Err(WorkspaceError::NonWorkspace(_)) => None,
                 Err(err) => return Err(err.into()),
             }
         };
@@ -84,10 +169,11 @@ pub(crate) async fn run(
                 );
             }
 
-            let venv = project::init_environment(
+            let venv = project::get_or_init_environment(
                 project.workspace(),
                 python.as_deref().map(ToolchainRequest::parse),
                 toolchain_preference,
+                toolchain_fetch,
                 connectivity,
                 native_tls,
                 cache,
@@ -100,6 +186,7 @@ pub(crate) async fn run(
                 project.workspace(),
                 venv.interpreter(),
                 settings.as_ref().into(),
+                &state,
                 preview,
                 connectivity,
                 concurrency,
@@ -116,6 +203,7 @@ pub(crate) async fn run(
                 dev,
                 Modifications::Sufficient,
                 settings.as_ref().into(),
+                &state,
                 preview,
                 connectivity,
                 concurrency,
@@ -138,7 +226,8 @@ pub(crate) async fn run(
                 // No opt-in is required for system environments, since we are not mutating it.
                 EnvironmentPreference::Any,
                 toolchain_preference,
-                client_builder,
+                toolchain_fetch,
+                &client_builder,
                 cache,
             )
             .await?;
@@ -177,7 +266,8 @@ pub(crate) async fn run(
                 python.as_deref().map(ToolchainRequest::parse),
                 EnvironmentPreference::Any,
                 toolchain_preference,
-                client_builder,
+                toolchain_fetch,
+                &client_builder,
                 cache,
             )
             .await?
@@ -199,12 +289,21 @@ pub(crate) async fn run(
             false,
         )?;
 
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+
+        let spec =
+            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+
         // Install the ephemeral requirements.
         Some(
             project::update_environment(
                 venv,
-                &requirements,
+                spec,
+                Modifications::Sufficient,
                 &settings,
+                &state,
                 preview,
                 connectivity,
                 concurrency,
@@ -316,8 +415,8 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
-            Self::External(command, args) => {
-                write!(f, "{}", command.to_string_lossy())?;
+            Self::External(executable, args) => {
+                write!(f, "{}", executable.to_string_lossy())?;
                 for arg in args {
                     write!(f, " {}", arg.to_string_lossy())?;
                 }
@@ -342,7 +441,7 @@ impl From<ExternalCommand> for RunCommand {
         let target_path = PathBuf::from(&target);
         if target_path
             .extension()
-            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
             && target_path.exists()
         {
             Self::Python(target_path, args.to_vec())

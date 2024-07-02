@@ -15,7 +15,7 @@ use uv_cli::{
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs,
     ToolListArgs, ToolRunArgs, ToolUninstallArgs, ToolchainFindArgs, ToolchainInstallArgs,
-    ToolchainListArgs, VenvArgs,
+    ToolchainListArgs, ToolchainUninstallArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -31,7 +31,7 @@ use uv_settings::{
     Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
     ResolverOptions,
 };
-use uv_toolchain::{Prefix, PythonVersion, Target, ToolchainPreference};
+use uv_toolchain::{Prefix, PythonVersion, Target, ToolchainFetch, ToolchainPreference};
 
 use crate::commands::pip::operations::Modifications;
 
@@ -48,6 +48,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
     pub(crate) toolchain_preference: ToolchainPreference,
+    pub(crate) toolchain_fetch: ToolchainFetch,
 }
 
 impl GlobalSettings {
@@ -114,6 +115,10 @@ impl GlobalSettings {
                 .toolchain_preference
                 .combine(workspace.and_then(|workspace| workspace.globals.toolchain_preference))
                 .unwrap_or(default_toolchain_preference),
+            toolchain_fetch: args
+                .toolchain_fetch
+                .combine(workspace.and_then(|workspace| workspace.globals.toolchain_fetch))
+                .unwrap_or_default(),
         }
     }
 }
@@ -295,7 +300,7 @@ impl ToolListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUninstallSettings {
-    pub(crate) name: String,
+    pub(crate) name: PackageName,
 }
 
 impl ToolUninstallSettings {
@@ -366,6 +371,26 @@ impl ToolchainInstallSettings {
         let ToolchainInstallArgs { targets, force } = args;
 
         Self { targets, force }
+    }
+}
+
+/// The resolved settings to use for a `toolchain uninstall` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolchainUninstallSettings {
+    pub(crate) targets: Vec<String>,
+}
+
+impl ToolchainUninstallSettings {
+    /// Resolve the [`ToolchainUninstallSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(
+        args: ToolchainUninstallArgs,
+        _filesystem: Option<FilesystemOptions>,
+    ) -> Self {
+        let ToolchainUninstallArgs { targets } = args;
+
+        Self { targets }
     }
 }
 
@@ -734,6 +759,8 @@ impl PipSyncSettings {
             no_break_system_packages,
             target,
             prefix,
+            allow_empty_requirements,
+            no_allow_empty_requirements,
             legacy_setup_py,
             no_legacy_setup_py,
             no_build_isolation,
@@ -766,15 +793,19 @@ impl PipSyncSettings {
                     exclude_newer,
                     target,
                     prefix,
+                    require_hashes: flag(require_hashes, no_require_hashes),
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
-                    no_build_isolation: flag(no_build_isolation, build_isolation),
-                    strict: flag(strict, no_strict),
+                    allow_empty_requirements: flag(
+                        allow_empty_requirements,
+                        no_allow_empty_requirements,
+                    ),
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
+                    no_build_isolation: flag(no_build_isolation, build_isolation),
                     python_version,
                     python_platform,
-                    require_hashes: flag(require_hashes, no_require_hashes),
+                    strict: flag(strict, no_strict),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
@@ -921,6 +952,7 @@ impl PipUninstallSettings {
             no_break_system_packages,
             target,
             prefix,
+            compat_args: _,
         } = args;
 
         Self {
@@ -960,6 +992,7 @@ impl PipFreezeSettings {
             python,
             system,
             no_system,
+            compat_args: _,
         } = args;
 
         Self {
@@ -1040,6 +1073,7 @@ impl PipShowSettings {
             python,
             system,
             no_system,
+            compat_args: _,
         } = args;
 
         Self {
@@ -1063,7 +1097,9 @@ impl PipShowSettings {
 pub(crate) struct PipTreeSettings {
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
+    pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
+    pub(crate) invert: bool,
     // CLI-only settings.
     pub(crate) shared: PipSettings,
 }
@@ -1074,18 +1110,23 @@ impl PipTreeSettings {
         let PipTreeArgs {
             depth,
             prune,
+            package,
             no_dedupe,
+            invert,
             strict,
             no_strict,
             python,
             system,
             no_system,
+            compat_args: _,
         } = args;
 
         Self {
             depth,
             prune,
+            package,
             no_dedupe,
+            invert,
             // Shared settings.
             shared: PipSettings::combine(
                 PipOptions {
@@ -1594,6 +1635,7 @@ pub(crate) struct PipSettings {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) no_build_isolation: bool,
     pub(crate) build_options: BuildOptions,
+    pub(crate) allow_empty_requirements: bool,
     pub(crate) strict: bool,
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
@@ -1653,6 +1695,7 @@ impl PipSettings {
             extra,
             all_extras,
             no_deps,
+            allow_empty_requirements,
             resolution,
             prerelease,
             output_file,
@@ -1778,6 +1821,10 @@ impl PipSettings {
             generate_hashes: args
                 .generate_hashes
                 .combine(generate_hashes)
+                .unwrap_or_default(),
+            allow_empty_requirements: args
+                .allow_empty_requirements
+                .combine(allow_empty_requirements)
                 .unwrap_or_default(),
             setup_py: if args
                 .legacy_setup_py

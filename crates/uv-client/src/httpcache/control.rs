@@ -216,7 +216,7 @@ impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> CacheControlPa
             )
         }
         let mut end = 0;
-        while self.cur.get(end).copied().map_or(false, is_token_byte) {
+        while self.cur.get(end).copied().is_some_and(is_token_byte) {
             end += 1;
         }
         if end == 0 {
@@ -240,7 +240,7 @@ impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> CacheControlPa
     ///
     /// [RFC 9111 Appendix A]: https://www.rfc-editor.org/rfc/rfc9111.html#name-collected-abnf
     fn maybe_parse_equals(&mut self) -> bool {
-        if self.cur.first().map_or(false, |&byte| byte == b'=') {
+        if self.cur.first().is_some_and(|&byte| byte == b'=') {
             self.cur = &self.cur[1..];
             true
         } else {
@@ -322,7 +322,7 @@ impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> CacheControlPa
     ///
     /// [RFC 9111 Appendix A]: https://www.rfc-editor.org/rfc/rfc9111.html#name-collected-abnf
     fn maybe_parse_directive_delimiter(&mut self) -> bool {
-        if self.cur.first().map_or(false, |&byte| byte == b',') {
+        if self.cur.first().is_some_and(|&byte| byte == b',') {
             self.cur = &self.cur[1..];
             true
         } else {
@@ -336,7 +336,7 @@ impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> CacheControlPa
     ///
     /// [RFC 9111 Appendix A]: https://www.rfc-editor.org/rfc/rfc9111.html#name-collected-abnf
     fn skip_whitespace(&mut self) {
-        while self.cur.first().map_or(false, u8::is_ascii_whitespace) {
+        while self.cur.first().is_some_and(u8::is_ascii_whitespace) {
             self.cur = &self.cur[1..];
         }
     }

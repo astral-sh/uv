@@ -1,6 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
@@ -22,9 +23,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, enabled, instrument, trace, warn, Level};
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist,
-    VersionOrUrlRef,
+    BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
+    IncompatibleWheel, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist,
+    ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -43,7 +44,7 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::error::ResolveError;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
-use crate::marker::normalize;
+use crate::marker::{normalize, requires_python_marker};
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
@@ -154,7 +155,6 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             database,
             flat_index,
             tags,
-            python_requirement.clone(),
             AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
             hasher,
             options.exclude_newer,
@@ -190,11 +190,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Result<Self, ResolveError> {
-        let requires_python = if markers.is_some() {
-            None
-        } else {
-            Some(python_requirement.to_marker_tree())
-        };
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
@@ -213,8 +208,12 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
             markers: markers.cloned(),
+            requires_python: if markers.is_some() {
+                None
+            } else {
+                python_requirement.to_marker_tree()
+            },
             python_requirement: python_requirement.clone(),
-            requires_python,
             reporter: None,
             installed_packages,
         };
@@ -313,20 +312,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         visited: &mut FxHashSet<PackageName>,
         request_sink: Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
-        let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
-        let mut prefetcher = BatchPrefetcher::default();
-        let state = SolveState {
-            pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
-            next: root,
-            pins: FilePins::default(),
-            fork_urls: ForkUrls::default(),
-            priorities: PubGrubPriorities::default(),
-            added_dependencies: FxHashMap::default(),
-            markers: MarkerTree::And(vec![]),
-        };
-        let mut forked_states = vec![state];
-        let mut resolutions = vec![];
-
         debug!(
             "Solving with installed Python version: {}",
             self.python_requirement.installed()
@@ -335,7 +320,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             debug!("Solving with target Python version: {}", target);
         }
 
+        let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
+        let mut prefetcher = BatchPrefetcher::default();
+        let state = ForkState {
+            pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
+            next: root,
+            pins: FilePins::default(),
+            fork_urls: ForkUrls::default(),
+            priorities: PubGrubPriorities::default(),
+            added_dependencies: FxHashMap::default(),
+            markers: MarkerTree::And(vec![]),
+            python_requirement: self.python_requirement.clone(),
+            requires_python: self.requires_python.clone(),
+        };
+        let mut preferences = self.preferences.clone();
+        let mut forked_states = vec![state];
+        let mut resolutions = vec![];
+
         'FORK: while let Some(mut state) = forked_states.pop() {
+            if !state.markers.is_universal() {
+                if let Some(requires_python) = state.requires_python.as_ref() {
+                    debug!("Solving split {} ({})", state.markers, requires_python);
+                } else {
+                    debug!("Solving split {}", state.markers);
+                }
+            }
             let start = Instant::now();
             loop {
                 // Run unit propagation.
@@ -370,7 +379,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state.markers,
                         start.elapsed().as_secs_f32()
                     );
-                    resolutions.push(state.into_resolution());
+
+                    let resolution = state.into_resolution();
+
+                    // Walk over the selected versions, and mark them as preferences.
+                    for (package, versions) in &resolution.packages {
+                        if let Entry::Vacant(entry) = preferences.entry(package.name.clone()) {
+                            if let Some(version) = versions.iter().next() {
+                                entry.insert(version.clone().into());
+                            }
+                        }
+                    }
+
+                    resolutions.push(resolution);
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
@@ -407,7 +428,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.next,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
+                    &preferences,
                     &state.fork_urls,
+                    &state.python_requirement,
                     visited,
                     &request_sink,
                 )?;
@@ -486,6 +509,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &version,
                         &state.fork_urls,
                         &state.markers,
+                        state.requires_python.as_ref(),
                     )?;
                     match forked_deps {
                         ForkedDependencies::Unavailable(reason) => {
@@ -546,9 +570,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 if !is_last {
                                     cur_state = Some(forked_state.clone());
                                 }
+
                                 forked_state.markers.and(fork.markers);
                                 forked_state.markers = normalize(forked_state.markers)
                                     .unwrap_or(MarkerTree::And(Vec::new()));
+
+                                // If the fork contains a narrowed Python requirement, apply it.
+                                let python_requirement = requires_python_marker(
+                                    &forked_state.markers,
+                                )
+                                .and_then(|marker| forked_state.python_requirement.narrow(&marker));
+                                if let Some(python_requirement) = python_requirement {
+                                    if let Some(target) = python_requirement.target() {
+                                        debug!("Narrowed `requires-python` bound to: {target}");
+                                    }
+                                    forked_state.requires_python =
+                                        if forked_state.requires_python.is_some() {
+                                            python_requirement.to_marker_tree()
+                                        } else {
+                                            None
+                                        };
+                                    forked_state.python_requirement = python_requirement;
+                                }
 
                                 forked_state.add_package_version_dependencies(
                                     for_package.as_deref(),
@@ -708,7 +751,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         range: &Range<Version>,
         pins: &mut FilePins,
+        preferences: &Preferences,
         fork_urls: &ForkUrls,
+        python_requirement: &PythonRequirement,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
@@ -729,9 +774,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | PubGrubPackageInner::Dev { name, .. }
             | PubGrubPackageInner::Package { name, .. } => {
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
-                    self.choose_version_url(name, range, url)
+                    self.choose_version_url(name, range, url, python_requirement)
                 } else {
-                    self.choose_version_registry(name, range, package, pins, visited, request_sink)
+                    self.choose_version_registry(
+                        name,
+                        range,
+                        package,
+                        preferences,
+                        python_requirement,
+                        pins,
+                        visited,
+                        request_sink,
+                    )
                 }
             }
         }
@@ -744,6 +798,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         range: &Range<Version>,
         url: &VerbatimParsedUrl,
+        python_requirement: &PythonRequirement,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
             "Searching for a compatible version of {name} @ {} ({range})",
@@ -801,8 +856,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         // The version is incompatible due to its Python requirement.
+        // STOPSHIP(charlie): Merge markers into `python_requirement`.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
-            if let Some(target) = self.python_requirement.target() {
+            if let Some(target) = python_requirement.target() {
                 if !target.is_compatible_with(requires_python) {
                     return Ok(Some(ResolverVersion::Unavailable(
                         version.clone(),
@@ -815,7 +871,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )));
                 }
             }
-            if !requires_python.contains(self.python_requirement.installed()) {
+            if !requires_python.contains(python_requirement.installed()) {
                 return Ok(Some(ResolverVersion::Unavailable(
                     version.clone(),
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
@@ -838,6 +894,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         range: &Range<Version>,
         package: &PubGrubPackage,
+        preferences: &Preferences,
+        python_requirement: &PythonRequirement,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -876,7 +934,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             name,
             range,
             version_maps,
-            &self.preferences,
+            preferences,
             &self.installed_packages,
             &self.exclusions,
         ) else {
@@ -894,6 +952,77 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )));
             }
         };
+
+        let incompatibility = match dist {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. }
+            | CompatibleDist::IncompatibleWheel { sdist, .. } => {
+                // Source distributions must meet both the _target_ Python version and the
+                // _installed_ Python version (to build successfully).
+                sdist
+                    .file
+                    .requires_python
+                    .as_ref()
+                    .and_then(|requires_python| {
+                        if let Some(target) = python_requirement.target() {
+                            if !target.is_compatible_with(requires_python) {
+                                return Some(IncompatibleDist::Source(
+                                    IncompatibleSource::RequiresPython(
+                                        requires_python.clone(),
+                                        PythonRequirementKind::Target,
+                                    ),
+                                ));
+                            }
+                        }
+                        if !requires_python.contains(python_requirement.installed()) {
+                            return Some(IncompatibleDist::Source(
+                                IncompatibleSource::RequiresPython(
+                                    requires_python.clone(),
+                                    PythonRequirementKind::Installed,
+                                ),
+                            ));
+                        }
+                        None
+                    })
+            }
+            CompatibleDist::CompatibleWheel { wheel, .. } => {
+                // Wheels must meet the _target_ Python version.
+                wheel
+                    .file
+                    .requires_python
+                    .as_ref()
+                    .and_then(|requires_python| {
+                        if let Some(target) = python_requirement.target() {
+                            if !target.is_compatible_with(requires_python) {
+                                return Some(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::RequiresPython(
+                                        requires_python.clone(),
+                                        PythonRequirementKind::Target,
+                                    ),
+                                ));
+                            }
+                        } else {
+                            if !requires_python.contains(python_requirement.installed()) {
+                                return Some(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::RequiresPython(
+                                        requires_python.clone(),
+                                        PythonRequirementKind::Installed,
+                                    ),
+                                ));
+                            }
+                        }
+                        None
+                    })
+            }
+        };
+
+        // The version is incompatible due to its Python requirement.
+        if let Some(incompatibility) = incompatibility {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::IncompatibleDist(incompatibility),
+            )));
+        }
 
         let filename = match dist.for_installation() {
             ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
@@ -937,8 +1066,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         fork_urls: &ForkUrls,
         markers: &MarkerTree,
+        requires_python: Option<&MarkerTree>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let result = self.get_dependencies(package, version, fork_urls, markers);
+        let result = self.get_dependencies(package, version, fork_urls, markers, requires_python);
         if self.markers.is_some() {
             return result.map(|deps| match deps {
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
@@ -956,6 +1086,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         fork_urls: &ForkUrls,
         markers: &MarkerTree,
+        requires_python: Option<&MarkerTree>,
     ) -> Result<Dependencies, ResolveError> {
         let url = package.name().and_then(|name| fork_urls.get(name));
         let dependencies = match &**package {
@@ -968,6 +1099,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     None,
                     markers,
+                    requires_python,
                 );
 
                 requirements
@@ -1096,6 +1228,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dev.as_ref(),
                     Some(name),
                     markers,
+                    requires_python,
                 );
 
                 let mut dependencies = requirements
@@ -1216,6 +1349,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
         markers: &'a MarkerTree,
+        requires_python: Option<&'a MarkerTree>,
     ) -> Vec<Cow<'a, Requirement>> {
         // Start with the requirements for the current extra of the package (for an extra
         // requirement) or the non-extra (regular) dependencies (if extra is None), plus
@@ -1226,7 +1360,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Right(dependencies.iter())
         };
         let mut requirements = self
-            .requirements_for_extra(regular_and_dev_dependencies, extra, markers)
+            .requirements_for_extra(
+                regular_and_dev_dependencies,
+                extra,
+                markers,
+                requires_python,
+            )
             .collect::<Vec<_>>();
 
         // Check if there are recursive self inclusions and we need to go into the expensive branch.
@@ -1249,7 +1388,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if !seen.insert(extra.clone()) {
                 continue;
             }
-            for requirement in self.requirements_for_extra(dependencies, Some(&extra), markers) {
+            for requirement in
+                self.requirements_for_extra(dependencies, Some(&extra), markers, requires_python)
+            {
                 if name == Some(&requirement.name) {
                     // Add each transitively included extra.
                     queue.extend(requirement.extras.iter().cloned());
@@ -1273,6 +1414,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
         markers: &'parameters MarkerTree,
+        requires_python: Option<&'parameters MarkerTree>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
         'data: 'parameters,
@@ -1282,12 +1424,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .filter(move |requirement| {
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
-                if !satisfies_requires_python(self.requires_python.as_ref(), requirement) {
+                if !satisfies_requires_python(requires_python, requirement) {
                     trace!(
                         "skipping {requirement} because of Requires-Python {requires_python}",
                         // OK because this filter only applies when there is a present
                         // Requires-Python specifier.
-                        requires_python = self.requires_python.as_ref().unwrap()
+                        requires_python = requires_python.unwrap()
                     );
                     return false;
                 }
@@ -1331,10 +1473,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .into_iter()
                         .flatten()
                         .filter(move |constraint| {
-                            if !satisfies_requires_python(self.requires_python.as_ref(), constraint) {
+                            if !satisfies_requires_python(requires_python, constraint) {
                                 trace!(
                                     "skipping {constraint} because of Requires-Python {requires_python}",
-                                    requires_python = self.requires_python.as_ref().unwrap()
+                                    requires_python = requires_python.unwrap()
                                 );
                                 return false;
                             }
@@ -1645,7 +1787,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
-struct SolveState {
+struct ForkState {
     /// The internal state used by the resolver.
     ///
     /// Note that not all parts of this state are strictly internal. For
@@ -1696,9 +1838,24 @@ struct SolveState {
     /// that the marker expression that provoked the fork is true), then that
     /// dependency is completely ignored.
     markers: MarkerTree,
+    /// The Python requirement for this fork. Defaults to the Python requirement for
+    /// the resolution, but may be narrowed if a `python_version` marker is present
+    /// in a given fork.
+    ///
+    /// For example, in:
+    /// ```text
+    /// numpy >=1.26 ; python_version >= "3.9"
+    /// numpy <1.26 ; python_version < "3.9"
+    /// ```
+    ///
+    /// The top fork has a narrower Python compatibility range, and thus can find a
+    /// solution that omits Python 3.8 support.
+    python_requirement: PythonRequirement,
+    /// The [`MarkerTree`] corresponding to the [`PythonRequirement`].
+    requires_python: Option<MarkerTree>,
 }
 
-impl SolveState {
+impl ForkState {
     /// Add the dependencies for the selected version of the current package, checking for
     /// self-dependencies, and handling URLs.
     fn add_package_version_dependencies(

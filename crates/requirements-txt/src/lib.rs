@@ -1201,7 +1201,7 @@ fn calculate_row_column(content: &str, position: usize) -> (usize, usize) {
                 // If the next character is a newline, skip it.
                 if chars
                     .peek()
-                    .map_or(false, |&(_, next_char)| next_char == '\n')
+                    .is_some_and(|&(_, next_char)| next_char == '\n')
                 {
                     chars.next();
                 }

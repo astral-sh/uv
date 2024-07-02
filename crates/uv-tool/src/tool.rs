@@ -14,11 +14,11 @@ use toml_edit::Value;
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
-    // The requirements requested by the user during installation.
+    /// The requirements requested by the user during installation.
     requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
     /// The Python requested by the user during installation.
     python: Option<String>,
-    // A mapping of entry point names to their metadata.
+    /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
 }
 
@@ -108,6 +108,10 @@ impl Tool {
 
     pub fn entrypoints(&self) -> &[ToolEntrypoint] {
         &self.entrypoints
+    }
+
+    pub fn requirements(&self) -> &[pep508_rs::Requirement<VerbatimParsedUrl>] {
+        &self.requirements
     }
 }
 
