@@ -1218,35 +1218,35 @@
     "ToolchainPreference": {
       "oneOf": [
         {
-          "description": "Only use managed toolchains, never use system toolchains.",
+          "description": "Only use managed toolchains; never use system toolchains.",
           "type": "string",
           "enum": [
             "only-managed"
           ]
         },
         {
-          "description": "Prefer installed toolchains, only download managed toolchains if no system toolchain is found.",
+          "description": "Prefer installed toolchains, only download managed toolchains if no system toolchain is found.\n\nInstalled managed toolchains are still preferred over system toolchains.",
           "type": "string",
           "enum": [
             "installed"
           ]
         },
         {
-          "description": "Prefer managed toolchains over system toolchains, even if one needs to be downloaded.",
+          "description": "Prefer managed toolchains over system toolchains, even if fetching is required.",
           "type": "string",
           "enum": [
-            "prefer-managed"
+            "managed"
           ]
         },
         {
-          "description": "Prefer system toolchains, only use managed toolchains if no system toolchain is found.",
+          "description": "Prefer system toolchains over managed toolchains.\n\nIf a system toolchain cannot be found, a managed toolchain can be used.",
           "type": "string",
           "enum": [
-            "prefer-system"
+            "system"
           ]
         },
         {
-          "description": "Only use system toolchains, never use managed toolchains.",
+          "description": "Only use system toolchains; never use managed toolchains.",
           "type": "string",
           "enum": [
             "only-system"
