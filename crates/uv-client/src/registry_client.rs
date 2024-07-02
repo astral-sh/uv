@@ -168,6 +168,7 @@ impl<'a> From<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
     }
 }
 
+
 /// A client for fetching packages from a `PyPI`-compatible index.
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
@@ -365,8 +366,8 @@ impl RegistryClient {
                 };
                 OwnedArchive::from_unarchived(&unarchived)
             }
-                .boxed_local()
-                .instrument(info_span!("parse_simple_api", package = %package_name))
+            .boxed_local()
+            .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         self.cached_client()
             .get_cacheable(
@@ -476,7 +477,7 @@ impl RegistryClient {
                     &wheel.url,
                     WheelCache::Url(&wheel.url),
                 )
-                    .await?
+                .await?
             }
             BuiltDist::Path(wheel) => {
                 let file = fs_err::tokio::File::open(&wheel.path)
@@ -602,8 +603,8 @@ impl RegistryClient {
                     url.clone(),
                     headers,
                 )
-                    .await
-                    .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                .await
+                .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
                 let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
@@ -615,8 +616,8 @@ impl RegistryClient {
                 })?;
                 Ok::<Metadata23, CachedClientError<Error>>(metadata)
             }
-                .boxed_local()
-                .instrument(info_span!("read_metadata_range_request", wheel = %filename))
+            .boxed_local()
+            .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 
         let result = self
@@ -667,7 +668,7 @@ impl RegistryClient {
 
                 read_metadata_async_stream(filename, url.to_string(), reader).await
             }
-                .instrument(info_span!("read_metadata_stream", wheel = %filename))
+            .instrument(info_span!("read_metadata_stream", wheel = %filename))
         };
 
         self.cached_client()
@@ -711,7 +712,7 @@ async fn read_metadata_async_seek(
             .enumerate()
             .filter_map(|(index, entry)| Some((index, entry.filename().as_str().ok()?))),
     )
-        .map_err(ErrorKind::DistInfo)?;
+    .map_err(ErrorKind::DistInfo)?;
 
     // Read the contents of the `METADATA` file.
     let mut contents = Vec::new();
