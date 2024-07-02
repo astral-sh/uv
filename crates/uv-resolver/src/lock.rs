@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -730,7 +730,7 @@ impl Distribution {
         let version = self.id.version.clone();
         let provides_extras = self.optional_dependencies.keys().cloned().collect();
 
-        let mut dependency_extras = HashMap::new();
+        let mut dependency_extras = FxHashMap::default();
         let mut requires_dist = self
             .dependencies
             .into_iter()
@@ -772,7 +772,7 @@ impl Distribution {
             .dev_dependencies
             .into_iter()
             .map(|(group, deps)| {
-                let mut dependency_extras = HashMap::new();
+                let mut dependency_extras = FxHashMap::default();
                 let mut deps = deps
                     .into_iter()
                     .filter_map(|dep| {
@@ -1889,7 +1889,7 @@ impl Dependency {
     pub(crate) fn into_requirement(
         self,
         workspace_root: &Path,
-        extras: &mut HashMap<PackageName, Vec<ExtraName>>,
+        extras: &mut FxHashMap<PackageName, Vec<ExtraName>>,
     ) -> Result<Option<Requirement>, LockError> {
         // Keep track of extras, these will be denormalized later.
         if let Some(extra) = self.extra {
