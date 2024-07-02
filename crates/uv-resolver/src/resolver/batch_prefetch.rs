@@ -58,7 +58,6 @@ impl BatchPrefetcher {
             extra: None,
             dev: None,
             marker: None,
-            url: None,
         } = &**next
         else {
             return Ok(());
@@ -74,7 +73,7 @@ impl BatchPrefetcher {
         let versions_response = index
             .packages()
             .wait_blocking(name)
-            .ok_or(ResolveError::Unregistered)?;
+            .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?;
 
         let VersionsResponse::Found(ref version_map) = *versions_response else {
             return Ok(());

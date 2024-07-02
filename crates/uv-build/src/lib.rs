@@ -30,7 +30,7 @@ use pep440_rs::Version;
 use pep508_rs::PackageName;
 use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
-use uv_fs::{PythonExt, Simplified};
+use uv_fs::{rename_with_retry, PythonExt, Simplified};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
@@ -398,7 +398,6 @@ impl SourceBuild {
     /// contents from an archive if necessary.
     ///
     /// `source_dist` is for error reporting only.
-    #[allow(clippy::too_many_arguments)]
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
@@ -757,7 +756,7 @@ impl SourceBuild {
 
             let from = tmp_dir.path().join(&filename);
             let to = wheel_dir.join(&filename);
-            fs_err::rename(from, to)?;
+            rename_with_retry(from, to).await?;
             Ok(filename)
         } else {
             if self.build_kind != BuildKind::Wheel {
@@ -901,7 +900,6 @@ fn escape_path_for_python(path: &Path) -> String {
 }
 
 /// Not a method because we call it before the builder is completely initialized
-#[allow(clippy::too_many_arguments)]
 async fn create_pep517_build_environment(
     runner: &PythonRunner,
     source_tree: &Path,

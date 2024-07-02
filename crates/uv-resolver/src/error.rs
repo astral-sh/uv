@@ -9,11 +9,12 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
 use pep440_rs::Version;
-use pep508_rs::Requirement;
+use pep508_rs::{MarkerTree, Requirement};
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
+use crate::fork_urls::ForkUrls;
 use crate::pubgrub::{
     PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
 };
@@ -36,8 +37,8 @@ pub enum ResolveError {
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
-    #[error("Attempted to wait on an unregistered task")]
-    Unregistered,
+    #[error("Attempted to wait on an unregistered task: `{_0}`")]
+    UnregisteredTask(String),
 
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
@@ -48,11 +49,18 @@ pub enum ResolveError {
     #[error(transparent)]
     PubGrubSpecifier(#[from] PubGrubSpecifierError),
 
-    #[error("Requirements contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
-    ConflictingUrlsDirect(PackageName, String, String),
+    #[error("Overrides contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
+    ConflictingOverrideUrls(PackageName, String, String),
 
-    #[error("There are conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
-    ConflictingUrlsTransitive(PackageName, String, String),
+    #[error("Requirements contain conflicting URLs for package `{0}`:\n- {}", _1.join("\n- "))]
+    ConflictingUrls(PackageName, Vec<String>),
+
+    #[error("Requirements contain conflicting URLs for package `{package_name}` in split `{fork_markers}`:\n- {}", urls.join("\n- "))]
+    ConflictingUrlsInFork {
+        package_name: PackageName,
+        urls: Vec<String>,
+        fork_markers: MarkerTree,
+    },
 
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
     DisallowedUrl(PackageName, String),
@@ -156,8 +164,16 @@ fn collapse_proxies(
     }
 }
 
-impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
-    fn from(value: pubgrub::error::PubGrubError<UvDependencyProvider>) -> Self {
+impl ResolveError {
+    /// Convert an error from PubGrub to a resolver error.
+    ///
+    /// [`ForkUrls`] breaks the usual pattern used here since it's part of one the [`SolveState`],
+    /// not of the [`ResolverState`], so we have to take it from the fork that errored instead of
+    /// being able to add it later.
+    pub(crate) fn from_pubgrub_error(
+        value: pubgrub::error::PubGrubError<UvDependencyProvider>,
+        fork_urls: ForkUrls,
+    ) -> Self {
         match value {
             // These are all never type variant that can never match, but never is experimental
             pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(_)
@@ -178,6 +194,7 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
                     index_locations: None,
                     unavailable_packages: FxHashMap::default(),
                     incomplete_packages: FxHashMap::default(),
+                    fork_urls,
                 })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
@@ -200,6 +217,7 @@ pub struct NoSolutionError {
     index_locations: Option<IndexLocations>,
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+    fork_urls: ForkUrls,
 }
 
 impl std::error::Error for NoSolutionError {}
@@ -222,6 +240,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.index_locations,
             &self.unavailable_packages,
             &self.incomplete_packages,
+            &self.fork_urls,
         ) {
             write!(f, "\n\n{hint}")?;
         }

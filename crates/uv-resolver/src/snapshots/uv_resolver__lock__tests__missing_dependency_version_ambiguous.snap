@@ -1,0 +1,16 @@
+---
+source: crates/uv-resolver/src/lock.rs
+expression: result
+---
+Err(
+    Error {
+        inner: Error {
+            inner: TomlError {
+                message: "dependency a has missing `version` field but has more than one matching distribution",
+                raw: None,
+                keys: [],
+                span: None,
+            },
+        },
+    },
+)

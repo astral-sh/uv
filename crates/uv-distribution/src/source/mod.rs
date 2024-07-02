@@ -30,7 +30,7 @@ use uv_client::{
 };
 use uv_configuration::{BuildKind, PreviewMode};
 use uv_extract::hash::Hasher;
-use uv_fs::{write_atomic, LockedFile};
+use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
 
 use crate::distribution_database::ManagedClient;
@@ -182,7 +182,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git(source, &GitSourceUrl::from(dist), tags, hashes)
+                self.git(source, &GitSourceUrl::from(dist), tags, hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -234,7 +234,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git(source, resource, tags, hashes)
+                self.git(source, resource, tags, hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -356,7 +356,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git_metadata(source, &GitSourceUrl::from(dist), hashes)
+                self.git_metadata(source, &GitSourceUrl::from(dist), hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -401,7 +401,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git_metadata(source, resource, hashes)
+                self.git_metadata(source, resource, hashes, client)
                     .boxed_local()
                     .await?
             }
@@ -433,7 +433,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Build a source distribution from a remote URL.
-    #[allow(clippy::too_many_arguments)]
     async fn url<'data>(
         &self,
         source: &BuildableSource<'data>,
@@ -505,7 +504,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ///
     /// If the build backend supports `prepare_metadata_for_build_wheel`, this method will avoid
     /// building the wheel.
-    #[allow(clippy::too_many_arguments)]
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,
@@ -1089,6 +1087,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitSourceUrl<'_>,
         tags: &Tags,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
@@ -1101,6 +1100,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .resolve(
                 resource.git,
+                client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1117,6 +1117,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 &url,
+                client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1173,6 +1174,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitSourceUrl<'_>,
         hashes: HashPolicy<'_>,
+        client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
@@ -1185,6 +1187,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .resolve(
                 resource.git,
+                client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1201,6 +1204,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 &url,
+                client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
             )
@@ -1369,7 +1373,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
             .await
             .map_err(Error::CacheWrite)?;
-        fs_err::tokio::rename(extracted, &target)
+        rename_with_retry(extracted, &target)
             .await
             .map_err(Error::CacheWrite)?;
 
@@ -1390,7 +1394,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         debug!("Building: {source}");
 
         // Guard against build of source distributions when disabled.
-        if self.build_context.build_options().no_build(source.name()) {
+        if self
+            .build_context
+            .build_options()
+            .no_build_requirement(source.name())
+        {
             if source.is_editable() {
                 debug!("Allowing build for editable source distribution: {source}");
             } else {

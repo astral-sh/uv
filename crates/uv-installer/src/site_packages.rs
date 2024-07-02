@@ -1,10 +1,10 @@
+use std::collections::BTreeSet;
 use std::iter::Flatten;
 use std::path::PathBuf;
-use std::{collections::BTreeSet, hash::BuildHasherDefault};
 
 use anyhow::{Context, Result};
 use fs_err as fs;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
 use distribution_types::{
@@ -38,7 +38,7 @@ pub struct SitePackages {
 
 impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
-    pub fn from_executable(venv: &PythonEnvironment) -> Result<SitePackages> {
+    pub fn from_environment(venv: &PythonEnvironment) -> Result<SitePackages> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
@@ -52,9 +52,10 @@ impl SitePackages {
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
-                                    || entry.path().extension().map_or(false, |ext| {
-                                        ext == "egg-link" || ext == "egg-info"
-                                    }))
+                                    || entry
+                                        .path()
+                                        .extension()
+                                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
                                 .then_some(Ok(entry.path())),
                                 Err(err) => Some(Err(err)),
                             },
@@ -87,15 +88,12 @@ impl SitePackages {
                 // Index the distribution by name.
                 by_name
                     .entry(dist_info.name().clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(idx);
 
                 // Index the distribution by URL.
                 if let InstalledDist::Url(dist) = &dist_info {
-                    by_url
-                        .entry(dist.url.clone())
-                        .or_insert_with(Vec::new)
-                        .push(idx);
+                    by_url.entry(dist.url.clone()).or_default().push(idx);
                 }
 
                 // Add the distribution to the database.
@@ -125,6 +123,13 @@ impl SitePackages {
             .iter()
             .flat_map(|&index| &self.distributions[index])
             .collect()
+    }
+
+    /// Returns `true` if there are any installed distributions with the given package name.
+    pub fn contains_package(&self, name: &PackageName) -> bool {
+        self.by_name
+            .get(name)
+            .is_some_and(|packages| !packages.is_empty())
     }
 
     /// Remove the given packages from the index, returning all installed versions, if any.
@@ -257,8 +262,7 @@ impl SitePackages {
         constraints: &[Requirement],
     ) -> Result<SatisfiesResult> {
         let mut stack = Vec::with_capacity(requirements.len());
-        let mut seen =
-            FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
+        let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
 
         // Add the direct requirements to the queue.
         for entry in requirements {

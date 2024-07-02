@@ -17,7 +17,7 @@ pub enum ImplementationName {
     PyPy,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd)]
 pub enum LenientImplementationName {
     Known(ImplementationName),
     Unknown(String),

@@ -6,7 +6,8 @@ use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{GroupName, PackageName};
 use uv_types::RequestedRequirements;
 
-use crate::{preferences::Preference, DependencyMode, Exclusions};
+use crate::preferences::Preferences;
+use crate::{DependencyMode, Exclusions};
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
@@ -29,7 +30,7 @@ pub struct Manifest {
     /// These represent "preferred" versions of a given package. For example, they may be the
     /// versions that are already installed in the environment, or already pinned in an existing
     /// lockfile.
-    pub(crate) preferences: Vec<Preference>,
+    pub(crate) preferences: Preferences,
 
     /// The name of the project.
     pub(crate) project: Option<PackageName>,
@@ -49,13 +50,12 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Constraints,
         overrides: Overrides,
         dev: Vec<GroupName>,
-        preferences: Vec<Preference>,
+        preferences: Preferences,
         project: Option<PackageName>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
@@ -78,7 +78,7 @@ impl Manifest {
             constraints: Constraints::default(),
             overrides: Overrides::default(),
             dev: Vec::new(),
-            preferences: Vec::new(),
+            preferences: Preferences::default(),
             project: None,
             exclusions: Exclusions::default(),
             lookaheads: Vec::new(),
@@ -94,6 +94,16 @@ impl Manifest {
     /// - Determining which requirements should allow direct URLs (e.g., `torch @ https://...`).
     /// - Determining which requirements should allow local version specifiers (e.g., `torch==2.2.0+cpu`).
     pub fn requirements<'a>(
+        &'a self,
+        markers: Option<&'a MarkerEnvironment>,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = &Requirement> + 'a {
+        self.requirements_no_overrides(markers, mode)
+            .chain(self.overrides(markers, mode))
+    }
+
+    /// Like [`Self::requirements`], but without the overrides.
+    pub fn requirements_no_overrides<'a>(
         &'a self,
         markers: Option<&'a MarkerEnvironment>,
         mode: DependencyMode,
@@ -119,11 +129,6 @@ impl Manifest {
                         self.constraints
                             .requirements()
                             .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
-                    )
-                    .chain(
-                        self.overrides
-                            .requirements()
-                            .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
                     ),
             ),
             // Include direct requirements, with constraints and overrides applied.
@@ -131,7 +136,28 @@ impl Manifest {
                 self.overrides
                     .apply(&self.requirements)
                     .chain(self.constraints.requirements())
-                    .chain(self.overrides.requirements())
+                    .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+            ),
+        }
+    }
+
+    /// Only the overrides from [`Self::requirements`].
+    pub fn overrides<'a>(
+        &'a self,
+        markers: Option<&'a MarkerEnvironment>,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = &Requirement> + 'a {
+        match mode {
+            // Include all direct and transitive requirements, with constraints and overrides applied.
+            DependencyMode::Transitive => Either::Left(
+                self.overrides
+                    .requirements()
+                    .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
+            ),
+            // Include direct requirements, with constraints and overrides applied.
+            DependencyMode::Direct => Either::Right(
+                self.overrides
+                    .requirements()
                     .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
             ),
         }

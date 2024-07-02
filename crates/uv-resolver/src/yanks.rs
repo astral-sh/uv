@@ -40,11 +40,11 @@ impl AllowedYanks {
         }
 
         // Allow yanks for any packages that are already pinned in the lockfile.
-        for preference in &manifest.preferences {
+        for (name, version) in manifest.preferences.iter() {
             allowed_yanks
-                .entry(preference.name().clone())
+                .entry(name.clone())
                 .or_default()
-                .insert(preference.version().clone());
+                .insert(version.clone());
         }
 
         Self(allowed_yanks)

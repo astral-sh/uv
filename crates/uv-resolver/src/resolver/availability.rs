@@ -40,8 +40,6 @@ pub(crate) enum UnavailableVersion {
     InvalidStructure,
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
-    /// Forward any kind of resolver error.
-    ResolverError(String),
 }
 
 impl Display for UnavailableVersion {
@@ -57,7 +55,6 @@ impl Display for UnavailableVersion {
             UnavailableVersion::Offline => f.write_str(
                 "network connectivity is disabled, but the metadata wasn't found in the cache",
             ),
-            UnavailableVersion::ResolverError(err) => f.write_str(err),
         }
     }
 }

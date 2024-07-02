@@ -1,17 +1,17 @@
-use std::hash::BuildHasherDefault;
-
+use indexmap::IndexSet;
 use petgraph::{
     graph::{Graph, NodeIndex},
     Directed,
 };
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, VersionId, VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
-use pypi_types::{ParsedUrlError, Yanked};
+use pypi_types::{ParsedUrlError, Requirement, Yanked};
+use uv_configuration::{Constraints, Overrides};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
@@ -22,7 +22,7 @@ use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::{Resolution, ResolutionPackage};
 use crate::{
-    InMemoryIndex, Manifest, MetadataResponse, PythonRequirement, RequiresPython, ResolveError,
+    InMemoryIndex, MetadataResponse, PythonRequirement, RequiresPython, ResolveError,
     VersionsResponse,
 };
 
@@ -31,36 +31,52 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    pub(crate) petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed>,
+    pub(crate) petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: Option<RequiresPython>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
+    /// The requirements that were used to build the graph.
+    pub(crate) requirements: Vec<Requirement>,
+    /// The constraints that were used to build the graph.
+    pub(crate) constraints: Constraints,
+    /// The overrides that were used to build the graph.
+    pub(crate) overrides: Overrides,
 }
 
-type NodeKey<'a> = (
-    &'a PackageName,
-    &'a Version,
-    Option<&'a ExtraName>,
-    Option<&'a GroupName>,
-);
+#[derive(Debug)]
+pub(crate) enum ResolutionGraphNode {
+    Root,
+    Dist(AnnotatedDist),
+}
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
     pub(crate) fn from_state(
-        index: &InMemoryIndex,
+        requirements: &[Requirement],
+        constraints: &Constraints,
+        overrides: &Overrides,
         preferences: &Preferences,
+        index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
         resolution: Resolution,
     ) -> Result<Self, ResolveError> {
-        let mut petgraph: Graph<AnnotatedDist, Option<MarkerTree>, Directed> =
-            Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
-        let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> = FxHashMap::with_capacity_and_hasher(
-            resolution.packages.len(),
-            BuildHasherDefault::default(),
+        type NodeKey<'a> = (
+            &'a PackageName,
+            &'a Version,
+            Option<&'a ExtraName>,
+            Option<&'a GroupName>,
         );
+
+        let mut petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed> =
+            Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
+        let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> =
+            FxHashMap::with_capacity_and_hasher(resolution.packages.len(), FxBuildHasher);
         let mut diagnostics = Vec::new();
+
+        // Add the root node.
+        let root_index = petgraph.add_node(ResolutionGraphNode::Root);
 
         // Add every package to the graph.
         for (package, versions) in &resolution.packages {
@@ -219,13 +235,13 @@ impl ResolutionGraph {
                 }
 
                 // Add the distribution to the graph.
-                let index = petgraph.add_node(AnnotatedDist {
+                let index = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
                     dist,
                     extra: extra.clone(),
                     dev: dev.clone(),
                     hashes,
                     metadata,
-                });
+                }));
                 inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
             }
         }
@@ -233,12 +249,14 @@ impl ResolutionGraph {
         // Add every edge to the graph.
         for (names, version_set) in resolution.dependencies {
             for versions in version_set {
-                let from_index = inverse[&(
-                    &names.from,
-                    &versions.from_version,
-                    versions.from_extra.as_ref(),
-                    versions.from_dev.as_ref(),
-                )];
+                let from_index = names.from.as_ref().map_or(root_index, |from| {
+                    inverse[&(
+                        from,
+                        &versions.from_version,
+                        versions.from_extra.as_ref(),
+                        versions.from_dev.as_ref(),
+                    )]
+                });
                 let to_index = inverse[&(
                     &names.to,
                     &versions.to_version,
@@ -277,28 +295,35 @@ impl ResolutionGraph {
             petgraph,
             requires_python,
             diagnostics,
+            requirements: requirements.to_vec(),
+            constraints: constraints.clone(),
+            overrides: overrides.clone(),
         })
+    }
+
+    /// Returns an iterator over the distinct packages in the graph.
+    fn dists(&self) -> impl Iterator<Item = &AnnotatedDist> {
+        self.petgraph
+            .node_indices()
+            .filter_map(move |index| match &self.petgraph[index] {
+                ResolutionGraphNode::Root => None,
+                ResolutionGraphNode::Dist(dist) => Some(dist),
+            })
     }
 
     /// Return the number of distinct packages in the graph.
     pub fn len(&self) -> usize {
-        self.petgraph
-            .node_indices()
-            .map(|index| &self.petgraph[index])
-            .filter(|dist| dist.is_base())
-            .count()
+        self.dists().filter(|dist| dist.is_base()).count()
     }
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.dists().any(super::AnnotatedDist::is_base)
     }
 
     /// Returns `true` if the graph contains the given package.
     pub fn contains(&self, name: &PackageName) -> bool {
-        self.petgraph
-            .node_indices()
-            .any(|index| self.petgraph[index].name() == name)
+        self.dists().any(|dist| dist.name() == name)
     }
 
     /// Return the [`ResolutionDiagnostic`]s that were encountered while building the graph.
@@ -308,7 +333,7 @@ impl ResolutionGraph {
 
     /// Return the marker tree specific to this resolution.
     ///
-    /// This accepts a manifest, in-memory-index and marker environment. All
+    /// This accepts an in-memory-index and marker environment, all
     /// of which should be the same values given to the resolver that produced
     /// this graph.
     ///
@@ -328,7 +353,6 @@ impl ResolutionGraph {
     /// to compute in some cases.)
     pub fn marker_tree(
         &self,
-        manifest: &Manifest,
         index: &InMemoryIndex,
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
@@ -348,7 +372,7 @@ impl ResolutionGraph {
         }
 
         /// Add all marker parameters from the given tree to the given set.
-        fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut FxHashSet<MarkerParam>) {
+        fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut IndexSet<MarkerParam>) {
             match marker_tree {
                 MarkerTree::Expression(
                     MarkerExpression::Version { key, .. }
@@ -378,9 +402,11 @@ impl ResolutionGraph {
             }
         }
 
-        let mut seen_marker_values = FxHashSet::default();
+        let mut seen_marker_values = IndexSet::default();
         for i in self.petgraph.node_indices() {
-            let dist = &self.petgraph[i];
+            let ResolutionGraphNode::Dist(dist) = &self.petgraph[i] else {
+                continue;
+            };
             let version_id = match dist.version_or_url() {
                 VersionOrUrlRef::Version(version) => {
                     VersionId::from_registry(dist.name().clone(), version.clone())
@@ -397,7 +423,10 @@ impl ResolutionGraph {
                     dist.version_id()
                 )
             };
-            for req in manifest.apply(archive.metadata.requires_dist.iter()) {
+            for req in self
+                .constraints
+                .apply(self.overrides.apply(archive.metadata.requires_dist.iter()))
+            {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
                 };
@@ -406,7 +435,10 @@ impl ResolutionGraph {
         }
 
         // Ensure that we consider markers from direct dependencies.
-        for direct_req in manifest.apply(manifest.requirements.iter()) {
+        for direct_req in self
+            .constraints
+            .apply(self.overrides.apply(self.requirements.iter()))
+        {
             let Some(ref marker_tree) = direct_req.marker else {
                 continue;
             };
@@ -444,14 +476,8 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
     fn from(graph: ResolutionGraph) -> Self {
         Self::new(
             graph
-                .petgraph
-                .node_indices()
-                .map(|node| {
-                    (
-                        graph.petgraph[node].name().clone(),
-                        graph.petgraph[node].dist.clone(),
-                    )
-                })
+                .dists()
+                .map(|node| (node.name().clone(), node.dist.clone()))
                 .collect(),
             graph.diagnostics,
         )

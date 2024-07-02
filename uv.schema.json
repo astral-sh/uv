@@ -104,6 +104,13 @@
         }
       ]
     },
+    "managed": {
+      "description": "Whether the project is managed by `uv`. If `false`, `uv` will ignore the project when `uv run` is invoked.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "native-tls": {
       "type": [
         "boolean",
@@ -228,6 +235,16 @@
         "$ref": "#/definitions/Source"
       }
     },
+    "toolchain-fetch": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ToolchainFetch"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "toolchain-preference": {
       "anyOf": [
         {
@@ -260,6 +277,7 @@
       }
     },
     "workspace": {
+      "description": "The workspace definition for the project, if any.",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvWorkspace"
@@ -499,6 +517,12 @@
             "null"
           ]
         },
+        "emit-build-options": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "emit-find-links": {
           "type": [
             "boolean",
@@ -672,6 +696,12 @@
             "null"
           ]
         },
+        "no-strip-markers": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "only-binary": {
           "type": [
             "array",
@@ -780,7 +810,12 @@
         },
         "trusted-host": {
           "type": [
-            "string",
+            "string"
+          ]
+        },
+        "universal": {
+          "type": [
+            "boolean",
             "null"
           ]
         },
@@ -1173,38 +1208,56 @@
         }
       }
     },
+    "ToolchainFetch": {
+      "oneOf": [
+        {
+          "description": "Automatically fetch managed toolchains when needed.",
+          "type": "string",
+          "enum": [
+            "automatic"
+          ]
+        },
+        {
+          "description": "Do not automatically fetch managed toolchains; require explicit installation.",
+          "type": "string",
+          "enum": [
+            "manual"
+          ]
+        }
+      ]
+    },
     "ToolchainPreference": {
       "oneOf": [
         {
-          "description": "Only use managed interpreters, never use system interpreters.",
+          "description": "Only use managed toolchains; never use system toolchains.",
           "type": "string",
           "enum": [
             "only-managed"
           ]
         },
         {
-          "description": "Prefer installed managed interpreters, but use system interpreters if not found. If neither can be found, download a managed interpreter.",
+          "description": "Prefer installed toolchains, only download managed toolchains if no system toolchain is found.\n\nInstalled managed toolchains are still preferred over system toolchains.",
           "type": "string",
           "enum": [
-            "prefer-installed-managed"
+            "installed"
           ]
         },
         {
-          "description": "Prefer managed interpreters, even if one needs to be downloaded, but use system interpreters if found.",
+          "description": "Prefer managed toolchains over system toolchains, even if fetching is required.",
           "type": "string",
           "enum": [
-            "prefer-managed"
+            "managed"
           ]
         },
         {
-          "description": "Prefer system interpreters, only use managed interpreters if no system interpreter is found.",
+          "description": "Prefer system toolchains over managed toolchains.\n\nIf a system toolchain cannot be found, a managed toolchain can be used.",
           "type": "string",
           "enum": [
-            "prefer-system"
+            "system"
           ]
         },
         {
-          "description": "Only use system interpreters, never use managed interpreters.",
+          "description": "Only use system toolchains; never use managed toolchains.",
           "type": "string",
           "enum": [
             "only-system"

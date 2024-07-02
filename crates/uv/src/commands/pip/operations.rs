@@ -35,9 +35,9 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    PythonRequirement, RequiresPython, ResolutionGraph, Resolver,
+    Preferences, PythonRequirement, ResolutionGraph, Resolver,
 };
-use uv_toolchain::{Interpreter, PythonEnvironment};
+use uv_toolchain::PythonEnvironment;
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
@@ -73,7 +73,6 @@ pub(crate) async fn read_requirements(
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<Requirement>,
@@ -87,10 +86,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     hasher: &HashStrategy,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
-    interpreter: &Interpreter,
     tags: Option<&Tags>,
     markers: Option<&MarkerEnvironment>,
-    requires_python: Option<&RequiresPython>,
+    python_requirement: PythonRequirement,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
@@ -184,11 +182,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Collect constraints and overrides.
     let constraints = Constraints::from_requirements(constraints);
     let overrides = Overrides::from_requirements(overrides);
-    let python_requirement = if let Some(requires_python) = requires_python {
-        PythonRequirement::from_requires_python(interpreter, requires_python)
-    } else {
-        PythonRequirement::from_interpreter(interpreter)
-    };
+    let preferences = Preferences::from_iter(preferences, markers);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -283,7 +277,6 @@ pub(crate) enum Modifications {
 }
 
 /// Install a set of requirements into the current environment.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
@@ -694,7 +687,7 @@ pub(crate) fn diagnose_environment(
     venv: &PythonEnvironment,
     printer: Printer,
 ) -> Result<(), Error> {
-    let site_packages = SitePackages::from_executable(venv)?;
+    let site_packages = SitePackages::from_environment(venv)?;
     for diagnostic in site_packages.diagnostics()? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution

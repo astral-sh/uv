@@ -1,8 +1,8 @@
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::StringVersion;
+use pep508_rs::{MarkerTree, StringVersion};
 use uv_toolchain::{Interpreter, PythonVersion};
 
-use crate::RequiresPython;
+use crate::{RequiresPython, RequiresPythonBound};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {
@@ -49,6 +49,19 @@ impl PythonRequirement {
         }
     }
 
+    /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
+    /// than the current `Requires-Python` minimum.
+    pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
+        let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() else {
+            return None;
+        };
+        let requires_python = requires_python.narrow(target)?;
+        Some(Self {
+            installed: self.installed.clone(),
+            target: Some(PythonTarget::RequiresPython(requires_python)),
+        })
+    }
+
     /// Return the installed version of Python.
     pub fn installed(&self) -> &StringVersion {
         &self.installed
@@ -59,10 +72,15 @@ impl PythonRequirement {
         self.target.as_ref()
     }
 
-    /// Return the target version of Python as a "requires python" type,
-    /// if available.
-    pub(crate) fn requires_python(&self) -> Option<&RequiresPython> {
-        self.target().and_then(|target| target.as_requires_python())
+    /// Return a [`MarkerTree`] representing the Python requirement.
+    ///
+    /// See: [`RequiresPython::to_marker_tree`]
+    pub fn to_marker_tree(&self) -> Option<MarkerTree> {
+        if let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() {
+            Some(requires_python.to_marker_tree())
+        } else {
+            None
+        }
     }
 }
 

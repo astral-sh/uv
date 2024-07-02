@@ -7,8 +7,8 @@ use std::str::{self};
 
 use anyhow::{anyhow, Context, Result};
 use cargo_util::{paths, ProcessBuilder};
-use reqwest::Client;
 use reqwest::StatusCode;
+use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 use url::Url;
 use uv_fs::Simplified;
@@ -175,7 +175,7 @@ impl GitRepository {
         })
     }
 
-    /// Fetches the object ID of the given `refname`.
+    /// Parses the object ID of the given `refname`.
     fn rev_parse(&self, refname: &str) -> Result<GitOid> {
         let result = ProcessBuilder::new("git")
             .arg("rev-parse")
@@ -218,7 +218,7 @@ impl GitRemote {
         db: Option<GitDatabase>,
         reference: &GitReference,
         locked_rev: Option<GitOid>,
-        client: &Client,
+        client: &ClientWithMiddleware,
     ) -> Result<(GitDatabase, GitOid)> {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
@@ -278,7 +278,6 @@ impl GitDatabase {
             Some(co) => co,
             None => GitCheckout::clone_into(destination, self, rev)?,
         };
-        checkout.update_submodules()?;
         Ok(checkout)
     }
 
@@ -296,9 +295,9 @@ impl GitDatabase {
         Ok(result)
     }
 
-    /// Checks if the database contains the object of this `oid`.
+    /// Checks if `oid` resolves to a commit in this database.
     pub(crate) fn contains(&self, oid: GitOid) -> bool {
-        self.repo.rev_parse(oid.as_str()).is_ok()
+        self.repo.rev_parse(&format!("{oid}^0")).is_ok()
     }
 }
 
@@ -345,13 +344,13 @@ impl GitCheckout {
     /// is done. Use [`GitCheckout::is_fresh`] to check.
     ///
     /// * The `repo` will be the checked out Git repository.
-    fn new(revision: GitOid, repo: GitRepository) -> GitCheckout {
-        GitCheckout { revision, repo }
+    fn new(revision: GitOid, repo: GitRepository) -> Self {
+        Self { revision, repo }
     }
 
     /// Clone a repo for a `revision` into a local path from a `database`.
     /// This is a filesystem-to-filesystem clone.
-    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<GitCheckout> {
+    fn clone_into(into: &Path, database: &GitDatabase, revision: GitOid) -> Result<Self> {
         let dirname = into.parent().unwrap();
         paths::create_dir_all(dirname)?;
         if into.exists() {
@@ -414,12 +413,7 @@ impl GitCheckout {
             .cwd(&self.repo.path)
             .exec_with_output()?;
 
-        paths::create(ok_file)?;
-        Ok(())
-    }
-
-    /// Runs `git submodule update --recursive` on this git checkout.
-    fn update_submodules(&self) -> Result<()> {
+        // Update submodules (`git submodule update --recursive`).
         ProcessBuilder::new("git")
             .arg("submodule")
             .arg("update")
@@ -427,7 +421,10 @@ impl GitCheckout {
             .arg("--init")
             .cwd(&self.repo.path)
             .exec_with_output()
-            .map(drop)
+            .map(drop)?;
+
+        paths::create(ok_file)?;
+        Ok(())
     }
 }
 
@@ -443,7 +440,7 @@ pub(crate) fn fetch(
     repo: &mut GitRepository,
     remote_url: &str,
     reference: &GitReference,
-    client: &Client,
+    client: &ClientWithMiddleware,
 ) -> Result<()> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
         Ok(FastPathRev::UpToDate) => return Ok(()),
@@ -642,7 +639,7 @@ fn github_fast_path(
     repo: &mut GitRepository,
     url: &str,
     reference: &GitReference,
-    client: &Client,
+    client: &ClientWithMiddleware,
 ) -> Result<FastPathRev> {
     let url = Url::parse(url)?;
     if !is_github(&url) {

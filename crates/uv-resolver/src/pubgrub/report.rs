@@ -17,6 +17,7 @@ use pep440_rs::Version;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::fork_urls::ForkUrls;
 use crate::python_requirement::{PythonRequirement, PythonTarget};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 use crate::RequiresPython;
@@ -407,167 +408,64 @@ impl PubGrubReportFormatter<'_> {
         index_locations: &Option<IndexLocations>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        fork_urls: &ForkUrls,
     ) -> IndexSet<PubGrubHint> {
         let mut hints = IndexSet::default();
         match derivation_tree {
-            DerivationTree::External(external) => match external {
-                External::Custom(package, set, _) | External::NoVersions(package, set) => {
-                    if let PubGrubPackageInner::Package {
-                        name, url: None, ..
-                    } = &**package
-                    {
-                        // Check for no versions due to pre-release options.
-                        if let Some(selector) = selector {
-                            let any_prerelease = set.iter().any(|(start, end)| {
-                                let is_pre1 = match start {
-                                    Bound::Included(version) => version.any_prerelease(),
-                                    Bound::Excluded(version) => version.any_prerelease(),
-                                    Bound::Unbounded => false,
-                                };
-                                let is_pre2 = match end {
-                                    Bound::Included(version) => version.any_prerelease(),
-                                    Bound::Excluded(version) => version.any_prerelease(),
-                                    Bound::Unbounded => false,
-                                };
-                                is_pre1 || is_pre2
+            DerivationTree::External(
+                External::Custom(package, set, _) | External::NoVersions(package, set),
+            ) => {
+                if let PubGrubPackageInner::Package { name, .. } = &**package {
+                    // Check for no versions due to pre-release options.
+                    if let Some(selector) = selector {
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_available_hint(
+                                package, name, set, selector, &mut hints,
+                            );
+                        }
+                    }
+                }
+
+                if let PubGrubPackageInner::Package { name, .. } = &**package {
+                    // Check for no versions due to no `--find-links` flat index
+                    if let Some(index_locations) = index_locations {
+                        Self::index_hints(
+                            package,
+                            name,
+                            set,
+                            index_locations,
+                            unavailable_packages,
+                            incomplete_packages,
+                            &mut hints,
+                        );
+                    }
+                }
+            }
+            DerivationTree::External(External::FromDependencyOf(
+                package,
+                package_set,
+                dependency,
+                dependency_set,
+            )) => {
+                // Check for no versions due to `Requires-Python`.
+                if matches!(
+                    &**dependency,
+                    PubGrubPackageInner::Python(PubGrubPython::Target)
+                ) {
+                    if let Some(python) = self.python_requirement {
+                        if let Some(PythonTarget::RequiresPython(requires_python)) = python.target()
+                        {
+                            hints.insert(PubGrubHint::RequiresPython {
+                                requires_python: requires_python.clone(),
+                                package: package.clone(),
+                                package_set: self.simplify_set(package_set, package).into_owned(),
+                                package_requires_python: dependency_set.clone(),
                             });
-
-                            if any_prerelease {
-                                // A pre-release marker appeared in the version requirements.
-                                if !selector.prerelease_strategy().allows(name) {
-                                    hints.insert(PubGrubHint::PreReleaseRequested {
-                                        package: package.clone(),
-                                        range: self.simplify_set(set, package).into_owned(),
-                                    });
-                                }
-                            } else if let Some(version) =
-                                self.available_versions.get(package).and_then(|versions| {
-                                    versions
-                                        .iter()
-                                        .rev()
-                                        .filter(|version| version.any_prerelease())
-                                        .find(|version| set.contains(version))
-                                })
-                            {
-                                // There are pre-release versions available for the package.
-                                if !selector.prerelease_strategy().allows(name) {
-                                    hints.insert(PubGrubHint::PreReleaseAvailable {
-                                        package: package.clone(),
-                                        version: version.clone(),
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    if let PubGrubPackageInner::Package { name, .. } = &**package {
-                        // Check for no versions due to no `--find-links` flat index
-                        if let Some(index_locations) = index_locations {
-                            let no_find_links =
-                                index_locations.flat_index().peekable().peek().is_none();
-
-                            // Add hints due to the package being entirely unavailable.
-                            match unavailable_packages.get(name) {
-                                Some(UnavailablePackage::NoIndex) => {
-                                    if no_find_links {
-                                        hints.insert(PubGrubHint::NoIndex);
-                                    }
-                                }
-                                Some(UnavailablePackage::Offline) => {
-                                    hints.insert(PubGrubHint::Offline);
-                                }
-                                Some(UnavailablePackage::MissingMetadata) => {
-                                    hints.insert(PubGrubHint::MissingPackageMetadata {
-                                        package: package.clone(),
-                                    });
-                                }
-                                Some(UnavailablePackage::InvalidMetadata(reason)) => {
-                                    hints.insert(PubGrubHint::InvalidPackageMetadata {
-                                        package: package.clone(),
-                                        reason: reason.clone(),
-                                    });
-                                }
-                                Some(UnavailablePackage::InvalidStructure(reason)) => {
-                                    hints.insert(PubGrubHint::InvalidPackageStructure {
-                                        package: package.clone(),
-                                        reason: reason.clone(),
-                                    });
-                                }
-                                Some(UnavailablePackage::NotFound) => {}
-                                None => {}
-                            }
-
-                            // Add hints due to the package being unavailable at specific versions.
-                            if let Some(versions) = incomplete_packages.get(name) {
-                                for (version, incomplete) in versions.iter().rev() {
-                                    if set.contains(version) {
-                                        match incomplete {
-                                            IncompletePackage::Offline => {
-                                                hints.insert(PubGrubHint::Offline);
-                                            }
-                                            IncompletePackage::MissingMetadata => {
-                                                hints.insert(PubGrubHint::MissingVersionMetadata {
-                                                    package: package.clone(),
-                                                    version: version.clone(),
-                                                });
-                                            }
-                                            IncompletePackage::InvalidMetadata(reason) => {
-                                                hints.insert(PubGrubHint::InvalidVersionMetadata {
-                                                    package: package.clone(),
-                                                    version: version.clone(),
-                                                    reason: reason.clone(),
-                                                });
-                                            }
-                                            IncompletePackage::InconsistentMetadata(reason) => {
-                                                hints.insert(
-                                                    PubGrubHint::InconsistentVersionMetadata {
-                                                        package: package.clone(),
-                                                        version: version.clone(),
-                                                        reason: reason.clone(),
-                                                    },
-                                                );
-                                            }
-                                            IncompletePackage::InvalidStructure(reason) => {
-                                                hints.insert(
-                                                    PubGrubHint::InvalidVersionStructure {
-                                                        package: package.clone(),
-                                                        version: version.clone(),
-                                                        reason: reason.clone(),
-                                                    },
-                                                );
-                                            }
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
                         }
                     }
                 }
-                External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
-                    // Check for no versions due to `Requires-Python`.
-                    if matches!(
-                        &**dependency,
-                        PubGrubPackageInner::Python(PubGrubPython::Target)
-                    ) {
-                        if let Some(python) = self.python_requirement {
-                            if let Some(PythonTarget::RequiresPython(requires_python)) =
-                                python.target()
-                            {
-                                hints.insert(PubGrubHint::RequiresPython {
-                                    requires_python: requires_python.clone(),
-                                    package: package.clone(),
-                                    package_set: self
-                                        .simplify_set(package_set, package)
-                                        .into_owned(),
-                                    package_requires_python: dependency_set.clone(),
-                                });
-                            }
-                        }
-                    }
-                }
-                External::NotRoot(..) => {}
-            },
+            }
+            DerivationTree::External(External::NotRoot(..)) => {}
             DerivationTree::Derived(derived) => {
                 hints.extend(self.hints(
                     &derived.cause1,
@@ -575,6 +473,7 @@ impl PubGrubReportFormatter<'_> {
                     index_locations,
                     unavailable_packages,
                     incomplete_packages,
+                    fork_urls,
                 ));
                 hints.extend(self.hints(
                     &derived.cause2,
@@ -582,10 +481,142 @@ impl PubGrubReportFormatter<'_> {
                     index_locations,
                     unavailable_packages,
                     incomplete_packages,
+                    fork_urls,
                 ));
             }
         }
         hints
+    }
+
+    fn index_hints(
+        package: &PubGrubPackage,
+        name: &PackageName,
+        set: &Range<Version>,
+        index_locations: &IndexLocations,
+        unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
+        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        hints: &mut IndexSet<PubGrubHint>,
+    ) {
+        let no_find_links = index_locations.flat_index().peekable().peek().is_none();
+
+        // Add hints due to the package being entirely unavailable.
+        match unavailable_packages.get(name) {
+            Some(UnavailablePackage::NoIndex) => {
+                if no_find_links {
+                    hints.insert(PubGrubHint::NoIndex);
+                }
+            }
+            Some(UnavailablePackage::Offline) => {
+                hints.insert(PubGrubHint::Offline);
+            }
+            Some(UnavailablePackage::MissingMetadata) => {
+                hints.insert(PubGrubHint::MissingPackageMetadata {
+                    package: package.clone(),
+                });
+            }
+            Some(UnavailablePackage::InvalidMetadata(reason)) => {
+                hints.insert(PubGrubHint::InvalidPackageMetadata {
+                    package: package.clone(),
+                    reason: reason.clone(),
+                });
+            }
+            Some(UnavailablePackage::InvalidStructure(reason)) => {
+                hints.insert(PubGrubHint::InvalidPackageStructure {
+                    package: package.clone(),
+                    reason: reason.clone(),
+                });
+            }
+            Some(UnavailablePackage::NotFound) => {}
+            None => {}
+        }
+
+        // Add hints due to the package being unavailable at specific versions.
+        if let Some(versions) = incomplete_packages.get(name) {
+            for (version, incomplete) in versions.iter().rev() {
+                if set.contains(version) {
+                    match incomplete {
+                        IncompletePackage::Offline => {
+                            hints.insert(PubGrubHint::Offline);
+                        }
+                        IncompletePackage::MissingMetadata => {
+                            hints.insert(PubGrubHint::MissingVersionMetadata {
+                                package: package.clone(),
+                                version: version.clone(),
+                            });
+                        }
+                        IncompletePackage::InvalidMetadata(reason) => {
+                            hints.insert(PubGrubHint::InvalidVersionMetadata {
+                                package: package.clone(),
+                                version: version.clone(),
+                                reason: reason.clone(),
+                            });
+                        }
+                        IncompletePackage::InconsistentMetadata(reason) => {
+                            hints.insert(PubGrubHint::InconsistentVersionMetadata {
+                                package: package.clone(),
+                                version: version.clone(),
+                                reason: reason.clone(),
+                            });
+                        }
+                        IncompletePackage::InvalidStructure(reason) => {
+                            hints.insert(PubGrubHint::InvalidVersionStructure {
+                                package: package.clone(),
+                                version: version.clone(),
+                                reason: reason.clone(),
+                            });
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    fn prerelease_available_hint(
+        &self,
+        package: &PubGrubPackage,
+        name: &PackageName,
+        set: &Range<Version>,
+        selector: &CandidateSelector,
+        hints: &mut IndexSet<PubGrubHint>,
+    ) {
+        let any_prerelease = set.iter().any(|(start, end)| {
+            let is_pre1 = match start {
+                Bound::Included(version) => version.any_prerelease(),
+                Bound::Excluded(version) => version.any_prerelease(),
+                Bound::Unbounded => false,
+            };
+            let is_pre2 = match end {
+                Bound::Included(version) => version.any_prerelease(),
+                Bound::Excluded(version) => version.any_prerelease(),
+                Bound::Unbounded => false,
+            };
+            is_pre1 || is_pre2
+        });
+
+        if any_prerelease {
+            // A pre-release marker appeared in the version requirements.
+            if !selector.prerelease_strategy().allows(name) {
+                hints.insert(PubGrubHint::PreReleaseRequested {
+                    package: package.clone(),
+                    range: self.simplify_set(set, package).into_owned(),
+                });
+            }
+        } else if let Some(version) = self.available_versions.get(package).and_then(|versions| {
+            versions
+                .iter()
+                .rev()
+                .filter(|version| version.any_prerelease())
+                .find(|version| set.contains(version))
+        }) {
+            // There are pre-release versions available for the package.
+            if !selector.prerelease_strategy().allows(name) {
+                hints.insert(PubGrubHint::PreReleaseAvailable {
+                    package: package.clone(),
+                    version: version.clone(),
+                });
+            }
+        }
     }
 }
 
@@ -800,7 +831,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The `Requires-Python` requirement ({}) defined in your `pyproject.toml` includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `Requires-Python` requirement (like {}).",
+                    "{}{} The `Requires-Python` requirement ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `Requires-Python` requirement (like {}).",
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.bold(),

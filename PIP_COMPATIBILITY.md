@@ -147,6 +147,24 @@ In the future, uv will support pinning packages to dedicated indexes (see: [#171
 Additionally, [PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to
 address the "dependency confusion" issue across package registries and installers.
 
+## PEP 517 build isolation
+
+uv uses [PEP 517](https://peps.python.org/pep-0517/) build isolation by default (akin to `pip install --use-pep517`),
+following `pypa/build` and in anticipation of `pip` defaulting to PEP 517 builds in the future ([pypa/pip#9175](https://github.com/pypa/pip/issues/9175)).
+
+If a package fails to install due to a missing build-time dependency, try using a newer version of the package; if the
+problem persists, consider filing an issue with the package maintainer, requesting that they update the packaging setup
+to declare the correct PEP 517 build-time dependencies.
+
+As an escape hatch, you can preinstall a package's build dependencies, then run `uv pip install` with
+`--no-build-isolation`, as in:
+
+```shell
+uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
+```
+
+For a list of packages that are known to fail under PEP 517 build isolation, see [#2252](https://github.com/astral-sh/uv/issues/2252).
+
 ## Transitive direct URL dependencies for constraints and overrides
 
 While uv does support URL dependencies (e.g., `black @ https://...`), it does not support
@@ -337,7 +355,6 @@ does support a large subset.
 Missing options and subcommands are prioritized based on user demand and the complexity of
 the implementation, and tend to be tracked in individual issues. For example:
 
-- [`--prefix`](https://github.com/astral-sh/uv/issues/3076)
 - [`--trusted-host`](https://github.com/astral-sh/uv/issues/1339)
 - [`--user`](https://github.com/astral-sh/uv/issues/2077)
 

@@ -7,6 +7,7 @@ use cache_key::RepositoryUrl;
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fs_err::tokio as fs;
+use reqwest_middleware::ClientWithMiddleware;
 use uv_fs::LockedFile;
 
 use crate::{Fetch, GitReference, GitSha, GitSource, GitUrl, Reporter};
@@ -51,6 +52,7 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
+        client: ClientWithMiddleware,
         cache: PathBuf,
         reporter: Option<impl Reporter + 'static>,
     ) -> Result<Fetch, GitResolverError> {
@@ -67,9 +69,9 @@ impl GitResolver {
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.clone(), cache).with_reporter(reporter)
+            GitSource::new(url.clone(), client, cache).with_reporter(reporter)
         } else {
-            GitSource::new(url.clone(), cache)
+            GitSource::new(url.clone(), client, cache)
         };
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
@@ -89,7 +91,8 @@ impl GitResolver {
     pub async fn resolve(
         &self,
         url: &GitUrl,
-        cache: impl Into<PathBuf>,
+        client: ClientWithMiddleware,
+        cache: PathBuf,
         reporter: Option<impl Reporter + 'static>,
     ) -> Result<Option<GitUrl>, GitResolverError> {
         // If the Git reference already contains a complete SHA, short-circuit.
@@ -108,9 +111,9 @@ impl GitResolver {
         // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
         // commit, etc.).
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.clone(), cache).with_reporter(reporter)
+            GitSource::new(url.clone(), client, cache).with_reporter(reporter)
         } else {
-            GitSource::new(url.clone(), cache)
+            GitSource::new(url.clone(), client, cache)
         };
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?

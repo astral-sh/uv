@@ -1,6 +1,4 @@
-use std::hash::BuildHasherDefault;
-
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use pypi_types::Requirement;
 use uv_normalize::PackageName;
@@ -13,12 +11,16 @@ impl Constraints {
     /// Create a new set of constraints from a set of requirements.
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
         let mut constraints: FxHashMap<PackageName, Vec<Requirement>> =
-            FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
+            FxHashMap::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
         for requirement in requirements {
             constraints
                 .entry(requirement.name.clone())
                 .or_default()
-                .push(requirement);
+                .push(Requirement {
+                    // We add and apply constraints independent of their extras.
+                    extras: vec![],
+                    ..requirement
+                });
         }
         Self(constraints)
     }

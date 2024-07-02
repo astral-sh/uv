@@ -1,5 +1,5 @@
+use std::collections::hash_map::Entry;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use tracing::trace;
@@ -98,8 +98,8 @@ impl Preference {
 }
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
-#[derive(Debug, Clone)]
-pub(crate) struct Preferences(Arc<FxHashMap<PackageName, Pin>>);
+#[derive(Debug, Clone, Default)]
+pub struct Preferences(FxHashMap<PackageName, Pin>);
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
@@ -107,7 +107,7 @@ impl Preferences {
     ///
     /// The provided [`MarkerEnvironment`] will be used to filter  the preferences
     /// to an applicable subset.
-    pub(crate) fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
+    pub fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
         preferences: PreferenceIterator,
         markers: Option<&MarkerEnvironment>,
     ) -> Self {
@@ -134,7 +134,17 @@ impl Preferences {
             })
             .collect();
 
-        Self(Arc::new(preferences))
+        Self(preferences)
+    }
+
+    /// Return the [`Entry`] for a package in the preferences.
+    pub fn entry(&mut self, package_name: PackageName) -> Entry<PackageName, Pin> {
+        self.0.entry(package_name)
+    }
+
+    /// Returns an iterator over the preferences.
+    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &Version)> {
+        self.0.iter().map(|(name, pin)| (name, pin.version()))
     }
 
     /// Return the pinned version for a package, if any.
@@ -163,7 +173,7 @@ impl std::fmt::Display for Preference {
 
 /// The pinned data associated with a package in a locked `requirements.txt` file (e.g., `flask==1.2.3`).
 #[derive(Debug, Clone)]
-struct Pin {
+pub struct Pin {
     version: Version,
     hashes: Vec<HashDigest>,
 }
@@ -177,5 +187,14 @@ impl Pin {
     /// Return the hashes of the pinned package.
     fn hashes(&self) -> &[HashDigest] {
         &self.hashes
+    }
+}
+
+impl From<Version> for Pin {
+    fn from(version: Version) -> Self {
+        Self {
+            version,
+            hashes: Vec::new(),
+        }
     }
 }

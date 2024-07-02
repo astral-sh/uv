@@ -152,8 +152,7 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
-/// stored zip file. The launcher will look for `python[w].exe` adjacent to it in the same directory
-/// to start the embedded script.
+/// stored zip file.
 ///
 /// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
 #[allow(unused_variables)]
@@ -233,6 +232,38 @@ pub(crate) fn windows_script_launcher(
     Ok(launcher)
 }
 
+/// Returns a [`PathBuf`] to `python[w].exe` for script execution.
+fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
+    // Only check for pythonw.exe on Windows
+    if cfg!(windows) && is_gui {
+        python_executable
+            .parent()
+            .map(|parent| parent.join("pythonw.exe"))
+            .filter(|path| path.is_file())
+            .unwrap_or_else(|| python_executable.to_path_buf())
+    } else {
+        python_executable.to_path_buf()
+    }
+}
+
+/// Determine the absolute path to an entrypoint script.
+fn entrypoint_path(entrypoint: &Script, layout: &Layout) -> PathBuf {
+    if cfg!(windows) {
+        // On windows we actually build an .exe wrapper
+        let script_name = entrypoint
+            .name
+            // FIXME: What are the in-reality rules here for names?
+            .strip_suffix(".py")
+            .unwrap_or(&entrypoint.name)
+            .to_string()
+            + ".exe";
+
+        layout.scheme.scripts.join(script_name)
+    } else {
+        layout.scheme.scripts.join(&entrypoint.name)
+    }
+}
+
 /// Create the wrapper scripts in the bin folder of the venv for launching console scripts.
 pub(crate) fn write_script_entrypoints(
     layout: &Layout,
@@ -242,20 +273,7 @@ pub(crate) fn write_script_entrypoints(
     is_gui: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
-        let entrypoint_absolute = if cfg!(windows) {
-            // On windows we actually build an .exe wrapper
-            let script_name = entrypoint
-                .name
-                // FIXME: What are the in-reality rules here for names?
-                .strip_suffix(".py")
-                .unwrap_or(&entrypoint.name)
-                .to_string()
-                + ".exe";
-
-            layout.scheme.scripts.join(script_name)
-        } else {
-            layout.scheme.scripts.join(&entrypoint.name)
-        };
+        let entrypoint_absolute = entrypoint_path(entrypoint, layout);
 
         let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
             .ok_or_else(|| {
@@ -269,9 +287,10 @@ pub(crate) fn write_script_entrypoints(
             })?;
 
         // Generate the launcher script.
+        let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
         let launcher_python_script = get_script_launcher(
             entrypoint,
-            &format_shebang(&layout.sys_executable, &layout.os_name),
+            &format_shebang(&launcher_executable, &layout.os_name),
         );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
@@ -279,7 +298,7 @@ pub(crate) fn write_script_entrypoints(
             write_file_recorded(
                 site_packages,
                 &entrypoint_relative,
-                &windows_script_launcher(&launcher_python_script, is_gui, &layout.sys_executable)?,
+                &windows_script_launcher(&launcher_python_script, is_gui, &launcher_executable)?,
                 record,
             )?;
         } else {
@@ -306,7 +325,7 @@ pub(crate) fn write_script_entrypoints(
 
 /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LibKind {
+pub enum LibKind {
     /// Install into the `purelib` directory.
     Pure,
     /// Install into the `platlib` directory.
@@ -317,7 +336,7 @@ pub(crate) enum LibKind {
 ///
 /// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
 /// > basic key: value format:
-pub(crate) fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
+pub fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
     // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same basic key: value format:
     let data = parse_key_value_file(&mut wheel_text.as_bytes(), "WHEEL")?;
 
@@ -499,7 +518,6 @@ fn install_script(
 }
 
 /// Move the files from the .data directory to the right location in the venv
-#[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 pub(crate) fn install_data(
     layout: &Layout,
@@ -631,7 +649,7 @@ pub(crate) fn extra_dist_info(
 
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
-pub(crate) fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
+pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
     csv::ReaderBuilder::new()
         .has_headers(false)
         .escape(Some(b'"'))
@@ -722,12 +740,16 @@ mod test {
     use std::io::Cursor;
     use std::path::Path;
 
+    use anyhow::Result;
+    use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
     use crate::wheel::format_shebang;
     use crate::Error;
 
-    use super::{parse_key_value_file, parse_wheel_file, read_record_file, Script};
+    use super::{
+        get_script_executable, parse_key_value_file, parse_wheel_file, read_record_file, Script,
+    };
 
     #[test]
     fn test_parse_key_value_file() {
@@ -921,5 +943,37 @@ mod test {
             "CLI launcher: {}",
             super::LAUNCHER_AArch64_CONSOLE.len()
         );
+    }
+
+    #[test]
+    fn test_script_executable() -> Result<()> {
+        // Test with adjacent pythonw.exe
+        let temp_dir = assert_fs::TempDir::new()?;
+        let python_exe = temp_dir.child("python.exe");
+        let pythonw_exe = temp_dir.child("pythonw.exe");
+        python_exe.write_str("")?;
+        pythonw_exe.write_str("")?;
+
+        let script_path = get_script_executable(&python_exe, true);
+        #[cfg(windows)]
+        assert_eq!(script_path, pythonw_exe.to_path_buf());
+        #[cfg(not(windows))]
+        assert_eq!(script_path, python_exe.to_path_buf());
+
+        let script_path = get_script_executable(&python_exe, false);
+        assert_eq!(script_path, python_exe.to_path_buf());
+
+        // Test without adjacent pythonw.exe
+        let temp_dir = assert_fs::TempDir::new()?;
+        let python_exe = temp_dir.child("python.exe");
+        python_exe.write_str("")?;
+
+        let script_path = get_script_executable(&python_exe, true);
+        assert_eq!(script_path, python_exe.to_path_buf());
+
+        let script_path = get_script_executable(&python_exe, false);
+        assert_eq!(script_path, python_exe.to_path_buf());
+
+        Ok(())
     }
 }

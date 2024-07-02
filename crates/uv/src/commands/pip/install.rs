@@ -23,7 +23,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
-    ResolutionMode,
+    PythonRequirement, ResolutionMode,
 };
 use uv_toolchain::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonVersion, Target, ToolchainRequest,
@@ -174,7 +174,7 @@ pub(crate) async fn pip_install(
     let _lock = environment.lock()?;
 
     // Determine the set of installed packages.
-    let site_packages = SitePackages::from_executable(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?;
 
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
@@ -218,6 +218,13 @@ pub(crate) async fn pip_install(
     }
 
     let interpreter = environment.interpreter();
+
+    // Determine the Python requirement, if the user requested a specific version.
+    let python_requirement = if let Some(python_version) = python_version.as_ref() {
+        PythonRequirement::from_python_version(interpreter, python_version)
+    } else {
+        PythonRequirement::from_interpreter(interpreter)
+    };
 
     // Determine the environment for the resolution.
     let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
@@ -296,15 +303,16 @@ pub(crate) async fn pip_install(
         &index,
         &git,
         &in_flight,
+        index_strategy,
         setup_py,
         config_settings,
         build_isolation,
         link_mode,
         &build_options,
+        exclude_newer,
         concurrency,
         preview,
-    )
-    .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+    );
 
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
@@ -328,10 +336,9 @@ pub(crate) async fn pip_install(
         &hasher,
         &reinstall,
         &upgrade,
-        interpreter,
         Some(&tags),
         Some(&markers),
-        None,
+        python_requirement,
         &client,
         &flat_index,
         &index,
@@ -370,15 +377,16 @@ pub(crate) async fn pip_install(
             &index,
             &git,
             &in_flight,
+            index_strategy,
             setup_py,
             config_settings,
             build_isolation,
             link_mode,
             &build_options,
+            exclude_newer,
             concurrency,
             preview,
         )
-        .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
 
     // Sync the environment.

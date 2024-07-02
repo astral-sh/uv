@@ -22,10 +22,10 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex};
 use uv_toolchain::{
-    request_from_version_file, EnvironmentPreference, Toolchain, ToolchainPreference,
-    ToolchainRequest,
+    request_from_version_file, EnvironmentPreference, Toolchain, ToolchainFetch,
+    ToolchainPreference, ToolchainRequest,
 };
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
@@ -43,6 +43,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
@@ -71,6 +72,7 @@ pub(crate) async fn venv(
         seed,
         preview,
         toolchain_preference,
+        toolchain_fetch,
         allow_existing,
         exclude_newer,
         native_tls,
@@ -121,6 +123,7 @@ async fn venv_impl(
     seed: bool,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
@@ -141,7 +144,8 @@ async fn venv_impl(
         interpreter_request,
         EnvironmentPreference::OnlySystem,
         toolchain_preference,
-        client_builder,
+        toolchain_fetch,
+        &client_builder,
         cache,
     )
     .await
@@ -163,7 +167,8 @@ async fn venv_impl(
 
     writeln!(
         printer.stderr(),
-        "Creating virtualenv at: {}",
+        "Creating virtualenv {}at: {}",
+        if seed { "with seed packages " } else { "" },
         path.user_display().cyan()
     )
     .into_diagnostic()?;
@@ -234,15 +239,16 @@ async fn venv_impl(
             &index,
             &git,
             &in_flight,
+            index_strategy,
             SetupPyStrategy::default(),
             &config_settings,
             BuildIsolation::Isolated,
             link_mode,
             &build_options,
+            exclude_newer,
             concurrency,
             preview,
-        )
-        .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+        );
 
         // Resolve the seed packages.
         let requirements = if interpreter.python_tuple() < (3, 12) {

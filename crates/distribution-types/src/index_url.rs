@@ -1,14 +1,15 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use itertools::Either;
 use once_cell::sync::Lazy;
-use url::Url;
+use thiserror::Error;
+use url::{ParseError, Url};
 
-use pep508_rs::{expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl};
+use pep508_rs::{expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError};
 use uv_fs::normalize_url_path;
 
 use crate::Verbatim;
@@ -90,19 +91,27 @@ impl Verbatim for IndexUrl {
     }
 }
 
+/// An error that can occur when parsing an [`IndexUrl`].
+#[derive(Error, Debug)]
+pub enum IndexUrlError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Url(#[from] ParseError),
+    #[error(transparent)]
+    VerbatimUrl(#[from] VerbatimUrlError),
+}
+
 impl FromStr for IndexUrl {
-    type Err = url::ParseError;
+    type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = Url::parse(s)?;
-        let url = VerbatimUrl::from_url(url).with_given(s.to_owned());
-        if *url.raw() == *PYPI_URL {
-            Ok(Self::Pypi(url))
-        } else if url.scheme() == "file" {
-            Ok(Self::Path(url))
+        let url = if let Ok(path) = Path::new(s).canonicalize() {
+            VerbatimUrl::from_path(path)?
         } else {
-            Ok(Self::Url(url))
-        }
+            VerbatimUrl::parse_url(s)?
+        };
+        Ok(Self::from(url.with_given(s)))
     }
 }
 
@@ -127,7 +136,9 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
 
 impl From<VerbatimUrl> for IndexUrl {
     fn from(url: VerbatimUrl) -> Self {
-        if *url.raw() == *PYPI_URL {
+        if url.scheme() == "file" {
+            Self::Path(url)
+        } else if *url.raw() == *PYPI_URL {
             Self::Pypi(url)
         } else {
             Self::Url(url)

@@ -54,7 +54,7 @@ pub(crate) fn pip_show(
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?;
 
     // Determine the markers to use for resolution.
     let markers = environment.interpreter().markers();

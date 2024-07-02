@@ -10,6 +10,7 @@ use unicode_width::UnicodeWidthStr;
 
 use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
+use uv_cli::ListFormat;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -18,7 +19,6 @@ use uv_toolchain::ToolchainRequest;
 use uv_toolchain::{EnvironmentPreference, PythonEnvironment};
 
 use crate::commands::ExitStatus;
-use crate::commands::ListFormat;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
@@ -49,7 +49,7 @@ pub(crate) fn pip_list(
     );
 
     // Build the installed index.
-    let site_packages = SitePackages::from_executable(&environment)?;
+    let site_packages = SitePackages::from_environment(&environment)?;
 
     // Filter if `--editable` is specified; always sort by name.
     let results = site_packages

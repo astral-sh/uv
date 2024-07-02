@@ -82,7 +82,7 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, PreviewMode, SetupPyStrategy,
+        BuildOptions, Concurrency, ConfigSettings, IndexStrategy, PreviewMode, SetupPyStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -128,8 +128,17 @@ mod resolver {
         venv: &PythonEnvironment,
     ) -> Result<ResolutionGraph> {
         let build_isolation = BuildIsolation::Isolated;
+        let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
+        let exclude_newer = Some(
+            NaiveDate::from_ymd_opt(2024, 6, 20)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_utc()
+                .into(),
+        );
         let flat_index = FlatIndex::default();
         let git = GitResolver::default();
         let hashes = HashStrategy::None;
@@ -139,7 +148,8 @@ mod resolver {
         let installed_packages = EmptyInstalledPackages;
         let interpreter = venv.interpreter();
         let python_requirement = PythonRequirement::from_interpreter(interpreter);
-        let build_options = BuildOptions::default();
+
+        let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
 
         let build_context = BuildDispatch::new(
             client,
@@ -150,25 +160,16 @@ mod resolver {
             &index,
             &git,
             &in_flight,
+            IndexStrategy::default(),
             SetupPyStrategy::default(),
             &config_settings,
             build_isolation,
             LinkMode::default(),
             &build_options,
+            exclude_newer,
             concurrency,
             PreviewMode::Disabled,
         );
-
-        let options = OptionsBuilder::new()
-            .exclude_newer(Some(
-                NaiveDate::from_ymd_opt(2024, 6, 20)
-                    .unwrap()
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_utc()
-                    .into(),
-            ))
-            .build();
 
         let resolver = Resolver::new(
             manifest,

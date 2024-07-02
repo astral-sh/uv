@@ -8,7 +8,9 @@ use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, V
 use uv_git::{GitReference, GitSha};
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::{ParsedUrl, VerbatimParsedUrl};
+use crate::{
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
+};
 
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.
 ///
@@ -248,6 +250,65 @@ impl RequirementSource {
                 location: archive.url,
                 subdirectory: archive.subdirectory,
             },
+        }
+    }
+
+    /// Convert the source to a [`VerbatimParsedUrl`], if it's a URL source.
+    pub fn to_verbatim_parsed_url(&self) -> Option<VerbatimParsedUrl> {
+        match &self {
+            Self::Registry { .. } => None,
+            Self::Url {
+                subdirectory,
+                location,
+                url,
+            } => Some(VerbatimParsedUrl {
+                parsed_url: ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+                    location.clone(),
+                    subdirectory.clone(),
+                )),
+                verbatim: url.clone(),
+            }),
+            Self::Path {
+                install_path,
+                lock_path,
+                url,
+            } => Some(VerbatimParsedUrl {
+                parsed_url: ParsedUrl::Path(ParsedPathUrl::from_source(
+                    install_path.clone(),
+                    lock_path.clone(),
+                    url.to_url(),
+                )),
+                verbatim: url.clone(),
+            }),
+            Self::Directory {
+                install_path,
+                lock_path,
+                editable,
+                url,
+            } => Some(VerbatimParsedUrl {
+                parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
+                    install_path.clone(),
+                    lock_path.clone(),
+                    *editable,
+                    url.to_url(),
+                )),
+                verbatim: url.clone(),
+            }),
+            Self::Git {
+                repository,
+                reference,
+                precise,
+                subdirectory,
+                url,
+            } => Some(VerbatimParsedUrl {
+                parsed_url: ParsedUrl::Git(ParsedGitUrl::from_source(
+                    repository.clone(),
+                    reference.clone(),
+                    *precise,
+                    subdirectory.clone(),
+                )),
+                verbatim: url.clone(),
+            }),
         }
     }
 

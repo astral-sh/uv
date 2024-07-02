@@ -16,12 +16,16 @@ use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{BuildKind, BuildOptions, ConfigSettings, Reinstall, SetupPyStrategy};
+use uv_configuration::{
+    BuildKind, BuildOptions, ConfigSettings, IndexStrategy, Reinstall, SetupPyStrategy,
+};
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, PythonRequirement, Resolver};
+use uv_resolver::{
+    ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
+};
 use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -32,6 +36,7 @@ pub struct BuildDispatch<'a> {
     cache: &'a Cache,
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
+    index_strategy: IndexStrategy,
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
@@ -41,15 +46,14 @@ pub struct BuildDispatch<'a> {
     link_mode: install_wheel_rs::linker::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
+    exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
-    options: Options,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     concurrency: Concurrency,
     preview_mode: PreviewMode,
 }
 
 impl<'a> BuildDispatch<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
@@ -59,11 +63,13 @@ impl<'a> BuildDispatch<'a> {
         index: &'a InMemoryIndex,
         git: &'a GitResolver,
         in_flight: &'a InFlight,
+        index_strategy: IndexStrategy,
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
         link_mode: install_wheel_rs::linker::LinkMode,
         build_options: &'a BuildOptions,
+        exclude_newer: Option<ExcludeNewer>,
         concurrency: Concurrency,
         preview_mode: PreviewMode,
     ) -> Self {
@@ -76,23 +82,18 @@ impl<'a> BuildDispatch<'a> {
             index,
             git,
             in_flight,
+            index_strategy,
             setup_py,
             config_settings,
             build_isolation,
             link_mode,
             build_options,
+            exclude_newer,
             concurrency,
             source_build_context: SourceBuildContext::default(),
-            options: Options::default(),
             build_extra_env_vars: FxHashMap::default(),
             preview_mode,
         }
-    }
-
-    #[must_use]
-    pub fn with_options(mut self, options: Options) -> Self {
-        self.options = options;
-        self
     }
 
     /// Set the environment variables to be used when building a source distribution.
@@ -126,10 +127,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.interpreter
     }
 
-    fn build_isolation(&self) -> BuildIsolation {
-        self.build_isolation
-    }
-
     fn build_options(&self) -> &BuildOptions {
         self.build_options
     }
@@ -138,17 +135,16 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.index_locations
     }
 
-    fn setup_py_strategy(&self) -> SetupPyStrategy {
-        self.setup_py
-    }
-
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()),
-            self.options,
+            OptionsBuilder::new()
+                .exclude_newer(self.exclude_newer)
+                .index_strategy(self.index_strategy)
+                .build(),
             &python_requirement,
             Some(markers),
             Some(tags),
@@ -198,7 +194,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let tags = self.interpreter.tags()?;
 
         // Determine the set of installed packages.
-        let site_packages = SitePackages::from_executable(venv)?;
+        let site_packages = SitePackages::from_environment(venv)?;
 
         let requirements = resolution.requirements().collect::<Vec<_>>();
 
@@ -311,7 +307,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         // unless all builds are disabled.
         if self
             .build_options
-            .no_build(dist.map(distribution_types::Name::name))
+            .no_build_requirement(dist.map(distribution_types::Name::name))
             // We always allow editable builds
             && !matches!(build_kind, BuildKind::Editable)
         {

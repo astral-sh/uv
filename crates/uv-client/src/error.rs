@@ -137,6 +137,9 @@ pub enum ErrorKind {
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),
 
+    #[error("Expected an index URL, but received non-base URL: {0}")]
+    CannotBeABase(Url),
+
     #[error(transparent)]
     DistInfo(#[from] install_wheel_rs::Error),
 
@@ -149,6 +152,10 @@ pub enum ErrorKind {
     /// configured the right registry to fetch it from.
     #[error("Package `{0}` was not found in the registry.")]
     PackageNotFound(String),
+
+    /// The package was not found in the local (file-based) index.
+    #[error("Package `{0}` was not found in the local index.")]
+    FileNotFound(String),
 
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of {0} from {1}")]

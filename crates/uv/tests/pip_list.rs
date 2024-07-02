@@ -8,30 +8,14 @@ use assert_fs::prelude::*;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext, EXCLUDE_NEWER};
+use crate::common::{get_bin, TestContext};
 
 mod common;
 
-/// Create a `pip install` command with options shared across scenarios.
-fn install_command(context: &TestContext) -> Command {
+fn list_command(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("install")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir);
-
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
-
+    command.arg("pip").arg("list");
+    context.add_shared_args(&mut command);
     command
 }
 
@@ -39,16 +23,9 @@ fn install_command(context: &TestContext) -> Command {
 fn list_empty_columns() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
+    uv_snapshot!(list_command(&context)
         .arg("--format")
-        .arg("columns")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("columns"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -62,16 +39,9 @@ fn list_empty_columns() {
 fn list_empty_freeze() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
+    uv_snapshot!(list_command(&context)
         .arg("--format")
-        .arg("freeze")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("freeze"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -85,16 +55,9 @@ fn list_empty_freeze() {
 fn list_empty_json() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
+    uv_snapshot!(list_command(&context)
         .arg("--format")
-        .arg("json")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("json"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -112,7 +75,7 @@ fn list_single_no_editable() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    uv_snapshot!(install_command(&context)
+    uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -130,14 +93,7 @@ fn list_single_no_editable() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(list_command(&context), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -157,7 +113,7 @@ fn list_editable() {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
-    uv_snapshot!(context.filters(), install_command(&context)
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
@@ -181,14 +137,7 @@ fn list_editable() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, list_command(&context), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -209,7 +158,7 @@ fn list_editable_only() {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
-    uv_snapshot!(context.filters(), install_command(&context)
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
@@ -233,15 +182,8 @@ fn list_editable_only() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
-        .arg("--editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, list_command(&context)
+        .arg("--editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -253,15 +195,8 @@ fn list_editable_only() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
-        .arg("--exclude-editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, list_command(&context)
+        .arg("--exclude-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -275,16 +210,9 @@ fn list_editable_only() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
+    uv_snapshot!(filters, list_command(&context)
         .arg("--editable")
-        .arg("--exclude-editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+        .arg("--exclude-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -299,7 +227,7 @@ fn list_exclude() {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
-    uv_snapshot!(context.filters(), install_command(&context)
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
@@ -323,16 +251,9 @@ fn list_exclude() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--exclude")
-    .arg("numpy")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("numpy"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -347,16 +268,9 @@ fn list_exclude() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--exclude")
-    .arg("poetry-editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("poetry-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -370,18 +284,11 @@ fn list_exclude() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--exclude")
     .arg("numpy")
     .arg("--exclude")
-    .arg("poetry-editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("poetry-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -402,7 +309,7 @@ fn list_format_json() {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
-    uv_snapshot!(context.filters(), install_command(&context)
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
@@ -426,15 +333,8 @@ fn list_format_json() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect();
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
-    .arg("--format=json")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, list_command(&context)
+    .arg("--format=json"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -444,16 +344,9 @@ fn list_format_json() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--format=json")
-    .arg("--editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("--editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -463,16 +356,9 @@ fn list_format_json() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--format=json")
-    .arg("--exclude-editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("--exclude-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -482,17 +368,10 @@ fn list_format_json() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--format=json")
     .arg("--editable")
-    .arg("--exclude-editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("--exclude-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -508,7 +387,8 @@ fn list_format_freeze() {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
-    uv_snapshot!(context.filters(), install_command(&context)
+    uv_snapshot!(context.filters(), context
+        .pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
@@ -532,15 +412,8 @@ fn list_format_freeze() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
-    .arg("--format=freeze")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, list_command(&context)
+    .arg("--format=freeze"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -553,16 +426,9 @@ fn list_format_freeze() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--format=freeze")
-    .arg("--editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("--editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -572,16 +438,9 @@ fn list_format_freeze() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--format=freeze")
-    .arg("--exclude-editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("--exclude-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -593,17 +452,10 @@ fn list_format_freeze() {
     "###
     );
 
-    uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
+    uv_snapshot!(filters, list_command(&context)
     .arg("--format=freeze")
     .arg("--editable")
-    .arg("--exclude-editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .env("UV_NO_WRAP", "1")
-    .current_dir(&context.temp_dir), @r###"
+    .arg("--exclude-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -649,15 +501,8 @@ Version: 0.22.0
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
-        .arg("--editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, list_command(&context)
+        .arg("--editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -699,15 +544,8 @@ Version: 0.1-bulbasaur
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("list")
-        .arg("--editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, list_command(&context)
+        .arg("--editable"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

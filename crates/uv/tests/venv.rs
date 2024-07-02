@@ -210,7 +210,7 @@ fn seed() {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: .venv
+    Creating virtualenv with seed packages at: .venv
      + pip==24.0
     Activate with: source .venv/bin/activate
     "###
@@ -221,19 +221,19 @@ fn seed() {
 
 #[test]
 fn seed_older_python_version() {
-    let context = TestContext::new_with_versions(&["3.10"]);
+    let context = TestContext::new_with_versions(&["3.11"]);
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
-        .arg("3.10"), @r###"
+        .arg("3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.10.[X] interpreter at: [PYTHON-3.10]
-    Creating virtualenv at: .venv
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv with seed packages at: .venv
      + pip==24.0
      + setuptools==69.2.0
      + wheel==0.43.0
@@ -264,7 +264,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.100 in system toolchains
+          × No interpreter found for Python 3.100 in system path or `py` launcher
         "###
         );
     } else {
@@ -274,7 +274,7 @@ fn create_venv_unknown_python_minor() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.100 in system toolchains
+          × No interpreter found for Python 3.100 in system path
         "###
         );
     }
@@ -302,7 +302,7 @@ fn create_venv_unknown_python_patch() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in system toolchains
+          × No interpreter found for Python 3.12.100 in system path or `py` launcher
         "###
         );
     } else {
@@ -312,7 +312,7 @@ fn create_venv_unknown_python_patch() {
         ----- stdout -----
 
         ----- stderr -----
-          × No interpreter found for Python 3.12.100 in system toolchains
+          × No interpreter found for Python 3.12.100 in system path
         "###
         );
     }
@@ -511,7 +511,10 @@ fn windows_shims() -> Result<()> {
     fs_err::create_dir(&shim_path)?;
     fs_err::write(
         shim_path.child("python.bat"),
-        format!("@echo off\r\n{}/python.exe %*", py38.1.display()),
+        format!(
+            "@echo off\r\n{}/python.exe %*",
+            py38.1.parent().unwrap().display()
+        ),
     )?;
 
     // Create a virtual environment at `.venv` with the shim
@@ -634,8 +637,10 @@ fn path_with_trailing_space_gives_proper_error() {
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // Set a custom cache directory with a trailing space
-    uv_snapshot!(context.filters(), context.venv()
-        .env("UV_CACHE_DIR", format!("{} ", context.cache_dir.path().display())), @r###"
+    let path_with_trailing_slash = format!("{} ", context.cache_dir.path().display());
+    uv_snapshot!(context.filters(), std::process::Command::new(crate::common::get_bin())
+        .arg("venv")
+        .env("UV_CACHE_DIR", path_with_trailing_slash), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

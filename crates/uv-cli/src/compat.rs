@@ -3,7 +3,7 @@ use clap::{Args, ValueEnum};
 
 use uv_warnings::warn_user;
 
-pub(crate) trait CompatArgs {
+pub trait CompatArgs {
     fn validate(&self) -> Result<()>;
 }
 
@@ -14,7 +14,7 @@ pub(crate) trait CompatArgs {
 /// nice user experience to warn, rather than fail, when users pass `--allow-unsafe`.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipCompileCompatArgs {
+pub struct PipCompileCompatArgs {
     #[clap(long, hide = true)]
     allow_unsafe: bool,
 
@@ -174,20 +174,27 @@ impl CompatArgs for PipCompileCompatArgs {
 /// These represent a subset of the `pip list` interface that uv supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipListCompatArgs {
+pub struct PipListCompatArgs {
+    #[clap(long, hide = true)]
+    disable_pip_version_check: bool,
+
     #[clap(long, hide = true)]
     outdated: bool,
 }
 
-impl CompatArgs for crate::compat::PipListCompatArgs {
+impl CompatArgs for PipListCompatArgs {
     /// Validate the arguments passed for `pip list` compatibility.
     ///
     /// This method will warn when an argument is passed that has no effect but matches uv's
     /// behavior. If an argument is passed that does _not_ match uv's behavior (e.g.,
     /// `--outdated`), this method will return an error.
     fn validate(&self) -> Result<()> {
+        if self.disable_pip_version_check {
+            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+        }
+
         if self.outdated {
-            return Err(anyhow!("pip list's `--outdated` is unsupported."));
+            return Err(anyhow!("pip's `--outdated` is unsupported."));
         }
 
         Ok(())
@@ -199,7 +206,7 @@ impl CompatArgs for crate::compat::PipListCompatArgs {
 /// These represent a subset of the `pip-sync` interface that uv supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipSyncCompatArgs {
+pub struct PipSyncCompatArgs {
     #[clap(short, long, hide = true)]
     ask: bool,
 
@@ -297,7 +304,7 @@ enum Resolver {
 /// These represent a subset of the `virtualenv` interface that uv supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct VenvCompatArgs {
+pub struct VenvCompatArgs {
     #[clap(long, hide = true)]
     clear: bool,
 
@@ -356,7 +363,10 @@ impl CompatArgs for VenvCompatArgs {
 /// These represent a subset of the `pip install` interface that uv supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct PipInstallCompatArgs {
+pub struct PipInstallCompatArgs {
+    #[clap(long, hide = true)]
+    disable_pip_version_check: bool,
+
     #[clap(long, hide = false)]
     user: bool,
 }
@@ -368,11 +378,41 @@ impl CompatArgs for PipInstallCompatArgs {
     /// behavior. If an argument is passed that does _not_ match uv's behavior, this method will
     /// return an error.
     fn validate(&self) -> Result<()> {
+        if self.disable_pip_version_check {
+            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+        }
+
         if self.user {
             return Err(anyhow!(
-                "pip install's `--user` is unsupported (use a virtual environment instead)."
+                "pip's `--user` is unsupported (use a virtual environment instead)."
             ));
         }
+
+        Ok(())
+    }
+}
+
+/// Arguments for generic `pip` command compatibility.
+///
+/// These represent a subset of the `pip` interface that exists on all commands.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PipGlobalCompatArgs {
+    #[clap(long, hide = true)]
+    disable_pip_version_check: bool,
+}
+
+impl CompatArgs for PipGlobalCompatArgs {
+    /// Validate the arguments passed for `pip` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches uv's
+    /// behavior. If an argument is passed that does _not_ match uv's behavior, this method will
+    /// return an error.
+    fn validate(&self) -> Result<()> {
+        if self.disable_pip_version_check {
+            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+        }
+
         Ok(())
     }
 }

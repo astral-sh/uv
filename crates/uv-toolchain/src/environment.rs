@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::env;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -10,8 +11,8 @@ use crate::discovery::find_toolchain;
 use crate::toolchain::Toolchain;
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
 use crate::{
-    EnvironmentPreference, Error, Interpreter, Prefix, Target, ToolchainPreference,
-    ToolchainRequest,
+    EnvironmentPreference, Error, Interpreter, Prefix, Target, ToolchainNotFound,
+    ToolchainPreference, ToolchainRequest,
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
@@ -24,6 +25,50 @@ struct PythonEnvironmentShared {
     interpreter: Interpreter,
 }
 
+/// The result of failed environment discovery.
+///
+/// Generally this is cast from [`ToolchainNotFound`] by [`PythonEnvironment::find`].
+#[derive(Clone, Debug, Error)]
+pub struct EnvironmentNotFound {
+    request: ToolchainRequest,
+    preference: EnvironmentPreference,
+}
+
+impl From<ToolchainNotFound> for EnvironmentNotFound {
+    fn from(value: ToolchainNotFound) -> Self {
+        Self {
+            request: value.request,
+            preference: value.environment_preference,
+        }
+    }
+}
+
+impl fmt::Display for EnvironmentNotFound {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let environment = match self.preference {
+            EnvironmentPreference::Any => "virtual or system environment",
+            EnvironmentPreference::ExplicitSystem => {
+                if self.request.is_explicit_system() {
+                    "virtual or system environment"
+                } else {
+                    // TODO(zanieb): We could add a hint to use the `--system` flag here
+                    "virtual environment"
+                }
+            }
+            EnvironmentPreference::OnlySystem => "system environment",
+            EnvironmentPreference::OnlyVirtual => "virtual environment",
+        };
+        match self.request {
+            ToolchainRequest::Any => {
+                write!(f, "No {environment} found")
+            }
+            _ => {
+                write!(f, "No {environment} found for {}", self.request)
+            }
+        }
+    }
+}
+
 impl PythonEnvironment {
     /// Find a [`PythonEnvironment`] matching the given request and preference.
     ///
@@ -34,13 +79,16 @@ impl PythonEnvironment {
         preference: EnvironmentPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let toolchain = find_toolchain(
+        let toolchain = match find_toolchain(
             request,
             preference,
             // Ignore managed toolchains when looking for environments
             ToolchainPreference::OnlySystem,
             cache,
-        )??;
+        )? {
+            Ok(toolchain) => toolchain,
+            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
+        };
         Ok(Self::from_toolchain(toolchain))
     }
 
@@ -49,9 +97,10 @@ impl PythonEnvironment {
         let venv = match fs_err::canonicalize(root.as_ref()) {
             Ok(venv) => venv,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(
-                    crate::ToolchainNotFound::DirectoryNotFound(root.as_ref().to_path_buf()),
-                ));
+                return Err(Error::MissingEnvironment(EnvironmentNotFound {
+                    preference: EnvironmentPreference::Any,
+                    request: ToolchainRequest::Directory(root.as_ref().to_owned()),
+                }));
             }
             Err(err) => return Err(Error::Discovery(err.into())),
         };
@@ -160,6 +209,9 @@ impl PythonEnvironment {
         if let Some(target) = self.0.interpreter.target() {
             // If we're installing into a `--target`, use a target-specific lock file.
             LockedFile::acquire(target.root().join(".lock"), target.root().user_display())
+        } else if let Some(prefix) = self.0.interpreter.prefix() {
+            // Likewise, if we're installing into a `--prefix`, use a prefix-specific lock file.
+            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display())
         } else if self.0.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.
             LockedFile::acquire(self.0.root.join(".lock"), self.0.root.user_display())

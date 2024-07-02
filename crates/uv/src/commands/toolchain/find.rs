@@ -5,13 +5,12 @@ use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_toolchain::{EnvironmentPreference, Toolchain, ToolchainPreference, ToolchainRequest};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Find a toolchain.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn find(
     request: Option<String>,
     toolchain_preference: ToolchainPreference,
@@ -20,7 +19,7 @@ pub(crate) async fn find(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user!("`uv toolchain find` is experimental and may change without warning.");
+        warn_user_once!("`uv toolchain find` is experimental and may change without warning.");
     }
 
     let request = match request {
