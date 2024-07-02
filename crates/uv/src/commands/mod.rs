@@ -33,6 +33,7 @@ pub(crate) use toolchain::dir::dir as toolchain_dir;
 pub(crate) use toolchain::find::find as toolchain_find;
 pub(crate) use toolchain::install::install as toolchain_install;
 pub(crate) use toolchain::list::list as toolchain_list;
+pub(crate) use toolchain::uninstall::uninstall as toolchain_uninstall;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
