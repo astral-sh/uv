@@ -74,8 +74,9 @@ impl InstalledTools {
     }
 
     /// Return the metadata for all installed tools.
+    ///
+    /// Note this is not safe to run without first using `acquire_lock`.
     pub fn tools(&self) -> Result<Vec<(String, Tool)>, Error> {
-        let _lock = self.acquire_lock();
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root()) {
             let name = directory.file_name().unwrap().to_string_lossy().to_string();
@@ -96,6 +97,8 @@ impl InstalledTools {
     }
 
     /// Get the receipt for the given tool.
+    ///
+    /// Note this is not safe to run without first using `acquire_lock` or `acquire_tool_lock`.
     pub fn get_tool_receipt(&self, name: &str) -> Result<Option<Tool>, Error> {
         let path = self.root.join(name).join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
@@ -106,15 +109,15 @@ impl InstalledTools {
     }
 
     /// Lock the tools directory.
-    fn acquire_lock(&self) -> Result<LockedFile, Error> {
+    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
         Ok(LockedFile::acquire(
             self.root.join(".lock"),
             self.root.user_display(),
         )?)
     }
 
-    /// Lock a tool directory.
-    fn acquire_tool_lock(&self, name: &str) -> Result<LockedFile, Error> {
+    /// Lock a specific tool directory.
+    pub fn acquire_tool_lock(&self, name: &str) -> Result<LockedFile, Error> {
         let path = self.root.join(name);
         Ok(LockedFile::acquire(
             path.join(".lock"),
@@ -125,9 +128,9 @@ impl InstalledTools {
     /// Add a receipt for a tool.
     ///
     /// Any existing receipt will be replaced.
+    ///
+    /// Note this is not safe to run without first using `acquire_lock` or `acquire_tool_lock`.
     pub fn add_tool_receipt(&self, name: &str, tool: Tool) -> Result<(), Error> {
-        let _lock = self.acquire_tool_lock(name);
-
         let tool_receipt = ToolReceipt::from(tool);
         let path = self.root.join(name).join("uv-receipt.toml");
 
@@ -147,8 +150,9 @@ impl InstalledTools {
     /// Remove the environment for a tool.
     ///
     /// Does not remove the tool's entrypoints.
+    ///
+    /// Note this is not safe to run without first using `acquire_lock` or `acquire_tool_lock`.
     pub fn remove_environment(&self, name: &str) -> Result<(), Error> {
-        let _lock = self.acquire_lock();
         let environment_path = self.root.join(name);
 
         debug!(
@@ -161,6 +165,11 @@ impl InstalledTools {
         Ok(())
     }
 
+    /// Get the environment for a tool or create an empty one.
+    ///
+    /// If `remove_existing` is true, any existing environment will be cleared.
+    ///
+    /// Note this is not safe to run without first using `acquire_lock` or `acquire_tool_lock`.
     pub fn environment(
         &self,
         name: &str,
@@ -168,7 +177,6 @@ impl InstalledTools {
         interpreter: Interpreter,
         cache: &Cache,
     ) -> Result<PythonEnvironment, Error> {
-        let _lock = self.acquire_lock();
         let environment_path = self.root.join(name);
 
         if !remove_existing && environment_path.exists() {

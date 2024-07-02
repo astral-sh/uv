@@ -125,6 +125,7 @@ pub(crate) async fn install(
     let name = from.name.to_string();
 
     let installed_tools = InstalledTools::from_settings()?;
+    let _lock = installed_tools.acquire_lock()?;
 
     let existing_tool_receipt = installed_tools.get_tool_receipt(&name)?;
     // TODO(zanieb): Automatically replace an existing tool if the request differs
