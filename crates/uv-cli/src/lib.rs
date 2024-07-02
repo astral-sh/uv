@@ -2462,6 +2462,10 @@ pub struct AddArgs {
         help_heading = "Python options"
     )]
     pub python: Option<String>,
+
+    /// Specifies the Python script where the dependency will be added.
+    #[arg(long)]
+    pub script: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -2509,6 +2513,9 @@ pub struct RemoveArgs {
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
+    /// Specifies the Python script where the dependency will be removed.
+    #[arg(long)]
+    pub script: Option<PathBuf>,
     /// The Python interpreter to use for resolving and syncing.
     ///
     /// See `uv help python` for details on Python discovery and supported

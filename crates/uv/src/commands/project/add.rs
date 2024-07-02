@@ -15,23 +15,33 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{
+    request_from_version_file, EnvironmentPreference, PythonDownloads, PythonInstallation,
+    PythonPreference, PythonRequest, VersionRequest,
+};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
+use uv_scripts::Pep723Script;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
-use uv_workspace::pyproject_mut::{ArrayEdit, PyProjectTomlMut};
+use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::project::ProjectError;
-use crate::commands::reporters::ResolverReporter;
+use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
+
+/// Represents the destination where dependencies are added, either to a project or a script.
+enum DependencyDestination {
+    Project(VirtualProject),
+    Script(Pep723Script),
+}
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -50,6 +60,7 @@ pub(crate) async fn add(
     package: Option<PackageName>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
+    script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     preview: PreviewMode,
@@ -63,43 +74,93 @@ pub(crate) async fn add(
         warn_user_once!("`uv add` is experimental and may change without warning");
     }
 
-    // Find the project in the workspace.
-    let project = if let Some(package) = package {
-        VirtualProject::Project(
-            Workspace::discover(&CWD, &DiscoveryOptions::default())
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+    let download_reporter = PythonDownloadReporter::single(printer);
+    let (dependency_destination, venv) = if let Some(script) = script {
+        // (1) Explicit request from user
+        let python_request = if let Some(request) = python.as_deref() {
+            Some(PythonRequest::parse(request))
+            // (2) Request from `.python-version`
+        } else if let Some(request) = request_from_version_file(&CWD).await? {
+            Some(request)
+            // (3) `Requires-Python` in `pyproject.toml`
+        } else {
+            script
+                .metadata
+                .requires_python
+                .clone()
+                .map(|requires_python| {
+                    PythonRequest::Version(VersionRequest::Range(requires_python))
+                })
+        };
+
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+
+        let interpreter = PythonInstallation::find_or_download(
+            python_request,
+            EnvironmentPreference::Any,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&download_reporter),
         )
+        .await?
+        .into_interpreter();
+
+        // Create a virtual environment.
+        let temp_dir = cache.environment()?;
+        let venv = uv_virtualenv::create_venv(
+            temp_dir.path(),
+            interpreter,
+            uv_virtualenv::Prompt::None,
+            false,
+            false,
+            false,
+        )?;
+
+        (DependencyDestination::Script(script), venv)
     } else {
-        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
-    };
+        // Find the project in the workspace.
+        let project = if let Some(package) = package {
+            VirtualProject::Project(
+                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                    .await?
+                    .with_current_project(package.clone())
+                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            )
+        } else {
+            VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+        };
 
-    // For virtual projects, allow dev dependencies, but nothing else.
-    if project.is_virtual() {
-        match dependency_type {
-            DependencyType::Production => {
-                anyhow::bail!("Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `{}`)", "uv add --dev".green())
+        // For virtual projects, allow dev dependencies, but nothing else.
+        if project.is_virtual() {
+            match dependency_type {
+                DependencyType::Production => {
+                    anyhow::bail!("Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `{}`)", "uv add --dev".green())
+                }
+                DependencyType::Optional(_) => {
+                    anyhow::bail!("Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `{}`)", "uv add --dev".green())
+                }
+                DependencyType::Dev => (),
             }
-            DependencyType::Optional(_) => {
-                anyhow::bail!("Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `{}`)", "uv add --dev".green())
-            }
-            DependencyType::Dev => (),
         }
-    }
 
-    // Discover or create the virtual environment.
-    let venv = project::get_or_init_environment(
-        project.workspace(),
-        python.as_deref().map(PythonRequest::parse),
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?;
+        // Discover or create the virtual environment.
+        let venv = project::get_or_init_environment(
+            project.workspace(),
+            python.as_deref().map(PythonRequest::parse),
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+        (DependencyDestination::Project(project), venv)
+    };
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
@@ -183,8 +244,15 @@ pub(crate) async fn add(
     .await?;
 
     // Add the requirements to the `pyproject.toml`.
-    let existing = project.pyproject_toml();
-    let mut pyproject = PyProjectTomlMut::from_toml(existing)?;
+    let mut toml = match &dependency_destination {
+        DependencyDestination::Script(script) => {
+            PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
+        }
+        DependencyDestination::Project(project) => {
+            let raw = project.pyproject_toml().raw.clone();
+            PyProjectTomlMut::from_toml(&raw, DependencyTarget::PyProjectToml)
+        }
+    }?;
     let mut edits = Vec::with_capacity(requirements.len());
     for mut requirement in requirements {
         // Add the specified extras.
@@ -192,48 +260,48 @@ pub(crate) async fn add(
         requirement.extras.sort_unstable();
         requirement.extras.dedup();
 
-        let (requirement, source) = if raw_sources {
-            // Use the PEP 508 requirement directly.
-            (pep508_rs::Requirement::from(requirement), None)
-        } else {
-            // Otherwise, try to construct the source.
-            let workspace = project
-                .workspace()
-                .packages()
-                .contains_key(&requirement.name);
-            let result = Source::from_requirement(
-                &requirement.name,
-                requirement.source.clone(),
-                workspace,
-                editable,
-                rev.clone(),
-                tag.clone(),
-                branch.clone(),
-            );
+        let (requirement, source) = match dependency_destination {
+            DependencyDestination::Script(_) => (pep508_rs::Requirement::from(requirement), None),
+            DependencyDestination::Project(_) if raw_sources => {
+                (pep508_rs::Requirement::from(requirement), None)
+            }
+            DependencyDestination::Project(ref project) => {
+                // Otherwise, try to construct the source.
+                let workspace = project
+                    .workspace()
+                    .packages()
+                    .contains_key(&requirement.name);
+                let result = Source::from_requirement(
+                    &requirement.name,
+                    requirement.source.clone(),
+                    workspace,
+                    editable,
+                    rev.clone(),
+                    tag.clone(),
+                    branch.clone(),
+                );
 
-            let source = match result {
-                Ok(source) => source,
-                Err(SourceError::UnresolvedReference(rev)) => {
-                    anyhow::bail!("Cannot resolve Git reference `{rev}` for requirement `{name}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.", name = requirement.name)
-                }
-                Err(err) => return Err(err.into()),
-            };
+                let source = match result {
+                    Ok(source) => source,
+                    Err(SourceError::UnresolvedReference(rev)) => {
+                        anyhow::bail!("Cannot resolve Git reference `{rev}` for requirement `{name}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.", name = requirement.name)
+                    }
+                    Err(err) => return Err(err.into()),
+                };
 
-            // Ignore the PEP 508 source.
-            let mut requirement = pep508_rs::Requirement::from(requirement);
-            requirement.clear_url();
+                // Ignore the PEP 508 source.
+                let mut requirement = pep508_rs::Requirement::from(requirement);
+                requirement.clear_url();
 
-            (requirement, source)
+                (requirement, source)
+            }
         };
-
         // Update the `pyproject.toml`.
         let edit = match dependency_type {
-            DependencyType::Production => {
-                pyproject.add_dependency(&requirement, source.as_ref())?
-            }
-            DependencyType::Dev => pyproject.add_dev_dependency(&requirement, source.as_ref())?,
+            DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
+            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
             DependencyType::Optional(ref group) => {
-                pyproject.add_optional_dependency(group, &requirement, source.as_ref())?
+                toml.add_optional_dependency(group, &requirement, source.as_ref())?
             }
         };
 
@@ -247,21 +315,40 @@ pub(crate) async fn add(
     }
 
     // Save the modified `pyproject.toml`.
-    let mut modified = false;
-    let content = pyproject.to_string();
-    if content == existing.raw {
-        debug!("No changes to `pyproject.toml`; skipping update");
-    } else {
-        fs_err::write(project.root().join("pyproject.toml"), &content)?;
-        modified = true;
-    }
-
+    let content = toml.to_string();
+    let modified = match &dependency_destination {
+        DependencyDestination::Script(script) => {
+            if content == script.metadata.raw {
+                debug!("No changes to dependencies; skipping update");
+                false
+            } else {
+                script.replace_metadata(&content).await?;
+                true
+            }
+        }
+        DependencyDestination::Project(project) => {
+            if content == *project.pyproject_toml().raw {
+                debug!("No changes to dependencies; skipping update");
+                false
+            } else {
+                let pyproject_path = project.root().join("pyproject.toml");
+                fs_err::write(pyproject_path, &content)?;
+                true
+            }
+        }
+    };
     // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
     // to exist at all.
     if frozen {
         return Ok(ExitStatus::Success);
     }
 
+    // If `--script`, exit early. There's no reason to lock and sync.
+    let DependencyDestination::Project(project) = dependency_destination else {
+        return Ok(ExitStatus::Success);
+    };
+
+    let existing = project.pyproject_toml();
     // Update the `pypackage.toml` in-memory.
     let project = project
         .clone()
@@ -357,13 +444,13 @@ pub(crate) async fn add(
 
             match edit.dependency_type {
                 DependencyType::Production => {
-                    pyproject.set_dependency_minimum_version(*index, minimum)?;
+                    toml.set_dependency_minimum_version(*index, minimum)?;
                 }
                 DependencyType::Dev => {
-                    pyproject.set_dev_dependency_minimum_version(*index, minimum)?;
+                    toml.set_dev_dependency_minimum_version(*index, minimum)?;
                 }
                 DependencyType::Optional(ref group) => {
-                    pyproject.set_optional_dependency_minimum_version(group, *index, minimum)?;
+                    toml.set_optional_dependency_minimum_version(group, *index, minimum)?;
                 }
             }
 
@@ -374,7 +461,7 @@ pub(crate) async fn add(
         // string content, since the above loop _must_ change an empty specifier to a non-empty
         // specifier.
         if modified {
-            fs_err::write(project.root().join("pyproject.toml"), pyproject.to_string())?;
+            fs_err::write(project.root().join("pyproject.toml"), toml.to_string())?;
         }
     }
 

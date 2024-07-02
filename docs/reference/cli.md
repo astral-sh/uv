@@ -711,6 +711,8 @@ uv add [OPTIONS] <REQUIREMENTS>...
 </ul>
 </dd><dt><code>--rev</code> <i>rev</i></dt><dd><p>Commit to use when adding a dependency from Git</p>
 
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Specifies the Python script where the dependency will be added</p>
+
 </dd><dt><code>--tag</code> <i>tag</i></dt><dd><p>Tag to use when adding a dependency from Git</p>
 
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
@@ -967,6 +969,8 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
+</dd><dt><code>--script</code> <i>script</i></dt><dd><p>Specifies the Python script where the dependency will be removed</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>

@@ -706,6 +706,7 @@ pub(crate) struct AddSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) script: Option<PathBuf>,
 }
 
 impl AddSettings {
@@ -731,6 +732,7 @@ impl AddSettings {
             refresh,
             package,
             python,
+            script,
         } = args;
 
         let requirements = requirements
@@ -765,6 +767,7 @@ impl AddSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            script,
         }
     }
 }
@@ -782,6 +785,7 @@ pub(crate) struct RemoveSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) script: Option<PathBuf>,
 }
 
 impl RemoveSettings {
@@ -800,6 +804,7 @@ impl RemoveSettings {
             refresh,
             package,
             python,
+            script,
         } = args;
 
         let dependency_type = if let Some(group) = optional {
@@ -823,6 +828,7 @@ impl RemoveSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            script,
         }
     }
 }

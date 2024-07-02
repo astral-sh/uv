@@ -1141,6 +1141,12 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
+            // If the target is a PEP 723 script, parse it.
+            let script = if let Some(script) = args.script {
+                Pep723Script::read(&script).await?
+            } else {
+                None
+            };
 
             commands::add(
                 args.locked,
@@ -1157,6 +1163,7 @@ async fn run_project(
                 args.package,
                 args.python,
                 args.settings,
+                script,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.preview,
@@ -1179,6 +1186,12 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
+            // If the target is a PEP 723 script, parse it.
+            let script = if let Some(script) = args.script {
+                Pep723Script::read(&script).await?
+            } else {
+                None
+            };
 
             commands::remove(
                 args.locked,
@@ -1189,6 +1202,7 @@ async fn run_project(
                 args.package,
                 args.python,
                 args.settings,
+                script,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.preview,

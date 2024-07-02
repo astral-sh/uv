@@ -16,7 +16,7 @@ use uv_python::{
 };
 use uv_resolver::RequiresPython;
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject_mut::PyProjectTomlMut;
+use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{check_nested_workspaces, DiscoveryOptions, Workspace, WorkspaceError};
 
 use crate::commands::project::find_requires_python;
@@ -315,7 +315,10 @@ async fn init_project(
             )?;
         } else {
             // Add the package to the workspace.
-            let mut pyproject = PyProjectTomlMut::from_toml(workspace.pyproject_toml())?;
+            let mut pyproject = PyProjectTomlMut::from_toml(
+                &workspace.pyproject_toml().raw,
+                DependencyTarget::PyProjectToml,
+            )?;
             pyproject.add_workspace(path.strip_prefix(workspace.install_path())?)?;
 
             // Save the modified `pyproject.toml`.
