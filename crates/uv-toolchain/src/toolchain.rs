@@ -122,6 +122,7 @@ impl Toolchain {
     ) -> Result<Self, Error> {
         let toolchains = InstalledToolchains::from_settings()?.init()?;
         let toolchain_dir = toolchains.root();
+        let _lock = toolchains.acquire_lock()?;
 
         let download = PythonDownload::from_request(&request)?;
         let client = client_builder.build();

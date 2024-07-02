@@ -31,6 +31,7 @@ pub(crate) async fn install(
 
     let toolchains = InstalledToolchains::from_settings()?.init()?;
     let toolchain_dir = toolchains.root();
+    let _lock = toolchains.acquire_lock()?;
 
     let requests: Vec<_> = if targets.is_empty() {
         if let Some(requests) = requests_from_version_file().await? {

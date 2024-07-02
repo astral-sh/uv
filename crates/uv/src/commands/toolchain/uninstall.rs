@@ -23,6 +23,7 @@ pub(crate) async fn uninstall(
     }
 
     let toolchains = InstalledToolchains::from_settings()?.init()?;
+    let _lock = toolchains.acquire_lock()?;
 
     let requests = targets
         .iter()
