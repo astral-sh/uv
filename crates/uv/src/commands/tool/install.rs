@@ -21,7 +21,7 @@ use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool,
 use uv_toolchain::{EnvironmentPreference, Toolchain, ToolchainPreference, ToolchainRequest};
 use uv_warnings::warn_user_once;
 
-use crate::commands::project::update_environment;
+use crate::commands::project::{update_environment, SharedState};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -146,6 +146,7 @@ pub(crate) async fn install(
         environment,
         spec,
         &settings,
+        &SharedState::default(),
         preview,
         connectivity,
         concurrency,

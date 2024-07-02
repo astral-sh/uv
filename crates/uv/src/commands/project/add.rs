@@ -18,6 +18,7 @@ use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
+use crate::commands::project::SharedState;
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
@@ -205,11 +206,15 @@ pub(crate) async fn add(
         pyproject.to_string(),
     )?;
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Lock and sync the environment.
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        &state,
         preview,
         connectivity,
         concurrency,
@@ -232,6 +237,7 @@ pub(crate) async fn add(
         dev,
         Modifications::Sufficient,
         settings.as_ref().into(),
+        &state,
         preview,
         connectivity,
         concurrency,

@@ -273,11 +273,21 @@ pub(crate) async fn get_or_init_environment(
     }
 }
 
+/// Shared state used during resolution and installation.
+#[derive(Default)]
+pub(crate) struct SharedState {
+    /// The resolved Git references.
+    git: GitResolver,
+    /// The fetched package versions and metadata.
+    index: InMemoryIndex,
+}
+
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     settings: &ResolverInstallerSettings,
+    state: &SharedState,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -350,9 +360,7 @@ pub(crate) async fn update_environment(
         .build();
 
     // Initialize any shared state.
-    let git = GitResolver::default();
     let in_flight = InFlight::default();
-    let index = InMemoryIndex::default();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -378,8 +386,8 @@ pub(crate) async fn update_environment(
         interpreter,
         index_locations,
         &flat_index,
-        &index,
-        &git,
+        &state.index,
+        &state.git,
         &in_flight,
         *index_strategy,
         setup_py,
@@ -411,7 +419,7 @@ pub(crate) async fn update_environment(
         python_requirement,
         &client,
         &flat_index,
-        &index,
+        &state.index,
         &resolve_dispatch,
         concurrency,
         options,
@@ -438,8 +446,8 @@ pub(crate) async fn update_environment(
             interpreter,
             index_locations,
             &flat_index,
-            &index,
-            &git,
+            &state.index,
+            &state.git,
             &in_flight,
             *index_strategy,
             setup_py,

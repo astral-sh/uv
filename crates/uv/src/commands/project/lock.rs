@@ -8,16 +8,14 @@ use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
-use uv_git::GitResolver;
+use uv_git::ResolvedRepositoryReference;
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
-use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython,
-};
+use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
 use uv_toolchain::{Interpreter, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError};
+use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
@@ -59,6 +57,7 @@ pub(crate) async fn lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        &SharedState::default(),
         preview,
         connectivity,
         concurrency,
@@ -86,6 +85,7 @@ pub(super) async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
+    state: &SharedState,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -163,7 +163,6 @@ pub(super) async fn do_lock(
 
     // Initialize any shared state.
     let in_flight = InFlight::default();
-    let index = InMemoryIndex::default();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -181,8 +180,10 @@ pub(super) async fn do_lock(
     // If an existing lockfile exists, build up a set of preferences.
     let LockedRequirements { preferences, git } = read_lockfile(workspace, upgrade).await?;
 
-    // Create the Git resolver.
-    let git = GitResolver::from_refs(git);
+    // Populate the Git resolver.
+    for ResolvedRepositoryReference { reference, sha } in git {
+        state.git.insert(reference, sha);
+    }
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -191,8 +192,8 @@ pub(super) async fn do_lock(
         interpreter,
         index_locations,
         &flat_index,
-        &index,
-        &git,
+        &state.index,
+        &state.git,
         &in_flight,
         index_strategy,
         setup_py,
@@ -224,7 +225,7 @@ pub(super) async fn do_lock(
         python_requirement,
         &client,
         &flat_index,
-        &index,
+        &state.index,
         &build_dispatch,
         concurrency,
         options,

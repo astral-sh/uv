@@ -19,7 +19,7 @@ use uv_toolchain::{
 };
 use uv_warnings::warn_user_once;
 
-use crate::commands::project::update_environment;
+use crate::commands::project::{update_environment, SharedState};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -102,6 +102,7 @@ pub(crate) async fn run(
             venv,
             spec,
             &settings,
+            &SharedState::default(),
             preview,
             connectivity,
             concurrency,
