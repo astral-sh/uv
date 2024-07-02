@@ -148,6 +148,7 @@ impl Workspace {
                 root: project_path,
                 project,
                 pyproject_toml,
+                private_lock: false, // collect_members will correct thia
             });
         Self::collect_members(
             workspace_root,
@@ -171,86 +172,10 @@ impl Workspace {
         })
     }
 
-    /// Returns the set of requirements that include all packages in the workspace.
-    pub fn members_as_requirements(&self) -> Vec<Requirement> {
-        self.packages
-            .values()
-            .filter_map(|member| {
-                let project = member.pyproject_toml.project.as_ref()?;
-                // Extract the extras available in the project.
-                let extras = project
-                    .optional_dependencies
-                    .as_ref()
-                    .map(|optional_dependencies| {
-                        // It's a `BTreeMap` so the keys are sorted.
-                        optional_dependencies.keys().cloned().collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-
-                let url = VerbatimUrl::from_path(&member.root)
-                    .expect("path is valid URL")
-                    .with_given(member.root.to_string_lossy());
-                Some(Requirement {
-                    name: project.name.clone(),
-                    extras,
-                    marker: None,
-                    source: RequirementSource::Directory {
-                        install_path: member.root.clone(),
-                        lock_path: member
-                            .root
-                            .strip_prefix(&self.root)
-                            .expect("Project must be below workspace root")
-                            .to_path_buf(),
-                        editable: true,
-                        url,
-                    },
-                    origin: None,
-                })
-            })
-            .collect()
-    }
-
-    /// Returns the set of overrides for the workspace.
-    pub fn overrides(&self) -> Vec<Requirement> {
-        let Some(workspace_package) = self
-            .packages
-            .values()
-            .find(|workspace_package| workspace_package.root() == self.root())
-        else {
-            return vec![];
-        };
-
-        let Some(overrides) = workspace_package
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.override_dependencies.as_ref())
-        else {
-            return vec![];
-        };
-
-        overrides
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
-    }
-
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn root(&self) -> &PathBuf {
         &self.root
-    }
-
-    /// The path to the workspace virtual environment.
-    pub fn venv(&self) -> PathBuf {
-        self.root.join(".venv")
     }
 
     /// The members of the workspace.
@@ -300,83 +225,92 @@ impl Workspace {
                         root: workspace_root.clone(),
                         project: project.clone(),
                         pyproject_toml,
+                        private_lock: false, // root is not private-locked
                     },
                 );
             };
         }
 
-        // The current project is a workspace member, especially in a single project workspace.
-        if let Some(root_member) = current_project {
-            debug!(
-                "Adding current workspace member: {}",
-                root_member.root.simplified_display()
-            );
-
-            seen.insert(root_member.root.clone());
-            workspace_members.insert(root_member.project.name.clone(), root_member);
-        }
-
         // Add all other workspace members.
-        for member_glob in workspace_definition.members.unwrap_or_default() {
-            let absolute_glob = workspace_root
-                .simplified()
-                .join(member_glob.as_str())
-                .to_string_lossy()
-                .to_string();
-            for member_root in glob(&absolute_glob)
-                .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
-            {
-                let member_root = member_root
-                    .map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
-                if !seen.insert(member_root.clone()) {
-                    continue;
-                }
-                let member_root = absolutize_path(&member_root)
-                    .map_err(WorkspaceError::Normalize)?
-                    .to_path_buf();
-
-                trace!("Processing workspace member {}", member_root.user_display());
-
-                // Read the member `pyproject.toml`.
-                let pyproject_path = member_root.join("pyproject.toml");
-                let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-                let pyproject_toml = PyProjectToml::from_string(contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
-
-                // Check if the current project is explicitly marked as unmanaged.
-                if pyproject_toml
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.managed)
-                    == Some(false)
+        for (members, private_lock) in [
+            (workspace_definition.members, false),
+            (workspace_definition.projects, true),
+        ] {
+            for member_glob in members.unwrap_or_default() {
+                let absolute_glob = workspace_root
+                    .simplified()
+                    .join(member_glob.as_str())
+                    .to_string_lossy()
+                    .to_string();
+                for member_root in glob(&absolute_glob)
+                    .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
                 {
+                    let member_root = member_root
+                        .map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
+                    if !seen.insert(member_root.clone()) {
+                        continue;
+                    }
+                    let member_root = absolutize_path(&member_root)
+                        .map_err(WorkspaceError::Normalize)?
+                        .to_path_buf();
+
+                    trace!("Processing workspace member {}", member_root.user_display());
+
+                    // Read the member `pyproject.toml`.
+                    let pyproject_path = member_root.join("pyproject.toml");
+                    let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
+                    let pyproject_toml = PyProjectToml::from_string(contents)
+                        .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
+
+                    // Check if the current project is explicitly marked as unmanaged.
+                    if pyproject_toml
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.managed)
+                        == Some(false)
+                    {
+                        debug!(
+                            "Project `{}` is marked as unmanaged; omitting from workspace members",
+                            pyproject_toml.project.as_ref().unwrap().name
+                        );
+                        continue;
+                    }
+
+                    // Extract the package name.
+                    let Some(project) = pyproject_toml.project.clone() else {
+                        return Err(WorkspaceError::MissingProject(member_root));
+                    };
+
                     debug!(
-                        "Project `{}` is marked as unmanaged; omitting from workspace members",
-                        pyproject_toml.project.as_ref().unwrap().name
+                        "Adding discovered workspace member: {}",
+                        member_root.simplified_display()
                     );
-                    continue;
+                    workspace_members.insert(
+                        project.name.clone(),
+                        WorkspaceMember {
+                            root: member_root.clone(),
+                            project,
+                            pyproject_toml,
+                            private_lock,
+                        },
+                    );
                 }
-
-                // Extract the package name.
-                let Some(project) = pyproject_toml.project.clone() else {
-                    return Err(WorkspaceError::MissingProject(member_root));
-                };
-
-                debug!(
-                    "Adding discovered workspace member: {}",
-                    member_root.simplified_display()
-                );
-                workspace_members.insert(
-                    project.name.clone(),
-                    WorkspaceMember {
-                        root: member_root.clone(),
-                        project,
-                        pyproject_toml,
-                    },
-                );
             }
         }
+
+        // The current project is a workspace member, especially in a single project workspace.
+        // This needs to execute after the members/projects iteration
+        if let Some(root_member) = current_project {
+            if seen.insert(root_member.root.clone()) {
+                debug!(
+                    "Adding current workspace member: {}",
+                    root_member.root.simplified_display()
+                );
+                workspace_members.insert(root_member.project.name.clone(), root_member);
+            }
+        }
+
         let workspace_sources = workspace_pyproject_toml
             .tool
             .and_then(|tool| tool.uv)
@@ -404,6 +338,8 @@ pub struct WorkspaceMember {
     project: Project,
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pyproject_toml: PyProjectToml,
+    /// does this member require a private lock
+    private_lock: bool,
 }
 
 impl WorkspaceMember {
@@ -654,6 +590,7 @@ impl ProjectWorkspace {
             root: project_path.clone(),
             project: project.clone(),
             pyproject_toml: project_pyproject_toml.clone(),
+            private_lock: false, // collect_members will correct this
         };
 
         let Some((workspace_root, workspace_definition, workspace_pyproject_toml)) = workspace
@@ -988,6 +925,128 @@ impl VirtualProject {
             VirtualProject::Virtual(_) => None,
         }
     }
+
+    /// Return the [`WorkspaceMember`] of the project, if it's not a virtual workspace.
+    pub fn project(&self) -> Option<&WorkspaceMember> {
+        match self {
+            VirtualProject::Project(project) => {
+                self.workspace().packages.get(project.project_name())
+            }
+            VirtualProject::Virtual(_) => None,
+        }
+    }
+
+    /// Returns the set of requirements that include all packages in the workspace using shared lock.
+    pub fn members_as_requirements(&self) -> Vec<Requirement> {
+        if let Some(member) = self.private_project() {
+            if member.private_lock {
+                return vec![self.member_as_requirement(member).unwrap()];
+            }
+        }
+        let mut requirements = vec![];
+        for member in self.workspace().packages.values() {
+            if !member.private_lock {
+                requirements.push(self.member_as_requirement(member).unwrap());
+            }
+        }
+        requirements
+    }
+
+    fn member_as_requirement(&self, member: &WorkspaceMember) -> Option<Requirement> {
+        let project = member.pyproject_toml.project.as_ref()?;
+        // Extract the extras available in the project.
+        let extras = project
+            .optional_dependencies
+            .as_ref()
+            .map(|optional_dependencies| {
+                // It's a `BTreeMap` so the keys are sorted.
+                optional_dependencies.keys().cloned().collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let url = VerbatimUrl::from_path(&member.root)
+            .expect("path is valid URL")
+            .with_given(member.root.to_string_lossy());
+        Some(Requirement {
+            name: project.name.clone(),
+            extras,
+            marker: None,
+            source: RequirementSource::Directory {
+                install_path: member.root.clone(),
+                lock_path: member
+                    .root
+                    .strip_prefix(&self.workspace().root)
+                    .expect("Project must be below workspace root")
+                    .to_path_buf(),
+                editable: true,
+                url,
+            },
+            origin: None,
+        })
+    }
+
+    /// Returns the set of overrides for the workspace.
+    pub fn overrides(&self) -> Vec<Requirement> {
+        let override_holder = if let Some(private_project) = self.private_project() {
+            Some(private_project)
+        } else {
+            self.workspace()
+                .packages
+                .values()
+                .find(|workspace_package| workspace_package.root() == self.workspace().root())
+        };
+        let Some(workspace_package) = override_holder else {
+            return vec![];
+        };
+
+        let Some(overrides) = workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.override_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        overrides
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
+            })
+            .collect()
+    }
+
+    /// The path to the workspace virtual environment.
+    pub fn venv(&self) -> PathBuf {
+        if let Some(private_project) = self.private_project() {
+            private_project.root.join(".venv")
+        } else {
+            self.workspace().root().join(".venv")
+        }
+    }
+
+    /// The path to the workspace lockfile
+    pub fn lockfile(&self) -> PathBuf {
+        if let Some(private_project) = self.private_project() {
+            private_project.root.join("uv.lock")
+        } else {
+            self.workspace().root().join("uv.lock")
+        }
+    }
+
+    fn private_project(&self) -> Option<&WorkspaceMember> {
+        if let Some(project) = self.project() {
+            if project.private_lock {
+                return Some(project);
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -1040,7 +1099,8 @@ mod tests {
                   "requires-python": ">=3.12",
                   "optional-dependencies": null
                 },
-                "pyproject_toml": "[PYPROJECT_TOML]"
+                "pyproject_toml": "[PYPROJECT_TOML]",
+                "private_lock": false
               }
             },
             "sources": {}
@@ -1075,7 +1135,8 @@ mod tests {
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
+                    "pyproject_toml": "[PYPROJECT_TOML]",
+                    "private_lock": false
                   }
                 },
                 "sources": {}
@@ -1109,7 +1170,8 @@ mod tests {
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
+                    "pyproject_toml": "[PYPROJECT_TOML]",
+                    "private_lock": false
                   },
                   "bird-feeder": {
                     "root": "[ROOT]/albatross-root-workspace/packages/bird-feeder",
@@ -1118,7 +1180,8 @@ mod tests {
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
+                    "pyproject_toml": "[PYPROJECT_TOML]",
+                    "private_lock": false
                   },
                   "seeds": {
                     "root": "[ROOT]/albatross-root-workspace/packages/seeds",
@@ -1127,7 +1190,8 @@ mod tests {
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
+                    "pyproject_toml": "[PYPROJECT_TOML]",
+                    "private_lock": false
                   }
                 },
                 "sources": {
@@ -1167,7 +1231,8 @@ mod tests {
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
+                    "pyproject_toml": "[PYPROJECT_TOML]",
+                    "private_lock": false
                   },
                   "bird-feeder": {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/bird-feeder",
@@ -1176,7 +1241,8 @@ mod tests {
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
+                    "pyproject_toml": "[PYPROJECT_TOML]",
+                    "private_lock": false
                   },
                   "seeds": {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/seeds",
@@ -1185,7 +1251,8 @@ mod tests {
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
+                    "pyproject_toml": "[PYPROJECT_TOML]",
+                    "private_lock": false
                   }
                 },
                 "sources": {}
@@ -1219,7 +1286,8 @@ mod tests {
                       "requires-python": ">=3.12",
                       "optional-dependencies": null
                     },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
+                    "pyproject_toml": "[PYPROJECT_TOML]",
+                    "private_lock": false
                   }
                 },
                 "sources": {}

@@ -42,7 +42,7 @@ pub(crate) async fn sync(
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
-        project.workspace(),
+        &project,
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
         toolchain_fetch,

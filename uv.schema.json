@@ -1200,6 +1200,15 @@
           "items": {
             "$ref": "#/definitions/String"
           }
+        },
+        "projects": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/String"
+          }
         }
       }
     },

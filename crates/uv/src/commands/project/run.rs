@@ -169,7 +169,7 @@ pub(crate) async fn run(
             }
 
             let venv = project::get_or_init_environment(
-                project.workspace(),
+                &project,
                 python.as_deref().map(ToolchainRequest::parse),
                 toolchain_preference,
                 toolchain_fetch,
@@ -182,7 +182,7 @@ pub(crate) async fn run(
 
             // Lock and sync the environment.
             let lock = project::lock::do_lock(
-                project.workspace(),
+                &project,
                 venv.interpreter(),
                 settings.as_ref().into(),
                 &state,
