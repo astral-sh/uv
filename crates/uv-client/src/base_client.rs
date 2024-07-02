@@ -139,9 +139,9 @@ impl<'a> BaseClientBuilder<'a> {
         let client = self.client.clone().unwrap_or_else(|| {
             if CryptoProvider::get_default().is_none() {
                 // Use aws_lc_rs as the default TLS provider to support more SSL cert algorithms
-                aws_lc_rs::default_provider()
-                    .install_default()
-                    .expect("failed to install aws_lc_rs as default TLS provider");
+                if aws_lc_rs::default_provider().install_default().is_err() {
+                    warn_user_once!("Failed to install aws_lc_rs as the default TLS provider.");
+                }
             };
 
             // Check for the presence of an `SSL_CERT_FILE`.
