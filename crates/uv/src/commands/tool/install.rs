@@ -24,7 +24,7 @@ use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::warn_user_once;
 
-use crate::commands::project::update_environment;
+use crate::commands::project::{resolve_environment, sync_environment, update_environment};
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -195,33 +195,62 @@ pub(crate) async fn install(
     // entrypoints (without `--force`).
     let reinstall_entry_points = existing_tool_receipt.is_some();
 
+    // Resolve the requirements.
+    let state = SharedState::default();
+    let spec = RequirementsSpecification::from_requirements(requirements.clone());
+
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
-        environment
+        update_environment(
+            environment,
+            spec,
+            &settings,
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
     } else {
-        // TODO(charlie): Resolve, then create the environment, then install. This ensures that
-        // we don't nuke the environment if the resolution fails.
-        installed_tools.create_environment(&from.name, interpreter)?
-    };
+        // If we're creating a new environment, ensure that we can resolve the requirements prior
+        // to removing any existing tools.
+        let resolution = resolve_environment(
+            &interpreter,
+            spec,
+            settings.as_ref().into(),
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
 
-    // Install the ephemeral requirements.
-    let spec = RequirementsSpecification::from_requirements(requirements.clone());
-    let environment = update_environment(
-        environment,
-        spec,
-        &settings,
-        &state,
-        preview,
-        connectivity,
-        concurrency,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?;
+        let environment = installed_tools.create_environment(&from.name, interpreter)?;
+
+        // Sync the environment with the resolved requirements.
+        sync_environment(
+            environment,
+            &resolution.into(),
+            settings.as_ref().into(),
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+    };
 
     let site_packages = SitePackages::from_environment(&environment)?;
     let installed = site_packages.get_packages(&from.name);
