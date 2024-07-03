@@ -216,9 +216,9 @@ pub(crate) async fn pip_compile(
     let python_requirement = if universal {
         let requires_python = RequiresPython::greater_than_equal_version(
             if let Some(python_version) = python_version.as_ref() {
-                python_version.version.clone()
+                &python_version.version
             } else {
-                interpreter.python_version().clone()
+                interpreter.python_version()
             },
         );
         PythonRequirement::from_requires_python(&interpreter, &requires_python)

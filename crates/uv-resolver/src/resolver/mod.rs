@@ -856,7 +856,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         // The version is incompatible due to its Python requirement.
-        // STOPSHIP(charlie): Merge markers into `python_requirement`.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
             if let Some(target) = python_requirement.target() {
                 if !target.is_compatible_with(requires_python) {
@@ -1934,14 +1933,14 @@ impl ForkState {
     ) -> Result<(), ResolveError> {
         // Incompatible requires-python versions are special in that we track
         // them as incompatible dependencies instead of marking the package version
-        // as unavailable directly
+        // as unavailable directly.
         if let UnavailableVersion::IncompatibleDist(
             IncompatibleDist::Source(IncompatibleSource::RequiresPython(requires_python, kind))
             | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python, kind)),
         ) = reason
         {
             let python_version: Range<Version> =
-                PubGrubSpecifier::try_from(&requires_python)?.into();
+                PubGrubSpecifier::from_release_specifiers(&requires_python)?.into();
 
             let package = &self.next;
             self.pubgrub
