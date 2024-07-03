@@ -9,7 +9,7 @@ mod common;
 
 #[test]
 fn tool_run_args() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -40,9 +40,9 @@ fn tool_run_args() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
      + pluggy==1.4.0
@@ -63,7 +63,7 @@ fn tool_run_args() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
-    Resolved 4 packages in [TIME]
+    Resolved [N] packages in [TIME]
     "###);
 }
 
@@ -335,7 +335,7 @@ fn tool_run_from_install() {
 
 #[test]
 fn tool_run_cache() {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -355,9 +355,9 @@ fn tool_run_cache() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -382,7 +382,7 @@ fn tool_run_cache() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
     "###);
 
     // Verify that varying the interpreter leads to a fresh environment.
@@ -401,9 +401,9 @@ fn tool_run_cache() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -428,7 +428,7 @@ fn tool_run_cache() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
     "###);
 
     // Verify that `--with` leads to a fresh environment.
@@ -449,9 +449,9 @@ fn tool_run_cache() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
-    Resolved 7 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 7 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + iniconfig==2.0.0

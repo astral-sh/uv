@@ -31,6 +31,7 @@ use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
 
 pub(crate) mod add;
+pub(crate) mod ephemeral;
 pub(crate) mod lock;
 pub(crate) mod remove;
 pub(crate) mod run;
