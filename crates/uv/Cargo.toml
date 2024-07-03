@@ -14,6 +14,7 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
+cache-key = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true, default-features = false }
 pep440_rs = { workspace = true }
@@ -58,7 +59,6 @@ regex = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

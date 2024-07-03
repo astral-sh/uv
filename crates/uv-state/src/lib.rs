@@ -95,9 +95,9 @@ impl StateStore {
 /// are subdirectories of the state store root.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum StateBucket {
-    // Managed Python installations
+    /// Managed Python installations
     ManagedPython,
-    // Installed tools
+    /// Installed tools.
     Tools,
 }
 
