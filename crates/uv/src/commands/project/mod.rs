@@ -469,7 +469,7 @@ pub(crate) async fn update_environment(
     };
 
     // Create a build dispatch.
-    let resolve_dispatch = BuildDispatch::new(
+    let build_dispatch = BuildDispatch::new(
         &client,
         cache,
         interpreter,
@@ -509,7 +509,7 @@ pub(crate) async fn update_environment(
         &client,
         &flat_index,
         &state.index,
-        &resolve_dispatch,
+        &build_dispatch,
         concurrency,
         options,
         printer,
@@ -519,35 +519,6 @@ pub(crate) async fn update_environment(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(err) => return Err(err.into()),
-    };
-
-    // Re-initialize the in-flight map.
-    let in_flight = InFlight::default();
-
-    // If we're running with `--reinstall`, initialize a separate `BuildDispatch`, since we may
-    // end up removing some distributions from the environment.
-    let install_dispatch = if reinstall.is_none() {
-        resolve_dispatch
-    } else {
-        BuildDispatch::new(
-            &client,
-            cache,
-            interpreter,
-            index_locations,
-            &flat_index,
-            &state.index,
-            &state.git,
-            &in_flight,
-            *index_strategy,
-            setup_py,
-            config_setting,
-            build_isolation,
-            *link_mode,
-            build_options,
-            *exclude_newer,
-            concurrency,
-            preview,
-        )
     };
 
     // Sync the environment.
@@ -565,7 +536,7 @@ pub(crate) async fn update_environment(
         &client,
         &in_flight,
         concurrency,
-        &install_dispatch,
+        &build_dispatch,
         cache,
         &venv,
         dry_run,
