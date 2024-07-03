@@ -54,13 +54,13 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Box<Commands>,
 
     #[command(flatten)]
-    pub global_args: GlobalArgs,
+    pub global_args: Box<GlobalArgs>,
 
     #[command(flatten)]
-    pub cache_args: CacheArgs,
+    pub cache_args: Box<CacheArgs>,
 
     /// The path to a `uv.toml` file to use for configuration.
     #[arg(global = true, long, env = "UV_CONFIG_FILE")]
