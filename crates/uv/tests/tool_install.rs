@@ -21,9 +21,9 @@ fn tool_install() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -35,22 +35,20 @@ fn tool_install() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("dotenv{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
     // On Windows, we can't snapshot an executable file.
@@ -58,40 +56,37 @@ fn tool_install() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Should run black in the virtual environment
+        // Should run python_dotenv in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/black/bin/python
+        #![TEMP_DIR]/tools/python-dotenv/bin/python
         # -*- coding: utf-8 -*-
         import re
         import sys
-        from black import patched_main
+        from dotenv.__main__ import cli
         if __name__ == "__main__":
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-            sys.exit(patched_main())
+            sys.exit(cli())
         "###);
-
     });
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = ["python-dotenv[cli]"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
 
-    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), Command::new("dotenv").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    black, 24.3.0 (compiled: yes)
-    Python (CPython) 3.12.[X]
+    dotenv, version 1.0.1
 
     ----- stderr -----
     "###);
@@ -174,9 +169,9 @@ fn tool_install_version() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black==24.2.0")
+        .arg("python_dotenv[cli]==1.0.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -185,25 +180,23 @@ fn tool_install_version() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.2.0
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.0
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("dotenv{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
     // On Windows, we can't snapshot an executable file.
@@ -211,16 +204,16 @@ fn tool_install_version() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Should run black in the virtual environment
+        // Should run python_dotenv in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/black/bin/python
+        #![TEMP_DIR]/tools/python-dotenv/bin/python
         # -*- coding: utf-8 -*-
         import re
         import sys
-        from black import patched_main
+        from dotenv.__main__ import cli
         if __name__ == "__main__":
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-            sys.exit(patched_main())
+            sys.exit(cli())
         "###);
 
     });
@@ -229,22 +222,20 @@ fn tool_install_version() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black==24.2.0"]
+        requirements = ["python-dotenv[cli]==1.0.0"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
 
-    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), Command::new("dotenv").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    black, 24.2.0 (compiled: yes)
-    Python (CPython) 3.12.[X]
+    dotenv, version 1.0.0
 
     ----- stderr -----
     "###);
@@ -257,36 +248,11 @@ fn tool_install_from() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black` using `--from` to specify the version
+    // Install `python_dotenv` using `--from` to specify the version
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--from")
-        .arg("black==24.2.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.2.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
-    "###);
-
-    // Attempt to install `black` using `--from` with a different package name
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
-        .arg("--from")
-        .arg("flask==24.2.0")
+        .arg("python_dotenv[cli]==1.0.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
@@ -295,14 +261,14 @@ fn tool_install_from() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    error: Package name `flask` provided with `--from` does not match install request `black`
+    error: Package requirement `python_dotenv[cli]==1.0.0` provided with `--from` conflicts with install request `python-dotenv[cli]`
     "###);
 
-    // Attempt to install `black` using `--from` with a different version
+    // Attempt to install `python_dotenv` using `--from` with a different package name
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black==24.2.0")
+        .arg("python-dotenv[cli]")
         .arg("--from")
-        .arg("black==24.3.0")
+        .arg("python_dotenv[cli]==1.0.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
@@ -311,7 +277,23 @@ fn tool_install_from() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    error: Package requirement `black==24.3.0` provided with `--from` conflicts with install request `black==24.2.0`
+    error: Package requirement `python_dotenv[cli]==1.0.0` provided with `--from` conflicts with install request `python-dotenv[cli]`
+    "###);
+
+    // Attempt to install `python_dotenv` using `--from` with a different version
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("python_dotenv==1.0.1")
+        .arg("--from")
+        .arg("python_dotenv[cli]==1.0.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    error: Package requirement `python_dotenv[cli]==1.0.0` provided with `--from` conflicts with install request `python_dotenv==1.0.1`
     "###);
 }
 
@@ -324,9 +306,9 @@ fn tool_install_already_installed() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -338,22 +320,20 @@ fn tool_install_already_installed() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("dotenv{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
     // On Windows, we can't snapshot an executable file.
@@ -361,16 +341,16 @@ fn tool_install_already_installed() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Should run black in the virtual environment
+        // Should run python_dotenv in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/black/bin/python
+        #![TEMP_DIR]/tools/python-dotenv/bin/python
         # -*- coding: utf-8 -*-
         import re
         import sys
-        from black import patched_main
+        from dotenv.__main__ import cli
         if __name__ == "__main__":
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-            sys.exit(patched_main())
+            sys.exit(cli())
         "###);
 
     });
@@ -379,19 +359,18 @@ fn tool_install_already_installed() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = ["python-dotenv[cli]"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
 
-    // Install `black` again
+    // Install `python_dotenv` again
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
@@ -400,32 +379,33 @@ fn tool_install_already_installed() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Tool `black` is already installed
+    Tool `python-dotenv[cli]` is already installed
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
     bin_dir
-        .child(format!("black{}", std::env::consts::EXE_SUFFIX))
+        .child(format!("dotenv{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We should not have an additional tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = ["python-dotenv[cli]"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
 
-    // Install `black` again with the `--reinstall` flag
+    // Install `python_dotenv` again with the `--reinstall` flag
     // We should recreate the entire environment and reinstall the entry points
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -438,27 +418,19 @@ fn tool_install_already_installed() {
     Resolved [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==24.3.0
-     + black==24.3.0
      - click==8.1.7
      + click==8.1.7
-     - mypy-extensions==1.0.0
-     + mypy-extensions==1.0.0
-     - packaging==24.0
-     + packaging==24.0
-     - pathspec==0.12.1
-     + pathspec==0.12.1
-     - platformdirs==4.2.0
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     - python-dotenv==1.0.1
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
-    // Install `black` again with `--reinstall-package` for `black`
-    // We should reinstall `black` in the environment and reinstall the entry points
+    // Install `python_dotenv` again with `--reinstall-package` for `python_dotenv`
+    // We should reinstall `python_dotenv` in the environment and reinstall the entry points
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--reinstall-package")
-        .arg("black")
+        .arg("python-dotenv")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -470,15 +442,15 @@ fn tool_install_already_installed() {
     Resolved [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==24.3.0
-     + black==24.3.0
-    Installed: black, blackd
+     - python-dotenv==1.0.1
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
-    // Install `black` again with `--reinstall-package` for a dependency
-    // We should reinstall `click` in the environment but not reinstall `black`
+    // Install `python_dotenv` again with `--reinstall-package` for a dependency
+    // We should reinstall `click` in the environment but not reinstall `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--reinstall-package")
         .arg("click")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -494,7 +466,7 @@ fn tool_install_already_installed() {
     Installed [N] packages in [TIME]
      - click==8.1.7
      + click==8.1.7
-    Installed: black, blackd
+    Installed: dotenv
     "###);
 }
 
@@ -507,12 +479,12 @@ fn tool_install_entry_point_exists() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("dotenv{}", std::env::consts::EXE_SUFFIX));
     executable.touch().unwrap();
 
-    // Attempt to install `black`
+    // Attempt to install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
@@ -524,33 +496,32 @@ fn tool_install_entry_point_exists() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    error: Entry point for tool already exists: black (use `--force` to overwrite)
+     + python-dotenv==1.0.1
+    error: Entry point for tool already exists: dotenv (use `--force` to overwrite)
     "###);
 
     // We should delete the virtual environment
-    assert!(!tool_dir.child("black").exists());
+    assert!(!tool_dir.child("python-dotenv").exists());
 
     // We should not write a tools entry
-    assert!(!tool_dir.join("black").join("uv-receipt.toml").exists());
+    assert!(!tool_dir
+        .join("python-dotenv")
+        .join("uv-receipt.toml")
+        .exists());
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Nor should we change the `black` entry point that exists
+        // Nor should we change the `python_dotenv` entry point that exists
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @"");
 
     });
 
-    // Attempt to install `black` with the `--reinstall` flag
+    // Attempt to install `python_dotenv` with the `--reinstall` flag
     // Should have no effect
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -562,17 +533,13 @@ fn tool_install_entry_point_exists() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    error: Entry point for tool already exists: black (use `--force` to overwrite)
+     + python-dotenv==1.0.1
+    error: Entry point for tool already exists: dotenv (use `--force` to overwrite)
     "###);
 
     // We should not create a virtual environment
-    assert!(!tool_dir.child("black").exists());
+    assert!(!tool_dir.child("python-dotenv").exists());
 
     // We should not write a tools entry
     assert!(!tool_dir.join("tools.toml").exists());
@@ -580,40 +547,14 @@ fn tool_install_entry_point_exists() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Nor should we change the `black` entry point that exists
+        // Nor should we change the `python_dotenv` entry point that exists
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @"");
 
     });
 
-    // Test error message when multiple entry points exist
-    bin_dir
-        .child(format!("blackd{}", std::env::consts::EXE_SUFFIX))
-        .touch()
-        .unwrap();
+    // Install `python_dotenv` with `--force`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv tool install` is experimental and may change without warning.
-    Resolved [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    error: Entry points for tool already exist: black, blackd (use `--force` to overwrite)
-    "###);
-
-    // Install `black` with `--force`
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--force")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -625,20 +566,18 @@ fn tool_install_entry_point_exists() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
 
-    // Re-install `black` with `--force`
+    // Re-install `python_dotenv` with `--force`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--force")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -648,14 +587,16 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Installed: black, blackd
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
 
-    // Re-install `black` without `--force`
+    // Re-install `python_dotenv` without `--force`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
@@ -664,14 +605,16 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Tool `black` is already installed
+    Tool `python-dotenv[cli]` is already installed
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
 
-    // Re-install `black` with `--reinstall`
+    // Re-install `python_dotenv` with `--reinstall`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -684,33 +627,26 @@ fn tool_install_entry_point_exists() {
     Resolved [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==24.3.0
-     + black==24.3.0
      - click==8.1.7
      + click==8.1.7
-     - mypy-extensions==1.0.0
-     + mypy-extensions==1.0.0
-     - packaging==24.0
-     + packaging==24.0
-     - pathspec==0.12.1
-     + pathspec==0.12.1
-     - platformdirs==4.2.0
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     - python-dotenv==1.0.1
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We write a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = ["python-dotenv[cli]"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
@@ -720,16 +656,16 @@ fn tool_install_entry_point_exists() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Should run black in the virtual environment
+        // Should run python_dotenv in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/black/bin/python3
+        #![TEMP_DIR]/tools/python-dotenv/bin/python3
         # -*- coding: utf-8 -*-
         import re
         import sys
-        from black import patched_main
+        from dotenv.__main__ import cli
         if __name__ == "__main__":
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-            sys.exit(patched_main())
+            sys.exit(cli())
         "###);
 
     });
@@ -738,22 +674,20 @@ fn tool_install_entry_point_exists() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = ["python-dotenv[cli]"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
 
-    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), Command::new("dotenv").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    black, 24.3.0 (compiled: yes)
-    Python (CPython) 3.12.[X]
+    dotenv, version 1.0.1
 
     ----- stderr -----
     "###);
@@ -768,29 +702,25 @@ fn tool_install_home() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
 
-    // Install `black`
-    uv_snapshot!(context.filters(), context.tool_install().arg("black").env("UV_TOOL_DIR", tool_dir.as_os_str()), @r###"
+    // Install `python_dotenv`
+    uv_snapshot!(context.filters(), context.tool_install().arg("python-dotenv[cli]").env("UV_TOOL_DIR", tool_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.3.0
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
     context
         .home_dir
-        .child(format!(".local/bin/black{}", std::env::consts::EXE_SUFFIX))
+        .child(format!(".local/bin/dotenv{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
 }
 
@@ -801,9 +731,9 @@ fn tool_install_xdg_data_home() {
     let tool_dir = context.temp_dir.child("tools");
     let data_home = context.temp_dir.child("data/home");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_DATA_HOME", data_home.as_os_str()), @r###"
     success: true
@@ -812,21 +742,17 @@ fn tool_install_xdg_data_home() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.3.0
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
     context
         .temp_dir
-        .child(format!("data/bin/black{}", std::env::consts::EXE_SUFFIX))
+        .child(format!("data/bin/dotenv{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
 }
 
@@ -837,9 +763,9 @@ fn tool_install_xdg_bin_home() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -848,20 +774,16 @@ fn tool_install_xdg_bin_home() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.3.0
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
     bin_dir
-        .child(format!("black{}", std::env::consts::EXE_SUFFIX))
+        .child(format!("dotenv{}", std::env::consts::EXE_SUFFIX))
         .assert(predicate::path::exists());
 }
 
@@ -897,9 +819,9 @@ fn tool_install_unnamed_package() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")
+        .arg("https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -908,25 +830,22 @@ fn tool_install_unnamed_package() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.4.2 (from https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + python-dotenv==1.0.1 (from https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl)
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("dotenv{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
     // On Windows, we can't snapshot an executable file.
@@ -934,16 +853,16 @@ fn tool_install_unnamed_package() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Should run black in the virtual environment
+        // Should run python_dotenv in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/black/bin/python
+        #![TEMP_DIR]/tools/python-dotenv/bin/python
         # -*- coding: utf-8 -*-
         import re
         import sys
-        from black import patched_main
+        from dotenv.__main__ import cli
         if __name__ == "__main__":
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-            sys.exit(patched_main())
+            sys.exit(cli())
         "###);
 
     });
@@ -952,25 +871,14 @@ fn tool_install_unnamed_package() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl"]
+        requirements = ["python-dotenv @ https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
-
-    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    black, 24.4.2 (compiled: no)
-    Python (CPython) 3.12.[X]
-
-    ----- stderr -----
-    "###);
 }
 
 /// Test installing a tool with a bare URL requirement using `--from`, where the URL and the package
@@ -981,9 +889,9 @@ fn tool_install_unnamed_conflict() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--from")
         .arg("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -994,7 +902,7 @@ fn tool_install_unnamed_conflict() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    error: Package name `iniconfig` provided with `--from` does not match install request `black`
+    error: Package requirement `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl` provided with `--from` conflicts with install request `python-dotenv[cli]`
     "###);
 }
 
@@ -1005,11 +913,11 @@ fn tool_install_unnamed_from() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv")
         .arg("--from")
-        .arg("https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")
+        .arg("https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -1018,25 +926,22 @@ fn tool_install_unnamed_from() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.4.2 (from https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl)
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + python-dotenv==1.0.1 (from https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl)
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("dotenv{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
     // On Windows, we can't snapshot an executable file.
@@ -1044,16 +949,16 @@ fn tool_install_unnamed_from() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Should run black in the virtual environment
+        // Should run python_dotenv in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/black/bin/python
+        #![TEMP_DIR]/tools/python-dotenv/bin/python
         # -*- coding: utf-8 -*-
         import re
         import sys
-        from black import patched_main
+        from dotenv.__main__ import cli
         if __name__ == "__main__":
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-            sys.exit(patched_main())
+            sys.exit(cli())
         "###);
 
     });
@@ -1062,25 +967,14 @@ fn tool_install_unnamed_from() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl"]
+        requirements = ["python-dotenv @ https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
-
-    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    black, 24.4.2 (compiled: no)
-    Python (CPython) 3.12.[X]
-
-    ----- stderr -----
-    "###);
 }
 
 /// Test installing a tool with a bare URL requirement using `--with`.
@@ -1090,9 +984,9 @@ fn tool_install_unnamed_with() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `python_dotenv`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--with")
         .arg("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -1103,26 +997,24 @@ fn tool_install_unnamed_with() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Resolved 7 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
-     + black==24.3.0
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + click==8.1.7
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
-    tool_dir.child("black").assert(predicate::path::is_dir());
     tool_dir
-        .child("black")
+        .child("python-dotenv")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("python-dotenv")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("dotenv{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
     // On Windows, we can't snapshot an executable file.
@@ -1130,16 +1022,16 @@ fn tool_install_unnamed_with() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // Should run black in the virtual environment
+        // Should run python_dotenv in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/black/bin/python
+        #![TEMP_DIR]/tools/python-dotenv/bin/python
         # -*- coding: utf-8 -*-
         import re
         import sys
-        from black import patched_main
+        from dotenv.__main__ import cli
         if __name__ == "__main__":
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-            sys.exit(patched_main())
+            sys.exit(cli())
         "###);
 
     });
@@ -1148,28 +1040,17 @@ fn tool_install_unnamed_with() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = [
-            "black",
+            "python-dotenv[cli]",
             "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
-
-    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    black, 24.3.0 (compiled: yes)
-    Python (CPython) 3.12.[X]
-
-    ----- stderr -----
-    "###);
 }
 
 /// Test upgrading an already installed tool.
@@ -1181,9 +1062,9 @@ fn tool_install_upgrade() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`.
+    // Install `python_dotenv`.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black==24.1.1")
+        .arg("python_dotenv[cli]==1.0.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -1195,25 +1076,20 @@ fn tool_install_upgrade() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.1.1
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.0
+    Installed: dotenv
     "###);
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black==24.1.1"]
+        requirements = ["python-dotenv[cli]==1.0.0"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
@@ -1221,7 +1097,7 @@ fn tool_install_upgrade() {
     // Install without the constraint. It should be replaced, but the package shouldn't be installed
     // since it's already satisfied in the environment.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -1230,26 +1106,25 @@ fn tool_install_upgrade() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Installed: black, blackd
+    Installed: dotenv
     "###);
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = ["python-dotenv[cli]"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
 
     // Install with a `with`. It should be added to the environment.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--with")
         .arg("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -1264,30 +1139,29 @@ fn tool_install_upgrade() {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-    Installed: black, blackd
+    Installed: dotenv
     "###);
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = [
-            "black",
+            "python-dotenv[cli]",
             "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
 
-    // Install with `--upgrade`. `black` should be reinstalled with a more recent version, and
+    // Install with `--upgrade`. `python_dotenv` should be reinstalled with a more recent version, and
     // `iniconfig` should be removed.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .arg("--upgrade")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
@@ -1301,22 +1175,21 @@ fn tool_install_upgrade() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==24.1.1
-     + black==24.3.0
      - iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-    Installed: black, blackd
+     - python-dotenv==1.0.0
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("python-dotenv").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = ["python-dotenv[cli]"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "dotenv", install-path = "[TEMP_DIR]/bin/dotenv" },
         ]
         "###);
     });
@@ -1331,11 +1204,11 @@ fn tool_install_python_request() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`.
+    // Install `python_dotenv`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-p")
         .arg("3.12")
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -1347,20 +1220,16 @@ fn tool_install_python_request() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 
     // Install with Python 3.12 (compatible).
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-p")
         .arg("3.12")
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
@@ -1369,14 +1238,14 @@ fn tool_install_python_request() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Tool `black` is already installed
+    Tool `python-dotenv[cli]` is already installed
     "###);
 
     // Install with Python 3.11 (incompatible).
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-p")
         .arg("3.11")
-        .arg("black")
+        .arg("python-dotenv[cli]")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: true
@@ -1385,16 +1254,11 @@ fn tool_install_python_request() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Existing environment for `black` does not satisfy the requested Python interpreter: `Python 3.11`
+    Existing environment for `python-dotenv` does not satisfy the requested Python interpreter: `Python 3.11`
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
      + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed: black, blackd
+     + python-dotenv==1.0.1
+    Installed: dotenv
     "###);
 }
