@@ -951,12 +951,19 @@ fn main() -> ExitCode {
         // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
         let stack_size = stack_size.parse().expect("Invalid stack size");
         let tokio_main = move || {
-            tokio::runtime::Builder::new_multi_thread()
+            let runtime = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .thread_stack_size(stack_size)
                 .build()
-                .expect("Failed building the Runtime")
-                .block_on(run())
+                .expect("Failed building the Runtime");
+            let result = runtime.block_on(run());
+            // Avoid waiting for pending tasks to complete.
+            //
+            // The resolver may have kicked off HTTP requests during resolution that
+            // turned out to be unnecessary. Waiting for those to complete can cause
+            // the CLI to hang before exiting.
+            runtime.shutdown_background();
+            result
         };
         std::thread::Builder::new()
             .stack_size(stack_size)
@@ -965,11 +972,13 @@ fn main() -> ExitCode {
             .join()
             .expect("Tokio executor failed, was there a panic?")
     } else {
-        tokio::runtime::Builder::new_multi_thread()
+        let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("Failed building the Runtime")
-            .block_on(run())
+            .expect("Failed building the Runtime");
+        let result = runtime.block_on(run());
+        runtime.shutdown_background();
+        result
     };
 
     match result {
