@@ -148,7 +148,7 @@ async fn run() -> Result<ExitStatus> {
     let globals = GlobalSettings::resolve(&cli.command, &cli.global_args, filesystem.as_ref());
 
     // Resolve the cache settings.
-    let cache_settings = CacheSettings::resolve(cli.cache_args, filesystem.as_ref());
+    let cache_settings = CacheSettings::resolve(*cli.cache_args, filesystem.as_ref());
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
@@ -215,7 +215,7 @@ async fn run() -> Result<ExitStatus> {
     // Configure the cache.
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
-    match cli.command {
+    match *cli.command {
         Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
         }) => {
@@ -945,8 +945,9 @@ async fn run() -> Result<ExitStatus> {
 
 fn main() -> ExitCode {
     let result = if let Ok(stack_size) = env::var("UV_STACK_SIZE") {
-        // Artificially limit the stack size to test for stack overflows. Windows has a default stack size of 1MB,
-        // which is lower than the linux and mac default.
+        // Artificially limit or increase the stack size to test without stack overflows in debug
+        // mode. Windows has a default stack size of 1MB, which is lower than the linux and mac
+        // default.
         // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
         let stack_size = stack_size.parse().expect("Invalid stack size");
         let tokio_main = move || {
