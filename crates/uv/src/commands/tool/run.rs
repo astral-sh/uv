@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -21,13 +20,10 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
     PythonRequest,
 };
-use uv_requirements::RequirementsSpecification;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::update_environment;
-use crate::commands::tool::common::resolve_requirements;
+use crate::commands::tool::common::{resolve_requirements, EphemeralEnvironment};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -134,23 +130,6 @@ pub(crate) async fn run(
     }
 }
 
-#[derive(Debug)]
-enum ToolEnvironment {
-    Existing(PythonEnvironment),
-    Ephemeral(PythonEnvironment, #[allow(dead_code)] tempfile::TempDir),
-}
-
-impl Deref for ToolEnvironment {
-    type Target = PythonEnvironment;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            ToolEnvironment::Existing(environment) => environment,
-            ToolEnvironment::Ephemeral(environment, _) => environment,
-        }
-    }
-}
-
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
@@ -169,7 +148,7 @@ async fn get_or_create_environment(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<ToolEnvironment> {
+) -> Result<PythonEnvironment> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -232,10 +211,10 @@ async fn get_or_create_environment(
         requirements
     };
 
+    // Check if the tool is already installed in a compatible environment.
     if !isolated {
         let installed_tools = InstalledTools::from_settings()?;
 
-        // Check if the tool is already installed in a compatible environment.
         let existing_environment =
             installed_tools
                 .get_environment(&from.name, cache)?
@@ -260,7 +239,7 @@ async fn get_or_create_environment(
                 Ok(SatisfiesResult::Fresh { .. })
             ) {
                 debug!("Using existing tool `{}`", from.name);
-                return Ok(ToolEnvironment::Existing(environment));
+                return Ok(environment);
             }
         }
     }
@@ -270,23 +249,9 @@ async fn get_or_create_environment(
 
     // If necessary, create an environment for the ephemeral requirements.
     debug!("Syncing ephemeral environment.");
-
-    // Create a virtual environment.
-    let temp_dir = cache.environment()?;
-    let venv = uv_virtualenv::create_venv(
-        temp_dir.path(),
+    let environment = EphemeralEnvironment::get_or_create(
+        requirements,
         interpreter,
-        uv_virtualenv::Prompt::None,
-        false,
-        false,
-    )?;
-
-    // Install the ephemeral requirements.
-    let spec = RequirementsSpecification::from_requirements(requirements.clone());
-    let ephemeral_env = update_environment(
-        venv,
-        spec,
-        Modifications::Exact,
         settings,
         &state,
         preview,
@@ -298,7 +263,7 @@ async fn get_or_create_environment(
     )
     .await?;
 
-    Ok(ToolEnvironment::Ephemeral(ephemeral_env, temp_dir))
+    Ok(environment.into())
 }
 
 /// Parse a target into a command name and a requirement.
