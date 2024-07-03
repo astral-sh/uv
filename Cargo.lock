@@ -5094,6 +5094,7 @@ dependencies = [
  "tracing",
  "uv-cache",
  "uv-fs",
+ "uv-installer",
  "uv-python",
  "uv-state",
  "uv-virtualenv",

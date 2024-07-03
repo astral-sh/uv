@@ -23,6 +23,7 @@ uv-state = { workspace = true }
 uv-python = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
+uv-installer = { workspace = true }
 
 dirs-sys = { workspace = true }
 fs-err = { workspace = true }
