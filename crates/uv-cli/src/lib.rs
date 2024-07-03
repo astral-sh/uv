@@ -50,6 +50,7 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
 
 #[derive(Parser)]
 #[command(name = "uv", author, version = uv_version::version(), long_version = crate::version::version())]
+#[command(about = "An extremely fast Python package manager.")]
 #[command(propagate_version = true)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
