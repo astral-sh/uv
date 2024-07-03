@@ -785,7 +785,7 @@ async fn run() -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::Run(args),
+            command: ToolCommand::Run(args) | ToolCommand::Uvx(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::ToolRunSettings::resolve(args, filesystem);

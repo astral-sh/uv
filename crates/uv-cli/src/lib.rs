@@ -1901,9 +1901,16 @@ pub struct ToolNamespace {
 
 #[derive(Subcommand)]
 pub enum ToolCommand {
-    /// Run a tool
+    /// Run a tool.
     Run(ToolRunArgs),
-    /// Install a tool
+    /// Hidden alias for `uv tool run` for invocation from the `uvx` command
+    #[command(
+        hide = true,
+        override_usage = "uvx [OPTIONS] <COMMAND>",
+        about = "Run a tool."
+    )]
+    Uvx(ToolRunArgs),
+    /// Install a tool.
     Install(ToolInstallArgs),
     /// List installed tools.
     List(ToolListArgs),
