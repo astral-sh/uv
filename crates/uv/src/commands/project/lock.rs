@@ -10,7 +10,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
@@ -161,9 +161,6 @@ pub(super) async fn do_lock(
         .build();
     let hasher = HashStrategy::Generate;
 
-    // Initialize any shared state.
-    let in_flight = InFlight::default();
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
@@ -194,7 +191,7 @@ pub(super) async fn do_lock(
         &flat_index,
         &state.index,
         &state.git,
-        &in_flight,
+        &state.in_flight,
         index_strategy,
         setup_py,
         config_setting,

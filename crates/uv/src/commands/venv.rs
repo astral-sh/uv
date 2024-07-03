@@ -21,24 +21,19 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_git::GitResolver;
 use uv_python::{
     request_from_version_file, EnvironmentPreference, PythonFetch, PythonInstallation,
     PythonPreference, PythonRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex};
-use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
+use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 
-use crate::commands::{pip, ExitStatus};
+use crate::commands::{pip, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::shell::Shell;
 
 /// Create a virtual environment.
-#[allow(
-    clippy::unnecessary_wraps,
-    clippy::too_many_arguments,
-    clippy::fn_params_excessive_bools
-)]
+#[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
@@ -215,12 +210,8 @@ async fn venv_impl(
             )
         };
 
-        // Create a shared in-memory index.
-        let index = InMemoryIndex::default();
-        let git = GitResolver::default();
-
-        // Track in-flight downloads, builds, etc., across resolutions.
-        let in_flight = InFlight::default();
+        // Initialize any shared state.
+        let state = SharedState::default();
 
         // For seed packages, assume the default settings and concurrency is sufficient.
         let config_settings = ConfigSettings::default();
@@ -236,9 +227,9 @@ async fn venv_impl(
             interpreter,
             index_locations,
             &flat_index,
-            &index,
-            &git,
-            &in_flight,
+            &state.index,
+            &state.git,
+            &state.in_flight,
             index_strategy,
             SetupPyStrategy::default(),
             &config_settings,

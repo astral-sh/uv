@@ -18,21 +18,20 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
-    PythonRequirement, ResolutionMode,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PreReleaseMode, PythonRequirement,
+    ResolutionMode,
 };
-use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{elapsed, ExitStatus, SharedState};
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
@@ -243,7 +242,6 @@ pub(crate) async fn pip_install(
 
     // When resolving, don't take any external preferences into account.
     let preferences = Vec::default();
-    let git = GitResolver::default();
 
     // Ignore development dependencies.
     let dev = Vec::default();
@@ -285,11 +283,8 @@ pub(crate) async fn pip_install(
         BuildIsolation::Isolated
     };
 
-    // Create a shared in-memory index.
-    let index = InMemoryIndex::default();
-
-    // Track in-flight downloads, builds, etc., across resolutions.
-    let in_flight = InFlight::default();
+    // Initialize any shared state.
+    let state = SharedState::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -298,9 +293,9 @@ pub(crate) async fn pip_install(
         interpreter,
         &index_locations,
         &flat_index,
-        &index,
-        &git,
-        &in_flight,
+        &state.index,
+        &state.git,
+        &state.in_flight,
         index_strategy,
         setup_py,
         config_settings,
@@ -339,7 +334,7 @@ pub(crate) async fn pip_install(
         python_requirement,
         &client,
         &flat_index,
-        &index,
+        &state.index,
         &build_dispatch,
         concurrency,
         options,
@@ -371,7 +366,7 @@ pub(crate) async fn pip_install(
         &hasher,
         &tags,
         &client,
-        &in_flight,
+        &state.in_flight,
         concurrency,
         &build_dispatch,
         &cache,

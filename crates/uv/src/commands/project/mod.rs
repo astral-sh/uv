@@ -13,19 +13,18 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStr
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, Workspace};
 use uv_fs::Simplified;
-use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
     PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, RequiresPython};
-use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_resolver::{FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython};
+use uv_types::{BuildIsolation, HashStrategy};
 
-use crate::commands::pip;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::ResolverReporter;
+use crate::commands::{pip, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -278,15 +277,6 @@ pub(crate) async fn get_or_init_environment(
     }
 }
 
-/// Shared state used during resolution and installation.
-#[derive(Default)]
-pub(crate) struct SharedState {
-    /// The resolved Git references.
-    git: GitResolver,
-    /// The fetched package versions and metadata.
-    index: InMemoryIndex,
-}
-
 /// Resolve any [`UnresolvedRequirementSpecification`] into a fully-qualified [`Requirement`].
 pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
@@ -327,9 +317,6 @@ pub(crate) async fn resolve_names(
         .platform(interpreter.platform())
         .build();
 
-    // Initialize any shared state.
-    let in_flight = InFlight::default();
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
@@ -346,7 +333,7 @@ pub(crate) async fn resolve_names(
         &flat_index,
         &state.index,
         &state.git,
-        &in_flight,
+        &state.in_flight,
         *index_strategy,
         setup_py,
         config_setting,
@@ -448,9 +435,6 @@ pub(crate) async fn update_environment(
         .index_strategy(*index_strategy)
         .build();
 
-    // Initialize any shared state.
-    let in_flight = InFlight::default();
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
@@ -477,7 +461,7 @@ pub(crate) async fn update_environment(
         &flat_index,
         &state.index,
         &state.git,
-        &in_flight,
+        &state.in_flight,
         *index_strategy,
         setup_py,
         config_setting,
@@ -534,7 +518,7 @@ pub(crate) async fn update_environment(
         &hasher,
         tags,
         &client,
-        &in_flight,
+        &state.in_flight,
         concurrency,
         &build_dispatch,
         cache,

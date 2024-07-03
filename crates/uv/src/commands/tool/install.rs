@@ -26,8 +26,8 @@ use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool,
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::{update_environment, SharedState};
-use crate::commands::{project, ExitStatus};
+use crate::commands::project::update_environment;
+use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
