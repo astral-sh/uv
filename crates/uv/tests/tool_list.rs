@@ -90,7 +90,9 @@ fn tool_list_missing_receipt() {
 
 #[test]
 fn tool_list_bad_environment() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = TestContext::new("3.12")
+        .with_filtered_exe_suffix()
+        .with_filtered_virtualenv_bin();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -116,11 +118,8 @@ fn tool_list_bad_environment() -> Result<()> {
     // Remove the python interpreter for black
     fs::remove_dir_all(venv_path.clone())?;
 
-    let mut filters = context.filters().clone();
-    filters.push((r"/black/.*", "/black/[VENV_PATH]`"));
-
     uv_snapshot!(
-        filters,
+        context.filters(),
         context
             .tool_list()
             .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -134,7 +133,7 @@ fn tool_list_bad_environment() -> Result<()> {
 
     ----- stderr -----
     warning: `uv tool list` is experimental and may change without warning.
-    Python interpreter not found at `[TEMP_DIR]/tools/black/[VENV_PATH]`
+    Python interpreter not found at `[TEMP_DIR]/tools/black/[BIN]/python3`
     "###
     );
 
