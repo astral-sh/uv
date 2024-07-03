@@ -46,8 +46,6 @@ pub enum Error {
     #[error(transparent)]
     ToolName(#[from] InvalidNameError),
     #[error(transparent)]
-    EnvironmentError(#[from] uv_toolchain::Error),
-    #[error(transparent)]
     EnvironmentError(#[from] uv_python::Error),
     #[error("Failed to find a receipt for tool `{0}` at {1}")]
     MissingToolReceipt(String, PathBuf),

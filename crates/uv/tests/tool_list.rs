@@ -123,6 +123,7 @@ fn tool_list_bad_environment() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     ruff v0.3.4
+        ruff
     
     ----- stderr -----
     warning: `uv tool list` is experimental and may change without warning.
