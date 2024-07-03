@@ -635,6 +635,8 @@ pub enum CacheBucket {
     Archive,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Environments,
+    /// Reusable environments used to invoke Python tools.
+    Tools,
 }
 
 impl CacheBucket {
@@ -648,6 +650,7 @@ impl CacheBucket {
             Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
             Self::Environments => "environments-v0",
+            Self::Tools => "tools-v0",
         }
     }
 
@@ -761,6 +764,9 @@ impl CacheBucket {
             Self::Environments => {
                 // Nothing to do.
             }
+            Self::Tools => {
+                // Nothing to do.
+            }
         }
         Ok(summary)
     }
@@ -776,6 +782,7 @@ impl CacheBucket {
             Self::Simple,
             Self::Archive,
             Self::Environments,
+            Self::Tools,
         ]
         .iter()
         .copied()

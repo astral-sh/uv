@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -9,9 +8,10 @@ use itertools::Itertools;
 use tokio::process::Command;
 use tracing::debug;
 
+use cache_key::digest;
 use distribution_types::UnresolvedRequirementSpecification;
 use pep440_rs::Version;
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
@@ -22,11 +22,12 @@ use uv_python::{
     PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
+use uv_resolver::Lock;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::update_environment;
+use crate::commands::project::{resolve_environment, sync_environment};
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -134,23 +135,6 @@ pub(crate) async fn run(
     }
 }
 
-#[derive(Debug)]
-enum ToolEnvironment {
-    Existing(PythonEnvironment),
-    Ephemeral(PythonEnvironment, #[allow(dead_code)] tempfile::TempDir),
-}
-
-impl Deref for ToolEnvironment {
-    type Target = PythonEnvironment;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            ToolEnvironment::Existing(environment) => environment,
-            ToolEnvironment::Ephemeral(environment, _) => environment,
-        }
-    }
-}
-
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
@@ -169,7 +153,7 @@ async fn get_or_create_environment(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<ToolEnvironment> {
+) -> Result<PythonEnvironment> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -232,10 +216,10 @@ async fn get_or_create_environment(
         requirements
     };
 
+    // Check if the tool is already installed in a compatible environment.
     if !isolated {
         let installed_tools = InstalledTools::from_settings()?;
 
-        // Check if the tool is already installed in a compatible environment.
         let existing_environment =
             installed_tools
                 .get_environment(&from.name, cache)?
@@ -260,7 +244,7 @@ async fn get_or_create_environment(
                 Ok(SatisfiesResult::Fresh { .. })
             ) {
                 debug!("Using existing tool `{}`", from.name);
-                return Ok(ToolEnvironment::Existing(environment));
+                return Ok(environment);
             }
         }
     }
@@ -271,22 +255,12 @@ async fn get_or_create_environment(
     // If necessary, create an environment for the ephemeral requirements.
     debug!("Syncing ephemeral environment.");
 
-    // Create a virtual environment.
-    let temp_dir = cache.environment()?;
-    let venv = uv_virtualenv::create_venv(
-        temp_dir.path(),
-        interpreter,
-        uv_virtualenv::Prompt::None,
-        false,
-        false,
-    )?;
-
-    // Install the ephemeral requirements.
     let spec = RequirementsSpecification::from_requirements(requirements.clone());
-    let ephemeral_env = update_environment(
-        venv,
+
+    // Resolve the requirements with the interpreter.
+    let resolution = resolve_environment(
+        &interpreter,
         spec,
-        Modifications::Exact,
         settings,
         &state,
         preview,
@@ -298,7 +272,72 @@ async fn get_or_create_environment(
     )
     .await?;
 
-    Ok(ToolEnvironment::Ephemeral(ephemeral_env, temp_dir))
+    // Hash the resolution by hashing the generated lockfile.
+    // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
+    // dependency), skip this step.
+    let lock = Lock::from_resolution_graph(&resolution)?;
+    let toml = lock.to_toml()?;
+    let resolution_hash = digest(&toml);
+
+    // Hash the interpreter by hashing the sysconfig data.
+    // TODO(charlie): Come up with a robust hash for the interpreter.
+    let interpreter_hash = digest(&interpreter.sys_executable());
+
+    // Search in the content-addressed cache. It's first addressed by interpreter metadata, and then
+    // by the requirements. Alternatively, we could just address by the requirements... and then
+    // check if the interpreter is compatible with the request.
+    let cache_entry = cache.entry(CacheBucket::Tools, interpreter_hash, resolution_hash);
+
+    match PythonEnvironment::from_root(cache_entry.path(), cache) {
+        Ok(environment) => {
+            // TODO(charlie): Validate that the environment is complete (with something like a tool
+            // receipt).
+            debug!(
+                "Using ephemeral environment at: `{}`",
+                cache_entry.path().display()
+            );
+            Ok(environment)
+        }
+        Err(uv_python::Error::MissingEnvironment(_)) => {
+            // TODO(charlie): Lock the cache entry. (We have to build tool environments in-place, as
+            // tools contain absolute paths to the interpreter. Otherwise, we'd build in a separate
+            // directory and then move the environment into the cache.)
+            debug!(
+                "Creating ephemeral environment at: `{}`",
+                cache_entry.path().display()
+            );
+
+            // Create a virtual environment in the cache.
+            fs_err::create_dir_all(cache_entry.path())?;
+
+            let venv = uv_virtualenv::create_venv(
+                cache_entry.path(),
+                interpreter,
+                uv_virtualenv::Prompt::None,
+                false,
+                false,
+            )?;
+
+            // Install the ephemeral requirements.
+            let venv = sync_environment(
+                venv,
+                &resolution.into(),
+                Modifications::Exact,
+                settings,
+                &state,
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            Ok(venv)
+        }
+        Err(err) => Err(err.into()),
+    }
 }
 
 /// Parse a target into a command name and a requirement.
