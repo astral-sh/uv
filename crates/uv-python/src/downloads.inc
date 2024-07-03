@@ -27,8 +27,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("24daaf20123ac4b2b8657c1ac8227d391d2e5769d81237b68ee674569d307ad0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("a4f17d1e3b4ea0e4c2a3664f232c0857979522936af582f7de92b57050220f74")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -79,8 +79,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("983f056cb8336a54364c2eec3d33808dd74f953f82b720c6a73ad943643b4920")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("0a55708cdd94f415726bb8ea9a6c70453b9b5ea9f4864534bf14604831e95c71")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -92,8 +92,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a009c51b178519e60b6b7848b0ea91f3a92007ca1bdf0a2e8b26b8b7a138cdc0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("98d6373e6394c1f25c5fb6f8a7dc7a5c6cad3e827bcdb6aca9a48435c043f1ed")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -118,8 +118,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("ded92cd034b33df953c490d3343ef187ac065d1fcd78e8cee894be197c5f977e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("e51f6676a24c3551657347ef97963164eac801df0a62afcba8e0e28ebb62acee")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -170,8 +170,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("469a7fd0d0a09936c5db41b5ac83bb29d5bfeb721aa483ac92f3f7ac4d311097")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("2e87c0215aea1614e52ff8588b0ba41eb5ecf555e500094a179c0bbf1b25cbc7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -196,8 +196,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("1d70476fb9013cc93e787417680b34629b510e6e2145cf48bb2f0fe887f7a4d8")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("add34876a96cea321077e6f5826d99d4c7f1f4e1fdd27d709e4e385031af7b29")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -209,8 +209,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("f40b88607928b5ee34ff87c1d574c8493a1604d7a40474e1b03731184186f419")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("067d9b68a5ff3eafa27c25ca771e28bee66eb8f36bfe71e0330928b55c88cd91")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -235,8 +235,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("15b61ed9d33b35ad014a13a68a55d8ea5ba7fb70945644747f4e53c659f2fed6")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("67065f1215e4274edbc44fa368d7d64525a2601636842cff880c2ea538279e0c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -287,8 +287,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("9009da24f436611d0bf086b8ea62aaed1c27104af5b770ddcfc92b60db06da8c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("3621be2cd8b5686e10a022f04869911cad9197a3ef77b30879fe25e792d7c249")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -313,8 +313,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("b61686ce05c58c913e4fdb7e7c7105ed36d9bcdcd1a841e7f08b243f40d5cf77")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("a94a35ecf61e9e4e9b9b64dcf1540371f35dbb3ca004018119091ca460cfffba")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -326,8 +326,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("505a4fbace661a43b354a059022eb31efb406859a5f7227109ebf0f278f20503")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("48aee32710363fffcad3a6fbe6461692a8b9ea23472e18fe030cca92506fff21")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -352,8 +352,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("89ef67b617b8c9804965509b2d256f53439ceede83b5b64085315f038ad81e60")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("f267489a041daf4e523c03d32639de04ee59ca925dff49a8c3ce2f28a9f70a3b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -404,8 +404,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("eb05c976374a9a44596ce340ab35e5461014f30202c3cbe10edcbfbe5ac4a6a1")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("86e16b6defbbd7db0b7f98879b2b381e0e5b0ec07126cb9f5fc0cafe9869dc36")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -430,8 +430,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("800a89873e30e24bb1b6075f8cd718964537c5ba62bcdbefdcdae4de68ddccc4")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("3178a7dd91ade5db6aa9023b476235f6b8224520ce0bda322131f26fd3fdb858")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -443,8 +443,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("5b1a1effbb43df57ad014fcebf4b20089e504d89613e7b8db22d9ccb9fb00a6c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("aa02889eb40c9207cef648b41b6b80eb81a741a5a5f35dfa9fc2be0132b68e67")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -469,8 +469,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a8c38cd2e53136c579632e2938d1b857f22e496c7dba99ad9a7ad6a67b43274a")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("5ce861907a2751a3a7395b1aaada830c2b072acc03f3dd0bcbaaa2b7a9166fc0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -521,8 +521,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9%2B20240415-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("66cb00fa3a0a9bfeff092b8e972d35390c4bc5478a0671e5157ea76a70555d6f")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9%2B20240415-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("c9f5e493c686ed8a5c38d1748c45fed18dc9b6faa70794d9cc9bb32489cc0b77")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -573,8 +573,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9%2B20240415-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("256b70d6f6abb9c861006f7b9dd1d60ed98e375f729ba00e6cc294c509801a4e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9%2B20240415-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("404002f47aa92ae43100ffe4cb98d65f6daaa6d30d1fe7474b6f700df997bed9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -586,8 +586,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9%2B20240415-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a1dc330f45d1c3dc0eb71d9c8d7db163769806bef81f975ff88e5c936cd8c8bd")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9%2B20240415-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("b7e098dc0352220aea8ed640cafb9d8be6eeb3e46c708c66974a4ab53e404331")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -612,8 +612,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9%2B20240415-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("fe24023c24cfd0105b038c271578637654a0e4f4f19c6a8aa3a47afc958cea9d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9%2B20240415-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("1c5038da28a4379c065db85116594524010f30e653307c53bb9694e4e710d2c7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -664,8 +664,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("45bf082aca6b7d5e7261852720a72b92f5305e9fdb07b10f6588cb51d8f83ff2")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("1d84ed69e5acce555513e9261ce4b78bed19969b06a51a26b2781a375d70083d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -690,8 +690,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a9716f2eebebe03de47d6d5d603d6ff78abf5eb38f88bf7607b17fd85e74ff16")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("db0ab185489fa204d67d0ade3c2293edca3ceaa71867186218abd1ffcfb6db34")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -703,8 +703,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("d495830b5980ed689bd7588aa556bac9c43ff766d8a8b32e7791b8ed664b04f3")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("131407f74fb956bfdcbe5a88da3e569f32bb0533b0b2529bf63dd5983a17a47a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -729,8 +729,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("d959c43184878d564b5368ce4d753cf059600aafdf3e50280e850f94b5a4ba61")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("ae1bf11b438304622d9334092491266f908f26d76da03f1125514a192cf093f8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -781,8 +781,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("e3a375f8f16198ccf8dbede231536544265e5b4b6b0f0df97c5b29503c5864e2")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("e066d3fb69162e401d2bb1f3c20798fde7c2fffcba0912d792e46d569b591ab3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -807,8 +807,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("016ed6470c599ea5cc4dbb9c3f3fe86be059ad4e1b6cd2df10e40b7ec6970f16")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("fc2e32d265a11da50d6154a65ece5161055cfd0450cdc94d69e21f021ecff38c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -820,8 +820,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("91b33369025b7e0079f603cd2a99f9a5932daa8ded113d5090f29c075c993df7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("5fee1c4d7bf370f9b74896e7575b5a94b36aba3d2d9d6746db72c8d3a6e2a4c1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -846,8 +846,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("01bca7a2f457d4bd2b367640d9337d12b31db73d670a16500b7a751194942103")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("b7e19b262c19dfb82107e092ba3959b2da9b8bc53aafeb86727996afdb577221")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -898,8 +898,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("d63d6eb065e60899b25853fe6bbd9f60ea6c3b12f4854adc75cb818bad55f4e9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("7c621a748a4fd6ae99d8ba7ec2da59173d31475838382a13df6d2b1bf95a7059")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -924,8 +924,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("71c34db1165860a6bf458d817aef00dea96146130bf5f8bd7ee39b12892ef463")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("2b3fb2ea8ee2ca290c09dfbca43428b1e8f6853290a7bc99ec394091e2f4b228")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -937,8 +937,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("78252aa883fed18de7bb9b146450e42dd75d78c345f56c1301bb042317a1d4f7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("b7a95b4861caa2cd66c1e272796048711cf063fb84f1e5b4ba447dc7593718a8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -963,8 +963,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("6e7889a15d861f1860ed84f3f5ea4586d198aa003b22556d91e180a44184dcd7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("6da291720c9fe2f63c5c55f7acc8b6094a05488453a84cfcc012e92305099ee7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1015,8 +1015,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("ac4b1e91d1cb7027595bfa4667090406331b291b2e346fb74e42b7031b216787")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("cf131546383f0d9b81eca17c3fcb80508e01b11d9ca956d790c41baefb859d7d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1028,8 +1028,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("75d27b399b323c25d8250fda9857e388bf1b03ba1eb7925ec23cf12042a63a88")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("e156b972b72ae2703c13da3335b16ce5db9f1f33bac27cb0c444a59d04d918fc")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1054,8 +1054,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("1aee6a613385a6355bed61a9b12259a5ed16e871b5bdfe5c9fe98b46ee2bb05e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("0d46418101588602d7d817c24fbab7d6ce2675f0fb13d758b6a09b68c343b29d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1067,8 +1067,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("b0819032ec336d6e1d9e9bfdba546bf854a7b7248f8720a6d07da72c4ac927e5")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("a4453d38dc9293326741c8062f53527bd9781eace71c89e5453de308522aa23a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1093,8 +1093,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("93ee095b53de5a74af18e612f55095fcf3118c3c0a87eb6344d8eaca396bfb2d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("556d7d46c2af6f9744da03cac5304975f60de1cd5846a109814dd5c396fe9042")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1145,8 +1145,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("37cf00439b57adf7ffef4a349d62dcf09739ba67b670e903b00b25f81fbb8a68")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("46982228f02dc6d8a1227289de479f938567ec8acaa361909a998a0196823809")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1158,8 +1158,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a9051364b5c2e28205f8484cae03d16c86b45df5d117324e846d0f5e870fe9fb")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("1bf5ba6806abbe70770e8e00b2902cbbb75dd4ff0c6e992de85e6752a9998e1a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1184,8 +1184,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("b9f76fd226bfcbc6a8769934b17323ca3b563f1c24660582fcccfa6d0c7146af")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("17ad84cbfbfee0ebfe309ca389fe176e75fd864c82671186e1fd9926a0c5cae9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1197,8 +1197,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("8ef6b5fa86b4abf51865b346b7cf8df36e474ed308869fc0ac3fe82de39194a4")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("e7cdb6602dbb5d58d04fca13f55b70c86759bf86b606cc544974876a0fcf662b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1223,8 +1223,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("1b5fdeb2dc56c30843e7350f1684178755fae91666a0a987e5eb39074c42a052")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("b48061173c763971a28669585b47fa26cde98497eee6ebd8057849547b7282ee")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1275,8 +1275,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("991521082b0347878ba855c4986d77cc805c22ef75159bc95dd24bfd80275e27")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("8b8e4c58070f8ff372cf89080f24ecb9154ccfcc7674a8a46d67bdb766a1ee95")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1288,8 +1288,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("7bd694eb848328e96f524ded0f9b9eca6230d71fce3cd49b335a5c33450f3e04")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("58734b66ee8d2762911f32c6bf59f36928990dc637e494f9ac8ebdd589d64547")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1314,8 +1314,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("241d583be3ecc34d76fafa0d186cb504ce5625eb2c0e895dc4f4073a649e5c73")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("63a2f046e990bd2a790cc94a1cf04cb0dce9015a44bb633751bfb5b616fe01f2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1340,8 +1340,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("4f1192179e1f62e69b8b45f7f699e6f0100fb0b8a39aad7a48472794d0c24bd4")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("b9e2e889a5797b181f086c175a03a0e011277a708199b2b20270bacfca72fb91")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1392,8 +1392,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("8fe27d850c02aa7bb34088fad5b48df90b4b841f40e1472243b8ab9da8776e40")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("cd3b910dce032f0ec9b414156b391878010940368b5ea27c33b998016e9c1cb8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1405,8 +1405,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("7986ebe82c07ecd2eb94fd1b3c9ebbb2366db2360e38f29ae0543e857551d0bf")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("cce57c5fbd3ff10b91d86978b7ad15b9e02f57447d4f429c0bd4e00aa676d389")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1444,8 +1444,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("b5bf700afc77588d853832d10b74ba793811cbec41b02ebc2c39a8b9987aacdd")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("02332441cb610b1e1aa2d2972e261e2910cc6a950b7973cac22c0759a93c5fcd")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1496,8 +1496,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.10.14%2B20240415-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("de404d6693cd550626b07312fe9919e0bc702bfdd096c66bd43c607e6a4e6959")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.10.14%2B20240415-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("630bbbba148557bf670fbd65eb7fcd3c212cac45387d135c02799a13967d0f3d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1548,8 +1548,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.10.14%2B20240415-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("413da7a9417eb63db96c2625e50b484de0c5ea02210a2d85a9b2162c19d31111")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.10.14%2B20240415-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("8d39b9d99ae3c4672887796135f05336c2be83978b4d08b10ddb4d04ca25860c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1561,8 +1561,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.10.14%2B20240415-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a0d0c72e74176c1375d79a73f738c76c243392b45cf681109406cddaceb9e1b3")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.10.14%2B20240415-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("21708a30151b205d287ab6cbc1b665a91038efdc5bddbc2fc297f903aebf66ce")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1587,8 +1587,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.10.14%2B20240415-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("e327322f9cc4a793118f492012426f11a61459ce83a8ebde0ca7c4bf3d1710a6")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.10.14%2B20240415-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("add8cc6cbb4f2a3f8af2272e62b7604f7529a8c357c0af0f8a9f7d3dd444ef1e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1639,8 +1639,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("06a53040504e1e2fdcb32dc0d61b123bea76725b5c14031c8f64e28f52ae5a5f")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("7f23a4afa4032a7c5a4e0ec926da37eea242472142613c2baa029ef61c3c493c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1652,8 +1652,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.10.13%2B20230826-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("08a3a1ff61b7ed2c87db7a9f88630781d98fabc2efb499f38ae0ead05973eb56")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.10.13%2B20230826-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("cc5625a16fbec682d4ce40c0d185318164bd181efaa7eaf945ca63015db9fea3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1678,8 +1678,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("cab4c8756445d1d1987c7c94d3bcf323684e44fb9070329d8287d4c38e155711")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("26ac03f780005ad3d28e97ea72ed4deac2e570f4fc1b8b35cd1ec48b69191399")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1691,8 +1691,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("fe46914541126297c7a8636845c2e7188868eaa617bb6e293871fca4a5cb63f7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("8bf42de2245406e3a201fd32454665d26a78afe183c62f81735c46c174b5c2b3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1717,8 +1717,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("41b20e9d87f57d27f608685b714a57eea81c9e079aa647d59837ec6659536626")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("d42f0dfa0245eb5d7cf26e86ce21ce6a92efb85bb2fb26c79a4657f18bae5fa1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1769,8 +1769,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("e30f2b4fd9bd79b9122e2975f3c17c9ddd727f8326b2e246378e81f7ecc7d74f")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("bb5fa1d4ad202afc8ee4330f313c093760c9fb1af5be204dc0c6ba50c7610fea")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1782,8 +1782,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("89c83fcdfd41c67e2dd2a037982556c657dc55fc1938c6f6cdcd5ffa614c1fb3")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("159124ac71c86d8617eae17db6ed9b98f01078cc9bd76073261901826f2d940d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1808,8 +1808,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("c318050fa91d84d447f5c8a5887a44f1cc8dd34d4c1d357cd755407d46ed1b21")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("bc23f5953c329b0155309e1ac40621da53cb3d1829912ff0616250410d876785")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1821,8 +1821,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("756579b52acb9b13b162ac901e56ff311def443e69d7f7259a91198b76a30ecb")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("068a3621662e806f142945b622ff2f588f7da65db4cd6282640e6f891bfe9b9e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1847,8 +1847,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("fb7354fcee7b17dd0793ebd3f6f1fc8b7b205332afcf8d700cc1119f2dc33ff7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("79fe684338fa26e1af64de583cca77a3fd501d899420de398177952d5182d202")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1899,8 +1899,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a5271cc014f2ce2ab54a0789556c15b84668e2afcc530512818c4b87c6a94483")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("2e304c39d8af27f9abf1cf44653f5e34e7d05b665cb68e5a5474559c145e7b33")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1912,8 +1912,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("9304d6eeef48bd246a2959ebc76b20dbb2c6a81aa1d214f4471cb273c11717f2")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("f55942f89c54c90af53dba603a86f90956eec87c7fb91f5dc2ae543373224ccd")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1938,8 +1938,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("ac32e3788109ff0cc536a6108072d9203217df744cf56d3a4ab0b19857d8e244")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("d800e3152cd53ca6cfa376e22d66b784cd07ca6ec3fec053a15c6c2b011b9a17")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1964,8 +1964,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("544e5020f71ad1525dbc92b08e429cc1e1e11866c48c07d91e99f531b9ba68b0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("38931a156ed020f5c579af37b771871b99f31e74c34fa7e093e97eb1b2d4f978")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2016,8 +2016,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("2c0996dd1fe35314e06e042081b24fb53f3b7b361c3e1b94a6ed659c275ca069")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("3d20f40654e4356bd42c4e70ec28f4b8d8dd559884467a4e1745c08729fb740a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2029,8 +2029,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("f8c3a63620f412c4a9ccfb6e2435a96a55775550c81a452d164caa6d03a6a1da")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("ae0745620168e65df44ae60b21622d488c9dd6ca83566083c565765256315283")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2068,8 +2068,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a90a45ba7afcbd1df9aef96a614acbb210607299ac74dadbb6bd66af22be34db")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("c5f7ad956c8870573763ed58b59d7f145830a93378234b815c068c893c0d5c1e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2120,8 +2120,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("879e76260be226512693e37a28cc3a6670b5ee270a4440e4b04a7b415dba451c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("5710521ca6958dd2e50f30f2b1591eb7f6a4c55a64c9b66d3196f8257f40bc96")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2133,8 +2133,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("ab434eccffeec4f6f51af017e4eed69d4f1ea55f48c5b89b8a8779df3fa799df")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("0ab3156bbdc87db8a9b938662a76bb405522b408b1f94d8eb20759f277f96cd8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2172,8 +2172,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("c86182951a82e761588476a0155afe99ae4ae1030e4a8e1e8bcb8e1d42f6327c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("59630be21c77f87b4378f0cf887cbeb6bec64c988c93f3dc795afee782a3322e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2224,8 +2224,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("9f346729b523e860194635eb67c9f6bc8f12728ba7ddfe4fd80f2e6d685781e3")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("f92fb53661f2ceddeb7b15ae1f165671acf4e4d4f9519a87e033981b93ee33b8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2237,8 +2237,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a79816c50abeb2752530f68b4d7d95b6f48392f44a9a7f135b91807d76872972")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("c379f2ef58c8d83f1607357ad75e860770d748232a4eec4263564cbfa6a3efbb")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2276,8 +2276,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("ce3fe27e6ca3a0e75a7f4f3b6568cd1bf967230a67e73393e94a23380dddaf10")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("22e59fa43657dc3487392a44a33a815d507cdd244b6609b6ad08f2661c34169c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2328,8 +2328,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("edc1c9742b824caebbc5cb224c8990aa8658b81593fd9219accf3efa3e849501")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("6606be4283ebcfe2d83b49b05f6d06b958fe120a4d96c1eeeb072369db06b827")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2341,8 +2341,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("07fa4f5499b8885d1eea49caf5476d76305ab73494b7398dfd22c14093859e4f")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("213374fd9845df5c1d3f1d2f5ac2610fe70ddba094aee0cbc2e91fd2dc808de2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2380,8 +2380,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("407e5951e39f5652b32b72b715c4aa772dd8c2da1065161c58c30a1f976dd1b2")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("8072f01279e05bad7c8d1076715db243489d1c2598f7b7d0457d0cac44fcb8b2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2432,8 +2432,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("9fa6970a3d0a5dc26c4ed272bb1836d1f1f7a8f4b9d67f634d0262ff8c1fed0b")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("6e5e1050549c1aa629924b1b6a3080655d9e110f88dfa734d9b1c98af924cc7d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2445,8 +2445,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("63fcfc425adabc034c851dadfb499de3083fd7758582191c12162ad2471256b0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("dea116554852261e4a9e79c8926a0e4ac483f9e624084ded73b30705e221b62d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2484,8 +2484,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("f8dfb83885d1cbc82febfa613258c1f6954ea88ef43ed7dc710d6df20efecdab")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("2a71e32ef8e1bbffbbfcd1825620d6a8944f97e76851bf1a14dc4fa48b626db8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2536,8 +2536,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("092369e9d170c4c1074e1b305accb74f9486e6185d2e3f3f971869ff89538d3e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("5d2ccef5a45d2287d73a6ff63a466b21a197beb373792e644b8881bce3b6aa55")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2549,8 +2549,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("ba940a74a7434fe78d81aed9fb1e5ccdc3d97191a2db35716fc94e3b6604ace0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("b28224a798dea965cb090f831d31aa531c6b9a14028344be6df53ab426497bb4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2588,8 +2588,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("7699f76ef89b436b452eacdbab508da3cd94146ba29b099f5cb6e250afba3210")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("15f961b087c6145f326fee30041db4af3ce0a8d24bbdefbd8d24973825728a0e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2640,8 +2640,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("101284d27578438da200be1f6b9a1ba621432c5549fa5517797ec320bf75e3d5")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("88d2bfc8b714b9e36e95e68129799527077827dd752357934f9d3d0ce756871e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2653,8 +2653,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("43c1cd6e203bfba1a2eeb96cd2a15ce0ebde0e72ecc9555934116459347a9c28")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("ea82b0b12e03fdc461c2337e59cb901ecc763194588db5a97372d26f242f4951")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2692,8 +2692,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("04760d869234ee8f801feb08edc042a6965320f6c0a7aedf92ec35501fef3b21")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("ee2251d5e59045c6fa1d4431c8a5cd0ed18923a785e7e0f47aa9d32ae0ca344e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2744,8 +2744,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("9936f1549f950311229465de509b35c062aa474e504c20a1d6f0f632da57e002")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("fb714771145a49482a113f532e4cbc21d601cf0dee4186a57fbc66ddd8d85aef")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2757,8 +2757,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("9be2a667f29ed048165cfb3f5dbe61703fd3e5956f8f517ae098740ac8411c0b")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("817cc2720c9c67cf87e5c0e41e44111098ceb6372d8140c8adbdd2f0397f1e02")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2796,8 +2796,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("d22d85f60b2ef982b747adda2d1bde4a32c23c3d8f652c00ce44526750859e4e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("65d2a31c3181ab15342e60a2ef92d6a0df6945200191115d0303d6e77428521c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2848,7 +2848,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-unknown-linux-gnu-debug-20211017T1616.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-unknown-linux-gnu-lto-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -2861,7 +2861,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-unknown-linux-gnu-debug-20211017T1616.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -2900,7 +2900,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-unknown-linux-gnu-debug-20211017T1616.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -2952,8 +2952,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.9.19%2B20240415-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("ac0612c7cbc01abc39865c7a1dfca04fb684c6c3f3a687154f5401b61bcb4041")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.9.19%2B20240415-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("c462b6f2ab7d87b1000972ff6c1e797c86a1306cceee02cdcc81cd2240f44d34")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3004,8 +3004,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.9.19%2B20240415-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("f16518d2ac9f34798bbc04adcf2227c924cef8b25be2d20e418d75bea9c12f7e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.9.19%2B20240415-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("06181e0a2f67818d0619556ebd8a06d837acd00b899bf7077d8146b3f4dcae8b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3017,8 +3017,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.9.19%2B20240415-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("b28e9b78e0086145bb10778db1ae48e6309b5730b5ec355384089183c8a0e109")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.9.19%2B20240415-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("dcb1fe5c643f79d46f436dfcfc8a9a72ecd82d41b5daf00ffe4c3d17e472092e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3043,8 +3043,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.9.19%2B20240415-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("d946c9e2ad7c22dbea22aa6509d8017bb24e2735c1f9f06349e9beccd21f5e29")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.9.19%2B20240415-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("e1a07336705b58215f8ea138f4abee4640b1baa018e84a9ed44d9a47c7bfa0c8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3095,8 +3095,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("d27efd4609a3e15ff901040529d5689be99f2ebfe5132ab980d066d775068265")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("93d7b15bf02a3191cfdee9d9d68bf2da782fc04cb142bcca6a4299fe524d9b37")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3108,8 +3108,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.9.18%2B20230826-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("7faf8fdfbad04e0356a9d52c9b8be4d40ffef85c9ab3e312c45bd64997ef8aa9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.9.18%2B20230826-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("9e40a541b4eb6eb0a5e2f35724a18332aea91c61e18dec77ca40da5cf2496839")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3134,8 +3134,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("c138eef19229351226a11e752230b8aa9d499ba9720f9f0574fa3260ccacb99b")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("edac161e775d979f4e5e27bea242014038fcca79e2a3eff126b5991090631295")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3147,8 +3147,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("dd05eff699ce5a7eee545bc05e4869c4e64ee02bf0c70691bcee215604c6b393")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("45f61aaa845588e2e43cdc28a523222e39270902ac475eed4ab6a21cc4987ead")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3173,8 +3173,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("e1fa92798fab6f3b44a48f24b8e284660c34738d560681b206f0deb0616465f9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("7de4b74bd7f5bbe897339cb692652471de28a97910abe4f8382f744baec551cf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3225,8 +3225,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("1f6c43d92ba9f4e15149cf5db6ecde11e05eee92c070a085e44f46c559520257")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("de2eab48ca487550258db38b38cb9372143283f757b3cf9ec522eb657e41a035")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3238,8 +3238,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("1a9b7edc16683410c27bc5b4b1761143bef7831a1ad172e7e3581c152c6837a2")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("9984f59284048608f6734b032ff76e6bc3cb208e2235fdb511b0e478158fdb2b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3264,8 +3264,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("bcb0ec31342df52b4555be309080a9c3224e7ff60a6291e34337ddfddef111cf")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("c3233f54dd4719c98559a92725b89bd42d68bebd4e4065a4d567a30c7a98ca28")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3277,8 +3277,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-s390x-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("bf8c846c1a4e52355d4ae294f4e1da9587d5415467eb6890bdf0f5a4c8cda396")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-s390x-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("4e06fb7047b92a694638ee622e8d1da9d1df2f604a2726fe8a087f748032ee7c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3303,8 +3303,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("649fff6048f4cb9e64a85eaf8e720eb4c3257e27e7c4ee46f75bfa48c18c6826")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("cec2385699c047e77d32b93442417ab7d49c3e78c946cf586380dfe0b12a36dd")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3355,8 +3355,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("57ac7ce9d3dd32c1277ee7295daf5ad7b5ecc929e65b31f11b1e7b94cd355ed1")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("6c516ed541e7f84ba8b322aa15006082701456bba7c57e68e7263d702927a76d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3368,8 +3368,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("e2a0226165550492e895369ee1b69a515f82e12cb969656012ee8e1543409661")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("4df4cae277ba3ff8de7a16ef3b38f7214c2b0e4cc992f09505b859b0c94f2fd8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3394,8 +3394,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-ppc64le-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("8b2e7ddc6feb116dfa6829cfc478be90a374dc5ce123a98bc77e86d0e93e917d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-ppc64le-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("3fcbf3e1090461a16cb33c66e973ea2e918fe1373e51a84892268df6b7155648")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3420,8 +3420,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("cdc1290b9bdb2f74a6c48ab24531919551128e39773365c6f3e17668216275a0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("9fc89e1f3e1c03b4f5cd3c289f52e53a7c5fc8779113c2af5a10b19b2e8a2c2f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3472,8 +3472,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("0da1f081313b088c1381206e698e70fffdffc01e1b2ce284145c24ee5f5b4cbb")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("4012279410b28c2688b4acfbc9189cdc8c81ef4c4f83c5e4532c39cb8685530e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3485,8 +3485,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("cbc6a14835022d89f4ca6042a06c4959d74d4bbb58e70bdbe0fe8d2928934922")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("7c5d8e6a4255115e96c4b987b76c203ae9c7e6655b2d52c880680f13d2f1af36")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3524,8 +3524,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("6a08761bb725b8d3a92144f81628febeab8b12326ca264ffe28255fa67c7bf17")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("b6860b9872f361af78021dd2e1fe7edfe821963deab91b9a813d12d706288d3d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3576,8 +3576,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("3020c743e4742d6e0e5d27fcb166c694bf1d9565369b2eaee9d68434304aebd2")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("b099375504383b3a30af02dcf3a9ce01b0e6fecba5b3a8729b4a0a374fee7984")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3589,8 +3589,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("83a11c4f3d1c0ec39119bd0513a8684b59b68c3989cf1e5042d7417d4770c904")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("612031ffd5b6dee7f4fe205afeee62a996bbd8df338ae7d0f3731a825aee04fb")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3628,8 +3628,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("54529c0a8ffe621f5c9c6bdd22968cac9d3207cbd5dcd9c07bbe61140c49937e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("7f88ff09b2b57c19f4262026b0919aca59558971838093c63b68dfce7834e84d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3680,8 +3680,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("8c706ebb2c8970da4fbec95b0520b4632309bc6a3e115cf309e38f181b553d14")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("e27d88c3c3424a3694f9f111dc4e881c3925aa5d9ec60ec8395a82da2d7c2f31")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3693,8 +3693,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("7d33637b48c45acf8805d5460895dca29bf2740fd2cf502fde6c6a00637db6b5")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("066d4722bcc75fb16000afd745b11fb5c02847471695c67db633918969e3936b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3732,8 +3732,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("352d00a4630d0665387bcb158aec3f6c7fc5a4d14d65ac26e1b826e20611222f")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("e586b6fef3943adff4e74fbc3fe276dfbca12e9d883e273ed0c8d781b24d7d6e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3784,8 +3784,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("202ef64e43570f0843ff5895fd9c1a2c36a96b48d52842fa95842d7d11025b20")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("0749e4f8169b45051c440c81c17449549710d0e5821d4fdb5170b704ddd165c4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3797,8 +3797,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("e52fdbe61dea847323cd6e81142d16a571dca9c0bcde3bfe5ae75a8d3d1a3bf4")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("4a32d5f827e9c1fbed68e51974d78f090ccdd8c83f777a2c9f80644a96d53c3f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3836,8 +3836,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("7290ac14e43749afdb37d3c9690f300f5f0786f19982e8960566ecdc3e42c3eb")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("9af4ad8e87d1d24352163d519df44f652efefe018b8c7b48ca57604054950abe")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3888,8 +3888,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("e1f3ae07a28a687f8602fb4d29a1b72cc5e113c61dc6769d0d85081ab3e09c71")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("e540f92f78cc84a52a77ce621c3da5a427367205884ab4210e763bc7fdaf889c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3901,8 +3901,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("0be0a5f524c68d521be2417565ca43f3125b1845f996d6d62266aa431e673f93")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("aeb50fcc54214780244dd64c0d66bf5dec30db075c999cf2c5a58134f8d21c33")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3940,8 +3940,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("020bcbfff16dc5ce35a898763be3d847c97df2e14dabf483a8ec88b0455ff971")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("49dfa5cb99d4f71657dc651ad68d0fce7cc011beb59499141138ef062bd62b49")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3992,8 +3992,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("8bf7ac2cd5825b8fde0a6e535266a57c97e82fd5a97877940920b403ca5e53d7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("a40dc3f12bbcaeb487d2ece8c5415f94f3856b400f78202b6055cd514c5e9a24")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4005,8 +4005,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("3e3bf4d3e71a2131e6c064d1e5019f58cb9c58fdceae4b76b26ac978a6d49aad")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("218a79ef09d599d95a04819311ee27ab0fd34dd80d3722347003fec0139dca7b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4044,8 +4044,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("d453abf741c3196ffc8470f3ea6404a3e2b55b2674a501bb79162f06122423e5")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("de0a1b11f56cd6acdbc4b369a023377fd830946726f3abbbce8fc11dcb56cac0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4096,7 +4096,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-unknown-linux-gnu-debug-20211017T1616.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-unknown-linux-gnu-lto-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4109,7 +4109,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-unknown-linux-gnu-debug-20211017T1616.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4148,7 +4148,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-gnu-debug-20211017T1616.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4200,7 +4200,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-aarch64-unknown-linux-gnu-debug-20210724T1424.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-aarch64-unknown-linux-gnu-lto-20210724T1424.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4213,7 +4213,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-unknown-linux-gnu-debug-20210724T1424.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4252,7 +4252,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-unknown-linux-gnu-debug-20210724T1424.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4304,7 +4304,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-unknown-linux-gnu-debug-20210506T0943.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4343,7 +4343,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-unknown-linux-gnu-debug-20210506T0943.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4395,7 +4395,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-unknown-linux-gnu-debug-20210414T1515.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4434,7 +4434,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-unknown-linux-gnu-debug-20210414T1515.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4512,7 +4512,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-unknown-linux-gnu-debug-20210413T2055.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-unknown-linux-gnu-pgo%2Blto-20210413T2055.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4564,7 +4564,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-unknown-linux-gnu-debug-20210327T1202.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4603,7 +4603,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-unknown-linux-gnu-debug-20210327T1202.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4668,7 +4668,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-unknown-linux-gnu-debug-20210103T1125.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-unknown-linux-gnu-pgo-20210103T1125.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4733,7 +4733,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-unknown-linux-gnu-debug-20201020T0627.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-unknown-linux-gnu-pgo-20201020T0627.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -4785,8 +4785,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.8.19%2B20240415-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("36cbe41bd9836718bb237de2a5fc1b2a02cc3c8f2c29b73b54dc7aaa160ef701")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.8.19%2B20240415-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("31415fdb0d8ea48f09d4a7e0e007f0dd77809be67f5e73ec803f6856d491c542")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4824,8 +4824,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.8.19%2B20240415-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("aa88b515e9b0b0e69b98070177dc89f08e2aafc0e94927416b3be45259f14a54")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.8.19%2B20240415-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("778a2f806278f033c683b224aa595775c369717d477e0152b1293c9677ba9377")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4876,8 +4876,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("6d71175a090950c2063680f250b8799ab39eb139aa1721c853d8950aadd1d4e2")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("df66801678a5f4accee67784aff058f283fd52e42898527b7ff0e1cbc3e50e8c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4915,8 +4915,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("189ae3b8249c57217e3253f9fc89857e088763cf2107a3f22ab2ac2398f41a65")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("7ede28a7119056c24ea51766ac3cd9d3c5d579d3db133e02051b4bcb300507e9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4967,8 +4967,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("eaee5a0b79cc28943e19df54f314634795aee43a6670ce99c0306893a18fa784")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("efdf69695af469da13f86d5be23556fee6c03f417f8810fca55307a63aabf08d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4980,8 +4980,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("61ac08680c022f180a32dc82d84548aeb92c7194a489e3b3c532dc48f999d757")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("aaf4b15bdc35674dbe25d4538c9e75e243796a0cc8841fd31d7bbbee6703342a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5019,8 +5019,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("f499750ab0019f36ccb4d964e222051d0d49a1d1e8dbada98abae738cf48c9dc")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("4bfe1055dee03d4357b3dca5b334df3076b8aab066cdd84596199b9712ee3632")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5071,8 +5071,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("423d43d93e2fe33b41ad66d35426f16541f09fee9d7272ae5decf5474ebbc225")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("62c3e7b417a9c11fb7d251ee6f763c7dd2ae681017a82686122a8167f1b8c081")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5084,8 +5084,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("9aa3e559130a47c33ee2b67f6ca69e2f10d8f70c1fd1e2871763b892372a6d9e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("e8d832f16548e199e7c622eec9e06f746ba9dbbdf562dac8810c4e64e1f5115a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5123,8 +5123,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("f12f5cb38f796ca48dc73262c05506a6f21f59d24e709ea0390b18bf71c2e1f9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("446a1f600698167a3e70448787f61dd8b1e6fb8f50f50558c901a0f4d3c7a6d6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5175,8 +5175,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("2e80025eda686c14a9a0618ced40043c1d577a754b904fd7a382cd41abf9ca00")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("3a4975f1b0c196c98b4867ad41d2f1ba211b52dc6a2965c56acbb00eb7f69aa7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5188,8 +5188,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("b8436415ea9bd9970fb766f791a14b0e14ce6351fc4604eb158f1425e8bb4a33")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("f76c0d13f600e819696035851ec47cf5a233cf053d2de85fbd8e5e12a8146f5f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5227,8 +5227,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("c3c8c23e34bddb4a2b90333ff17041f344401775d505700f1ceddb3ad9d589e0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("1fd71062d9b7d632af202972c4488fa9c2255d2ef072b80766ab059b37473ea5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5279,8 +5279,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("a14d8b5cbd8e1ca45cbcb49f4bf0b0440dc86eb95b7c3da3c463a704a3b4593c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("650821c45386e7727b6e682620007d2532d9ee599b2caf4b4356575bee3c77a0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5292,8 +5292,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("631bb90fe8f2965d03400b268de90fe155ce51961296360d6578b7151aa9ef4c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("adb5a08f8dd700bc2d8260226354137349939e9bc5ccfdb8c16493e97b593a19")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5331,8 +5331,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("bd1e8e09edccaab82fbd75b457205a076847d62e3354c3d9b5abe985181047fc")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("5ca1c591ffb019fad3978018f68d69d4b6c73ce629fb7e42bc2c594cd8344d4f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5383,8 +5383,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("3a927205db4686c182b5e8f3fc7fd7d82ec8f61c70d5b2bfddd9673c7ddc07ba")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-aarch64-unknown-linux-gnu-lto-full.tar.zst",
+        sha256: Some("ad2b859fb502491f72f8d74ed3410bfb78a8886f8a1baa6908faea6128d91265")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5396,8 +5396,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("6daf0405beae6d127a2dcae61d51a719236b861b4cabc220727e48547fd6f045")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("9191ac9858eddfc727fa5ebadc654a57a719ac96b9dee4e1e48e6498a27499f4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5435,8 +5435,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("891b5d7b0e936b98a62f65bc0b28fff61ca9002125a2fc1ebb9c72f6b0056712")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("31c98d8329746c19739558f164e6374a2cd9c5c93c9e213d2548c993566a593c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5487,8 +5487,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-i686-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("7cfac9a57e262be3e889036d7fc570293e6d3d74411ee23e1fa9aa470d387e6a")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-i686-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("61024acdfe5aef07ba4246ea07dba9962770ec1f3d137c54835c0e5b6e040149")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5526,8 +5526,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-        sha256: Some("9ad20c520c291d08087e9afb4390f389d2b66c7fc97f23fffc1313ebafc5fee0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+        sha256: Some("a014cf132a642a5d585f37da0c56f7e6672699811726af18e8905d652b261a3f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5565,7 +5565,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-unknown-linux-gnu-debug-20210724T1424.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5604,7 +5604,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-unknown-linux-gnu-debug-20210724T1424.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5643,7 +5643,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-unknown-linux-gnu-debug-20210506T0943.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5682,7 +5682,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-unknown-linux-gnu-debug-20210506T0943.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5721,7 +5721,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-unknown-linux-gnu-debug-20210414T1515.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5760,7 +5760,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-unknown-linux-gnu-debug-20210414T1515.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5799,7 +5799,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-unknown-linux-gnu-debug-20210327T1202.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5838,7 +5838,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-unknown-linux-gnu-debug-20210327T1202.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5903,7 +5903,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-unknown-linux-gnu-debug-20210103T1125.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-unknown-linux-gnu-pgo-20210103T1125.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -5968,7 +5968,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-unknown-linux-gnu-debug-20201020T0627.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-unknown-linux-gnu-pgo-20201020T0627.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -6033,7 +6033,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.8.5-x86_64-unknown-linux-gnu-debug-20200823T0036.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.8.5-x86_64-unknown-linux-gnu-pgo-20200823T0036.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -6098,7 +6098,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-unknown-linux-gnu-debug-20200518T0040.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-unknown-linux-gnu-pgo-20200518T0040.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -6163,7 +6163,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-unknown-linux-gnu-debug-20200418T2305.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-unknown-linux-gnu-pgo-20200418T2243.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -6215,7 +6215,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-unknown-linux-gnu-debug-20200823T0036.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-unknown-linux-gnu-pgo-20200823T0036.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -6280,7 +6280,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-unknown-linux-gnu-debug-20200518T0040.tar.zst",
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-unknown-linux-gnu-pgo-20200518T0040.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
