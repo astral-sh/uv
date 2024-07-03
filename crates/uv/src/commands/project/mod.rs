@@ -348,12 +348,10 @@ pub(crate) async fn update_environment(
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(native_tls)
-        .connectivity(connectivity)
+    let client = RegistryClientBuilder::from(client_builder)
+        .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(markers)
         .platform(interpreter.platform())
         .build();

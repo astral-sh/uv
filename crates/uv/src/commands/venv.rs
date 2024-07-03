@@ -185,12 +185,10 @@ async fn venv_impl(
         let interpreter = venv.interpreter();
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::new(cache.clone())
-            .native_tls(native_tls)
+        let client = RegistryClientBuilder::from(&client_builder)
+            .cache(cache.clone())
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
-            .keyring(keyring_provider)
-            .connectivity(connectivity)
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();
