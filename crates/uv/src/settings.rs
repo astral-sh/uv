@@ -11,8 +11,8 @@ use pypi_types::Requirement;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::options::{flag, resolver_installer_options, resolver_options};
 use uv_cli::{
-    AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, ListFormat, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
+    AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs,
+    Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
@@ -143,6 +143,33 @@ impl CacheSettings {
             cache_dir: args
                 .cache_dir
                 .or_else(|| workspace.and_then(|workspace| workspace.globals.cache_dir.clone())),
+        }
+    }
+}
+
+/// The resolved settings to use for a `init` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct InitSettings {
+    pub(crate) path: Option<String>,
+    pub(crate) name: Option<PackageName>,
+    pub(crate) no_readme: bool,
+}
+
+impl InitSettings {
+    /// Resolve the [`InitSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: InitArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let InitArgs {
+            path,
+            name,
+            no_readme,
+        } = args;
+
+        Self {
+            path,
+            name,
+            no_readme,
         }
     }
 }

@@ -821,6 +821,20 @@ async fn run_project(
     }
 
     match *project_command {
+        ProjectCommand::Init(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::InitSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::init(
+                args.path,
+                args.name,
+                args.no_readme,
+                globals.preview,
+                printer,
+            )
+            .await
+        }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::RunSettings::resolve(args, filesystem);

@@ -358,6 +358,9 @@ pub enum PipCommand {
 
 #[derive(Subcommand)]
 pub enum ProjectCommand {
+    /// Initialize a project.
+    #[clap(hide = true)]
+    Init(InitArgs),
     /// Run a command in the project environment.
     #[clap(hide = true)]
     #[command(
@@ -1779,6 +1782,21 @@ impl ExternalCommand {
             [cmd, args @ ..] => (Some(cmd), args),
         }
     }
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct InitArgs {
+    /// The path of the project.
+    pub path: Option<String>,
+
+    /// The name of the project, defaults to the name of the directory.
+    #[arg(long)]
+    pub name: Option<PackageName>,
+
+    /// Do not create a readme file.
+    #[arg(long)]
+    pub no_readme: bool,
 }
 
 #[derive(Args)]
