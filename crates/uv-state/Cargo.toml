@@ -16,3 +16,4 @@ workspace = true
 directories = { workspace = true }
 tempfile = { workspace = true }
 fs-err = { workspace = true }
+dirs-sys = { workspace = true }

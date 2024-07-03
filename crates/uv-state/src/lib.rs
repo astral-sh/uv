@@ -83,8 +83,8 @@ impl StateStore {
     pub fn from_settings(state_dir: Option<PathBuf>) -> Result<Self, io::Error> {
         if let Some(state_dir) = state_dir {
             StateStore::from_path(state_dir)
-        } else if let Some(project_dirs) = ProjectDirs::from("", "", "uv") {
-            StateStore::from_path(project_dirs.data_dir())
+        } else if let Some(data_dir) = data_dir() {
+            StateStore::from_path(data_dir.join("uv"))
         } else {
             StateStore::from_path(".uv")
         }
@@ -107,5 +107,29 @@ impl StateBucket {
             Self::ManagedPython => "python",
             Self::Tools => "tools",
         }
+    }
+}
+
+/// Returns the path to the user data directory.
+///
+/// This is similar to the `data_dir()` returned by the `dirs` crate, but it respects the
+/// `XDG_DATA_HOME` environment variable on both Linux _and_ macOS. If `XDG_DATA_HOME` is not
+/// set, it defaults to `$HOME/.local/share` on Linux and `Application Support` on macOS.
+///
+/// Note we do not use `XDG_STATE_HOME` because this data is portable:
+///
+/// > The $XDG_STATE_HOME contains state data that should persist between (application) restarts,
+/// > but that is not important or portable enough to the user that it should be stored in $XDG_DATA_HOME.
+fn data_dir() -> Option<PathBuf> {
+    let default = ProjectDirs::from("", "", "uv").map(|dirs| dirs.data_dir().to_path_buf());
+
+    // On macOS, respect `XDG_DATA_HOME` if present, then fallback to the default
+    if cfg!(target_os = "macos") {
+        std::env::var_os("XDG_DATA_HOME")
+            .and_then(dirs_sys::is_absolute_path)
+            .or(default)
+    // On Windows and Linux, use the `ProjectDirs` default behavior.
+    } else {
+        default
     }
 }

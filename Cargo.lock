@@ -5070,6 +5070,7 @@ name = "uv-state"
 version = "0.0.1"
 dependencies = [
  "directories",
+ "dirs-sys",
  "fs-err",
  "tempfile",
 ]
