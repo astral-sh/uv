@@ -25,7 +25,6 @@ use uv_requirements::RequirementsSpecification;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
-use crate::commands::pip::operations::Modifications;
 use crate::commands::project::update_environment;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
@@ -286,7 +285,6 @@ async fn get_or_create_environment(
     let ephemeral_env = update_environment(
         venv,
         spec,
-        Modifications::Exact,
         settings,
         &state,
         preview,

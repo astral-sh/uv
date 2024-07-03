@@ -110,7 +110,6 @@ pub(crate) async fn run(
             let environment = project::update_environment(
                 venv,
                 spec,
-                Modifications::Sufficient,
                 &settings,
                 &state,
                 preview,
@@ -300,7 +299,6 @@ pub(crate) async fn run(
             project::update_environment(
                 venv,
                 spec,
-                Modifications::Sufficient,
                 &settings,
                 &state,
                 preview,

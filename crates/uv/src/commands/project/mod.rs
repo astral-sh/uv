@@ -361,7 +361,6 @@ pub(crate) async fn resolve_names(
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
-    modifications: Modifications,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
     preview: PreviewMode,
@@ -509,7 +508,7 @@ pub(crate) async fn update_environment(
     pip::operations::install(
         &resolution,
         site_packages,
-        modifications,
+        Modifications::Exact,
         reinstall,
         build_options,
         *link_mode,
