@@ -24,7 +24,6 @@ use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::warn_user_once;
 
-use crate::commands::pip::operations::Modifications;
 use crate::commands::project::update_environment;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
@@ -211,7 +210,6 @@ pub(crate) async fn install(
     let environment = update_environment(
         environment,
         spec,
-        Modifications::Exact,
         &settings,
         &state,
         preview,
