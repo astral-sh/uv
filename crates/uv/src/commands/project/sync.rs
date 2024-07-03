@@ -105,6 +105,7 @@ pub(super) async fn do_sync(
         index_strategy,
         keyring_provider,
         config_setting,
+        exclude_newer,
         link_mode,
         compile_bytecode,
         reinstall,
@@ -149,7 +150,6 @@ pub(super) async fn do_sync(
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
     let dry_run = false;
-    let exclude_newer = None;
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
 
