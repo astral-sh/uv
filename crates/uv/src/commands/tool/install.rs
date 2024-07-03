@@ -202,6 +202,8 @@ pub(crate) async fn install(
     let environment = if let Some(environment) = existing_environment {
         environment
     } else {
+        // TODO(charlie): Resolve, then create the environment, then install. This ensures that
+        // we don't nuke the environment if the resolution fails.
         installed_tools.create_environment(&from.name, interpreter)?
     };
 
