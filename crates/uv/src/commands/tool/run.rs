@@ -22,8 +22,8 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::{update_environment, SharedState};
-use crate::commands::ExitStatus;
+use crate::commands::project::update_environment;
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 

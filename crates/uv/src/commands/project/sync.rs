@@ -8,7 +8,7 @@ use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_installer::SitePackages;
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
-use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
@@ -145,9 +145,6 @@ pub(super) async fn do_sync(
         .platform(venv.interpreter().platform())
         .build();
 
-    // Initialize any shared state.
-    let in_flight = InFlight::default();
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
@@ -172,7 +169,7 @@ pub(super) async fn do_sync(
         &flat_index,
         &state.index,
         &state.git,
-        &in_flight,
+        &state.in_flight,
         index_strategy,
         setup_py,
         config_setting,
@@ -199,7 +196,7 @@ pub(super) async fn do_sync(
         &hasher,
         tags,
         &client,
-        &in_flight,
+        &state.in_flight,
         concurrency,
         &build_dispatch,
         cache,

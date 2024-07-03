@@ -36,9 +36,12 @@ pub(crate) use tool::run::run as tool_run;
 pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 use uv_cache::Cache;
 use uv_fs::Simplified;
+use uv_git::GitResolver;
 use uv_installer::compile_tree;
 use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
+use uv_resolver::InMemoryIndex;
+use uv_types::InFlight;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
 
@@ -166,4 +169,15 @@ pub(super) fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
     let bytes = bytes as f32;
     let i = ((bytes.log2() / 10.0) as usize).min(UNITS.len() - 1);
     (bytes / 1024_f32.powi(i as i32), UNITS[i])
+}
+
+/// Shared state used during resolution and installation.
+#[derive(Default)]
+pub(crate) struct SharedState {
+    /// The resolved Git references.
+    pub(crate) git: GitResolver,
+    /// The fetched package versions and metadata.
+    pub(crate) index: InMemoryIndex,
+    /// The downloaded distributions.
+    pub(crate) in_flight: InFlight,
 }
