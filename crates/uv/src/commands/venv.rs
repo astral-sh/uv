@@ -131,6 +131,8 @@ async fn venv_impl(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
+    let client_builder_clone = client_builder.clone();
+
     let mut interpreter_request = python_request.map(ToolchainRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {
         interpreter_request = request_from_version_file().await.into_diagnostic()?;
@@ -185,7 +187,7 @@ async fn venv_impl(
         let interpreter = venv.interpreter();
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::from(client_builder.clone())
+        let client = RegistryClientBuilder::from(client_builder_clone)
             .cache(cache.clone())
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
