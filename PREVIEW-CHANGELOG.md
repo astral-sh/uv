@@ -1,8 +1,15 @@
 # Changelog
 
+## 0.2.21
+
+### Preview features
+
+- Replace tool environments on updated Python request ([#4746](https://github.com/astral-sh/uv/pull/4746))
+
 ## 0.2.20
 
 <!-- No changes -->
+
 
 ## 0.2.19
 
