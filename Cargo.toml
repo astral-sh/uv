@@ -212,7 +212,7 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.17.0"
+cargo-dist-version = "0.18.0"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
@@ -242,13 +242,13 @@ targets = [
 ]
 # Whether to auto-include files like READMEs, LICENSEs, and CHANGELOGs (default true)
 auto-includes = false
-# Whether cargo-dist should create a Github Release or use an existing draft
+# Whether cargo-dist should create a GitHub Release or use an existing draft
 create-release = true
 # Publish jobs to run in CI
 pr-run-mode = "skip"
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
-# The stage during which the Github Release should be created
+# The stage during which the GitHub Release should be created
 github-release = "announce"
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
@@ -256,7 +256,7 @@ build-local-artifacts = false
 local-artifacts-jobs = ["./build-binaries", "./build-docker"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
-# Skip checking whether the specified configuration files are up to date
-allow-dirty = ["ci"]
+# Custom permissions for GitHub Jobs
+github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read" } }
 # Whether to install an updater program
 install-updater = false
