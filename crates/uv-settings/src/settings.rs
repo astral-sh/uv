@@ -76,6 +76,7 @@ pub struct InstallerOptions {
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub config_settings: Option<ConfigSettings>,
+    pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub reinstall: Option<bool>,

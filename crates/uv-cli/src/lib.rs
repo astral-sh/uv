@@ -668,13 +668,6 @@ pub struct PipSyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
-    pub exclude_newer: Option<ExcludeNewer>,
-
     /// Require a matching hash for each requirement.
     ///
     /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
@@ -2227,6 +2220,13 @@ pub struct InstallerArgs {
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    pub exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
     ///
