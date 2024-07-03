@@ -9,7 +9,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::Workspace;
-use uv_toolchain::{ToolchainFetch, ToolchainPreference, ToolchainRequest};
+use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::tree::DisplayDependencyGraph;
@@ -30,8 +30,8 @@ pub(crate) async fn tree(
     invert: bool,
     python: Option<String>,
     settings: ResolverSettings,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -49,9 +49,9 @@ pub(crate) async fn tree(
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(
         &workspace,
-        python.as_deref().map(ToolchainRequest::parse),
-        toolchain_preference,
-        toolchain_fetch,
+        python.as_deref().map(PythonRequest::parse),
+        python_preference,
+        python_fetch,
         connectivity,
         native_tls,
         cache,
