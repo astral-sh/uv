@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.21
+
+- Fix issue where standalone installer failed to due missing `uvx.exe` binary on Windows ([#4756](https://github.com/astral-sh/uv/pull/4756))
+
+### CLI
+
+- Differentiate `freeze` and `list` help text ([#4751](https://github.com/astral-sh/uv/pull/4751))
+
 ## 0.2.20
 
 - Fix issue where the standalone installer failed due to a missing `uvx` binary ([#4743](https://github.com/astral-sh/uv/pull/4743))
