@@ -949,8 +949,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          # TODO(konsti): https://github.com/actions/setup-python/issues/888
-          python-version: "3.13.0-beta.1"
+          python-version: "3.13"
           allow-prereleases: true
           cache: pip
 
