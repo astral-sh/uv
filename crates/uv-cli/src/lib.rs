@@ -13,7 +13,7 @@ use uv_configuration::{
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::{PythonVersion, ToolchainPreference};
+use uv_toolchain::{PythonVersion, ToolchainFetch, ToolchainPreference};
 
 pub mod compat;
 pub mod options;
@@ -118,9 +118,13 @@ pub struct GlobalArgs {
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
 
-    /// Whether to use system or uv-managed Python toolchains.
+    /// Whether to prefer Python toolchains from uv or on the system.
     #[arg(global = true, long)]
     pub toolchain_preference: Option<ToolchainPreference>,
+
+    /// Whether to automatically download Python toolchains when required.
+    #[arg(global = true, long)]
+    pub toolchain_fetch: Option<ToolchainFetch>,
 
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
@@ -250,9 +254,9 @@ pub enum PipCommand {
     Install(PipInstallArgs),
     /// Uninstall packages from an environment.
     Uninstall(PipUninstallArgs),
-    /// Enumerate the installed packages in an environment.
+    /// List, in requirements format, packages installed in an environment.
     Freeze(PipFreezeArgs),
-    /// Enumerate the installed packages in an environment.
+    /// List, in tabular format, packages installed in an environment.
     List(PipListArgs),
     /// Show information about one or more installed packages.
     Show(PipShowArgs),
@@ -822,6 +826,13 @@ pub struct PipSyncArgs {
     #[arg(long, conflicts_with = "no_build")]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
+    /// Allow sync of empty requirements, which will clear the environment of all packages.
+    #[arg(long, overrides_with("no_allow_empty_requirements"))]
+    pub allow_empty_requirements: bool,
+
+    #[arg(long, overrides_with("allow_empty_requirements"))]
+    pub no_allow_empty_requirements: bool,
+
     /// The minimum Python version that should be supported by the requirements (e.g.,
     /// `3.7` or `3.7.9`).
     ///
@@ -1205,6 +1216,9 @@ pub struct PipUninstallArgs {
     /// Uninstall packages from the specified `--prefix` directory.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
+
+    #[command(flatten)]
+    pub compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -1255,6 +1269,9 @@ pub struct PipFreezeArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    #[command(flatten)]
+    pub compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -1407,6 +1424,9 @@ pub struct PipShowArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    #[command(flatten)]
+    pub compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -1419,6 +1439,11 @@ pub struct PipTreeArgs {
     /// Prune the given package from the display of the dependency tree.
     #[arg(long)]
     pub prune: Vec<PackageName>,
+
+    /// Display only the specified packages.
+    #[arg(long)]
+    pub package: Vec<PackageName>,
+
     /// Do not de-duplicate repeated dependencies.
     /// Usually, when a package has already displayed its dependencies,
     /// further occurrences will not re-display its dependencies,
@@ -1426,6 +1451,10 @@ pub struct PipTreeArgs {
     /// This flag will cause those duplicates to be repeated.
     #[arg(long)]
     pub no_dedupe: bool,
+
+    #[arg(long, alias = "reverse")]
+    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
+    pub invert: bool,
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
@@ -1468,6 +1497,9 @@ pub struct PipTreeArgs {
 
     #[arg(long, overrides_with("system"))]
     pub no_system: bool,
+
+    #[command(flatten)]
+    pub compat_args: compat::PipGlobalCompatArgs,
 }
 
 #[derive(Args)]
@@ -1877,6 +1909,8 @@ pub enum ToolCommand {
     List(ToolListArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
+    /// Show the tools directory.
+    Dir,
 }
 
 #[derive(Args)]
@@ -1980,7 +2014,8 @@ pub struct ToolListArgs;
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolUninstallArgs {
-    pub name: String,
+    /// The name of the tool to uninstall.
+    pub name: PackageName,
 }
 
 #[derive(Args)]
@@ -1995,12 +2030,18 @@ pub enum ToolchainCommand {
     /// List the available toolchains.
     List(ToolchainListArgs),
 
-    /// Download and install a specific toolchain.
+    /// Download and install toolchains.
     Install(ToolchainInstallArgs),
 
-    /// Search for a toolchain
+    /// Search for a toolchain.
     #[command(disable_version_flag = true)]
     Find(ToolchainFindArgs),
+
+    /// Show the toolchains directory.
+    Dir,
+
+    /// Uninstall toolchains.
+    Uninstall(ToolchainUninstallArgs),
 }
 
 #[derive(Args)]
@@ -2032,6 +2073,13 @@ pub struct ToolchainInstallArgs {
     /// Force the installation of the toolchain, even if it is already installed.
     #[arg(long, short)]
     pub force: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ToolchainUninstallArgs {
+    /// The toolchains to uninstall.
+    pub targets: Vec<String>,
 }
 
 #[derive(Args)]

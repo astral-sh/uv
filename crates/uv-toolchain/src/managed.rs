@@ -19,7 +19,7 @@ use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::toolchain::{self, ToolchainKey};
 use crate::ToolchainRequest;
-use uv_fs::Simplified;
+use uv_fs::{LockedFile, Simplified};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -63,6 +63,14 @@ impl InstalledToolchains {
     /// A directory for installed toolchains at `root`.
     fn from_path(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
+    }
+
+    /// Lock the toolchains directory.
+    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            self.root.user_display(),
+        )?)
     }
 
     /// Prefer, in order:
@@ -204,7 +212,7 @@ Error=This toolchain is managed by uv and should not be modified.
 ";
 
 /// A uv-managed Python toolchain installed on the current system..
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct InstalledToolchain {
     /// The path to the top-level directory of the installed toolchain.
     path: PathBuf,
@@ -224,6 +232,7 @@ impl InstalledToolchain {
         Ok(Self { path, key })
     }
 
+    /// The path to this toolchain's Python executable.
     pub fn executable(&self) -> PathBuf {
         if cfg!(windows) {
             self.path.join("install").join("python.exe")
@@ -234,6 +243,7 @@ impl InstalledToolchain {
         }
     }
 
+    /// The [`PythonVersion`] of the toolchain.
     pub fn version(&self) -> PythonVersion {
         self.key.version()
     }
@@ -263,7 +273,7 @@ impl InstalledToolchain {
             ToolchainRequest::ExecutableName(name) => self
                 .executable()
                 .file_name()
-                .map_or(false, |filename| filename.to_string_lossy() == *name),
+                .is_some_and(|filename| filename.to_string_lossy() == *name),
             ToolchainRequest::Implementation(implementation) => {
                 implementation == self.implementation()
             }
@@ -278,14 +288,16 @@ impl InstalledToolchain {
     /// Ensure the toolchain is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
-        let lib = if cfg!(windows) { "Lib" } else { "lib" };
-        let file = self
-            .path
-            .join("install")
-            .join(lib)
-            // Note the Python version must not include the patch.
-            .join(format!("python{}", self.key.version().python_version()))
-            .join("EXTERNALLY-MANAGED");
+        // Construct the path to the `stdlib` directory.
+        let stdlib = if cfg!(windows) {
+            self.path.join("install").join("Lib")
+        } else {
+            self.path
+                .join("install")
+                .join("lib")
+                .join(format!("python{}", self.key.version().python_version()))
+        };
+        let file = stdlib.join("EXTERNALLY-MANAGED");
         fs_err::write(file, EXTERNALLY_MANAGED)?;
         Ok(())
     }

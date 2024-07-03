@@ -167,6 +167,21 @@ fn test_albatross_project_in_excluded() {
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
+
+    let current_dir = workspaces_dir()
+        .join("albatross-project-in-excluded")
+        .join("packages")
+        .join("seeds");
+    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: `seeds @ file://[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/packages/seeds`
+      Caused by: The project is marked as unmanaged: `[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/packages/seeds`
+    "###
+    );
 }
 
 #[test]

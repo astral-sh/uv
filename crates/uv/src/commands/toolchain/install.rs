@@ -1,6 +1,5 @@
 use anyhow::Result;
 use futures::StreamExt;
-use itertools::Itertools;
 use std::fmt::Write;
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -32,6 +31,7 @@ pub(crate) async fn install(
 
     let toolchains = InstalledToolchains::from_settings()?.init()?;
     let toolchain_dir = toolchains.root();
+    let _lock = toolchains.acquire_lock()?;
 
     let requests: Vec<_> = if targets.is_empty() {
         if let Some(requests) = requests_from_version_file().await? {
@@ -48,7 +48,7 @@ pub(crate) async fn install(
 
     let download_requests = requests
         .iter()
-        .map(|request| PythonDownloadRequest::from_request(request.clone()))
+        .map(PythonDownloadRequest::from_request)
         .collect::<Result<Vec<_>, downloads::Error>>()?;
 
     let installed_toolchains: Vec<_> = toolchains.find_all()?.collect();
@@ -64,7 +64,7 @@ pub(crate) async fn install(
         {
             writeln!(
                 printer.stderr(),
-                "Found installed toolchain '{}' that satisfies {request}",
+                "Found installed toolchain `{}` that satisfies {request}",
                 toolchain.key()
             )?;
             if force {
@@ -105,8 +105,7 @@ pub(crate) async fn install(
         .into_iter()
         // Populate the download requests with defaults
         .map(PythonDownloadRequest::fill)
-        .map(|request| request.map(|inner| PythonDownload::from_request(&inner)))
-        .flatten_ok()
+        .map(|request| PythonDownload::from_request(&request))
         .collect::<Result<Vec<_>, uv_toolchain::downloads::Error>>()?;
 
     // Construct a client

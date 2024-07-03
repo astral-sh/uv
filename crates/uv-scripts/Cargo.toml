@@ -1,0 +1,23 @@
+[package]
+name = "uv-scripts"
+version = "0.0.1"
+edition = "2021"
+description = "Parse PEP 723-style Python scripts."
+
+[lints]
+workspace = true
+
+[dependencies]
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+pypi-types = { workspace = true }
+
+fs-err = { workspace = true, features = ["tokio"] }
+memchr = { workspace = true }
+once_cell = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+indoc = { workspace = true }

@@ -237,7 +237,7 @@ impl RegistryClient {
                     ErrorKind::Offline(_) => continue,
 
                     // The package could not be found in the remote index.
-                    ErrorKind::ReqwestError(err) => {
+                    ErrorKind::WrappedReqwestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND)
                             || err.status() == Some(StatusCode::UNAUTHORIZED)
                             || err.status() == Some(StatusCode::FORBIDDEN)

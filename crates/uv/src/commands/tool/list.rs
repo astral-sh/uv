@@ -10,7 +10,6 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List installed tools.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`uv tool list` is experimental and may change without warning.");

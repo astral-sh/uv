@@ -337,6 +337,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
                 args.settings.setup_py,
+                args.settings.allow_empty_requirements,
                 globals.connectivity,
                 &args.settings.config_setting,
                 args.settings.no_build_isolation,
@@ -550,11 +551,12 @@ async fn run() -> Result<ExitStatus> {
             commands::pip_tree(
                 args.depth,
                 args.prune,
+                args.package,
                 args.no_dedupe,
+                args.invert,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
-                globals.preview,
                 &cache,
                 printer,
             )
@@ -616,6 +618,7 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.settings.python.as_deref(),
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 args.settings.link_mode,
                 &args.settings.index_locations,
                 args.settings.index_strategy,
@@ -648,16 +651,17 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
-                args.extras,
-                args.dev,
                 args.command,
                 requirements,
-                args.python,
                 args.package,
+                args.extras,
+                args.dev,
+                args.python,
                 args.settings,
                 globals.isolated,
                 globals.preview,
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -680,6 +684,7 @@ async fn run() -> Result<ExitStatus> {
                 args.modifications,
                 args.python,
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 args.settings,
                 globals.preview,
                 globals.connectivity,
@@ -703,6 +708,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.preview,
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -732,6 +738,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.settings,
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -755,6 +762,7 @@ async fn run() -> Result<ExitStatus> {
                 args.package,
                 args.python,
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -788,13 +796,14 @@ async fn run() -> Result<ExitStatus> {
 
             commands::tool_run(
                 args.command,
-                args.python,
                 args.from,
                 args.with,
+                args.python,
                 args.settings,
                 globals.isolated,
                 globals.preview,
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -822,6 +831,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.preview,
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -848,6 +858,12 @@ async fn run() -> Result<ExitStatus> {
 
             commands::tool_uninstall(args.name, globals.preview, printer).await
         }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Dir,
+        }) => {
+            commands::tool_dir(globals.preview)?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Toolchain(ToolchainNamespace {
             command: ToolchainCommand::List(args),
         }) => {
@@ -863,6 +879,7 @@ async fn run() -> Result<ExitStatus> {
                 args.all_versions,
                 args.all_platforms,
                 globals.toolchain_preference,
+                globals.toolchain_fetch,
                 globals.preview,
                 &cache,
                 printer,
@@ -891,6 +908,15 @@ async fn run() -> Result<ExitStatus> {
             .await
         }
         Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::Uninstall(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolchainUninstallSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::toolchain_uninstall(args.targets, globals.preview, printer).await
+        }
+        Commands::Toolchain(ToolchainNamespace {
             command: ToolchainCommand::Find(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
@@ -907,6 +933,12 @@ async fn run() -> Result<ExitStatus> {
                 printer,
             )
             .await
+        }
+        Commands::Toolchain(ToolchainNamespace {
+            command: ToolchainCommand::Dir,
+        }) => {
+            commands::toolchain_dir(globals.preview)?;
+            Ok(ExitStatus::Success)
         }
     }
 }

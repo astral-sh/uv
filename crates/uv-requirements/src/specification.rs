@@ -314,11 +314,29 @@ impl RequirementsSpecification {
         Ok(spec)
     }
 
+    /// Parse an individual package requirement.
+    pub fn parse_package(name: &str) -> Result<UnresolvedRequirementSpecification> {
+        let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?, false)
+            .with_context(|| format!("Failed to parse: `{name}`"))?;
+        Ok(UnresolvedRequirementSpecification::from(requirement))
+    }
+
     /// Read the requirements from a set of sources.
     pub async fn from_simple_sources(
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         Self::from_sources(requirements, &[], &[], client_builder).await
+    }
+
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].
+    pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            ..Self::default()
+        }
     }
 }

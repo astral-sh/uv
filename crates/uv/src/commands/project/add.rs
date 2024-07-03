@@ -12,12 +12,13 @@ use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex};
-use uv_toolchain::{ToolchainPreference, ToolchainRequest};
+use uv_toolchain::{ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
+use crate::commands::project::SharedState;
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
@@ -38,6 +39,7 @@ pub(crate) async fn add(
     python: Option<String>,
     settings: ResolverInstallerSettings,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -60,10 +62,11 @@ pub(crate) async fn add(
     };
 
     // Discover or create the virtual environment.
-    let venv = project::init_environment(
+    let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(ToolchainRequest::parse),
         toolchain_preference,
+        toolchain_fetch,
         connectivity,
         native_tls,
         cache,
@@ -202,11 +205,15 @@ pub(crate) async fn add(
         pyproject.to_string(),
     )?;
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Lock and sync the environment.
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        &state,
         preview,
         connectivity,
         concurrency,
@@ -229,6 +236,7 @@ pub(crate) async fn add(
         dev,
         Modifications::Sufficient,
         settings.as_ref().into(),
+        &state,
         preview,
         connectivity,
         concurrency,

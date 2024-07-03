@@ -22,7 +22,6 @@ use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Uninstall packages from the current environment.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
     python: Option<String>,

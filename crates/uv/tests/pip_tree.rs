@@ -9,22 +9,58 @@ use crate::common::{get_bin, TestContext};
 
 mod common;
 
-fn tree_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command.arg("pip").arg("tree");
-    context.add_shared_args(&mut command);
-    command
-}
-
 #[test]
 fn no_package() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn prune_last_in_the_subgroup() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==2.31.0").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###
+    );
+
+    context.assert_command("import requests").success();
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--prune").arg("certifi"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    requests v2.31.0
+    ├── charset-normalizer v3.3.2
+    ├── idna v3.6
+    └── urllib3 v2.2.1
 
     ----- stderr -----
     "###
@@ -60,7 +96,7 @@ fn single_package() {
     );
 
     context.assert_command("import requests").success();
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -107,7 +143,7 @@ fn python_version_marker() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -153,17 +189,113 @@ fn nested_dependencies() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     scikit-learn v1.4.1.post1
     ├── numpy v1.26.4
     ├── scipy v1.12.0
-    │   └── numpy v1.26.4 (*)
+    │   └── numpy v1.26.4
     ├── joblib v1.3.2
     └── threadpoolctl v3.4.0
-    (*) Package tree already displayed
+
+    ----- stderr -----
+    "###
+    );
+}
+
+// Identical test as `invert` since `--reverse` is simply an alias for `--invert`.
+#[test]
+fn reverse() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("scikit-learn==1.4.1.post1")
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + joblib==1.3.2
+     + numpy==1.26.4
+     + scikit-learn==1.4.1.post1
+     + scipy==1.12.0
+     + threadpoolctl==3.4.0
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--reverse"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    joblib v1.3.2
+    └── scikit-learn v1.4.1.post1
+    numpy v1.26.4
+    ├── scikit-learn v1.4.1.post1
+    └── scipy v1.12.0
+        └── scikit-learn v1.4.1.post1
+    threadpoolctl v3.4.0
+    └── scikit-learn v1.4.1.post1
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn invert() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("scikit-learn==1.4.1.post1")
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + joblib==1.3.2
+     + numpy==1.26.4
+     + scikit-learn==1.4.1.post1
+     + scipy==1.12.0
+     + threadpoolctl==3.4.0
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    joblib v1.3.2
+    └── scikit-learn v1.4.1.post1
+    numpy v1.26.4
+    ├── scikit-learn v1.4.1.post1
+    └── scipy v1.12.0
+        └── scikit-learn v1.4.1.post1
+    threadpoolctl v3.4.0
+    └── scikit-learn v1.4.1.post1
 
     ----- stderr -----
     "###
@@ -259,13 +391,11 @@ fn depth() {
     scikit-learn v1.4.1.post1
     ├── numpy v1.26.4
     ├── scipy v1.12.0
-    │   └── numpy v1.26.4 (*)
+    │   └── numpy v1.26.4
     ├── joblib v1.3.2
     └── threadpoolctl v3.4.0
-    (*) Package tree already displayed
 
     ----- stderr -----
-
     "###
     );
 }
@@ -318,7 +448,6 @@ fn prune() {
     └── threadpoolctl v3.4.0
 
     ----- stderr -----
-
     "###
     );
 
@@ -342,7 +471,6 @@ fn prune() {
     └── threadpoolctl v3.4.0
 
     ----- stderr -----
-
     "###
     );
 
@@ -365,14 +493,13 @@ fn prune() {
     └── threadpoolctl v3.4.0
 
     ----- stderr -----
-
     "###
     );
 }
 
 #[test]
 #[cfg(target_os = "macos")]
-fn nested_dependencies_more_complex() {
+fn complex_nested_dependencies_inverted() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -426,7 +553,129 @@ fn nested_dependencies_more_complex() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    certifi v2024.2.2
+    └── requests v2.31.0
+        ├── requests-toolbelt v1.0.0
+        │   └── twine v4.0.2
+        │       └── packse v0.3.12
+        └── twine v4.0.2 (*)
+    charset-normalizer v3.3.2
+    └── requests v2.31.0 (*)
+    chevron-blue v0.2.1
+    └── packse v0.3.12
+    docutils v0.20.1
+    └── readme-renderer v43.0
+        └── twine v4.0.2 (*)
+    idna v3.6
+    └── requests v2.31.0 (*)
+    jaraco-context v4.3.0
+    └── keyring v25.0.0
+        └── twine v4.0.2 (*)
+    mdurl v0.1.2
+    └── markdown-it-py v3.0.0
+        └── rich v13.7.1
+            └── twine v4.0.2 (*)
+    more-itertools v10.2.0
+    ├── jaraco-classes v3.3.1
+    │   └── keyring v25.0.0 (*)
+    └── jaraco-functools v4.0.0
+        └── keyring v25.0.0 (*)
+    msgspec v0.18.6
+    └── packse v0.3.12
+    nh3 v0.2.15
+    └── readme-renderer v43.0 (*)
+    packaging v24.0
+    └── hatchling v1.22.4
+        └── packse v0.3.12
+    pathspec v0.12.1
+    └── hatchling v1.22.4 (*)
+    pkginfo v1.10.0
+    └── twine v4.0.2 (*)
+    pluggy v1.4.0
+    └── hatchling v1.22.4 (*)
+    pygments v2.17.2
+    ├── readme-renderer v43.0 (*)
+    └── rich v13.7.1 (*)
+    rfc3986 v2.0.0
+    └── twine v4.0.2 (*)
+    setuptools v69.2.0
+    └── packse v0.3.12
+    trove-classifiers v2024.3.3
+    └── hatchling v1.22.4 (*)
+    urllib3 v2.2.1
+    ├── requests v2.31.0 (*)
+    └── twine v4.0.2 (*)
+    zipp v3.18.1
+    └── importlib-metadata v7.1.0
+        └── twine v4.0.2 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn complex_nested_dependencies() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("packse").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 32 packages in [TIME]
+    Prepared 32 packages in [TIME]
+    Installed 32 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + chevron-blue==0.2.1
+     + docutils==0.20.1
+     + hatchling==1.22.4
+     + idna==3.6
+     + importlib-metadata==7.1.0
+     + jaraco-classes==3.3.1
+     + jaraco-context==4.3.0
+     + jaraco-functools==4.0.0
+     + keyring==25.0.0
+     + markdown-it-py==3.0.0
+     + mdurl==0.1.2
+     + more-itertools==10.2.0
+     + msgspec==0.18.6
+     + nh3==0.2.15
+     + packaging==24.0
+     + packse==0.3.12
+     + pathspec==0.12.1
+     + pkginfo==1.10.0
+     + pluggy==1.4.0
+     + pygments==2.17.2
+     + readme-renderer==43.0
+     + requests==2.31.0
+     + requests-toolbelt==1.0.0
+     + rfc3986==2.0.0
+     + rich==13.7.1
+     + setuptools==69.2.0
+     + trove-classifiers==2024.3.3
+     + twine==4.0.2
+     + urllib3==2.2.1
+     + zipp==3.18.1
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -452,20 +701,20 @@ fn nested_dependencies_more_complex() {
         │   └── certifi v2024.2.2
         ├── requests-toolbelt v1.0.0
         │   └── requests v2.31.0 (*)
-        ├── urllib3 v2.2.1 (*)
+        ├── urllib3 v2.2.1
         ├── importlib-metadata v7.1.0
         │   └── zipp v3.18.1
         ├── keyring v25.0.0
         │   ├── jaraco-classes v3.3.1
         │   │   └── more-itertools v10.2.0
         │   ├── jaraco-functools v4.0.0
-        │   │   └── more-itertools v10.2.0 (*)
+        │   │   └── more-itertools v10.2.0
         │   └── jaraco-context v4.3.0
         ├── rfc3986 v2.0.0
         └── rich v13.7.1
             ├── markdown-it-py v3.0.0
             │   └── mdurl v0.1.2
-            └── pygments v2.17.2 (*)
+            └── pygments v2.17.2
     (*) Package tree already displayed
 
     ----- stderr -----
@@ -475,7 +724,7 @@ fn nested_dependencies_more_complex() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn prune_big_tree() {
+fn prune_large_tree() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -558,20 +807,20 @@ fn prune_big_tree() {
         │   └── certifi v2024.2.2
         ├── requests-toolbelt v1.0.0
         │   └── requests v2.31.0 (*)
-        ├── urllib3 v2.2.1 (*)
+        ├── urllib3 v2.2.1
         ├── importlib-metadata v7.1.0
         │   └── zipp v3.18.1
         ├── keyring v25.0.0
         │   ├── jaraco-classes v3.3.1
         │   │   └── more-itertools v10.2.0
         │   ├── jaraco-functools v4.0.0
-        │   │   └── more-itertools v10.2.0 (*)
+        │   │   └── more-itertools v10.2.0
         │   └── jaraco-context v4.3.0
         ├── rfc3986 v2.0.0
         └── rich v13.7.1
             ├── markdown-it-py v3.0.0
             │   └── mdurl v0.1.2
-            └── pygments v2.17.2 (*)
+            └── pygments v2.17.2
     (*) Package tree already displayed
 
     ----- stderr -----
@@ -616,7 +865,7 @@ fn cyclic_dependency() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -673,7 +922,7 @@ fn removed_dependency() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -728,7 +977,7 @@ fn multiple_packages() {
         filters.push(("└── colorama v0.4.6\n", ""));
     }
     context.assert_command("import requests").success();
-    uv_snapshot!(filters, tree_command(&context), @r###"
+    uv_snapshot!(filters, context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -787,7 +1036,7 @@ fn multiple_packages_shared_descendant() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -797,7 +1046,7 @@ fn multiple_packages_shared_descendant() {
     │   ├── python-dateutil v2.9.0.post0
     │   │   └── six v1.16.0
     │   └── urllib3 v2.2.1
-    ├── jmespath v1.0.1 (*)
+    ├── jmespath v1.0.1
     └── s3transfer v0.10.1
         └── botocore v1.34.69 (*)
     pendulum v3.0.0
@@ -806,6 +1055,81 @@ fn multiple_packages_shared_descendant() {
     └── time-machine v2.14.1
         └── python-dateutil v2.9.0.post0 (*)
     (*) Package tree already displayed
+
+    ----- stderr -----
+    "###
+    );
+}
+
+// Test the interaction between `--no-dedupe` and `--invert`.
+#[test]
+#[cfg(not(windows))]
+fn no_dedupe_and_invert() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(
+            r"
+        pendulum==3.0.0
+        boto3==1.34.69
+    ",
+        )
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 10 packages in [TIME]
+    Installed 10 packages in [TIME]
+     + boto3==1.34.69
+     + botocore==1.34.69
+     + jmespath==1.0.1
+     + pendulum==3.0.0
+     + python-dateutil==2.9.0.post0
+     + s3transfer==0.10.1
+     + six==1.16.0
+     + time-machine==2.14.1
+     + tzdata==2024.1
+     + urllib3==2.2.1
+
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--no-dedupe").arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    jmespath v1.0.1
+    ├── boto3 v1.34.69
+    └── botocore v1.34.69
+        ├── boto3 v1.34.69
+        └── s3transfer v0.10.1
+            └── boto3 v1.34.69
+    six v1.16.0
+    └── python-dateutil v2.9.0.post0
+        ├── botocore v1.34.69
+        │   ├── boto3 v1.34.69
+        │   └── s3transfer v0.10.1
+        │       └── boto3 v1.34.69
+        ├── pendulum v3.0.0
+        └── time-machine v2.14.1
+            └── pendulum v3.0.0
+    tzdata v2024.1
+    └── pendulum v3.0.0
+    urllib3 v2.2.1
+    └── botocore v1.34.69
+        ├── boto3 v1.34.69
+        └── s3transfer v0.10.1
+            └── boto3 v1.34.69
 
     ----- stderr -----
     "###
@@ -878,7 +1202,7 @@ fn no_dedupe_and_cycle() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context)
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--no-dedupe"), @r###"
     success: true
     exit_code: 0
@@ -956,7 +1280,7 @@ fn no_dedupe() {
     "###
     );
 
-    uv_snapshot!(context.filters(), tree_command(&context)
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--no-dedupe"), @r###"
     success: true
     exit_code: 0
@@ -1015,7 +1339,7 @@ fn with_editable() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, tree_command(&context), @r###"
+    uv_snapshot!(filters, context.pip_tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1023,7 +1347,156 @@ fn with_editable() {
     └── iniconfig v2.0.1.dev6+g9cae431
 
     ----- stderr -----
+    "###
+    );
+}
 
+#[test]
+#[cfg(target_os = "macos")]
+fn package_flag_complex() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("packse").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 32 packages in [TIME]
+    Prepared 32 packages in [TIME]
+    Installed 32 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + chevron-blue==0.2.1
+     + docutils==0.20.1
+     + hatchling==1.22.4
+     + idna==3.6
+     + importlib-metadata==7.1.0
+     + jaraco-classes==3.3.1
+     + jaraco-context==4.3.0
+     + jaraco-functools==4.0.0
+     + keyring==25.0.0
+     + markdown-it-py==3.0.0
+     + mdurl==0.1.2
+     + more-itertools==10.2.0
+     + msgspec==0.18.6
+     + nh3==0.2.15
+     + packaging==24.0
+     + packse==0.3.12
+     + pathspec==0.12.1
+     + pkginfo==1.10.0
+     + pluggy==1.4.0
+     + pygments==2.17.2
+     + readme-renderer==43.0
+     + requests==2.31.0
+     + requests-toolbelt==1.0.0
+     + rfc3986==2.0.0
+     + rich==13.7.1
+     + setuptools==69.2.0
+     + trove-classifiers==2024.3.3
+     + twine==4.0.2
+     + urllib3==2.2.1
+     + zipp==3.18.1
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree()
+        .arg("--package")
+        .arg("hatchling")
+        .arg("--package")
+        .arg("keyring"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hatchling v1.22.4
+    ├── packaging v24.0
+    ├── pathspec v0.12.1
+    ├── pluggy v1.4.0
+    └── trove-classifiers v2024.3.3
+
+    keyring v25.0.0
+    ├── jaraco-classes v3.3.1
+    │   └── more-itertools v10.2.0
+    ├── jaraco-functools v4.0.0
+    │   └── more-itertools v10.2.0
+    └── jaraco-context v4.3.0
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn package_flag() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("scikit-learn==1.4.1.post1")
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + joblib==1.3.2
+     + numpy==1.26.4
+     + scikit-learn==1.4.1.post1
+     + scipy==1.12.0
+     + threadpoolctl==3.4.0
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree()
+        .arg("--package")
+        .arg("numpy"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    numpy v1.26.4
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree()
+        .arg("--package")
+        .arg("scipy")
+        .arg("--package")
+        .arg("joblib"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    scipy v1.12.0
+    └── numpy v1.26.4
+
+    joblib v1.3.2
+
+    ----- stderr -----
     "###
     );
 }

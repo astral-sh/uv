@@ -11,30 +11,33 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
-use uv_requirements::RequirementsSource;
+use uv_normalize::PackageName;
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_toolchain::{
-    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainPreference, ToolchainRequest,
+    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainFetch, ToolchainPreference,
+    ToolchainRequest,
 };
 use uv_warnings::warn_user_once;
 
-use crate::commands::project::update_environment;
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::{update_environment, SharedState};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
     command: ExternalCommand,
-    python: Option<String>,
     from: Option<String>,
     with: Vec<String>,
+    python: Option<String>,
     settings: ResolverInstallerSettings,
     _isolated: bool,
     preview: PreviewMode,
     toolchain_preference: ToolchainPreference,
+    toolchain_fetch: ToolchainFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -61,6 +64,13 @@ pub(crate) async fn run(
         .chain(with.into_iter().map(RequirementsSource::from_package))
         .collect::<Vec<_>>();
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let spec =
+        RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
@@ -68,16 +78,15 @@ pub(crate) async fn run(
     debug!("Syncing ephemeral environment.");
 
     // Discover an interpreter.
-    // Note we force preview on during `uv tool run` for now since the entire interface is in preview
-    let interpreter = Toolchain::find(
-        &python
-            .as_deref()
-            .map(ToolchainRequest::parse)
-            .unwrap_or_default(),
+    let interpreter = Toolchain::find_or_fetch(
+        python.as_deref().map(ToolchainRequest::parse),
         EnvironmentPreference::OnlySystem,
         toolchain_preference,
+        toolchain_fetch,
+        &client_builder,
         cache,
-    )?
+    )
+    .await?
     .into_interpreter();
 
     // Create a virtual environment.
@@ -94,8 +103,10 @@ pub(crate) async fn run(
     let ephemeral_env = Some(
         update_environment(
             venv,
-            &requirements,
+            spec,
+            Modifications::Sufficient,
             &settings,
+            &SharedState::default(),
             preview,
             connectivity,
             concurrency,
@@ -183,6 +194,12 @@ fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
     // e.g. `uv@`, warn and treat the whole thing as the command
     if version.is_empty() {
         debug!("Ignoring empty version request in command");
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    }
+
+    // e.g. ignore `git+https://github.com/uv/uv.git@main`
+    if PackageName::from_str(name).is_err() {
+        debug!("Ignoring non-package name `{}` in command", name);
         return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
     }
 

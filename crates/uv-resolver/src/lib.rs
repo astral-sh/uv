@@ -10,7 +10,7 @@ pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease_mode::PreReleaseMode;
 pub use pubgrub::{PubGrubSpecifier, PubGrubSpecifierError};
 pub use python_requirement::PythonRequirement;
-pub use requires_python::{RequiresPython, RequiresPythonError};
+pub use requires_python::{RequiresPython, RequiresPythonBound, RequiresPythonError};
 pub use resolution::{AnnotationStyle, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{

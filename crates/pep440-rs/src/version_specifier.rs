@@ -436,7 +436,7 @@ impl VersionSpecifier {
     }
 
     /// Returns a version specifier representing the given lower bound.
-    fn from_lower_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
+    pub fn from_lower_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
         match bound {
             Bound::Included(version) => Some(
                 VersionSpecifier::from_version(Operator::GreaterThanEqual, version.clone())
@@ -450,7 +450,7 @@ impl VersionSpecifier {
     }
 
     /// Returns a version specifier representing the given upper bound.
-    fn from_upper_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
+    pub fn from_upper_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
         match bound {
             Bound::Included(version) => Some(
                 VersionSpecifier::from_version(Operator::LessThanEqual, version.clone()).unwrap(),
