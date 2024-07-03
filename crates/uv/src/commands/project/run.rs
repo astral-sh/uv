@@ -21,6 +21,7 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -55,18 +56,9 @@ pub(crate) async fn run(
     let state = SharedState::default();
 
     // Determine whether the command to execute is a PEP 723 script.
-    let temp_dir;
     let script_interpreter = if let RunCommand::Python(target, _) = &command {
         if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
             debug!("Found PEP 723 script at: {}", target.display());
-
-            let spec = RequirementsSpecification::from_requirements(
-                metadata
-                    .dependencies
-                    .into_iter()
-                    .map(Requirement::from)
-                    .collect(),
-            );
 
             // (1) Explicit request from user
             let python_request = if let Some(request) = python.as_deref() {
@@ -96,20 +88,15 @@ pub(crate) async fn run(
             .await?
             .into_interpreter();
 
-            // Create a virtual environment
-            temp_dir = cache.environment()?;
-            let venv = uv_virtualenv::create_venv(
-                temp_dir.path(),
-                interpreter,
-                uv_virtualenv::Prompt::None,
-                false,
-                false,
-            )?;
-
             // Install the script requirements.
-            let environment = project::update_environment(
-                venv,
-                spec,
+            let requirements = metadata
+                .dependencies
+                .into_iter()
+                .map(Requirement::from)
+                .collect();
+            let environment = CachedEnvironment::get_or_create(
+                requirements,
+                interpreter,
                 &settings,
                 &state,
                 preview,
