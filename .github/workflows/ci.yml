@@ -98,7 +98,7 @@ jobs:
         with:
           tool: cargo-xwin
       - name: Install xwin dependencies
-        run: sudo apt-get install --no-install-recommends -y llvm clang cmake ninja-build
+        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
       - name: "Clippy"
         run: cargo xwin clippy --target x86_64-pc-windows-msvc --workspace --all-targets --all-features --locked --profile fast-build -- -D warnings
         env:
