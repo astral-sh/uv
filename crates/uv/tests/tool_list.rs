@@ -8,7 +8,7 @@ mod common;
 
 #[test]
 fn tool_list() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -28,7 +28,9 @@ fn tool_list() {
     exit_code: 0
     ----- stdout -----
     black
-
+        black
+        blackd
+    
     ----- stderr -----
     warning: `uv tool list` is experimental and may change without warning.
     "###);
@@ -36,7 +38,7 @@ fn tool_list() {
 
 #[test]
 fn tool_list_empty() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -55,7 +57,7 @@ fn tool_list_empty() {
 
 #[test]
 fn tool_list_missing_receipt() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
