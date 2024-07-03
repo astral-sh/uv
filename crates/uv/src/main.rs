@@ -17,9 +17,9 @@ use uv_cli::{
     compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand,
 };
+use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace};
-use uv_cli::{ToolCommand, ToolNamespace, ToolchainCommand, ToolchainNamespace};
 use uv_configuration::Concurrency;
 use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
@@ -288,7 +288,7 @@ async fn run() -> Result<ExitStatus> {
                 args.settings.link_mode,
                 args.settings.python,
                 args.settings.system,
-                globals.toolchain_preference,
+                globals.python_preference,
                 args.settings.concurrency,
                 globals.native_tls,
                 globals.quiet,
@@ -617,8 +617,8 @@ async fn run() -> Result<ExitStatus> {
             commands::venv(
                 &args.name,
                 args.settings.python.as_deref(),
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 args.settings.link_mode,
                 &args.settings.index_locations,
                 args.settings.index_strategy,
@@ -660,8 +660,8 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.isolated,
                 globals.preview,
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -683,8 +683,8 @@ async fn run() -> Result<ExitStatus> {
                 args.dev,
                 args.modifications,
                 args.python,
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 args.settings,
                 globals.preview,
                 globals.connectivity,
@@ -707,8 +707,8 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.settings,
                 globals.preview,
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -737,8 +737,8 @@ async fn run() -> Result<ExitStatus> {
                 args.package,
                 args.python,
                 args.settings,
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -761,8 +761,8 @@ async fn run() -> Result<ExitStatus> {
                 args.dependency_type,
                 args.package,
                 args.python,
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -802,8 +802,8 @@ async fn run() -> Result<ExitStatus> {
                 args.settings,
                 globals.isolated,
                 globals.preview,
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -830,8 +830,8 @@ async fn run() -> Result<ExitStatus> {
                 args.force,
                 args.settings,
                 globals.preview,
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -864,39 +864,39 @@ async fn run() -> Result<ExitStatus> {
             commands::tool_dir(globals.preview)?;
             Ok(ExitStatus::Success)
         }
-        Commands::Toolchain(ToolchainNamespace {
-            command: ToolchainCommand::List(args),
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::List(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolchainListSettings::resolve(args, filesystem);
+            let args = settings::PythonListSettings::resolve(args, filesystem);
             show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::toolchain_list(
+            commands::python_list(
                 args.kinds,
                 args.all_versions,
                 args.all_platforms,
-                globals.toolchain_preference,
-                globals.toolchain_fetch,
+                globals.python_preference,
+                globals.python_fetch,
                 globals.preview,
                 &cache,
                 printer,
             )
             .await
         }
-        Commands::Toolchain(ToolchainNamespace {
-            command: ToolchainCommand::Install(args),
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolchainInstallSettings::resolve(args, filesystem);
+            let args = settings::PythonInstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::toolchain_install(
+            commands::python_install(
                 args.targets,
                 args.force,
                 globals.native_tls,
@@ -907,37 +907,37 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Toolchain(ToolchainNamespace {
-            command: ToolchainCommand::Uninstall(args),
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::Uninstall(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolchainUninstallSettings::resolve(args, filesystem);
+            let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::toolchain_uninstall(args.targets, globals.preview, printer).await
+            commands::python_uninstall(args.targets, globals.preview, printer).await
         }
-        Commands::Toolchain(ToolchainNamespace {
-            command: ToolchainCommand::Find(args),
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::Find(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolchainFindSettings::resolve(args, filesystem);
+            let args = settings::PythonFindSettings::resolve(args, filesystem);
 
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::toolchain_find(
+            commands::python_find(
                 args.request,
-                globals.toolchain_preference,
+                globals.python_preference,
                 globals.preview,
                 &cache,
                 printer,
             )
             .await
         }
-        Commands::Toolchain(ToolchainNamespace {
-            command: ToolchainCommand::Dir,
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::Dir,
         }) => {
-            commands::toolchain_dir(globals.preview)?;
+            commands::python_dir(globals.preview)?;
             Ok(ExitStatus::Success)
         }
     }

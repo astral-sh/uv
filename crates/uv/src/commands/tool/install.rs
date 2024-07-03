@@ -17,12 +17,12 @@ use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_python::{
+    EnvironmentPreference, Interpreter, PythonFetch, PythonInstallation, PythonPreference,
+    PythonRequest,
+};
 use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
-use uv_toolchain::{
-    EnvironmentPreference, Interpreter, Toolchain, ToolchainFetch, ToolchainPreference,
-    ToolchainRequest,
-};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
@@ -40,8 +40,8 @@ pub(crate) async fn install(
     force: bool,
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -56,15 +56,15 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let python_request = python.as_deref().map(ToolchainRequest::parse);
+    let python_request = python.as_deref().map(PythonRequest::parse);
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
-    let interpreter = Toolchain::find_or_fetch(
+    let interpreter = PythonInstallation::find_or_fetch(
         python_request.clone(),
         EnvironmentPreference::OnlySystem,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         &client_builder,
         cache,
     )

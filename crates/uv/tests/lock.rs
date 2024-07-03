@@ -2034,13 +2034,13 @@ fn lock_requires_python() -> Result<()> {
         .filters()
         .into_iter()
         .chain(context.filters())
-        // Platform independent message for the missing toolchain
+        // Platform independent message for the missing Python installation
         .chain([(" or `py` launcher", "")])
         .collect();
 
     // Install from the lockfile.
-    // Note we need to disable toolchain fetches or we'll just download 3.12
-    uv_snapshot!(filters, context38.sync().arg("--toolchain-fetch").arg("manual"), @r###"
+    // Note we need to disable Python fetches or we'll just download 3.12
+    uv_snapshot!(filters, context38.sync().arg("--python-fetch").arg("manual"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

@@ -12,8 +12,8 @@ use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
 use uv_normalize::{ExtraName, PackageName};
+use uv_python::{PythonFetch, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::{PythonVersion, ToolchainFetch, ToolchainPreference};
 
 pub mod compat;
 pub mod options;
@@ -118,13 +118,13 @@ pub struct GlobalArgs {
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
 
-    /// Whether to prefer Python toolchains from uv or on the system.
+    /// Whether to prefer using Python from uv or on the system.
     #[arg(global = true, long)]
-    pub toolchain_preference: Option<ToolchainPreference>,
+    pub python_preference: Option<PythonPreference>,
 
-    /// Whether to automatically download Python toolchains when required.
+    /// Whether to automatically download Python when required.
     #[arg(global = true, long)]
-    pub toolchain_fetch: Option<ToolchainFetch>,
+    pub python_fetch: Option<PythonFetch>,
 
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
@@ -173,7 +173,7 @@ pub enum Commands {
     /// Run and manage executable Python packages.
     Tool(ToolNamespace),
     /// Manage Python installations.
-    Toolchain(ToolchainNamespace),
+    Python(PythonNamespace),
     /// Manage Python projects.
     #[command(flatten)]
     Project(ProjectCommand),
@@ -2020,72 +2020,71 @@ pub struct ToolUninstallArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainNamespace {
+pub struct PythonNamespace {
     #[command(subcommand)]
-    pub command: ToolchainCommand,
+    pub command: PythonCommand,
 }
 
 #[derive(Subcommand)]
-pub enum ToolchainCommand {
-    /// List the available toolchains.
-    List(ToolchainListArgs),
+pub enum PythonCommand {
+    /// List the available Python installations.
+    List(PythonListArgs),
 
-    /// Download and install toolchains.
-    Install(ToolchainInstallArgs),
+    /// Download and install Python versions.
+    Install(PythonInstallArgs),
 
-    /// Search for a toolchain.
-    #[command(disable_version_flag = true)]
-    Find(ToolchainFindArgs),
+    /// Search for a Python installation.
+    Find(PythonFindArgs),
 
-    /// Show the toolchains directory.
+    /// Show the uv Python installation directory.
     Dir,
 
-    /// Uninstall toolchains.
-    Uninstall(ToolchainUninstallArgs),
+    /// Uninstall Python versions.
+    Uninstall(PythonUninstallArgs),
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainListArgs {
-    /// List all toolchain versions, including outdated patch versions.
+pub struct PythonListArgs {
+    /// List all Python versions, including outdated patch versions.
     #[arg(long)]
     pub all_versions: bool,
 
-    /// List toolchains for all platforms.
+    /// List Python installations for all platforms.
     #[arg(long)]
     pub all_platforms: bool,
 
-    /// Only show installed toolchains, exclude available downloads.
+    /// Only show installed Python versions, exclude available downloads.
     #[arg(long)]
     pub only_installed: bool,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainInstallArgs {
-    /// The toolchains to install.
+pub struct PythonInstallArgs {
+    /// The Python versions to install.
     ///
-    /// If not provided, the requested toolchain(s) will be read from the `.python-versions`
+    /// If not provided, the requested Python version(s) will be read from the `.python-versions`
     ///  or `.python-version` files. If neither file is present, uv will check if it has
-    /// installed any toolchains. If not, it will install the latest stable version of Python.
+    /// installed any Python versions. If not, it will install the latest stable version of Python.
     pub targets: Vec<String>,
 
-    /// Force the installation of the toolchain, even if it is already installed.
+    /// Force the installation of the requested Python, even if it is already installed.
     #[arg(long, short)]
     pub force: bool,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainUninstallArgs {
-    /// The toolchains to uninstall.
+pub struct PythonUninstallArgs {
+    /// The Python versions to uninstall.
     pub targets: Vec<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainFindArgs {
-    /// The toolchain request.
+pub struct PythonFindArgs {
+    /// The Python request.
     pub request: Option<String>,
 }
 

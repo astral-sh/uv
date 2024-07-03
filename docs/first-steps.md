@@ -29,9 +29,9 @@ See the documentation on [projects](./preview/projects.md) for more details on g
 
 These commands are used to manage Python itself. uv is capable of installing and managing multiple Python versions.
 
-- `uv toolchain install`
-- `uv toolchain list`
-- `uv toolchain find`
+- `uv python install`
+- `uv python list`
+- `uv python find`
 
 See the documentation on [toolchains](./preview/toolchains.md) for more details on getting started.
 

@@ -40,7 +40,7 @@ uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-git = { workspace = true }
-uv-toolchain = { workspace = true }
+uv-python = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 

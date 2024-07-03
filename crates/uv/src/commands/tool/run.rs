@@ -14,11 +14,11 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_normalize::PackageName;
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_toolchain::{
-    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainFetch, ToolchainPreference,
-    ToolchainRequest,
+use uv_python::{
+    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
@@ -36,8 +36,8 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     _isolated: bool,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -78,11 +78,11 @@ pub(crate) async fn run(
     debug!("Syncing ephemeral environment.");
 
     // Discover an interpreter.
-    let interpreter = Toolchain::find_or_fetch(
-        python.as_deref().map(ToolchainRequest::parse),
+    let interpreter = PythonInstallation::find_or_fetch(
+        python.as_deref().map(PythonRequest::parse),
         EnvironmentPreference::OnlySystem,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         &client_builder,
         cache,
     )

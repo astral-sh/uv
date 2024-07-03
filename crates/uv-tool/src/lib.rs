@@ -14,8 +14,8 @@ pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
+use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
-use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_warnings::warn_user_once;
 
 mod receipt;
@@ -38,7 +38,7 @@ pub enum Error {
     #[error("Failed to find a directory for executables")]
     NoExecutableDirectory,
     #[error(transparent)]
-    EnvironmentError(#[from] uv_toolchain::Error),
+    EnvironmentError(#[from] uv_python::Error),
     #[error("Failed to find a receipt for tool `{0}` at {1}")]
     MissingToolReceipt(String, PathBuf),
 }

@@ -1,6 +1,6 @@
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerTree, StringVersion};
-use uv_toolchain::{Interpreter, PythonVersion};
+use uv_python::{Interpreter, PythonVersion};
 
 use crate::{RequiresPython, RequiresPythonBound};
 

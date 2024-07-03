@@ -10,9 +10,9 @@ use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::{DistributionDatabase, ProjectWorkspace, VirtualProject, Workspace};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
+use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex};
-use uv_toolchain::{ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user_once;
 
@@ -38,8 +38,8 @@ pub(crate) async fn add(
     package: Option<PackageName>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -64,9 +64,9 @@ pub(crate) async fn add(
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
         project.workspace(),
-        python.as_deref().map(ToolchainRequest::parse),
-        toolchain_preference,
-        toolchain_fetch,
+        python.as_deref().map(PythonRequest::parse),
+        python_preference,
+        python_fetch,
         connectivity,
         native_tls,
         cache,
