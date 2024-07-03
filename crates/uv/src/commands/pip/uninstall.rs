@@ -13,10 +13,10 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{KeyringProviderType, PreviewMode};
 use uv_fs::Simplified;
+use uv_python::EnvironmentPreference;
+use uv_python::PythonRequest;
+use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_toolchain::EnvironmentPreference;
-use uv_toolchain::ToolchainRequest;
-use uv_toolchain::{Prefix, PythonEnvironment, Target};
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -49,7 +49,7 @@ pub(crate) async fn pip_uninstall(
     let environment = PythonEnvironment::find(
         &python
             .as_deref()
-            .map(ToolchainRequest::parse)
+            .map(PythonRequest::parse)
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
         &cache,

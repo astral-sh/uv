@@ -6,8 +6,8 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStr
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_installer::SitePackages;
+use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
-use uv_toolchain::{PythonEnvironment, ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user_once;
 
@@ -23,8 +23,8 @@ pub(crate) async fn sync(
     dev: bool,
     modifications: Modifications,
     python: Option<String>,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     settings: InstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -43,9 +43,9 @@ pub(crate) async fn sync(
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
         project.workspace(),
-        python.as_deref().map(ToolchainRequest::parse),
-        toolchain_preference,
-        toolchain_fetch,
+        python.as_deref().map(PythonRequest::parse),
+        python_preference,
+        python_fetch,
         connectivity,
         native_tls,
         cache,

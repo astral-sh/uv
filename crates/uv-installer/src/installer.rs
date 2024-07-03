@@ -3,7 +3,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::instrument;
 
 use distribution_types::CachedDist;
-use uv_toolchain::PythonEnvironment;
+use uv_python::PythonEnvironment;
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,

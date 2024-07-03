@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::{Tags, TagsError};
 use uv_configuration::TargetTriple;
-use uv_toolchain::{Interpreter, PythonVersion};
+use uv_python::{Interpreter, PythonVersion};
 
 pub(crate) mod check;
 pub(crate) mod compile;

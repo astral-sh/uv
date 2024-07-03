@@ -7,9 +7,9 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall,
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::ResolvedRepositoryReference;
+use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
 use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
-use uv_toolchain::{Interpreter, ToolchainFetch, ToolchainPreference, ToolchainRequest};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -23,8 +23,8 @@ pub(crate) async fn lock(
     python: Option<String>,
     settings: ResolverSettings,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -41,9 +41,9 @@ pub(crate) async fn lock(
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(
         &workspace,
-        python.as_deref().map(ToolchainRequest::parse),
-        toolchain_preference,
-        toolchain_fetch,
+        python.as_deref().map(PythonRequest::parse),
+        python_preference,
+        python_fetch,
         connectivity,
         native_tls,
         cache,

@@ -9,7 +9,7 @@ use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions};
 use uv_git::GitResolver;
-use uv_toolchain::{Interpreter, PythonEnvironment};
+use uv_python::{Interpreter, PythonEnvironment};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///

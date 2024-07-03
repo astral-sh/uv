@@ -22,7 +22,7 @@ uv-fs = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
 uv-resolver = { workspace = true, features = ["schemars"] }
-uv-toolchain = { workspace = true, features = ["schemars"] }
+uv-python = { workspace = true, features = ["schemars"] }
 uv-warnings = { workspace = true }
 
 dirs-sys = { workspace = true }

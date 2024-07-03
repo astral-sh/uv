@@ -19,13 +19,13 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
+};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
     PythonRequirement, ResolutionMode,
-};
-use uv_toolchain::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonVersion, Target, ToolchainRequest,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -117,7 +117,7 @@ pub(crate) async fn pip_sync(
     let environment = PythonEnvironment::find(
         &python
             .as_deref()
-            .map(ToolchainRequest::parse)
+            .map(PythonRequest::parse)
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
         &cache,

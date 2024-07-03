@@ -22,11 +22,11 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex};
-use uv_toolchain::{
-    request_from_version_file, EnvironmentPreference, Toolchain, ToolchainFetch,
-    ToolchainPreference, ToolchainRequest,
+use uv_python::{
+    request_from_version_file, EnvironmentPreference, PythonFetch, PythonInstallation,
+    PythonPreference, PythonRequest,
 };
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::{pip, ExitStatus};
@@ -42,8 +42,8 @@ use crate::shell::Shell;
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
@@ -71,8 +71,8 @@ pub(crate) async fn venv(
         connectivity,
         seed,
         preview,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         allow_existing,
         exclude_newer,
         native_tls,
@@ -122,8 +122,8 @@ async fn venv_impl(
     connectivity: Connectivity,
     seed: bool,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
@@ -134,17 +134,17 @@ async fn venv_impl(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let mut interpreter_request = python_request.map(ToolchainRequest::parse);
+    let mut interpreter_request = python_request.map(PythonRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {
         interpreter_request = request_from_version_file().await.into_diagnostic()?;
     }
 
     // Locate the Python interpreter to use in the environment
-    let interpreter = Toolchain::find_or_fetch(
+    let interpreter = PythonInstallation::find_or_fetch(
         interpreter_request,
         EnvironmentPreference::OnlySystem,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         &client_builder,
         cache,
     )
