@@ -15,12 +15,12 @@ use uv_distribution::{DistributionDatabase, Workspace};
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
+use uv_python::{
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
+    PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, RequiresPython};
-use uv_toolchain::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
-    ToolchainFetch, ToolchainPreference, ToolchainRequest, VersionRequest,
-};
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::pip;
@@ -44,7 +44,7 @@ pub(crate) enum ProjectError {
     RequestedPythonIncompatibility(Version, RequiresPython),
 
     #[error(transparent)]
-    Toolchain(#[from] uv_toolchain::Error),
+    Python(#[from] uv_python::Error),
 
     #[error(transparent)]
     Virtualenv(#[from] uv_virtualenv::Error),
@@ -94,14 +94,14 @@ pub(crate) fn find_requires_python(
 fn find_environment(
     workspace: &Workspace,
     cache: &Cache,
-) -> Result<PythonEnvironment, uv_toolchain::Error> {
+) -> Result<PythonEnvironment, uv_python::Error> {
     PythonEnvironment::from_root(workspace.venv(), cache)
 }
 
 /// Check if the given interpreter satisfies the project's requirements.
 fn interpreter_meets_requirements(
     interpreter: &Interpreter,
-    requested_python: Option<&ToolchainRequest>,
+    requested_python: Option<&PythonRequest>,
     cache: &Cache,
 ) -> bool {
     let Some(request) = requested_python else {
@@ -126,9 +126,9 @@ impl FoundInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
-        python_request: Option<ToolchainRequest>,
-        toolchain_preference: ToolchainPreference,
-        toolchain_fetch: ToolchainFetch,
+        python_request: Option<PythonRequest>,
+        python_preference: PythonPreference,
+        python_fetch: PythonFetch,
         connectivity: Connectivity,
         native_tls: bool,
         cache: &Cache,
@@ -147,9 +147,7 @@ impl FoundInterpreter {
             requires_python
                 .as_ref()
                 .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    ToolchainRequest::Version(VersionRequest::Range(specifiers.clone()))
-                })
+                .map(|specifiers| PythonRequest::Version(VersionRequest::Range(specifiers.clone())))
         };
 
         // Read from the virtual environment first.
@@ -172,7 +170,7 @@ impl FoundInterpreter {
                     }
                 }
             }
-            Err(uv_toolchain::Error::MissingEnvironment(_)) => {}
+            Err(uv_python::Error::MissingEnvironment(_)) => {}
             Err(err) => return Err(err.into()),
         };
 
@@ -181,11 +179,11 @@ impl FoundInterpreter {
             .native_tls(native_tls);
 
         // Locate the Python interpreter to use in the environment
-        let interpreter = Toolchain::find_or_fetch(
+        let interpreter = PythonInstallation::find_or_fetch(
             python_request,
             EnvironmentPreference::OnlySystem,
-            toolchain_preference,
-            toolchain_fetch,
+            python_preference,
+            python_fetch,
             &client_builder,
             cache,
         )
@@ -223,9 +221,9 @@ impl FoundInterpreter {
 /// Initialize a virtual environment for the current project.
 pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
-    python: Option<ToolchainRequest>,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python: Option<PythonRequest>,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
@@ -234,8 +232,8 @@ pub(crate) async fn get_or_init_environment(
     match FoundInterpreter::discover(
         workspace,
         python,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         connectivity,
         native_tls,
         cache,
@@ -471,7 +469,7 @@ pub(crate) async fn update_environment(
     };
 
     // Create a build dispatch.
-    let resolve_dispatch = BuildDispatch::new(
+    let build_dispatch = BuildDispatch::new(
         &client,
         cache,
         interpreter,
@@ -511,7 +509,7 @@ pub(crate) async fn update_environment(
         &client,
         &flat_index,
         &state.index,
-        &resolve_dispatch,
+        &build_dispatch,
         concurrency,
         options,
         printer,
@@ -521,35 +519,6 @@ pub(crate) async fn update_environment(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(err) => return Err(err.into()),
-    };
-
-    // Re-initialize the in-flight map.
-    let in_flight = InFlight::default();
-
-    // If we're running with `--reinstall`, initialize a separate `BuildDispatch`, since we may
-    // end up removing some distributions from the environment.
-    let install_dispatch = if reinstall.is_none() {
-        resolve_dispatch
-    } else {
-        BuildDispatch::new(
-            &client,
-            cache,
-            interpreter,
-            index_locations,
-            &flat_index,
-            &state.index,
-            &state.git,
-            &in_flight,
-            *index_strategy,
-            setup_py,
-            config_setting,
-            build_isolation,
-            *link_mode,
-            build_options,
-            *exclude_newer,
-            concurrency,
-            preview,
-        )
     };
 
     // Sync the environment.
@@ -567,7 +536,7 @@ pub(crate) async fn update_environment(
         &client,
         &in_flight,
         concurrency,
-        &install_dispatch,
+        &build_dispatch,
         cache,
         &venv,
         dry_run,

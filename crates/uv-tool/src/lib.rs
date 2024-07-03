@@ -20,8 +20,8 @@ pub use tool::{Tool, ToolEntrypoint};
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 use uv_installer::SitePackages;
+use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
-use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_warnings::warn_user_once;
 
 mod receipt;
@@ -47,6 +47,8 @@ pub enum Error {
     ToolName(#[from] InvalidNameError),
     #[error(transparent)]
     EnvironmentError(#[from] uv_toolchain::Error),
+    #[error(transparent)]
+    EnvironmentError(#[from] uv_python::Error),
     #[error("Failed to find a receipt for tool `{0}` at {1}")]
     MissingToolReceipt(String, PathBuf),
     #[error("Failed to read tool environment packages at `{0}`: {1}")]
@@ -159,6 +161,10 @@ impl InstalledTools {
     /// Remove the environment for a tool.
     ///
     /// Does not remove the tool's entrypoints.
+    ///
+    /// # Errors
+    ///
+    /// If no such environment exists for the tool.
     pub fn remove_environment(&self, name: &PackageName) -> Result<(), Error> {
         let _lock = self.acquire_lock();
         let environment_path = self.root.join(name.to_string());
@@ -173,23 +179,45 @@ impl InstalledTools {
         Ok(())
     }
 
-    /// Return the [`PythonEnvironment`] for a given tool.
-    pub fn environment(
+    /// Return the [`PythonEnvironment`] for a given tool, if it exists.
+    pub fn get_environment(
         &self,
         name: &PackageName,
-        remove_existing: bool,
-        interpreter: Interpreter,
         cache: &Cache,
-    ) -> Result<PythonEnvironment, Error> {
+    ) -> Result<Option<PythonEnvironment>, Error> {
         let _lock = self.acquire_lock();
         let environment_path = self.root.join(name.to_string());
 
-        if !remove_existing && environment_path.exists() {
+        if environment_path.is_dir() {
             debug!(
                 "Using existing environment for tool `{name}` at `{}`.",
                 environment_path.user_display()
             );
-            return Ok(PythonEnvironment::from_root(environment_path, cache)?);
+            Ok(Some(PythonEnvironment::from_root(environment_path, cache)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Create the [`PythonEnvironment`] for a given tool, removing any existing environments.
+    pub fn create_environment(
+        &self,
+        name: &PackageName,
+        interpreter: Interpreter,
+    ) -> Result<PythonEnvironment, Error> {
+        let _lock = self.acquire_lock();
+        let environment_path = self.root.join(name.to_string());
+
+        // Remove any existing environment.
+        match fs_err::remove_dir_all(&environment_path) {
+            Ok(()) => {
+                debug!(
+                    "Removed existing environment for tool `{name}` at `{}`.",
+                    environment_path.user_display()
+                );
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err.into()),
         }
 
         debug!(

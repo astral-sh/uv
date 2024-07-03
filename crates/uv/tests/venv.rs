@@ -638,7 +638,14 @@ fn path_with_trailing_space_gives_proper_error() {
 
     // Set a custom cache directory with a trailing space
     let path_with_trailing_slash = format!("{} ", context.cache_dir.path().display());
-    uv_snapshot!(context.filters(), std::process::Command::new(crate::common::get_bin())
+    let mut filters = context.filters();
+    // Windows translates error messages, for example i get:
+    // "Caused by: Das System kann den angegebenen Pfad nicht finden. (os error 3)"
+    filters.push((
+        r"Caused by: .* \(os error 3\)",
+        "Caused by: The system cannot find the path specified. (os error 3)",
+    ));
+    uv_snapshot!(filters, std::process::Command::new(crate::common::get_bin())
         .arg("venv")
         .env("UV_CACHE_DIR", path_with_trailing_slash), @r###"
     success: false

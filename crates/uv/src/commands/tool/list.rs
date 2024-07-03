@@ -26,8 +26,8 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
         return Ok(ExitStatus::Success);
     }
 
-    // TODO(zanieb): Track and display additional metadata, like entry points
-    for (name, _tool) in tools {
+    for (name, tool) in tools {
+        // Output tool name and version
         let version =
             match installed_tools.version(&name, &Cache::from_path(installed_tools.root())) {
                 Ok(version) => version,
@@ -38,6 +38,11 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
             };
 
         writeln!(printer.stdout(), "{name} v{version}")?;
+
+        // Output tool entrypoints
+        for entrypoint in tool.entrypoints() {
+            writeln!(printer.stdout(), "    {}", &entrypoint.name)?;
+        }
     }
 
     Ok(ExitStatus::Success)

@@ -7,12 +7,12 @@ use std::sync::Arc;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
-use crate::discovery::find_toolchain;
-use crate::toolchain::Toolchain;
+use crate::discovery::find_python_installation;
+use crate::installation::PythonInstallation;
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
 use crate::{
-    EnvironmentPreference, Error, Interpreter, Prefix, Target, ToolchainNotFound,
-    ToolchainPreference, ToolchainRequest,
+    EnvironmentPreference, Error, Interpreter, Prefix, PythonNotFound, PythonPreference,
+    PythonRequest, Target,
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
@@ -27,15 +27,15 @@ struct PythonEnvironmentShared {
 
 /// The result of failed environment discovery.
 ///
-/// Generally this is cast from [`ToolchainNotFound`] by [`PythonEnvironment::find`].
+/// Generally this is cast from [`PythonNotFound`] by [`PythonEnvironment::find`].
 #[derive(Clone, Debug, Error)]
 pub struct EnvironmentNotFound {
-    request: ToolchainRequest,
+    request: PythonRequest,
     preference: EnvironmentPreference,
 }
 
-impl From<ToolchainNotFound> for EnvironmentNotFound {
-    fn from(value: ToolchainNotFound) -> Self {
+impl From<PythonNotFound> for EnvironmentNotFound {
+    fn from(value: PythonNotFound) -> Self {
         Self {
             request: value.request,
             preference: value.environment_preference,
@@ -59,7 +59,7 @@ impl fmt::Display for EnvironmentNotFound {
             EnvironmentPreference::OnlyVirtual => "virtual environment",
         };
         match self.request {
-            ToolchainRequest::Any => {
+            PythonRequest::Any => {
                 write!(f, "No {environment} found")
             }
             _ => {
@@ -72,24 +72,24 @@ impl fmt::Display for EnvironmentNotFound {
 impl PythonEnvironment {
     /// Find a [`PythonEnvironment`] matching the given request and preference.
     ///
-    /// If looking for a Python toolchain to create a new environment, use [`Toolchain::find`]
+    /// If looking for a Python interpreter to create a new environment, use [`PythonInstallation::find`]
     /// instead.
     pub fn find(
-        request: &ToolchainRequest,
+        request: &PythonRequest,
         preference: EnvironmentPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let toolchain = match find_toolchain(
+        let installation = match find_python_installation(
             request,
             preference,
-            // Ignore managed toolchains when looking for environments
-            ToolchainPreference::OnlySystem,
+            // Ignore managed installations when looking for environments
+            PythonPreference::OnlySystem,
             cache,
         )? {
-            Ok(toolchain) => toolchain,
+            Ok(installation) => installation,
             Err(err) => return Err(EnvironmentNotFound::from(err).into()),
         };
-        Ok(Self::from_toolchain(toolchain))
+        Ok(Self::from_installation(installation))
     }
 
     /// Create a [`PythonEnvironment`] from the virtual environment at the given root.
@@ -99,7 +99,7 @@ impl PythonEnvironment {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::MissingEnvironment(EnvironmentNotFound {
                     preference: EnvironmentPreference::Any,
-                    request: ToolchainRequest::Directory(root.as_ref().to_owned()),
+                    request: PythonRequest::Directory(root.as_ref().to_owned()),
                 }));
             }
             Err(err) => return Err(Error::Discovery(err.into())),
@@ -113,9 +113,9 @@ impl PythonEnvironment {
         })))
     }
 
-    /// Create a [`PythonEnvironment`] from an existing [`Toolchain`].
-    pub fn from_toolchain(toolchain: Toolchain) -> Self {
-        Self::from_interpreter(toolchain.into_interpreter())
+    /// Create a [`PythonEnvironment`] from an existing [`PythonInstallation`].
+    pub fn from_installation(installation: PythonInstallation) -> Self {
+        Self::from_interpreter(installation.into_interpreter())
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`].

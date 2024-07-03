@@ -20,13 +20,13 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
+};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
     PythonRequirement, ResolutionMode,
-};
-use uv_toolchain::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonVersion, Target, ToolchainRequest,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 
@@ -119,7 +119,7 @@ pub(crate) async fn pip_install(
     let environment = PythonEnvironment::find(
         &python
             .as_deref()
-            .map(ToolchainRequest::parse)
+            .map(PythonRequest::parse)
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
         &cache,
@@ -291,8 +291,8 @@ pub(crate) async fn pip_install(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
-    // Create a build dispatch for resolution.
-    let resolve_dispatch = BuildDispatch::new(
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
         interpreter,
@@ -340,7 +340,7 @@ pub(crate) async fn pip_install(
         &client,
         &flat_index,
         &index,
-        &resolve_dispatch,
+        &build_dispatch,
         concurrency,
         options,
         printer,
@@ -358,35 +358,6 @@ pub(crate) async fn pip_install(
         Err(err) => return Err(err.into()),
     };
 
-    // Re-initialize the in-flight map.
-    let in_flight = InFlight::default();
-
-    // If we're running with `--reinstall`, initialize a separate `BuildDispatch`, since we may
-    // end up removing some distributions from the environment.
-    let install_dispatch = if reinstall.is_none() {
-        resolve_dispatch
-    } else {
-        BuildDispatch::new(
-            &client,
-            &cache,
-            interpreter,
-            &index_locations,
-            &flat_index,
-            &index,
-            &git,
-            &in_flight,
-            index_strategy,
-            setup_py,
-            config_settings,
-            build_isolation,
-            link_mode,
-            &build_options,
-            exclude_newer,
-            concurrency,
-            preview,
-        )
-    };
-
     // Sync the environment.
     operations::install(
         &resolution,
@@ -402,7 +373,7 @@ pub(crate) async fn pip_install(
         &client,
         &in_flight,
         concurrency,
-        &install_dispatch,
+        &build_dispatch,
         &cache,
         &environment,
         dry_run,

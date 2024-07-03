@@ -57,8 +57,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -189,8 +189,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -322,8 +322,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -487,8 +487,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -621,8 +621,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -741,8 +741,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -898,8 +898,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1055,8 +1055,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1257,8 +1257,8 @@ fn resolve_find_links() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1408,8 +1408,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1534,8 +1534,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1688,8 +1688,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1866,8 +1866,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -1982,8 +1982,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2098,8 +2098,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2216,8 +2216,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,
@@ -2359,8 +2359,8 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         isolated: false,
         show_settings: true,
         preview: Disabled,
-        toolchain_preference: OnlySystem,
-        toolchain_fetch: Automatic,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
     }
     CacheSettings {
         no_cache: false,

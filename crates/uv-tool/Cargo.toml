@@ -20,7 +20,7 @@ pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-fs = { workspace = true }
 uv-state = { workspace = true }
-uv-toolchain = { workspace = true }
+uv-python = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
 uv-installer = { workspace = true }

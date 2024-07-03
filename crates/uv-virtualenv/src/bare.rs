@@ -13,7 +13,7 @@ use tracing::info;
 
 use pypi_types::Scheme;
 use uv_fs::{cachedir, Simplified};
-use uv_toolchain::{Interpreter, VirtualEnvironment};
+use uv_python::{Interpreter, VirtualEnvironment};
 use uv_version::version;
 
 use crate::{Error, Prompt};

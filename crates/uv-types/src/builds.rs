@@ -1,4 +1,4 @@
-use uv_toolchain::PythonEnvironment;
+use uv_python::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.
 #[derive(Debug, Default, Copy, Clone)]
