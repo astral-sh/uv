@@ -67,13 +67,13 @@ pub(crate) async fn install(
         {
             writeln!(
                 printer.stderr(),
-                "Found installed installation `{}` that satisfies {request}",
+                "Found existing installation `{}` that satisfies {request}",
                 installation.key()
             )?;
             if force {
                 writeln!(
                     printer.stderr(),
-                    "Removing installed installation `{}`",
+                    "Removing existing installation `{}`",
                     installation.key()
                 )?;
                 fs::remove_dir_all(installation.path())?;
@@ -88,18 +88,15 @@ pub(crate) async fn install(
         if matches!(requests.as_slice(), [PythonRequest::Any]) {
             writeln!(
                 printer.stderr(),
-                "A installation is already installed. Use `uv installation install <request>` to install a specific installation.",
+                "Python is already available. Use `uv python install <request>` to install a specific version.",
             )?;
         } else if requests.len() > 1 {
             writeln!(
                 printer.stderr(),
-                "All requested installations already installed."
+                "All requested versions already installed."
             )?;
         } else {
-            writeln!(
-                printer.stderr(),
-                "Requested installation already installed."
-            )?;
+            writeln!(printer.stderr(), "Requested versions already installed.")?;
         }
         return Ok(ExitStatus::Success);
     }
@@ -107,7 +104,7 @@ pub(crate) async fn install(
     if unfilled_requests.len() > 1 {
         writeln!(
             printer.stderr(),
-            "Found {}/{} installations requiring installation",
+            "Found {}/{} versions requiring installation",
             unfilled_requests.len(),
             requests.len()
         )?;
@@ -158,7 +155,7 @@ pub(crate) async fn install(
     let s = if downloads.len() == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
-        "Installed {} installation{s} in {}s",
+        "Installed {} version{s} in {}s",
         downloads.len(),
         start.elapsed().as_secs()
     )?;
