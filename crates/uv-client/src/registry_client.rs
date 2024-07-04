@@ -38,10 +38,7 @@ pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
     cache: Cache,
-    base_client_builder: BaseClientBuilder<'a>,
-    client: Option<Client>,
-    markers: Option<&'a MarkerEnvironment>,
-    platform: Option<&'a Platform>,
+    base_client_builder: BaseClientBuilder<'a>
 }
 
 impl RegistryClientBuilder<'_> {
@@ -50,10 +47,7 @@ impl RegistryClientBuilder<'_> {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
             cache,
-            base_client_builder: BaseClientBuilder::new(),
-            client: None,
-            markers: None,
-            platform: None,
+            base_client_builder: BaseClientBuilder::new()
         }
     }
 }
@@ -103,37 +97,25 @@ impl<'a> RegistryClientBuilder<'a> {
 
     #[must_use]
     pub fn client(mut self, client: Client) -> Self {
-        self.client = Some(client);
+        self.base_client_builder = self.base_client_builder.client(client);
         self
     }
 
     #[must_use]
     pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
-        self.markers = Some(markers);
+        self.base_client_builder = self.base_client_builder.markers(markers);
         self
     }
 
     #[must_use]
     pub fn platform(mut self, platform: &'a Platform) -> Self {
-        self.platform = Some(platform);
+        self.base_client_builder = self.base_client_builder.platform(platform);
         self
     }
 
     pub fn build(self) -> RegistryClient {
         // Build a base client
-        let mut builder = self.base_client_builder;
-
-        if let Some(client) = self.client {
-            builder = builder.client(client);
-        }
-
-        if let Some(markers) = self.markers {
-            builder = builder.markers(markers);
-        }
-
-        if let Some(platform) = self.platform {
-            builder = builder.platform(platform);
-        }
+        let builder = self.base_client_builder;
 
         let client = builder.build();
 
@@ -160,10 +142,7 @@ impl<'a> From<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
             cache: Cache::temp().unwrap(),
-            base_client_builder: value,
-            client: None,
-            markers: None,
-            platform: None,
+            base_client_builder: value
         }
     }
 }
