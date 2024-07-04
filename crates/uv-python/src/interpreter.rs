@@ -140,6 +140,25 @@ impl Interpreter {
         }
     }
 
+    /// Return the [`Interpreter`] for the base executable, if it's available.
+    ///
+    /// If no such base executable is available, or if the base executable is the same as the
+    /// current executable, this method returns `None`.
+    pub fn to_base_interpreter(&self, cache: &Cache) -> Result<Option<Self>, Error> {
+        if let Some(base_executable) = self
+            .sys_base_executable()
+            .filter(|base_executable| *base_executable != self.sys_executable())
+        {
+            match Self::query(base_executable, cache) {
+                Ok(base_interpreter) => Ok(Some(base_interpreter)),
+                Err(Error::NotFound(_)) => Ok(None),
+                Err(err) => Err(err),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Returns the path to the Python virtual environment.
     #[inline]
     pub fn platform(&self) -> &Platform {
