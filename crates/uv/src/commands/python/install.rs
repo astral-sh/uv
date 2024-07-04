@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use fs_err as fs;
 use futures::StreamExt;
 
 use uv_cache::Cache;
@@ -70,6 +71,12 @@ pub(crate) async fn install(
                 installation.key()
             )?;
             if force {
+                writeln!(
+                    printer.stderr(),
+                    "Removing installed installation `{}`",
+                    installation.key()
+                )?;
+                fs::remove_dir_all(installation.path())?;
                 unfilled_requests.push(download_request);
             }
         } else {
