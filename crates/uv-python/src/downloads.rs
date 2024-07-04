@@ -433,16 +433,16 @@ impl ManagedPythonDownload {
             .into_async_read();
 
         debug!("Extracting {filename}");
-        let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
-        let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
-        uv_extract::stream::archive(&mut hasher, filename, temp_dir.path())
-            .await
-            .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
 
-        hasher.finish().await.map_err(Error::HashExhaustion)?;
-
-        // Check the hash
         if let Some(expected) = self.sha256 {
+            let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
+            let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
+            uv_extract::stream::archive(&mut hasher, filename, temp_dir.path())
+                .await
+                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+
+            hasher.finish().await.map_err(Error::HashExhaustion)?;
+
             let actual = hashers
                 .into_iter()
                 .map(HashDigest::from)
@@ -456,6 +456,10 @@ impl ManagedPythonDownload {
                     actual: actual.to_string(),
                 });
             }
+        } else {
+            uv_extract::stream::archive(reader.compat(), filename, temp_dir.path())
+                .await
+                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
         }
 
         // Extract the top-level directory.
