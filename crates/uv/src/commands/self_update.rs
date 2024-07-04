@@ -4,6 +4,7 @@ use anyhow::Result;
 use axoupdater::{AxoUpdater, AxoupdateError};
 use owo_colors::OwoColorize;
 use tracing::debug;
+
 use uv_client::WrappedReqwestError;
 
 use crate::commands::ExitStatus;

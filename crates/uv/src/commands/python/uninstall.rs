@@ -1,8 +1,10 @@
+use std::collections::BTreeSet;
+use std::fmt::Write;
+
 use anyhow::Result;
 use futures::StreamExt;
 use itertools::Itertools;
-use std::collections::BTreeSet;
-use std::fmt::Write;
+
 use uv_configuration::PreviewMode;
 use uv_python::downloads::{self, PythonDownloadRequest};
 use uv_python::managed::ManagedPythonInstallations;

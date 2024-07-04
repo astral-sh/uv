@@ -17,16 +17,16 @@ use crate::settings::ResolverInstallerSettings;
 
 /// An ephemeral [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
-pub(crate) struct EphemeralEnvironment(PythonEnvironment);
+pub(crate) struct CachedEnvironment(PythonEnvironment);
 
-impl From<EphemeralEnvironment> for PythonEnvironment {
-    fn from(ephemeral: EphemeralEnvironment) -> Self {
+impl From<CachedEnvironment> for PythonEnvironment {
+    fn from(ephemeral: CachedEnvironment) -> Self {
         ephemeral.0
     }
 }
 
-impl EphemeralEnvironment {
-    /// Get or create an [`EphemeralEnvironment`] based on a given set of requirements and a base
+impl CachedEnvironment {
+    /// Get or create an [`CachedEnvironment`] based on a given set of requirements and a base
     /// interpreter.
     pub(crate) async fn get_or_create(
         requirements: Vec<Requirement>,

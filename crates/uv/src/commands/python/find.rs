@@ -1,5 +1,6 @@
-use anyhow::Result;
 use std::fmt::Write;
+
+use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
