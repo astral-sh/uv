@@ -1398,3 +1398,67 @@ fn tool_install_python_request() {
     Installed: black, blackd
     "###);
 }
+
+/// Test preserving a tool environment when new but incompatible requirements are requested.
+#[test]
+fn tool_install_preserve_environment() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==24.1.1")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.1.1
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed: black, blackd
+    "###);
+
+    // Install `black`, but with an incompatible requirement.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==24.1.1")
+        .arg("--with")
+        .arg("packaging==0.0.1")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    error: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
+    And because you require packaging==0.0.1, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // Install `black`. The tool should already be installed, since we didn't remove the environment.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==24.1.1")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Tool `black==24.1.1` is already installed
+    "###);
+}
