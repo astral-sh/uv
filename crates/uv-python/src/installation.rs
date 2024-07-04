@@ -88,7 +88,7 @@ impl PythonInstallation {
         // Perform a fetch aggressively if managed Python is preferred
         if matches!(preference, PythonPreference::Managed) && python_fetch.is_automatic() {
             if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
-                return Self::fetch(request, client_builder, cache).await;
+                return Self::fetch(request.fill(), client_builder, cache).await;
             }
         }
 
