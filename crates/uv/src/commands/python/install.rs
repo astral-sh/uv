@@ -67,13 +67,13 @@ pub(crate) async fn install(
         {
             writeln!(
                 printer.stderr(),
-                "Found installed installation `{}` that satisfies {request}",
+                "Found existing installation `{}` that satisfies {request}",
                 installation.key()
             )?;
             if force {
                 writeln!(
                     printer.stderr(),
-                    "Removing installed installation `{}`",
+                    "Removing existing installation `{}`",
                     installation.key()
                 )?;
                 fs::remove_dir_all(installation.path())?;
