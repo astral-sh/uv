@@ -94,12 +94,9 @@ pub(crate) async fn add(
         resolution_environment(python_version, python_platform, venv.interpreter())?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(native_tls)
-        .connectivity(connectivity)
+    let client = RegistryClientBuilder::from(client_builder)
         .index_urls(settings.index_locations.index_urls())
         .index_strategy(settings.index_strategy)
-        .keyring(settings.keyring_provider)
         .markers(&markers)
         .platform(venv.interpreter().platform())
         .build();
