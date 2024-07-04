@@ -86,10 +86,25 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
 pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPythonBound> {
     match tree {
         MarkerTree::Expression(MarkerExpression::Version {
-            key: MarkerValueVersion::PythonFullVersion | MarkerValueVersion::PythonVersion,
+            key: MarkerValueVersion::PythonFullVersion,
             specifier,
         }) => {
-            let specifier = PubGrubSpecifier::try_from(specifier).ok()?;
+            // Simplify using PEP 440 semantics.
+            let specifier = PubGrubSpecifier::from_pep440_specifier(specifier).ok()?;
+
+            // Convert to PubGrub range and perform a union.
+            let range = PubGrubRange::from(specifier);
+            let (lower, _) = range.iter().next()?;
+
+            // Extract the lower bound.
+            Some(RequiresPythonBound::new(lower.clone()))
+        }
+        MarkerTree::Expression(MarkerExpression::Version {
+            key: MarkerValueVersion::PythonVersion,
+            specifier,
+        }) => {
+            // Simplify using release-only semantics, since `python_version` is always `major.minor`.
+            let specifier = PubGrubSpecifier::from_release_specifier(specifier).ok()?;
 
             // Convert to PubGrub range and perform a union.
             let range = PubGrubRange::from(specifier);
@@ -348,7 +363,26 @@ fn keyed_range(expr: &MarkerExpression) -> Option<(&MarkerValueVersion, PubGrubR
         _ => return None,
     };
 
-    let pubgrub_specifier = PubGrubSpecifier::try_from(&specifier).ok()?;
+    // Simplify using either PEP 440 or release-only semantics.
+    let pubgrub_specifier = match expr {
+        MarkerExpression::Version {
+            key: MarkerValueVersion::PythonVersion,
+            ..
+        } => PubGrubSpecifier::from_release_specifier(&specifier).ok()?,
+        MarkerExpression::Version {
+            key: MarkerValueVersion::PythonFullVersion,
+            ..
+        } => PubGrubSpecifier::from_pep440_specifier(&specifier).ok()?,
+        MarkerExpression::VersionInverted {
+            key: MarkerValueVersion::PythonVersion,
+            ..
+        } => PubGrubSpecifier::from_release_specifier(&specifier).ok()?,
+        MarkerExpression::VersionInverted {
+            key: MarkerValueVersion::PythonFullVersion,
+            ..
+        } => PubGrubSpecifier::from_pep440_specifier(&specifier).ok()?,
+        _ => return None,
+    };
 
     Some((key, pubgrub_specifier.into()))
 }
@@ -403,7 +437,7 @@ mod tests {
         // a quirk of how pubgrub works, but this is considered part of normalization
         assert_marker_equal(
             "python_version > '3.17.post4' or python_version > '3.18.post4'",
-            "python_version >= '3.17.post5'",
+            "python_version > '3.17'",
         );
 
         assert_marker_equal(

@@ -35,26 +35,26 @@ impl From<PubGrubSpecifier> for Range<Version> {
     }
 }
 
-impl TryFrom<&VersionSpecifiers> for PubGrubSpecifier {
-    type Error = PubGrubSpecifierError;
-
-    /// Convert a PEP 440 specifier to a PubGrub-compatible version range.
-    fn try_from(specifiers: &VersionSpecifiers) -> Result<Self, PubGrubSpecifierError> {
+impl PubGrubSpecifier {
+    /// Convert [`VersionSpecifiers`] to a PubGrub-compatible version range, using PEP 440
+    /// semantics.
+    pub(crate) fn from_pep440_specifiers(
+        specifiers: &VersionSpecifiers,
+    ) -> Result<Self, PubGrubSpecifierError> {
         let range = specifiers
             .iter()
-            .map(crate::pubgrub::PubGrubSpecifier::try_from)
+            .map(Self::from_pep440_specifier)
             .fold_ok(Range::full(), |range, specifier| {
                 range.intersection(&specifier.into())
             })?;
         Ok(Self(range))
     }
-}
 
-impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
-    type Error = PubGrubSpecifierError;
-
-    /// Convert a PEP 440 specifier to a PubGrub-compatible version range.
-    fn try_from(specifier: &VersionSpecifier) -> Result<Self, PubGrubSpecifierError> {
+    /// Convert the [`VersionSpecifier`] to a PubGrub-compatible version range, using PEP 440
+    /// semantics.
+    pub(crate) fn from_pep440_specifier(
+        specifier: &VersionSpecifier,
+    ) -> Result<Self, PubGrubSpecifierError> {
         let ranges = match specifier.operator() {
             Operator::Equal => {
                 let version = specifier.version().clone();
@@ -145,6 +145,106 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
             }
         };
 
+        Ok(Self(ranges))
+    }
+
+    /// Convert the [`VersionSpecifiers`] to a PubGrub-compatible version range, using release-only
+    /// semantics.
+    ///
+    /// Assumes that the range will only be tested against versions that consist solely of release
+    /// segments (e.g., `3.12.0`, but not `3.12.0b1`).
+    ///
+    /// These semantics are used for testing Python compatibility (e.g., `requires-python` against
+    /// the user's installed Python version). In that context, it's more intuitive that `3.13.0b0`
+    /// is allowed for projects that declare `requires-python = ">3.13"`.
+    ///
+    /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
+    pub(crate) fn from_release_specifiers(
+        specifiers: &VersionSpecifiers,
+    ) -> Result<Self, PubGrubSpecifierError> {
+        let range = specifiers
+            .iter()
+            .map(Self::from_release_specifier)
+            .fold_ok(Range::full(), |range, specifier| {
+                range.intersection(&specifier.into())
+            })?;
+        Ok(Self(range))
+    }
+
+    /// Convert the [`VersionSpecifier`] to a PubGrub-compatible version range, using release-only
+    /// semantics.
+    ///
+    /// Assumes that the range will only be tested against versions that consist solely of release
+    /// segments (e.g., `3.12.0`, but not `3.12.0b1`).
+    ///
+    /// These semantics are used for testing Python compatibility (e.g., `requires-python` against
+    /// the user's installed Python version). In that context, it's more intuitive that `3.13.0b0`
+    /// is allowed for projects that declare `requires-python = ">3.13"`.
+    ///
+    /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
+    pub(crate) fn from_release_specifier(
+        specifier: &VersionSpecifier,
+    ) -> Result<Self, PubGrubSpecifierError> {
+        let ranges = match specifier.operator() {
+            Operator::Equal => {
+                let version = specifier.version().only_release();
+                Range::singleton(version)
+            }
+            Operator::ExactEqual => {
+                let version = specifier.version().only_release();
+                Range::singleton(version)
+            }
+            Operator::NotEqual => {
+                let version = specifier.version().only_release();
+                Range::singleton(version).complement()
+            }
+            Operator::TildeEqual => {
+                let [rest @ .., last, _] = specifier.version().release() else {
+                    return Err(PubGrubSpecifierError::InvalidTildeEquals(specifier.clone()));
+                };
+                let upper = Version::new(rest.iter().chain([&(last + 1)]));
+                let version = specifier.version().only_release();
+                Range::from_range_bounds(version..upper)
+            }
+            Operator::LessThan => {
+                let version = specifier.version().only_release();
+                Range::strictly_lower_than(version)
+            }
+            Operator::LessThanEqual => {
+                let version = specifier.version().only_release();
+                Range::lower_than(version)
+            }
+            Operator::GreaterThan => {
+                let version = specifier.version().only_release();
+                Range::strictly_higher_than(version)
+            }
+            Operator::GreaterThanEqual => {
+                let version = specifier.version().only_release();
+                Range::higher_than(version)
+            }
+            Operator::EqualStar => {
+                let low = specifier.version().only_release();
+                let high = {
+                    let mut high = low.clone();
+                    let mut release = high.release().to_vec();
+                    *release.last_mut().unwrap() += 1;
+                    high = high.with_release(release);
+                    high
+                };
+                Range::from_range_bounds(low..high)
+            }
+            Operator::NotEqualStar => {
+                let low = specifier.version().only_release();
+                let high = {
+                    let mut high = low.clone();
+                    let mut release = high.release().to_vec();
+                    *release.last_mut().unwrap() += 1;
+                    high = high.with_release(release);
+                    high
+                };
+                Range::from_range_bounds(low..high).complement()
+            }
+        };
         Ok(Self(ranges))
     }
 }

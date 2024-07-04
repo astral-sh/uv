@@ -124,7 +124,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
                  ----- stderr -----
                  warning: The requested Python version 3.9 is not available; 3.11.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the requested Python version (3.9) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the requested Python version (3.9.0) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
                  "###
     );
@@ -354,7 +354,7 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
                            package-a==2.0.0
                        we can conclude that package-a<2.0.0 cannot be used. (1)
 
-                       Because the requested Python version (3.11) does not satisfy Python>=3.12 and package-a==2.0.0 depends on Python>=3.12, we can conclude that package-a==2.0.0 cannot be used.
+                       Because the requested Python version (3.11.0) does not satisfy Python>=3.12 and package-a==2.0.0 depends on Python>=3.12, we can conclude that package-a==2.0.0 cannot be used.
                        And because we know from (1) that package-a<2.0.0 cannot be used, we can conclude that all versions of package-a cannot be used.
                        And because you require package-a, we can conclude that the requirements are unsatisfiable.
                  "###
@@ -403,7 +403,7 @@ fn python_patch_override_no_patch() -> Result<()> {
 
                  ----- stderr -----
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the requested Python version (3.8) does not satisfy Python>=3.8.4 and package-a==1.0.0 depends on Python>=3.8.4, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the requested Python version (3.8.0) does not satisfy Python>=3.8.4 and package-a==1.0.0 depends on Python>=3.8.4, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
                  "###
     );
