@@ -42,6 +42,22 @@ impl CachedEnvironment {
     ) -> anyhow::Result<Self> {
         let spec = RequirementsSpecification::from_requirements(requirements);
 
+        // When caching, always use the base interpreter, rather than that of the virtual
+        // environment.
+        let interpreter = if let Some(interpreter) = interpreter.to_base_interpreter(cache)? {
+            debug!(
+                "Caching via base interpreter: `{}`",
+                interpreter.sys_executable().display()
+            );
+            interpreter
+        } else {
+            debug!(
+                "Caching via interpreter: `{}`",
+                interpreter.sys_executable().display()
+            );
+            interpreter
+        };
+
         // Resolve the requirements with the interpreter.
         let resolution = resolve_environment(
             &interpreter,
@@ -60,11 +76,13 @@ impl CachedEnvironment {
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.
-        let lock = Lock::from_resolution_graph(&resolution)?;
-        let toml = lock.to_toml()?;
-        let resolution_hash = digest(&toml);
+        let resolution_hash = digest(
+            &Lock::from_resolution_graph(&resolution)?
+                .to_toml()?
+                .as_bytes(),
+        );
 
-        // Hash the interpreter by hashing the sysconfig data.
+        // Hash the interpreter based on its path.
         // TODO(charlie): Come up with a robust hash for the interpreter.
         let interpreter_hash = digest(&interpreter.sys_executable());
 
