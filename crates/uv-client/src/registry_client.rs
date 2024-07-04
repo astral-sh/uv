@@ -38,7 +38,7 @@ pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
     cache: Cache,
-    base_client_builder: BaseClientBuilder<'a>
+    base_client_builder: BaseClientBuilder<'a>,
 }
 
 impl RegistryClientBuilder<'_> {
@@ -47,7 +47,7 @@ impl RegistryClientBuilder<'_> {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
             cache,
-            base_client_builder: BaseClientBuilder::new()
+            base_client_builder: BaseClientBuilder::new(),
         }
     }
 }
@@ -142,7 +142,7 @@ impl<'a> From<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
             cache: Cache::temp().unwrap(),
-            base_client_builder: value
+            base_client_builder: value,
         }
     }
 }
