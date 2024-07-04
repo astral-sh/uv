@@ -17,17 +17,16 @@ use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_python::{
+    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
+};
 use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
-use uv_toolchain::{
-    EnvironmentPreference, Interpreter, Toolchain, ToolchainFetch, ToolchainPreference,
-    ToolchainRequest,
-};
 use uv_warnings::warn_user_once;
 
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::{update_environment, SharedState};
-use crate::commands::{project, ExitStatus};
+use crate::commands::project::update_environment;
+use crate::commands::tool::common::resolve_requirements;
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -40,8 +39,8 @@ pub(crate) async fn install(
     force: bool,
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -56,15 +55,15 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let python_request = python.as_deref().map(ToolchainRequest::parse);
+    let python_request = python.as_deref().map(PythonRequest::parse);
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
-    let interpreter = Toolchain::find_or_fetch(
+    let interpreter = PythonInstallation::find_or_fetch(
         python_request.clone(),
         EnvironmentPreference::OnlySystem,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         &client_builder,
         cache,
     )
@@ -203,6 +202,8 @@ pub(crate) async fn install(
     let environment = if let Some(environment) = existing_environment {
         environment
     } else {
+        // TODO(charlie): Resolve, then create the environment, then install. This ensures that
+        // we don't nuke the environment if the resolution fails.
         installed_tools.create_environment(&from.name, interpreter)?
     };
 
@@ -211,7 +212,6 @@ pub(crate) async fn install(
     let environment = update_environment(
         environment,
         spec,
-        Modifications::Exact,
         &settings,
         &state,
         preview,
@@ -332,42 +332,4 @@ pub(crate) async fn install(
     installed_tools.add_tool_receipt(&from.name, tool)?;
 
     Ok(ExitStatus::Success)
-}
-
-/// Resolve any [`UnnamedRequirements`].
-async fn resolve_requirements(
-    requirements: impl Iterator<Item = &str>,
-    interpreter: &Interpreter,
-    settings: &ResolverInstallerSettings,
-    state: &SharedState,
-    preview: PreviewMode,
-    connectivity: Connectivity,
-    concurrency: Concurrency,
-    native_tls: bool,
-    cache: &Cache,
-    printer: Printer,
-) -> Result<Vec<Requirement>> {
-    // Parse the requirements.
-    let requirements = {
-        let mut parsed = vec![];
-        for requirement in requirements {
-            parsed.push(RequirementsSpecification::parse_package(requirement)?);
-        }
-        parsed
-    };
-
-    // Resolve the parsed requirements.
-    project::resolve_names(
-        requirements,
-        interpreter,
-        settings,
-        state,
-        preview,
-        connectivity,
-        concurrency,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await
 }

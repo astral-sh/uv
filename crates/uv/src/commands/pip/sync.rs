@@ -17,21 +17,20 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_git::GitResolver;
 use uv_installer::SitePackages;
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
+};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder, PreReleaseMode,
-    PythonRequirement, ResolutionMode,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PreReleaseMode, PythonRequirement,
+    ResolutionMode,
 };
-use uv_toolchain::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonVersion, Target, ToolchainRequest,
-};
-use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::ExitStatus;
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -117,7 +116,7 @@ pub(crate) async fn pip_sync(
     let environment = PythonEnvironment::find(
         &python
             .as_deref()
-            .map(ToolchainRequest::parse)
+            .map(PythonRequest::parse)
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
         &cache,
@@ -229,29 +228,25 @@ pub(crate) async fn pip_sync(
         BuildIsolation::Isolated
     };
 
-    // Create a shared in-memory index.
-    let index = InMemoryIndex::default();
-
-    // Track in-flight downloads, builds, etc., across resolutions.
-    let in_flight = InFlight::default();
+    // Initialize any shared state.
+    let state = SharedState::default();
 
     // When resolving, don't take any external preferences into account.
     let preferences = Vec::default();
-    let git = GitResolver::default();
 
     // Ignore development dependencies.
     let dev = Vec::default();
 
-    // Create a build dispatch for resolution.
-    let resolve_dispatch = BuildDispatch::new(
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
         interpreter,
         &index_locations,
         &flat_index,
-        &index,
-        &git,
-        &in_flight,
+        &state.index,
+        &state.git,
+        &state.in_flight,
         index_strategy,
         setup_py,
         config_settings,
@@ -292,8 +287,8 @@ pub(crate) async fn pip_sync(
         python_requirement,
         &client,
         &flat_index,
-        &index,
-        &resolve_dispatch,
+        &state.index,
+        &build_dispatch,
         concurrency,
         options,
         printer,
@@ -311,35 +306,6 @@ pub(crate) async fn pip_sync(
         Err(err) => return Err(err.into()),
     };
 
-    // Re-initialize the in-flight map.
-    let in_flight = InFlight::default();
-
-    // If we're running with `--reinstall`, initialize a separate `BuildDispatch`, since we may
-    // end up removing some distributions from the environment.
-    let install_dispatch = if reinstall.is_none() {
-        resolve_dispatch
-    } else {
-        BuildDispatch::new(
-            &client,
-            &cache,
-            interpreter,
-            &index_locations,
-            &flat_index,
-            &index,
-            &git,
-            &in_flight,
-            index_strategy,
-            setup_py,
-            config_settings,
-            build_isolation,
-            link_mode,
-            &build_options,
-            exclude_newer,
-            concurrency,
-            preview,
-        )
-    };
-
     // Sync the environment.
     operations::install(
         &resolution,
@@ -353,9 +319,9 @@ pub(crate) async fn pip_sync(
         &hasher,
         &tags,
         &client,
-        &in_flight,
+        &state.in_flight,
         concurrency,
-        &install_dispatch,
+        &build_dispatch,
         &cache,
         &environment,
         dry_run,

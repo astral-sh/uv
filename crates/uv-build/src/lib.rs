@@ -31,7 +31,7 @@ use pep508_rs::PackageName;
 use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
-use uv_toolchain::{Interpreter, PythonEnvironment};
+use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`

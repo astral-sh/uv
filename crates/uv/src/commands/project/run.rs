@@ -13,16 +13,15 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::{VirtualProject, Workspace, WorkspaceError};
 use uv_normalize::PackageName;
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_toolchain::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
-    ToolchainFetch, ToolchainPreference, ToolchainRequest, VersionRequest,
+use uv_python::{
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
+    PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::SharedState;
-use crate::commands::{project, ExitStatus};
+use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -37,8 +36,8 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     isolated: bool,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -71,14 +70,14 @@ pub(crate) async fn run(
 
             // (1) Explicit request from user
             let python_request = if let Some(request) = python.as_deref() {
-                Some(ToolchainRequest::parse(request))
+                Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
             } else if let Some(request) = request_from_version_file().await? {
                 Some(request)
                 // (3) `Requires-Python` in `pyproject.toml`
             } else {
                 metadata.requires_python.map(|requires_python| {
-                    ToolchainRequest::Version(VersionRequest::Range(requires_python))
+                    PythonRequest::Version(VersionRequest::Range(requires_python))
                 })
             };
 
@@ -86,11 +85,11 @@ pub(crate) async fn run(
                 .connectivity(connectivity)
                 .native_tls(native_tls);
 
-            let interpreter = Toolchain::find_or_fetch(
+            let interpreter = PythonInstallation::find_or_fetch(
                 python_request,
                 EnvironmentPreference::Any,
-                toolchain_preference,
-                toolchain_fetch,
+                python_preference,
+                python_fetch,
                 &client_builder,
                 cache,
             )
@@ -111,7 +110,6 @@ pub(crate) async fn run(
             let environment = project::update_environment(
                 venv,
                 spec,
-                Modifications::Sufficient,
                 &settings,
                 &state,
                 preview,
@@ -171,9 +169,9 @@ pub(crate) async fn run(
 
             let venv = project::get_or_init_environment(
                 project.workspace(),
-                python.as_deref().map(ToolchainRequest::parse),
-                toolchain_preference,
-                toolchain_fetch,
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_fetch,
                 connectivity,
                 native_tls,
                 cache,
@@ -221,18 +219,18 @@ pub(crate) async fn run(
                 .connectivity(connectivity)
                 .native_tls(native_tls);
 
-            let toolchain = Toolchain::find_or_fetch(
-                python.as_deref().map(ToolchainRequest::parse),
+            let python = PythonInstallation::find_or_fetch(
+                python.as_deref().map(PythonRequest::parse),
                 // No opt-in is required for system environments, since we are not mutating it.
                 EnvironmentPreference::Any,
-                toolchain_preference,
-                toolchain_fetch,
+                python_preference,
+                python_fetch,
                 &client_builder,
                 cache,
             )
             .await?;
 
-            toolchain.into_interpreter()
+            python.into_interpreter()
         };
 
         Some(interpreter)
@@ -262,11 +260,11 @@ pub(crate) async fn run(
                 .native_tls(native_tls);
 
             // Note we force preview on during `uv run` for now since the entire interface is in preview
-            Toolchain::find_or_fetch(
-                python.as_deref().map(ToolchainRequest::parse),
+            PythonInstallation::find_or_fetch(
+                python.as_deref().map(PythonRequest::parse),
                 EnvironmentPreference::Any,
-                toolchain_preference,
-                toolchain_fetch,
+                python_preference,
+                python_fetch,
                 &client_builder,
                 cache,
             )
@@ -301,7 +299,6 @@ pub(crate) async fn run(
             project::update_environment(
                 venv,
                 spec,
-                Modifications::Sufficient,
                 &settings,
                 &state,
                 preview,

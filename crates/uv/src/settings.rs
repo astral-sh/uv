@@ -13,9 +13,9 @@ use uv_cli::options::{flag, installer_options, resolver_installer_options, resol
 use uv_cli::{
     AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs,
-    ToolListArgs, ToolRunArgs, ToolUninstallArgs, ToolchainFindArgs, ToolchainInstallArgs,
-    ToolchainListArgs, ToolchainUninstallArgs, VenvArgs,
+    PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
+    PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
+    ToolUninstallArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -25,13 +25,13 @@ use uv_configuration::{
 };
 use uv_distribution::pyproject::DependencyType;
 use uv_normalize::PackageName;
+use uv_python::{Prefix, PythonFetch, PythonPreference, PythonVersion, Target};
 use uv_requirements::RequirementsSource;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_settings::{
     Combine, FilesystemOptions, InstallerOptions, Options, PipOptions, ResolverInstallerOptions,
     ResolverOptions,
 };
-use uv_toolchain::{Prefix, PythonVersion, Target, ToolchainFetch, ToolchainPreference};
 
 use crate::commands::pip::operations::Modifications;
 
@@ -47,8 +47,8 @@ pub(crate) struct GlobalSettings {
     pub(crate) isolated: bool,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
-    pub(crate) toolchain_preference: ToolchainPreference,
-    pub(crate) toolchain_fetch: ToolchainFetch,
+    pub(crate) python_preference: PythonPreference,
+    pub(crate) python_fetch: PythonFetch,
 }
 
 impl GlobalSettings {
@@ -64,17 +64,17 @@ impl GlobalSettings {
                 .unwrap_or(false),
         );
 
-        // Always use preview mode toolchain preferences during preview commands
+        // Always use preview mode python preferences during preview commands
         // TODO(zanieb): There should be a cleaner way to do this, we should probably resolve
         // force preview to true for these commands but it would break our experimental warning
         // right now
-        let default_toolchain_preference = if matches!(
+        let default_python_preference = if matches!(
             command,
-            Commands::Project(_) | Commands::Toolchain(_) | Commands::Tool(_)
+            Commands::Project(_) | Commands::Python(_) | Commands::Tool(_)
         ) {
-            ToolchainPreference::default_from(PreviewMode::Enabled)
+            PythonPreference::default_from(PreviewMode::Enabled)
         } else {
-            ToolchainPreference::default_from(preview)
+            PythonPreference::default_from(preview)
         };
 
         Self {
@@ -111,13 +111,13 @@ impl GlobalSettings {
             isolated: args.isolated,
             show_settings: args.show_settings,
             preview,
-            toolchain_preference: args
-                .toolchain_preference
-                .combine(workspace.and_then(|workspace| workspace.globals.toolchain_preference))
-                .unwrap_or(default_toolchain_preference),
-            toolchain_fetch: args
-                .toolchain_fetch
-                .combine(workspace.and_then(|workspace| workspace.globals.toolchain_fetch))
+            python_preference: args
+                .python_preference
+                .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
+                .unwrap_or(default_python_preference),
+            python_fetch: args
+                .python_fetch
+                .combine(workspace.and_then(|workspace| workspace.globals.python_fetch))
                 .unwrap_or_default(),
         }
     }
@@ -314,7 +314,7 @@ impl ToolUninstallSettings {
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) enum ToolchainListKinds {
+pub(crate) enum PythonListKinds {
     #[default]
     Default,
     Installed,
@@ -323,26 +323,26 @@ pub(crate) enum ToolchainListKinds {
 /// The resolved settings to use for a `tool run` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct ToolchainListSettings {
-    pub(crate) kinds: ToolchainListKinds,
+pub(crate) struct PythonListSettings {
+    pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
     pub(crate) all_versions: bool,
 }
 
-impl ToolchainListSettings {
-    /// Resolve the [`ToolchainListSettings`] from the CLI and filesystem configuration.
+impl PythonListSettings {
+    /// Resolve the [`PythonListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolchainListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let ToolchainListArgs {
+    pub(crate) fn resolve(args: PythonListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let PythonListArgs {
             all_versions,
             all_platforms,
             only_installed,
         } = args;
 
         let kinds = if only_installed {
-            ToolchainListKinds::Installed
+            PythonListKinds::Installed
         } else {
-            ToolchainListKinds::default()
+            PythonListKinds::default()
         };
 
         Self {
@@ -353,59 +353,56 @@ impl ToolchainListSettings {
     }
 }
 
-/// The resolved settings to use for a `toolchain install` invocation.
+/// The resolved settings to use for a `python install` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct ToolchainInstallSettings {
+pub(crate) struct PythonInstallSettings {
     pub(crate) targets: Vec<String>,
     pub(crate) force: bool,
 }
 
-impl ToolchainInstallSettings {
-    /// Resolve the [`ToolchainInstallSettings`] from the CLI and filesystem configuration.
+impl PythonInstallSettings {
+    /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(
-        args: ToolchainInstallArgs,
-        _filesystem: Option<FilesystemOptions>,
-    ) -> Self {
-        let ToolchainInstallArgs { targets, force } = args;
+    pub(crate) fn resolve(args: PythonInstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let PythonInstallArgs { targets, force } = args;
 
         Self { targets, force }
     }
 }
 
-/// The resolved settings to use for a `toolchain uninstall` invocation.
+/// The resolved settings to use for a `python uninstall` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct ToolchainUninstallSettings {
+pub(crate) struct PythonUninstallSettings {
     pub(crate) targets: Vec<String>,
 }
 
-impl ToolchainUninstallSettings {
-    /// Resolve the [`ToolchainUninstallSettings`] from the CLI and filesystem configuration.
+impl PythonUninstallSettings {
+    /// Resolve the [`PythonUninstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
-        args: ToolchainUninstallArgs,
+        args: PythonUninstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let ToolchainUninstallArgs { targets } = args;
+        let PythonUninstallArgs { targets } = args;
 
         Self { targets }
     }
 }
 
-/// The resolved settings to use for a `toolchain find` invocation.
+/// The resolved settings to use for a `python find` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct ToolchainFindSettings {
+pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
 }
 
-impl ToolchainFindSettings {
-    /// Resolve the [`ToolchainFindSettings`] from the CLI and workspace configuration.
+impl PythonFindSettings {
+    /// Resolve the [`PythonFindSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolchainFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let ToolchainFindArgs { request } = args;
+    pub(crate) fn resolve(args: PythonFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let PythonFindArgs { request } = args;
 
         Self { request }
     }
@@ -749,7 +746,6 @@ impl PipSyncSettings {
             constraint,
             installer,
             refresh,
-            exclude_newer,
             require_hashes,
             no_require_hashes,
             python,
@@ -790,7 +786,6 @@ impl PipSyncSettings {
                     python,
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
-                    exclude_newer,
                     target,
                     prefix,
                     require_hashes: flag(require_hashes, no_require_hashes),
@@ -1235,6 +1230,7 @@ pub(crate) struct InstallerSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) config_setting: ConfigSettings,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: Reinstall,
@@ -1247,6 +1243,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
@@ -1266,7 +1263,7 @@ impl InstallerSettings {
             resolution: _,
             prerelease: _,
             config_settings,
-            exclude_newer: _,
+            exclude_newer,
             link_mode,
             compile_bytecode,
             upgrade: _,
@@ -1303,6 +1300,7 @@ impl InstallerSettings {
                 .config_settings
                 .combine(config_settings)
                 .unwrap_or_default(),
+            exclude_newer: args.exclude_newer.combine(exclude_newer),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
             compile_bytecode: args
                 .compile_bytecode
@@ -1337,6 +1335,7 @@ impl InstallerSettings {
             index_strategy: self.index_strategy,
             keyring_provider: self.keyring_provider,
             config_setting: &self.config_setting,
+            exclude_newer: self.exclude_newer,
             link_mode: self.link_mode,
             compile_bytecode: self.compile_bytecode,
             reinstall: &self.reinstall,
@@ -1961,6 +1960,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
             config_setting: settings.config_setting,
+            exclude_newer: settings.exclude_newer,
             link_mode: settings.link_mode,
             compile_bytecode: settings.compile_bytecode,
             reinstall: settings.reinstall,

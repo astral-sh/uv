@@ -1,21 +1,27 @@
 use core::fmt;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
 
 use fs_err as fs;
+
+use pep440_rs::Version;
+use pep508_rs::{InvalidNameError, PackageName};
+
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
 use fs_err::File;
 use thiserror::Error;
 use tracing::debug;
 
 use install_wheel_rs::read_record_file;
-use pep440_rs::Version;
-use pep508_rs::PackageName;
+
 pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
+use uv_installer::SitePackages;
+use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
-use uv_toolchain::{Interpreter, PythonEnvironment};
 use uv_warnings::warn_user_once;
 
 mod receipt;
@@ -38,9 +44,15 @@ pub enum Error {
     #[error("Failed to find a directory for executables")]
     NoExecutableDirectory,
     #[error(transparent)]
-    EnvironmentError(#[from] uv_toolchain::Error),
+    ToolName(#[from] InvalidNameError),
+    #[error(transparent)]
+    EnvironmentError(#[from] uv_python::Error),
     #[error("Failed to find a receipt for tool `{0}` at {1}")]
     MissingToolReceipt(String, PathBuf),
+    #[error("Failed to read tool environment packages at `{0}`: {1}")]
+    EnvironmentRead(PathBuf, String),
+    #[error("Failed find tool package `{0}` at `{1}`")]
+    MissingToolPackage(PackageName, PathBuf),
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -228,6 +240,19 @@ impl InstalledTools {
         Ok(Self::from_path(
             StateStore::temp()?.bucket(StateBucket::Tools),
         ))
+    }
+
+    pub fn version(&self, name: &str, cache: &Cache) -> Result<Version, Error> {
+        let environment_path = self.root.join(name);
+        let package_name = PackageName::from_str(name)?;
+        let environment = PythonEnvironment::from_root(&environment_path, cache)?;
+        let site_packages = SitePackages::from_environment(&environment)
+            .map_err(|err| Error::EnvironmentRead(environment_path.clone(), err.to_string()))?;
+        let packages = site_packages.get_packages(&package_name);
+        let package = packages
+            .first()
+            .ok_or_else(|| Error::MissingToolPackage(package_name, environment_path))?;
+        Ok(package.version().clone())
     }
 
     /// Initialize the tools directory.

@@ -6,16 +6,16 @@ use anyhow::Result;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
-use uv_toolchain::downloads::PythonDownloadRequest;
-use uv_toolchain::{
-    find_toolchains, DiscoveryError, EnvironmentPreference, Toolchain, ToolchainFetch,
-    ToolchainNotFound, ToolchainPreference, ToolchainRequest, ToolchainSource,
+use uv_python::downloads::PythonDownloadRequest;
+use uv_python::{
+    find_python_installations, DiscoveryError, EnvironmentPreference, PythonFetch,
+    PythonInstallation, PythonNotFound, PythonPreference, PythonRequest, PythonSource,
 };
 use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::ToolchainListKinds;
+use crate::settings::PythonListKinds;
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 enum Kind {
@@ -24,26 +24,26 @@ enum Kind {
     System,
 }
 
-/// List available toolchains.
+/// List available Python installations.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn list(
-    kinds: ToolchainListKinds,
+    kinds: PythonListKinds,
     all_versions: bool,
     all_platforms: bool,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv toolchain list` is experimental and may change without warning.");
+        warn_user_once!("`uv python list` is experimental and may change without warning.");
     }
 
     let download_request = match kinds {
-        ToolchainListKinds::Installed => None,
-        ToolchainListKinds::Default => {
-            if toolchain_fetch.is_automatic() {
+        PythonListKinds::Installed => None,
+        PythonListKinds::Default => {
+            if python_fetch.is_automatic() {
                 Some(if all_platforms {
                     PythonDownloadRequest::default()
                 } else {
@@ -58,14 +58,14 @@ pub(crate) async fn list(
 
     let downloads = download_request
         .as_ref()
-        .map(uv_toolchain::downloads::PythonDownloadRequest::iter_downloads)
+        .map(uv_python::downloads::PythonDownloadRequest::iter_downloads)
         .into_iter()
         .flatten();
 
-    let installed = find_toolchains(
-        &ToolchainRequest::Any,
+    let installed = find_python_installations(
+        &PythonRequest::Any,
         EnvironmentPreference::OnlySystem,
-        toolchain_preference,
+        python_preference,
         cache,
     )
     // Raise discovery errors if critical
@@ -75,24 +75,24 @@ pub(crate) async fn list(
             .err()
             .map_or(true, DiscoveryError::is_critical)
     })
-    .collect::<Result<Vec<Result<Toolchain, ToolchainNotFound>>, DiscoveryError>>()?
+    .collect::<Result<Vec<Result<PythonInstallation, PythonNotFound>>, DiscoveryError>>()?
     .into_iter()
-    // Drop any "missing" toolchains
+    // Drop any "missing" installations
     .filter_map(std::result::Result::ok);
 
     let mut output = BTreeSet::new();
-    for toolchain in installed {
-        let kind = if matches!(toolchain.source(), ToolchainSource::Managed) {
+    for installation in installed {
+        let kind = if matches!(installation.source(), PythonSource::Managed) {
             Kind::Managed
         } else {
             Kind::System
         };
         output.insert((
-            toolchain.python_version().clone(),
-            toolchain.os().to_string(),
-            toolchain.key().clone(),
+            installation.python_version().clone(),
+            installation.os().to_string(),
+            installation.key().clone(),
             kind,
-            Some(toolchain.interpreter().sys_executable().to_path_buf()),
+            Some(installation.interpreter().sys_executable().to_path_buf()),
         ));
     }
     for download in downloads {

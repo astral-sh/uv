@@ -12,9 +12,8 @@
 # title/body based on your changelogs.
 
 name: Release
-
 permissions:
-  contents: write
+  "contents": "write"
 
 # This task will run whenever you workflow_dispatch with a tag that looks like a version
 # like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
@@ -65,7 +64,7 @@ jobs:
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
         shell: bash
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.17.0/cargo-dist-installer.sh | sh"
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.18.0/cargo-dist-installer.sh | sh"
       - name: Cache cargo-dist
         uses: actions/upload-artifact@v4
         with:
@@ -106,8 +105,8 @@ jobs:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
     permissions:
-      packages: write
-      contents: read
+      "contents": "read"
+      "packages": "write"
 
   # Build and package all the platform-agnostic(ish) things
   build-global-artifacts:
@@ -212,8 +211,8 @@ jobs:
     secrets: inherit
     # publish jobs get escalated permissions
     permissions:
-      id-token: write
-      packages: write
+      "id-token": "write"
+      "packages": "write"
 
   # Create a GitHub Release while uploading all files to it
   announce:
