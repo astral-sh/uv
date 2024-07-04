@@ -223,6 +223,7 @@ fn run_script() -> Result<()> {
        "#
     })?;
 
+    // Running the script should install the requirements.
     uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
         success: true
         exit_code: 0
@@ -234,6 +235,16 @@ fn run_script() -> Result<()> {
         Installed 1 package in [TIME]
          + iniconfig==2.0.0
         "###);
+
+    // Running again should use the existing environment.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
 
     // Otherwise, the script requirements should _not_ be available, but the project requirements
     // should.

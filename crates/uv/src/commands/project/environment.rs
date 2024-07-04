@@ -126,4 +126,9 @@ impl CachedEnvironment {
 
         Ok(Self(venv))
     }
+
+    /// Convert the [`EphemeralEnvironment`] into an [`Interpreter`].
+    pub(crate) fn into_interpreter(self) -> Interpreter {
+        self.0.into_interpreter()
+    }
 }
