@@ -177,7 +177,7 @@ pub enum Commands {
     Python(PythonNamespace),
     /// Manage Python projects.
     #[command(flatten)]
-    Project(ProjectCommand),
+    Project(Box<ProjectCommand>),
     /// Create a virtual environment.
     #[command(alias = "virtualenv", alias = "v")]
     Venv(VenvArgs),

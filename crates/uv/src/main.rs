@@ -23,9 +23,10 @@ use uv_cli::{SelfCommand, SelfNamespace};
 use uv_configuration::Concurrency;
 use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
-use uv_settings::Combine;
+use uv_settings::{Combine, FilesystemOptions};
 
 use crate::commands::ExitStatus;
+use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
@@ -166,11 +167,11 @@ async fn run() -> Result<ExitStatus> {
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if globals.quiet {
-        printer::Printer::Quiet
+        Printer::Quiet
     } else if globals.verbose > 0 {
-        printer::Printer::Verbose
+        Printer::Verbose
     } else {
-        printer::Printer::Default
+        Printer::Default
     };
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
@@ -636,141 +637,8 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Project(ProjectCommand::Run(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-
-            let requirements = args
-                .with
-                .into_iter()
-                .map(RequirementsSource::from_package)
-                .collect::<Vec<_>>();
-
-            commands::run(
-                args.command,
-                requirements,
-                args.package,
-                args.extras,
-                args.dev,
-                args.python,
-                args.settings,
-                globals.isolated,
-                globals.preview,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Project(ProjectCommand::Sync(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::SyncSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-
-            commands::sync(
-                args.extras,
-                args.dev,
-                args.modifications,
-                args.python,
-                globals.python_preference,
-                globals.python_fetch,
-                args.settings,
-                globals.preview,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Project(ProjectCommand::Lock(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::LockSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-
-            commands::lock(
-                args.python,
-                args.settings,
-                globals.preview,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Project(ProjectCommand::Add(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AddSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-
-            commands::add(
-                args.requirements,
-                args.editable,
-                args.dependency_type,
-                args.raw_sources,
-                args.rev,
-                args.tag,
-                args.branch,
-                args.extras,
-                args.package,
-                args.python,
-                args.settings,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.preview,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Project(ProjectCommand::Remove(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RemoveSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?;
-
-            commands::remove(
-                args.requirements,
-                args.dependency_type,
-                args.package,
-                args.python,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.preview,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
+        Commands::Project(project) => {
+            run_project(project, globals, filesystem, cache, printer).await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
@@ -939,6 +807,169 @@ async fn run() -> Result<ExitStatus> {
         }) => {
             commands::python_dir(globals.preview)?;
             Ok(ExitStatus::Success)
+        }
+    }
+}
+
+/// Run a [`ProjectCommand`].
+async fn run_project(
+    project_command: Box<ProjectCommand>,
+    globals: GlobalSettings,
+    filesystem: Option<FilesystemOptions>,
+    cache: Cache,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    // Write out any resolved settings.
+    macro_rules! show_settings {
+        ($arg:expr) => {
+            if globals.show_settings {
+                writeln!(printer.stdout(), "{:#?}", $arg)?;
+                return Ok(ExitStatus::Success);
+            }
+        };
+        ($arg:expr, false) => {
+            if globals.show_settings {#
+                writeln!(printer.stdout(), "{:#?}", $arg)?;
+            }
+        };
+    }
+
+    match *project_command {
+        ProjectCommand::Run(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::RunSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            let requirements = args
+                .with
+                .into_iter()
+                .map(RequirementsSource::from_package)
+                .collect::<Vec<_>>();
+
+            commands::run(
+                args.command,
+                requirements,
+                args.package,
+                args.extras,
+                args.dev,
+                args.python,
+                args.settings,
+                globals.isolated,
+                globals.preview,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Sync(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::SyncSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::sync(
+                args.extras,
+                args.dev,
+                args.modifications,
+                args.python,
+                globals.python_preference,
+                globals.python_fetch,
+                args.settings,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Lock(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::LockSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::lock(
+                args.python,
+                args.settings,
+                globals.preview,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Add(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AddSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::add(
+                args.requirements,
+                args.editable,
+                args.dependency_type,
+                args.raw_sources,
+                args.rev,
+                args.tag,
+                args.branch,
+                args.extras,
+                args.package,
+                args.python,
+                args.settings,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Remove(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::RemoveSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::remove(
+                args.requirements,
+                args.dependency_type,
+                args.package,
+                args.python,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
         }
     }
 }
