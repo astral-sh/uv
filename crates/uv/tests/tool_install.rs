@@ -6,9 +6,10 @@ use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, PathChild},
 };
-use common::{uv_snapshot, TestContext};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+
+use common::{uv_snapshot, TestContext};
 
 mod common;
 

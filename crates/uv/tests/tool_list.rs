@@ -1,11 +1,12 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use fs_err as fs;
-
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
+use fs_err as fs;
+
 use common::{uv_snapshot, TestContext};
+
 mod common;
 
 #[test]

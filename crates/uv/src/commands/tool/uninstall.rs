@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::{bail, Result};
 use itertools::Itertools;
-
 use tracing::debug;
+
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;

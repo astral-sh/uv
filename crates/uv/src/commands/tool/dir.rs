@@ -1,5 +1,6 @@
 use anyhow::Context;
 use owo_colors::OwoColorize;
+
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_tool::InstalledTools;

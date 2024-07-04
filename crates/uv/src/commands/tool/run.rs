@@ -23,7 +23,7 @@ use uv_python::{
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
-use crate::commands::project::ephemeral::EphemeralEnvironment;
+use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -248,7 +248,7 @@ async fn get_or_create_environment(
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
-    let environment = EphemeralEnvironment::get_or_create(
+    let environment = CachedEnvironment::get_or_create(
         requirements,
         interpreter,
         settings,
