@@ -14,9 +14,11 @@ use uv_client::WrappedReqwestError;
 
 use futures::TryStreamExt;
 
+use pypi_types::{HashAlgorithm, HashDigest};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, instrument};
 use url::Url;
+use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
 
 #[derive(Error, Debug)]
@@ -35,6 +37,14 @@ pub enum Error {
     NetworkMiddlewareError(#[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
     ExtractError(String, #[source] uv_extract::Error),
+    #[error("Failed to hash installation")]
+    HashExhaustion(#[source] io::Error),
+    #[error("Hash mismatch for `{installation}`\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]
+    HashMismatch {
+        installation: String,
+        expected: String,
+        actual: String,
+    },
     #[error("Invalid download url")]
     InvalidUrl(#[from] url::ParseError),
     #[error("Failed to create download directory")]
@@ -423,9 +433,30 @@ impl ManagedPythonDownload {
             .into_async_read();
 
         debug!("Extracting {filename}");
-        uv_extract::stream::archive(reader.compat(), filename, temp_dir.path())
+        let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
+        let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
+        uv_extract::stream::archive(&mut hasher, filename, temp_dir.path())
             .await
             .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+
+        hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+        // Check the hash
+        if let Some(expected) = self.sha256 {
+            let actual = hashers
+                .into_iter()
+                .map(HashDigest::from)
+                .next()
+                .unwrap()
+                .digest;
+            if !actual.eq_ignore_ascii_case(expected) {
+                return Err(Error::HashMismatch {
+                    installation: self.key.to_string(),
+                    expected: expected.to_string(),
+                    actual: actual.to_string(),
+                });
+            }
+        }
 
         // Extract the top-level directory.
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
