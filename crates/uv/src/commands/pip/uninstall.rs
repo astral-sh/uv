@@ -206,14 +206,14 @@ pub(crate) async fn pip_uninstall(
         printer.stderr(),
         "{}",
         format!(
-            "Uninstalled {} in {}",
+            "Uninstalled {} {}",
             format!(
                 "{} package{}",
                 distributions.len(),
                 if distributions.len() == 1 { "" } else { "s" }
             )
             .bold(),
-            elapsed(start.elapsed())
+            format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
     )?;

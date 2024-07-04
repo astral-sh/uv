@@ -198,9 +198,9 @@ pub(crate) async fn pip_install(
                     printer.stderr(),
                     "{}",
                     format!(
-                        "Audited {} in {}",
+                        "Audited {} {}",
                         format!("{num_requirements} package{s}").bold(),
-                        elapsed(start.elapsed())
+                        format!("in {}", elapsed(start.elapsed())).dimmed()
                     )
                     .dimmed()
                 )?;

@@ -47,9 +47,9 @@ pub(crate) fn pip_check(
         printer.stderr(),
         "{}",
         format!(
-            "Checked {} in {}",
+            "Checked {} {}",
             format!("{} package{}", packages.len(), s).bold(),
-            elapsed(start.elapsed())
+            format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
     )?;

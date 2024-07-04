@@ -146,9 +146,9 @@ pub(super) async fn compile_bytecode(
         printer.stderr(),
         "{}",
         format!(
-            "Bytecode compiled {} in {}",
+            "Bytecode compiled {} {}",
             format!("{files} file{s}").bold(),
-            elapsed(start.elapsed())
+            format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
     )?;
