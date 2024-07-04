@@ -2063,10 +2063,10 @@ pub struct PythonListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonInstallArgs {
-    /// The Python versions to install.
+    /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the `.python-versions`
-    ///  or `.python-version` files. If neither file is present, uv will check if it has
+    /// or `.python-version` files. If neither file is present, uv will check if it has
     /// installed any Python versions. If not, it will install the latest stable version of Python.
     pub targets: Vec<String>,
 
@@ -2078,7 +2078,8 @@ pub struct PythonInstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
-    /// The Python versions to uninstall.
+    /// The Python version(s) to uninstall.
+    #[arg(required = true)]
     pub targets: Vec<String>,
 }
 
