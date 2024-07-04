@@ -408,8 +408,8 @@ dependencies = [
  "uv-dispatch",
  "uv-distribution",
  "uv-git",
+ "uv-python",
  "uv-resolver",
- "uv-toolchain",
  "uv-types",
 ]
 
@@ -4425,7 +4425,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.2.20"
+version = "0.2.21"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4434,6 +4434,7 @@ dependencies = [
  "axoupdater",
  "base64 0.22.1",
  "byteorder",
+ "cache-key",
  "chrono",
  "clap",
  "distribution-types",
@@ -4483,12 +4484,12 @@ dependencies = [
  "uv-git",
  "uv-installer",
  "uv-normalize",
+ "uv-python",
  "uv-requirements",
  "uv-resolver",
  "uv-scripts",
  "uv-settings",
  "uv-tool",
- "uv-toolchain",
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
@@ -4543,7 +4544,7 @@ dependencies = [
  "tracing",
  "uv-configuration",
  "uv-fs",
- "uv-toolchain",
+ "uv-python",
  "uv-types",
  "uv-virtualenv",
 ]
@@ -4587,9 +4588,9 @@ dependencies = [
  "uv-cache",
  "uv-configuration",
  "uv-normalize",
+ "uv-python",
  "uv-resolver",
  "uv-settings",
- "uv-toolchain",
  "uv-version",
  "uv-warnings",
 ]
@@ -4699,9 +4700,9 @@ dependencies = [
  "uv-distribution",
  "uv-git",
  "uv-installer",
+ "uv-python",
  "uv-resolver",
  "uv-settings",
- "uv-toolchain",
  "uv-types",
  "walkdir",
 ]
@@ -4725,8 +4726,8 @@ dependencies = [
  "uv-distribution",
  "uv-git",
  "uv-installer",
+ "uv-python",
  "uv-resolver",
- "uv-toolchain",
  "uv-types",
 ]
 
@@ -4871,7 +4872,7 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-normalize",
- "uv-toolchain",
+ "uv-python",
  "uv-types",
  "uv-warnings",
  "walkdir",
@@ -4892,6 +4893,52 @@ dependencies = [
  "rkyv",
  "schemars",
  "serde",
+]
+
+[[package]]
+name = "uv-python"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "assert_fs",
+ "cache-key",
+ "clap",
+ "configparser",
+ "fs-err",
+ "futures",
+ "indoc",
+ "install-wheel-rs",
+ "itertools 0.13.0",
+ "once_cell",
+ "pep440_rs",
+ "pep508_rs",
+ "platform-tags",
+ "pypi-types",
+ "regex",
+ "reqwest",
+ "reqwest-middleware",
+ "rmp-serde",
+ "same-file",
+ "schemars",
+ "serde",
+ "serde_json",
+ "target-lexicon",
+ "temp-env",
+ "tempfile",
+ "test-log",
+ "thiserror",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uv-cache",
+ "uv-client",
+ "uv-configuration",
+ "uv-extract",
+ "uv-fs",
+ "uv-state",
+ "uv-warnings",
+ "which",
+ "winapi",
 ]
 
 [[package]]
@@ -4974,7 +5021,7 @@ dependencies = [
  "uv-distribution",
  "uv-git",
  "uv-normalize",
- "uv-toolchain",
+ "uv-python",
  "uv-types",
  "uv-warnings",
 ]
@@ -5014,8 +5061,8 @@ dependencies = [
  "uv-fs",
  "uv-macros",
  "uv-normalize",
+ "uv-python",
  "uv-resolver",
- "uv-toolchain",
  "uv-warnings",
 ]
 
@@ -5047,56 +5094,11 @@ dependencies = [
  "tracing",
  "uv-cache",
  "uv-fs",
+ "uv-installer",
+ "uv-python",
  "uv-state",
- "uv-toolchain",
  "uv-virtualenv",
  "uv-warnings",
-]
-
-[[package]]
-name = "uv-toolchain"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "assert_fs",
- "cache-key",
- "clap",
- "configparser",
- "fs-err",
- "futures",
- "indoc",
- "install-wheel-rs",
- "itertools 0.13.0",
- "once_cell",
- "pep440_rs",
- "pep508_rs",
- "platform-tags",
- "pypi-types",
- "regex",
- "reqwest",
- "reqwest-middleware",
- "rmp-serde",
- "same-file",
- "schemars",
- "serde",
- "serde_json",
- "target-lexicon",
- "temp-env",
- "tempfile",
- "test-log",
- "thiserror",
- "tokio-util",
- "tracing",
- "url",
- "uv-cache",
- "uv-client",
- "uv-configuration",
- "uv-extract",
- "uv-fs",
- "uv-state",
- "uv-warnings",
- "which",
- "winapi",
 ]
 
 [[package]]
@@ -5116,12 +5118,12 @@ dependencies = [
  "uv-configuration",
  "uv-git",
  "uv-normalize",
- "uv-toolchain",
+ "uv-python",
 ]
 
 [[package]]
 name = "uv-version"
-version = "0.2.20"
+version = "0.2.21"
 
 [[package]]
 name = "uv-virtualenv"
@@ -5135,7 +5137,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "uv-fs",
- "uv-toolchain",
+ "uv-python",
  "uv-version",
 ]
 

@@ -195,6 +195,7 @@ jobs:
         run: |
           ARCHIVE_FILE=uv-${{ matrix.platform.target }}.zip
           7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uv.exe
+          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uvx.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
         uses: actions/upload-artifact@v4

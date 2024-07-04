@@ -1,5 +1,5 @@
 [package]
-name = "uv-toolchain"
+name = "uv-python"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }

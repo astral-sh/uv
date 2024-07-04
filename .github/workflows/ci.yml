@@ -98,7 +98,7 @@ jobs:
         with:
           tool: cargo-xwin
       - name: Install xwin dependencies
-        run: sudo apt-get install --no-install-recommends -y llvm clang cmake ninja-build
+        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
       - name: "Clippy"
         run: cargo xwin clippy --target x86_64-pc-windows-msvc --workspace --all-targets --all-features --locked --profile fast-build -- -D warnings
         env:
@@ -135,7 +135,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run toolchain install
+          cargo run python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -172,7 +172,7 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run toolchain install
+          cargo run python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -949,8 +949,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          # TODO(konsti): https://github.com/actions/setup-python/issues/888
-          python-version: "3.13.0-beta.1"
+          python-version: "3.13"
           allow-prereleases: true
           cache: pip
 

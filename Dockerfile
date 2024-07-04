@@ -34,12 +34,14 @@ RUN rustup target add $(cat rust_target.txt)
 COPY crates crates
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock
-RUN cargo zigbuild --bin uv --target $(cat rust_target.txt) --release
-RUN cp target/$(cat rust_target.txt)/release/uv /uv
+RUN cargo zigbuild --bin uv --bin uvx --target $(cat rust_target.txt) --release
+RUN cp target/$(cat rust_target.txt)/release/uv /uv \
+  && cp target/$(cat rust_target.txt)/release/uvx /uvx
 # TODO(konsti): Optimize binary size, with a version that also works when cross compiling
 # RUN strip --strip-all /uv
 
 FROM scratch
 COPY --from=build /uv /uv
+COPY --from=build /uvx /uvx
 WORKDIR /io
 ENTRYPOINT ["/uv"]

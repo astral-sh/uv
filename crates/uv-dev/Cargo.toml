@@ -31,7 +31,7 @@ uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-resolver = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
-uv-toolchain = { workspace = true }
+uv-python = { workspace = true }
 uv-types = { workspace = true }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace

@@ -462,20 +462,13 @@ impl VersionSpecifier {
         }
     }
 
-    /// Whether the given version satisfies the version range
+    /// Whether the given version satisfies the version range.
     ///
-    /// e.g. `>=1.19,<2.0` and `1.21` -> true
-    /// <https://peps.python.org/pep-0440/#version-specifiers>
+    /// For example, `>=1.19,<2.0` contains `1.21`, but not `2.0`.
     ///
-    /// Unlike `pypa/packaging`, prereleases are included by default
-    ///
-    /// I'm utterly non-confident in the description in PEP 440 and apparently even pip got some
-    /// of that wrong, e.g. <https://github.com/pypa/pip/issues/9121> and
-    /// <https://github.com/pypa/pip/issues/5503>, and also i'm not sure if it produces the correct
-    /// behaviour from a user perspective
-    ///
-    /// This implementation is as close as possible to
-    /// <https://github.com/pypa/packaging/blob/e184feef1a28a5c574ec41f5c263a3a573861f5a/packaging/specifiers.py#L362-L496>
+    /// See:
+    /// - <https://peps.python.org/pep-0440/#version-specifiers>
+    /// - <https://github.com/pypa/packaging/blob/e184feef1a28a5c574ec41f5c263a3a573861f5a/packaging/specifiers.py#L362-L496>
     pub fn contains(&self, version: &Version) -> bool {
         // "Except where specifically noted below, local version identifiers MUST NOT be permitted
         // in version specifiers, and local version labels MUST be ignored entirely when checking

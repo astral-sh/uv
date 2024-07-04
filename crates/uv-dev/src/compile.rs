@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use tracing::info;
 use uv_cache::{Cache, CacheArgs};
-use uv_toolchain::{EnvironmentPreference, PythonEnvironment, ToolchainRequest};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
 #[derive(Parser)]
 pub(crate) struct CompileArgs {
@@ -21,7 +21,7 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
         python
     } else {
         let interpreter = PythonEnvironment::find(
-            &ToolchainRequest::default(),
+            &PythonRequest::default(),
             EnvironmentPreference::OnlyVirtual,
             &cache,
         )?

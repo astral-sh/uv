@@ -17,9 +17,9 @@ use regex::Regex;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_toolchain::managed::InstalledToolchains;
-use uv_toolchain::{
-    EnvironmentPreference, PythonVersion, Toolchain, ToolchainPreference, ToolchainRequest,
+use uv_python::managed::ManagedPythonInstallations;
+use uv_python::{
+    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
 };
 
 // Exclude any packages uploaded after this date.
@@ -157,7 +157,7 @@ impl TestContext {
             .iter()
             .map(|version| PythonVersion::from_str(version).unwrap())
             .zip(
-                python_toolchains_for_versions(&temp_dir, python_versions)
+                python_installations_for_versions(&temp_dir, python_versions)
                     .expect("Failed to find test Python versions"),
             )
             .collect();
@@ -284,7 +284,7 @@ impl TestContext {
     /// * Don't wrap text output based on the terminal we're in, the test output doesn't get printed
     ///   but snapshotted to a string.
     /// * Use a fake `HOME` to avoid accidentally changing the developer's machine.
-    /// * Hide other Python toolchain with `UV_TOOLCHAIN_DIR` and installed interpreters with
+    /// * Hide other Python python with `UV_PYTHON_INSTALL_DIR` and installed interpreters with
     ///   `UV_TEST_PYTHON_PATH`.
     /// * Increase the stack size to avoid stack overflows on windows due to large async functions.
     pub fn add_shared_args(&self, command: &mut Command) {
@@ -294,7 +294,7 @@ impl TestContext {
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .env("UV_NO_WRAP", "1")
             .env("HOME", self.home_dir.as_os_str())
-            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_PYTHON_INSTALL_DIR", "")
             .env("UV_TEST_PYTHON_PATH", &self.python_path())
             .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
             .current_dir(self.temp_dir.path());
@@ -371,23 +371,23 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv toolchain find` command with options shared across scenarios.
-    pub fn toolchain_find(&self) -> Command {
+    /// Create a `uv python find` command with options shared across scenarios.
+    pub fn python_find(&self) -> Command {
         let mut command = Command::new(get_bin());
         command
-            .arg("toolchain")
+            .arg("python")
             .arg("find")
             .env("UV_PREVIEW", "1")
-            .env("UV_TOOLCHAIN_DIR", "")
+            .env("UV_PYTHON_INSTALL_DIR", "")
             .current_dir(&self.temp_dir);
         self.add_shared_args(&mut command);
         command
     }
 
-    /// Create a `uv toolchain dir` command with options shared across scenarios.
-    pub fn toolchain_dir(&self) -> Command {
+    /// Create a `uv python dir` command with options shared across scenarios.
+    pub fn python_dir(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command.arg("toolchain").arg("dir");
+        command.arg("python").arg("dir");
         self.add_shared_args(&mut command);
         command
     }
@@ -601,7 +601,7 @@ impl TestContext {
 
     /// Create a new virtual environment named `.venv` in the test context.
     fn create_venv(&self) {
-        let executable = get_toolchain(
+        let executable = get_python(
             self.python_version
                 .as_ref()
                 .expect("A Python version must be provided to create a test virtual environment"),
@@ -640,18 +640,18 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
     }
 }
 
-/// Get the path to the python interpreter for a specific toolchain version.
-pub fn get_toolchain(version: &PythonVersion) -> PathBuf {
-    InstalledToolchains::from_settings()
-        .map(|installed_toolchains| {
-            installed_toolchains
+/// Get the path to the python interpreter for a specific python version.
+pub fn get_python(version: &PythonVersion) -> PathBuf {
+    ManagedPythonInstallations::from_settings()
+        .map(|installed_pythons| {
+            installed_pythons
                 .find_version(version)
                 .expect("Tests are run on a supported platform")
                 .next()
                 .as_ref()
-                .map(uv_toolchain::managed::InstalledToolchain::executable)
+                .map(uv_python::managed::ManagedPythonInstallation::executable)
         })
-        // We'll search for the request Python on the PATH if not found in the toolchain versions
+        // We'll search for the request Python on the PATH if not found in the python versions
         // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
         .unwrap_or_default()
         .unwrap_or(PathBuf::from(version.to_string()))
@@ -691,7 +691,7 @@ pub fn python_path_with_versions(
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
     Ok(std::env::join_paths(
-        python_toolchains_for_versions(temp_dir, python_versions)?
+        python_installations_for_versions(temp_dir, python_versions)?
             .into_iter()
             .map(|path| path.parent().unwrap().to_path_buf()),
     )?)
@@ -700,7 +700,7 @@ pub fn python_path_with_versions(
 /// Returns a list of Python executables for the given versions.
 ///
 /// Generally this should be used with `UV_TEST_PYTHON_PATH`.
-pub fn python_toolchains_for_versions(
+pub fn python_installations_for_versions(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<Vec<PathBuf>> {
@@ -708,13 +708,13 @@ pub fn python_toolchains_for_versions(
     let selected_pythons = python_versions
         .iter()
         .map(|python_version| {
-            if let Ok(toolchain) = Toolchain::find(
-                &ToolchainRequest::parse(python_version),
+            if let Ok(python) = PythonInstallation::find(
+                &PythonRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
-                ToolchainPreference::Managed,
+                PythonPreference::Managed,
                 &cache,
             ) {
-                toolchain.into_interpreter().sys_executable().to_owned()
+                python.into_interpreter().sys_executable().to_owned()
             } else {
                 panic!("Could not find Python {python_version} for test");
             }

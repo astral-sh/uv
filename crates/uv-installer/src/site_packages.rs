@@ -13,7 +13,7 @@ use distribution_types::{
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_normalize::PackageName;
-use uv_toolchain::PythonEnvironment;
+use uv_python::PythonEnvironment;
 use uv_types::InstalledPackagesProvider;
 
 use crate::satisfies::RequirementSatisfaction;

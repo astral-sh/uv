@@ -5,25 +5,27 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use pep440_rs::Version;
 use tokio::process::Command;
 use tracing::debug;
 
+use distribution_types::UnresolvedRequirementSpecification;
+use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
+use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_toolchain::{
-    EnvironmentPreference, PythonEnvironment, Toolchain, ToolchainFetch, ToolchainPreference,
-    ToolchainRequest,
+use uv_python::{
+    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
+use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::{update_environment, SharedState};
-use crate::commands::ExitStatus;
+use crate::commands::project::ephemeral::EphemeralEnvironment;
+use crate::commands::tool::common::resolve_requirements;
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -34,10 +36,10 @@ pub(crate) async fn run(
     with: Vec<String>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-    _isolated: bool,
+    isolated: bool,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -59,63 +61,23 @@ pub(crate) async fn run(
         parse_target(target)?
     };
 
-    let requirements = [RequirementsSource::from_package(from.to_string())]
-        .into_iter()
-        .chain(with.into_iter().map(RequirementsSource::from_package))
-        .collect::<Vec<_>>();
-
-    let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls);
-
-    let spec =
-        RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
-
-    // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
-    // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
-
-    // If necessary, create an environment for the ephemeral requirements.
-    debug!("Syncing ephemeral environment.");
-
-    // Discover an interpreter.
-    let interpreter = Toolchain::find_or_fetch(
-        python.as_deref().map(ToolchainRequest::parse),
-        EnvironmentPreference::OnlySystem,
-        toolchain_preference,
-        toolchain_fetch,
-        &client_builder,
+    // Get or create a compatible environment in which to execute the tool.
+    let environment = get_or_create_environment(
+        &from,
+        &with,
+        python.as_deref(),
+        &settings,
+        isolated,
+        preview,
+        python_preference,
+        python_fetch,
+        connectivity,
+        concurrency,
+        native_tls,
         cache,
+        printer,
     )
-    .await?
-    .into_interpreter();
-
-    // Create a virtual environment.
-    let temp_dir = cache.environment()?;
-    let venv = uv_virtualenv::create_venv(
-        temp_dir.path(),
-        interpreter,
-        uv_virtualenv::Prompt::None,
-        false,
-        false,
-    )?;
-
-    // Install the ephemeral requirements.
-    let ephemeral_env = Some(
-        update_environment(
-            venv,
-            spec,
-            Modifications::Sufficient,
-            &settings,
-            &SharedState::default(),
-            preview,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?,
-    );
+    .await?;
 
     // TODO(zanieb): Determine the command via the package entry points
     let command = target;
@@ -126,34 +88,23 @@ pub(crate) async fn run(
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
-        ephemeral_env
-            .as_ref()
-            .map(PythonEnvironment::scripts)
-            .into_iter()
-            .map(PathBuf::from)
-            .chain(
-                std::env::var_os("PATH")
-                    .as_ref()
-                    .iter()
-                    .flat_map(std::env::split_paths),
-            ),
+        std::iter::once(environment.scripts().to_path_buf()).chain(
+            std::env::var_os("PATH")
+                .as_ref()
+                .iter()
+                .flat_map(std::env::split_paths),
+        ),
     )?;
     process.env("PATH", new_path);
 
     // Construct the `PYTHONPATH` environment variable.
     let new_python_path = std::env::join_paths(
-        ephemeral_env
-            .as_ref()
-            .map(PythonEnvironment::site_packages)
-            .into_iter()
-            .flatten()
-            .map(PathBuf::from)
-            .chain(
-                std::env::var_os("PYTHONPATH")
-                    .as_ref()
-                    .iter()
-                    .flat_map(std::env::split_paths),
-            ),
+        environment.site_packages().map(PathBuf::from).chain(
+            std::env::var_os("PYTHONPATH")
+                .as_ref()
+                .iter()
+                .flat_map(std::env::split_paths),
+        ),
     )?;
     process.env("PYTHONPATH", new_python_path);
 
@@ -178,6 +129,140 @@ pub(crate) async fn run(
     } else {
         Ok(ExitStatus::Failure)
     }
+}
+
+/// Get or create a [`PythonEnvironment`] in which to run the specified tools.
+///
+/// If the target tool is already installed in a compatible environment, returns that
+/// [`PythonEnvironment`]. Otherwise, creates an ephemeral environment.
+async fn get_or_create_environment(
+    from: &str,
+    with: &[String],
+    python: Option<&str>,
+    settings: &ResolverInstallerSettings,
+    isolated: bool,
+    preview: PreviewMode,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<PythonEnvironment> {
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
+    let python_request = python.map(PythonRequest::parse);
+
+    // Discover an interpreter.
+    let interpreter = PythonInstallation::find_or_fetch(
+        python_request.clone(),
+        EnvironmentPreference::OnlySystem,
+        python_preference,
+        python_fetch,
+        &client_builder,
+        cache,
+    )
+    .await?
+    .into_interpreter();
+
+    // Initialize any shared state.
+    let state = SharedState::default();
+
+    // Resolve the `from` requirement.
+    let from = {
+        resolve_requirements(
+            std::iter::once(from),
+            &interpreter,
+            settings,
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+        .pop()
+        .unwrap()
+    };
+
+    // Combine the `from` and `with` requirements.
+    let requirements = {
+        let mut requirements = Vec::with_capacity(1 + with.len());
+        requirements.push(from.clone());
+        requirements.extend(
+            resolve_requirements(
+                with.iter().map(String::as_str),
+                &interpreter,
+                settings,
+                &state,
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?,
+        );
+        requirements
+    };
+
+    // Check if the tool is already installed in a compatible environment.
+    if !isolated {
+        let installed_tools = InstalledTools::from_settings()?;
+
+        let existing_environment =
+            installed_tools
+                .get_environment(&from.name, cache)?
+                .filter(|environment| {
+                    python_request.as_ref().map_or(true, |python_request| {
+                        python_request.satisfied(environment.interpreter(), cache)
+                    })
+                });
+        if let Some(environment) = existing_environment {
+            // Check if the installed packages meet the requirements.
+            let site_packages = SitePackages::from_environment(&environment)?;
+
+            let requirements = requirements
+                .iter()
+                .cloned()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect::<Vec<_>>();
+            let constraints = [];
+
+            if matches!(
+                site_packages.satisfies(&requirements, &constraints),
+                Ok(SatisfiesResult::Fresh { .. })
+            ) {
+                debug!("Using existing tool `{}`", from.name);
+                return Ok(environment);
+            }
+        }
+    }
+
+    // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
+    // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
+
+    let environment = EphemeralEnvironment::get_or_create(
+        requirements,
+        interpreter,
+        settings,
+        &state,
+        preview,
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await?;
+
+    Ok(environment.into())
 }
 
 /// Parse a target into a command name and a requirement.

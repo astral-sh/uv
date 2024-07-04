@@ -6,9 +6,9 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStr
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_installer::SitePackages;
+use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
-use uv_toolchain::{PythonEnvironment, ToolchainFetch, ToolchainPreference, ToolchainRequest};
-use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
@@ -23,8 +23,8 @@ pub(crate) async fn sync(
     dev: bool,
     modifications: Modifications,
     python: Option<String>,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     settings: InstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -43,9 +43,9 @@ pub(crate) async fn sync(
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
         project.workspace(),
-        python.as_deref().map(ToolchainRequest::parse),
-        toolchain_preference,
-        toolchain_fetch,
+        python.as_deref().map(PythonRequest::parse),
+        python_preference,
+        python_fetch,
         connectivity,
         native_tls,
         cache,
@@ -105,6 +105,7 @@ pub(super) async fn do_sync(
         index_strategy,
         keyring_provider,
         config_setting,
+        exclude_newer,
         link_mode,
         compile_bytecode,
         reinstall,
@@ -145,14 +146,10 @@ pub(super) async fn do_sync(
         .platform(venv.interpreter().platform())
         .build();
 
-    // Initialize any shared state.
-    let in_flight = InFlight::default();
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
     let dry_run = false;
-    let exclude_newer = None;
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
 
@@ -172,7 +169,7 @@ pub(super) async fn do_sync(
         &flat_index,
         &state.index,
         &state.git,
-        &in_flight,
+        &state.in_flight,
         index_strategy,
         setup_py,
         config_setting,
@@ -199,7 +196,7 @@ pub(super) async fn do_sync(
         &hasher,
         tags,
         &client,
-        &in_flight,
+        &state.in_flight,
         concurrency,
         &build_dispatch,
         cache,

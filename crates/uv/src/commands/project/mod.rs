@@ -9,27 +9,29 @@ use pep440_rs::Version;
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, Workspace};
 use uv_fs::Simplified;
-use uv_git::GitResolver;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, RequiresPython};
-use uv_toolchain::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, Toolchain,
-    ToolchainFetch, ToolchainPreference, ToolchainRequest, VersionRequest,
+use uv_python::{
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
+    PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
-use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
+use uv_resolver::{FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 
-use crate::commands::pip;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::ResolverReporter;
+use crate::commands::{pip, SharedState};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
 
 pub(crate) mod add;
+pub(crate) mod ephemeral;
 pub(crate) mod lock;
 pub(crate) mod remove;
 pub(crate) mod run;
@@ -44,7 +46,7 @@ pub(crate) enum ProjectError {
     RequestedPythonIncompatibility(Version, RequiresPython),
 
     #[error(transparent)]
-    Toolchain(#[from] uv_toolchain::Error),
+    Python(#[from] uv_python::Error),
 
     #[error(transparent)]
     Virtualenv(#[from] uv_virtualenv::Error),
@@ -94,14 +96,14 @@ pub(crate) fn find_requires_python(
 fn find_environment(
     workspace: &Workspace,
     cache: &Cache,
-) -> Result<PythonEnvironment, uv_toolchain::Error> {
+) -> Result<PythonEnvironment, uv_python::Error> {
     PythonEnvironment::from_root(workspace.venv(), cache)
 }
 
 /// Check if the given interpreter satisfies the project's requirements.
 fn interpreter_meets_requirements(
     interpreter: &Interpreter,
-    requested_python: Option<&ToolchainRequest>,
+    requested_python: Option<&PythonRequest>,
     cache: &Cache,
 ) -> bool {
     let Some(request) = requested_python else {
@@ -126,9 +128,9 @@ impl FoundInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
-        python_request: Option<ToolchainRequest>,
-        toolchain_preference: ToolchainPreference,
-        toolchain_fetch: ToolchainFetch,
+        python_request: Option<PythonRequest>,
+        python_preference: PythonPreference,
+        python_fetch: PythonFetch,
         connectivity: Connectivity,
         native_tls: bool,
         cache: &Cache,
@@ -147,9 +149,7 @@ impl FoundInterpreter {
             requires_python
                 .as_ref()
                 .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    ToolchainRequest::Version(VersionRequest::Range(specifiers.clone()))
-                })
+                .map(|specifiers| PythonRequest::Version(VersionRequest::Range(specifiers.clone())))
         };
 
         // Read from the virtual environment first.
@@ -172,7 +172,7 @@ impl FoundInterpreter {
                     }
                 }
             }
-            Err(uv_toolchain::Error::MissingEnvironment(_)) => {}
+            Err(uv_python::Error::MissingEnvironment(_)) => {}
             Err(err) => return Err(err.into()),
         };
 
@@ -181,11 +181,11 @@ impl FoundInterpreter {
             .native_tls(native_tls);
 
         // Locate the Python interpreter to use in the environment
-        let interpreter = Toolchain::find_or_fetch(
+        let interpreter = PythonInstallation::find_or_fetch(
             python_request,
             EnvironmentPreference::OnlySystem,
-            toolchain_preference,
-            toolchain_fetch,
+            python_preference,
+            python_fetch,
             &client_builder,
             cache,
         )
@@ -223,9 +223,9 @@ impl FoundInterpreter {
 /// Initialize a virtual environment for the current project.
 pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
-    python: Option<ToolchainRequest>,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python: Option<PythonRequest>,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
@@ -234,8 +234,8 @@ pub(crate) async fn get_or_init_environment(
     match FoundInterpreter::discover(
         workspace,
         python,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         connectivity,
         native_tls,
         cache,
@@ -280,15 +280,6 @@ pub(crate) async fn get_or_init_environment(
     }
 }
 
-/// Shared state used during resolution and installation.
-#[derive(Default)]
-pub(crate) struct SharedState {
-    /// The resolved Git references.
-    git: GitResolver,
-    /// The fetched package versions and metadata.
-    index: InMemoryIndex,
-}
-
 /// Resolve any [`UnresolvedRequirementSpecification`] into a fully-qualified [`Requirement`].
 pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
@@ -329,9 +320,6 @@ pub(crate) async fn resolve_names(
         .platform(interpreter.platform())
         .build();
 
-    // Initialize any shared state.
-    let in_flight = InFlight::default();
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
@@ -348,7 +336,7 @@ pub(crate) async fn resolve_names(
         &flat_index,
         &state.index,
         &state.git,
-        &in_flight,
+        &state.in_flight,
         *index_strategy,
         setup_py,
         config_setting,
@@ -372,11 +360,238 @@ pub(crate) async fn resolve_names(
     Ok(resolver.resolve().await?)
 }
 
+/// Run dependency resolution for an interpreter, returning the [`ResolutionGraph`].
+pub(crate) async fn resolve_environment<'a>(
+    interpreter: &Interpreter,
+    spec: RequirementsSpecification,
+    settings: ResolverSettingsRef<'_>,
+    state: &SharedState,
+    preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<ResolutionGraph> {
+    let ResolverSettingsRef {
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        resolution,
+        prerelease,
+        config_setting,
+        exclude_newer,
+        link_mode,
+        upgrade: _,
+        build_options,
+    } = settings;
+
+    // Determine the tags, markers, and interpreter to use for resolution.
+    let tags = interpreter.tags()?;
+    let markers = interpreter.markers();
+    let python_requirement = PythonRequirement::from_interpreter(interpreter);
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
+        .index_urls(index_locations.index_urls())
+        .index_strategy(index_strategy)
+        .keyring(keyring_provider)
+        .markers(markers)
+        .platform(interpreter.platform())
+        .build();
+
+    let options = OptionsBuilder::new()
+        .resolution_mode(resolution)
+        .prerelease_mode(prerelease)
+        .exclude_newer(exclude_newer)
+        .index_strategy(index_strategy)
+        .build();
+
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let build_isolation = BuildIsolation::default();
+    let dev = Vec::default();
+    let extras = ExtrasSpecification::default();
+    let hasher = HashStrategy::default();
+    let preferences = Vec::default();
+    let setup_py = SetupPyStrategy::default();
+
+    // When resolving from an interpreter, we assume an empty environment, so reinstalls and
+    // upgrades aren't relevant.
+    let reinstall = Reinstall::default();
+    let upgrade = Upgrade::default();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+    };
+
+    // Create a build dispatch.
+    let resolve_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        interpreter,
+        index_locations,
+        &flat_index,
+        &state.index,
+        &state.git,
+        &state.in_flight,
+        index_strategy,
+        setup_py,
+        config_setting,
+        build_isolation,
+        link_mode,
+        build_options,
+        exclude_newer,
+        concurrency,
+        preview,
+    );
+
+    // Resolve the requirements.
+    Ok(pip::operations::resolve(
+        spec.requirements,
+        spec.constraints,
+        spec.overrides,
+        dev,
+        spec.source_trees,
+        spec.project,
+        &extras,
+        preferences,
+        EmptyInstalledPackages,
+        &hasher,
+        &reinstall,
+        &upgrade,
+        Some(tags),
+        Some(markers),
+        python_requirement,
+        &client,
+        &flat_index,
+        &state.index,
+        &resolve_dispatch,
+        concurrency,
+        options,
+        printer,
+        preview,
+    )
+    .await?)
+}
+
+/// Sync a [`PythonEnvironment`] with a set of resolved requirements.
+pub(crate) async fn sync_environment(
+    venv: PythonEnvironment,
+    resolution: &Resolution,
+    settings: InstallerSettingsRef<'_>,
+    state: &SharedState,
+    preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<PythonEnvironment> {
+    let InstallerSettingsRef {
+        index_locations,
+        index_strategy,
+        keyring_provider,
+        config_setting,
+        exclude_newer,
+        link_mode,
+        compile_bytecode,
+        reinstall,
+        build_options,
+    } = settings;
+
+    let site_packages = SitePackages::from_environment(&venv)?;
+
+    // Determine the tags, markers, and interpreter to use for resolution.
+    let interpreter = venv.interpreter();
+    let tags = venv.interpreter().tags()?;
+    let markers = venv.interpreter().markers();
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
+        .index_urls(index_locations.index_urls())
+        .index_strategy(index_strategy)
+        .keyring(keyring_provider)
+        .markers(markers)
+        .platform(interpreter.platform())
+        .build();
+
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    let build_isolation = BuildIsolation::default();
+    let dry_run = false;
+    let hasher = HashStrategy::default();
+    let setup_py = SetupPyStrategy::default();
+
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+    };
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        interpreter,
+        index_locations,
+        &flat_index,
+        &state.index,
+        &state.git,
+        &state.in_flight,
+        index_strategy,
+        setup_py,
+        config_setting,
+        build_isolation,
+        link_mode,
+        build_options,
+        exclude_newer,
+        concurrency,
+        preview,
+    );
+
+    // Sync the environment.
+    pip::operations::install(
+        resolution,
+        site_packages,
+        Modifications::Exact,
+        reinstall,
+        build_options,
+        link_mode,
+        compile_bytecode,
+        index_locations,
+        &hasher,
+        tags,
+        &client,
+        &state.in_flight,
+        concurrency,
+        &build_dispatch,
+        cache,
+        &venv,
+        dry_run,
+        printer,
+        preview,
+    )
+    .await?;
+
+    // Notify the user of any resolution diagnostics.
+    pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+
+    Ok(venv)
+}
+
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
-    modifications: Modifications,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
     preview: PreviewMode,
@@ -386,7 +601,6 @@ pub(crate) async fn update_environment(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<PythonEnvironment> {
-    // Extract the project settings.
     let ResolverInstallerSettings {
         index_locations,
         index_strategy,
@@ -450,9 +664,6 @@ pub(crate) async fn update_environment(
         .index_strategy(*index_strategy)
         .build();
 
-    // Initialize any shared state.
-    let in_flight = InFlight::default();
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
@@ -471,7 +682,7 @@ pub(crate) async fn update_environment(
     };
 
     // Create a build dispatch.
-    let resolve_dispatch = BuildDispatch::new(
+    let build_dispatch = BuildDispatch::new(
         &client,
         cache,
         interpreter,
@@ -479,7 +690,7 @@ pub(crate) async fn update_environment(
         &flat_index,
         &state.index,
         &state.git,
-        &in_flight,
+        &state.in_flight,
         *index_strategy,
         setup_py,
         config_setting,
@@ -511,7 +722,7 @@ pub(crate) async fn update_environment(
         &client,
         &flat_index,
         &state.index,
-        &resolve_dispatch,
+        &build_dispatch,
         concurrency,
         options,
         printer,
@@ -523,40 +734,11 @@ pub(crate) async fn update_environment(
         Err(err) => return Err(err.into()),
     };
 
-    // Re-initialize the in-flight map.
-    let in_flight = InFlight::default();
-
-    // If we're running with `--reinstall`, initialize a separate `BuildDispatch`, since we may
-    // end up removing some distributions from the environment.
-    let install_dispatch = if reinstall.is_none() {
-        resolve_dispatch
-    } else {
-        BuildDispatch::new(
-            &client,
-            cache,
-            interpreter,
-            index_locations,
-            &flat_index,
-            &state.index,
-            &state.git,
-            &in_flight,
-            *index_strategy,
-            setup_py,
-            config_setting,
-            build_isolation,
-            *link_mode,
-            build_options,
-            *exclude_newer,
-            concurrency,
-            preview,
-        )
-    };
-
     // Sync the environment.
     pip::operations::install(
         &resolution,
         site_packages,
-        modifications,
+        Modifications::Exact,
         reinstall,
         build_options,
         *link_mode,
@@ -565,9 +747,9 @@ pub(crate) async fn update_environment(
         &hasher,
         tags,
         &client,
-        &in_flight,
+        &state.in_flight,
         concurrency,
-        &install_dispatch,
+        &build_dispatch,
         cache,
         &venv,
         dry_run,

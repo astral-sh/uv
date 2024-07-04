@@ -15,8 +15,8 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_toolchain::ToolchainRequest;
-use uv_toolchain::{EnvironmentPreference, PythonEnvironment};
+use uv_python::PythonRequest;
+use uv_python::{EnvironmentPreference, PythonEnvironment};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -37,7 +37,7 @@ pub(crate) fn pip_list(
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
-        &python.map(ToolchainRequest::parse).unwrap_or_default(),
+        &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
     )?;

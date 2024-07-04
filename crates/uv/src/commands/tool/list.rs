@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use anyhow::Result;
 
+use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
@@ -25,9 +26,23 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
         return Ok(ExitStatus::Success);
     }
 
-    // TODO(zanieb): Track and display additional metadata, like entry points
-    for (name, _tool) in tools {
-        writeln!(printer.stdout(), "{name}")?;
+    for (name, tool) in tools {
+        // Output tool name and version
+        let version =
+            match installed_tools.version(&name, &Cache::from_path(installed_tools.root())) {
+                Ok(version) => version,
+                Err(e) => {
+                    writeln!(printer.stderr(), "{e}")?;
+                    continue;
+                }
+            };
+
+        writeln!(printer.stdout(), "{name} v{version}")?;
+
+        // Output tool entrypoints
+        for entrypoint in tool.entrypoints() {
+            writeln!(printer.stdout(), "    {}", &entrypoint.name)?;
+        }
     }
 
     Ok(ExitStatus::Success)
