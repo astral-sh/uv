@@ -105,7 +105,10 @@ pub(crate) async fn uninstall(
 
     if failed {
         if matching_installations.len() > 1 {
-            writeln!(printer.stderr(), "Some Python uninstalls failed")?;
+            writeln!(
+                printer.stderr(),
+                "Failed to remove some Python installations"
+            )?;
         }
         return Ok(ExitStatus::Failure);
     }

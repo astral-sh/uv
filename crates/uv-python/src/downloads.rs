@@ -407,7 +407,7 @@ impl ManagedPythonDownload {
         parent_path: &Path,
     ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
-        let path = parent_path.join(self.key().to_string()).clone();
+        let path = parent_path.join(self.key().to_string());
 
         // If it already exists, return it
         if path.is_dir() {
@@ -429,7 +429,7 @@ impl ManagedPythonDownload {
         );
         let reader = response
             .bytes_stream()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
             .into_async_read();
 
         debug!("Extracting {filename}");
