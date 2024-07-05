@@ -373,8 +373,8 @@ pub struct PipCompileArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, value_parser = parse_file_path)]
-    pub r#override: Vec<PathBuf>,
+    #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub r#override: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the extra group name; may be provided more than once.
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -906,8 +906,8 @@ pub struct PipInstallArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, value_parser = parse_file_path)]
-    pub r#override: Vec<PathBuf>,
+    #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub r#override: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the extra group name; may be provided more than once.
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.

@@ -684,7 +684,10 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            r#override,
+            r#override: r#override
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             overrides_from_workspace,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
@@ -890,7 +893,10 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            r#override,
+            r#override: r#override
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             dry_run,
             overrides_from_workspace,
             refresh: Refresh::from(refresh),
