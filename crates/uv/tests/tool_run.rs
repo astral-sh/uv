@@ -42,6 +42,7 @@ fn tool_run_args() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/ad714af3cb8a4686/b092cf4519439d39/bin/python
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
@@ -87,6 +88,7 @@ fn tool_run_at_version() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/5dd048337b5b560b/7c286a65dce9a738/bin/python
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
@@ -185,6 +187,7 @@ fn tool_run_from_version() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/8dab69931067a637/7c286a65dce9a738/bin/python
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
@@ -241,6 +244,7 @@ fn tool_run_from_install() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/8abab9923fbfb5b4/725aed21922802e5/bin/python
     Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -357,6 +361,7 @@ fn tool_run_cache() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/2ce11a08f3914247/725aed21922802e5/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7

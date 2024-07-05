@@ -1014,6 +1014,7 @@ fn add_remove_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Installed 1 package in [TIME]
      - child1==0.1.0 (from file://[TEMP_DIR]/child1)
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
@@ -1119,6 +1120,7 @@ fn add_workspace_editable() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Installed 2 packages in [TIME]
      + child1==0.1.0 (from file://[TEMP_DIR]/child1)
      + child2==0.1.0 (from file://[TEMP_DIR]/child2)

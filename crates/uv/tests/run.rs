@@ -224,16 +224,17 @@ fn run_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Prepared 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + iniconfig==2.0.0
-        "###);
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
 
     // Otherwise, the script requirements should _not_ be available, but the project requirements
     // should.

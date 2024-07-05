@@ -59,6 +59,7 @@ fn tool_uninstall() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.2.0
      + click==8.1.7

@@ -35,6 +35,7 @@ fn tool_install() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -188,6 +189,7 @@ fn tool_install_version() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.2.0
      + click==8.1.7
@@ -273,6 +275,7 @@ fn tool_install_from() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.2.0
      + click==8.1.7
@@ -338,6 +341,7 @@ fn tool_install_already_installed() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -524,6 +528,7 @@ fn tool_install_entry_point_exists() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -779,6 +784,7 @@ fn tool_install_home() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -815,6 +821,7 @@ fn tool_install_xdg_data_home() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -851,6 +858,7 @@ fn tool_install_xdg_bin_home() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -885,6 +893,7 @@ fn tool_install_no_entrypoints() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
+    Installing to environment at tools/iniconfig/bin/python
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     error: No entry points found for tool `iniconfig`
@@ -911,6 +920,7 @@ fn tool_install_unnamed_package() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.4.2 (from https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl)
      + click==8.1.7
@@ -1021,6 +1031,7 @@ fn tool_install_unnamed_from() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 6 packages in [TIME]
      + black==24.4.2 (from https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl)
      + click==8.1.7
@@ -1106,6 +1117,7 @@ fn tool_install_unnamed_with() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed 7 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -1195,6 +1207,7 @@ fn tool_install_upgrade() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.1.1
      + click==8.1.7
@@ -1347,6 +1360,7 @@ fn tool_install_python_request() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -1422,6 +1436,7 @@ fn tool_install_preserve_environment() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.1.1
      + click==8.1.7
