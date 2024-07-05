@@ -155,6 +155,7 @@ fn tool_run_at_version() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
@@ -270,6 +271,7 @@ fn tool_run_from_install() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed 6 packages in [TIME]
      + black==24.1.1
      + click==8.1.7
@@ -408,6 +410,7 @@ fn tool_run_cache() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
