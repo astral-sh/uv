@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::Result;
 use fs_err as fs;
 use futures::StreamExt;
-
+use itertools::Itertools;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
@@ -45,6 +45,7 @@ pub(crate) async fn install(
     } else {
         targets
             .iter()
+            .dedup()
             .map(|target| PythonRequest::parse(target.as_str()))
             .collect()
     };

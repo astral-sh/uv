@@ -29,6 +29,7 @@ pub(crate) async fn uninstall(
 
     let requests = targets
         .iter()
+        .dedup()
         .map(|target| PythonRequest::parse(target.as_str()))
         .collect::<Vec<_>>();
 
