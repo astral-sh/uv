@@ -696,6 +696,7 @@ fn tool_install_entry_point_exists() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Installed [N] packages in [TIME]
      - black==24.3.0
      + black==24.3.0
