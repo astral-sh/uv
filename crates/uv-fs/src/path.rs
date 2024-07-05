@@ -160,7 +160,7 @@ pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
 ///
 /// When a relative path is provided with `..` components that extend beyond the base directory.
 /// For example, `./a/../../b` cannot be normalized because it escapes the base directory.
-pub fn normalize_path(path: &Path) -> Result<PathBuf, std::io::Error> {
+pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     let mut components = path.components().peekable();
     let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
         components.next();
@@ -180,7 +180,10 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf, std::io::Error> {
                 if !ret.pop() {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
-                        "cannot normalize a relative path beyond the base directory",
+                        format!(
+                            "cannot normalize a relative path beyond the base directory: {}",
+                            path.display()
+                        ),
                     ));
                 }
             }
@@ -190,6 +193,52 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf, std::io::Error> {
         }
     }
     Ok(ret)
+}
+
+/// Normalize a path, removing things like `.` and `..`.
+///
+/// Unlike [`normalize_absolute_path`], this works with relative paths and does never error.
+///
+/// Note that we can theoretically go beyond the root dir here (e.g. `/usr/../../foo` becomes
+/// `/../foo`), but that's not a (correctness) problem, we will fail later with a file not found
+/// error with a path computed from the user's input.
+///
+/// # Examples
+///
+/// In: `../../workspace-git-path-dep-test/packages/c/../../packages/d`
+/// Out: `../../workspace-git-path-dep-test/packages/d`
+///
+/// In: `workspace-git-path-dep-test/packages/c/../../packages/d`
+/// Out: `workspace-git-path-dep-test/packages/d`
+///
+/// In: `./a/../../b`
+/// Out: `../b`
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                // Preserve filesystem roots and regular path components.
+                normalized.push(component);
+            }
+            Component::ParentDir => {
+                match normalized.components().last() {
+                    None | Some(Component::ParentDir | Component::RootDir) => {
+                        // Preserve leading and above-root `..`
+                        normalized.push(component);
+                    }
+                    Some(Component::Normal(_) | Component::Prefix(_) | Component::CurDir) => {
+                        // Remove inner `..`
+                        normalized.pop();
+                    }
+                }
+            }
+            Component::CurDir => {
+                // Remove `.`
+            }
+        }
+    }
+    normalized
 }
 
 /// Convert a path to an absolute path, relative to the current working directory.
@@ -402,16 +451,16 @@ mod tests {
     #[test]
     fn test_normalize_path() {
         let path = Path::new("/a/b/../c/./d");
-        let normalized = normalize_path(path).unwrap();
+        let normalized = normalize_absolute_path(path).unwrap();
         assert_eq!(normalized, Path::new("/a/c/d"));
 
         let path = Path::new("/a/../c/./d");
-        let normalized = normalize_path(path).unwrap();
+        let normalized = normalize_absolute_path(path).unwrap();
         assert_eq!(normalized, Path::new("/c/d"));
 
         // This should be an error.
         let path = Path::new("/a/../../c/./d");
-        let err = normalize_path(path).unwrap_err();
+        let err = normalize_absolute_path(path).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     }
 
@@ -441,5 +490,24 @@ mod tests {
             .unwrap(),
             Path::new("../../../bin/foo_launcher")
         );
+    }
+
+    #[test]
+    fn test_normalize_relative() {
+        let cases = [
+            (
+                "../../workspace-git-path-dep-test/packages/c/../../packages/d",
+                "../../workspace-git-path-dep-test/packages/d",
+            ),
+            (
+                "workspace-git-path-dep-test/packages/c/../../packages/d",
+                "workspace-git-path-dep-test/packages/d",
+            ),
+            ("./a/../../b", "../b"),
+            ("/usr/../../foo", "/../foo"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
+        }
     }
 }

@@ -57,7 +57,8 @@ impl Metadata {
     /// dependencies.
     pub async fn from_workspace(
         metadata: Metadata23,
-        project_root: &Path,
+        install_path: &Path,
+        lock_path: &Path,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -66,13 +67,14 @@ impl Metadata {
             requires_dist,
             provides_extras,
             dev_dependencies,
-        } = RequiresDist::from_workspace(
+        } = RequiresDist::from_project_maybe_workspace(
             pypi_types::RequiresDist {
                 name: metadata.name,
                 requires_dist: metadata.requires_dist,
                 provides_extras: metadata.provides_extras,
             },
-            project_root,
+            install_path,
+            lock_path,
             preview_mode,
         )
         .await?;

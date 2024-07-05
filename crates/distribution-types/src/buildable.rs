@@ -166,7 +166,8 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 #[derive(Debug, Clone)]
 pub struct DirectorySourceUrl<'a> {
     pub url: &'a Url,
-    pub path: Cow<'a, Path>,
+    pub install_path: Cow<'a, Path>,
+    pub lock_path: Cow<'a, Path>,
     pub editable: bool,
 }
 
@@ -180,7 +181,8 @@ impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
     fn from(dist: &'a DirectorySourceDist) -> Self {
         Self {
             url: &dist.url,
-            path: Cow::Borrowed(&dist.install_path),
+            install_path: Cow::Borrowed(&dist.install_path),
+            lock_path: Cow::Borrowed(&dist.lock_path),
             editable: dist.editable,
         }
     }
