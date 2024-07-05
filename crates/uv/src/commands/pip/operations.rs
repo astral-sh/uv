@@ -1,7 +1,6 @@
 //! Common operations shared across the `pip` API and subcommands.
 
 use std::fmt::Write;
-use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
@@ -454,8 +453,9 @@ pub(crate) async fn install(
         let s = if wheels.len() == 1 { "" } else { "s" };
 
         let python_executable = venv.python_executable();
-        let venv_dir_canonical = fs::canonicalize(".venv").unwrap_or(PathBuf::from(".venv"));
-        let is_outside_working_directory = !(python_executable.starts_with(&venv_dir_canonical));
+        let venv_dir = PathBuf::from(".venv");
+        let venv_dir_canonical = venv_dir.canonicalize().unwrap_or(venv_dir);
+        let is_outside_working_directory = !(python_executable.starts_with(venv_dir_canonical));
         if is_outside_working_directory {
             writeln!(
                 printer.stderr(),
@@ -464,6 +464,7 @@ pub(crate) async fn install(
                     "Installing to environment at {}",
                     python_executable.user_display()
                 )
+                .dimmed()
             )?;
         }
         writeln!(
