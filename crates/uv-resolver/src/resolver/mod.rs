@@ -1466,7 +1466,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 true
             })
             .flat_map(move |requirement| {
-                iter::once(Cow::Borrowed(requirement)).chain(
+                iter::once(requirement.clone()).chain(
                     self.constraints
                         .get(&requirement.name)
                         .into_iter()

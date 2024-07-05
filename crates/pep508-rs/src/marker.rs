@@ -1897,6 +1897,28 @@ impl MarkerTree {
             }
         }
     }
+
+    /// Find a top level `extra == "..."` expression.
+    ///
+    /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
+    /// main conjunction.
+    pub fn top_level_extra(&self) -> Option<&MarkerExpression> {
+        match &self {
+            MarkerTree::Expression(extra_expression @ MarkerExpression::Extra { .. }) => {
+                Some(extra_expression)
+            }
+            MarkerTree::And(and) => and.iter().find_map(|marker| {
+                if let MarkerTree::Expression(extra_expression @ MarkerExpression::Extra { .. }) =
+                    marker
+                {
+                    Some(extra_expression)
+                } else {
+                    None
+                }
+            }),
+            MarkerTree::Expression(_) | MarkerTree::Or(_) => None,
+        }
+    }
 }
 
 impl Display for MarkerTree {
