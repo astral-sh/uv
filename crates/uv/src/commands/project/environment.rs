@@ -15,13 +15,13 @@ use crate::commands::SharedState;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
-/// An ephemeral [`PythonEnvironment`] stored in the cache.
+/// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
 pub(crate) struct CachedEnvironment(PythonEnvironment);
 
 impl From<CachedEnvironment> for PythonEnvironment {
-    fn from(ephemeral: CachedEnvironment) -> Self {
-        ephemeral.0
+    fn from(environment: CachedEnvironment) -> Self {
+        environment.0
     }
 }
 
@@ -100,7 +100,7 @@ impl CachedEnvironment {
         let ok = cache_entry.path().join(".ok");
         if ok.is_file() {
             debug!(
-                "Found existing ephemeral environment at: `{}`",
+                "Found existing cached environment at: `{}`",
                 cache_entry.path().display()
             );
             return Ok(Self(PythonEnvironment::from_root(
@@ -110,7 +110,7 @@ impl CachedEnvironment {
         }
 
         debug!(
-            "Creating ephemeral environment at: `{}`",
+            "Creating cached environment at: `{}`",
             cache_entry.path().display()
         );
 
@@ -122,7 +122,6 @@ impl CachedEnvironment {
             false,
         )?;
 
-        // Install the ephemeral requirements.
         // TODO(charlie): Rather than passing all the arguments to `sync_environment`, return a
         // struct that lets us "continue" from `resolve_environment`.
         let venv = sync_environment(
@@ -145,7 +144,7 @@ impl CachedEnvironment {
         Ok(Self(venv))
     }
 
-    /// Convert the [`EphemeralEnvironment`] into an [`Interpreter`].
+    /// Convert the [`CachedEnvironment`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         self.0.into_interpreter()
     }
