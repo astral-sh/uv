@@ -53,6 +53,10 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"Caused by: .* \(os error 2\)",
         "Caused by: No such file or directory (os error 2)",
     ),
+    (
+        r"environments-v1/[a-zA-Z0-9]+/[a-zA-Z0-9]+",
+        "environments-v1/[RANDOM]/[RANDOM]",
+    ),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.

@@ -42,7 +42,7 @@ fn tool_run_args() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/environments-v1/7e641cd0955e8cc7/b092cf4519439d39/bin/python
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
@@ -88,7 +88,7 @@ fn tool_run_at_version() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/environments-v1/a79d6c87a3b74ee0/7c286a65dce9a738/bin/python
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
@@ -187,7 +187,7 @@ fn tool_run_from_version() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
-    Installing to environment at [CACHE_DIR]/environments-v1/fc7223bfbbf91792/7c286a65dce9a738/bin/python
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed 4 packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
@@ -244,7 +244,7 @@ fn tool_run_from_install() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
-    Installing to environment at [CACHE_DIR]/environments-v1/e0648129369c791c/725aed21922802e5/bin/python
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed 6 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -361,7 +361,7 @@ fn tool_run_cache() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
-    Installing to environment at [CACHE_DIR]/environments-v1/e8c93ee5eaf74cc1/725aed21922802e5/bin/python
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7

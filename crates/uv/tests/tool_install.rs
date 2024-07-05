@@ -476,6 +476,7 @@ fn tool_install_already_installed() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Installed [N] packages in [TIME]
      - black==24.3.0
      + black==24.3.0
@@ -610,6 +611,7 @@ fn tool_install_entry_point_exists() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -1318,6 +1320,7 @@ fn tool_install_upgrade() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Installed [N] packages in [TIME]
      - black==24.1.1
      + black==24.3.0
