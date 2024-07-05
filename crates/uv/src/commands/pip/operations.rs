@@ -2,7 +2,7 @@
 
 use std::fmt::Write;
 use std::fs;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
