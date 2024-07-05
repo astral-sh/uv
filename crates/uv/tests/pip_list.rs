@@ -350,7 +350,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"}]
+    [{"name":"poetry-editable","version":"0.1.0","dependencies":["anyio"],"editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"}]
 
     ----- stderr -----
     "###
@@ -362,7 +362,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"anyio","version":"4.3.0","dependencies":["idna","sniffio","exceptiongroup","typing-extensions","packaging","sphinx","sphinx-rtd-theme","sphinx-autodoc-typehints","anyio","coverage","exceptiongroup","hypothesis","psutil","pytest","pytest-mock","trustme","uvloop","trio"]},{"name":"idna","version":"3.6","dependencies":[]},{"name":"sniffio","version":"1.3.1","dependencies":[]}]
 
     ----- stderr -----
     "###
