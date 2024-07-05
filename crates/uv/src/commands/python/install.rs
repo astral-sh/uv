@@ -14,6 +14,7 @@ use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{requests_from_version_file, PythonRequest};
 use uv_warnings::warn_user_once;
 
+use crate::commands::reporters::DownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -128,40 +129,53 @@ pub(crate) async fn install(
         .native_tls(native_tls)
         .build();
 
-    let mut tasks = futures::stream::iter(downloads.iter())
+    let reporter = DownloadReporter::from(printer).with_length(downloads.len() as u64);
+
+    let tasks = futures::stream::iter(downloads.iter())
         .map(|download| async {
-            let _ = writeln!(printer.stderr(), "Downloading {}", download.key());
-            let result = download.fetch(&client, installations_dir).await;
+            let result = download
+                .fetch(&client, installations_dir, Some(&reporter))
+                .await;
             (download.python_version(), result)
         })
-        .buffered(4);
+        .buffered(4)
+        .collect::<Vec<_>>()
+        .await;
 
-    let mut results = Vec::new();
-    while let Some(task) = tasks.next().await {
-        let (version, result) = task;
-        let path = match result? {
+    let mut installed = 0;
+    for (version, result) in &tasks {
+        let path = match result {
             // We should only encounter already-available during concurrent installs
-            DownloadResult::AlreadyAvailable(path) => path,
-            DownloadResult::Fetched(path) => {
+            Ok(DownloadResult::AlreadyAvailable(path)) => Some(path),
+            Ok(DownloadResult::Fetched(path)) => {
+                installed += 1;
                 writeln!(
                     printer.stderr(),
                     "Installed Python {version} to {}",
                     path.user_display()
                 )?;
-                path
+                Some(path)
+            }
+            Err(err) => {
+                writeln!(
+                    printer.stderr(),
+                    "Failed to install Python {version}: {err}"
+                )?;
+                None
             }
         };
-        // Ensure the installations have externally managed markers
-        let installed = ManagedPythonInstallation::new(path.clone())?;
-        installed.ensure_externally_managed()?;
-        results.push((version, path));
+        if let Some(path) = path {
+            // Ensure the installations have externally managed markers
+            let installed = ManagedPythonInstallation::new(path.clone())?;
+            installed.ensure_externally_managed()?;
+        }
     }
 
-    let s = if downloads.len() == 1 { "" } else { "s" };
+    let s = if installed == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
         "Installed {} version{s} in {}s",
-        downloads.len(),
+        installed,
         start.elapsed().as_secs()
     )?;
 

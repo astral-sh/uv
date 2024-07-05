@@ -4927,6 +4927,7 @@ dependencies = [
  "tempfile",
  "test-log",
  "thiserror",
+ "tokio",
  "tokio-util",
  "tracing",
  "url",

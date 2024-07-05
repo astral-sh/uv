@@ -11,6 +11,7 @@ use distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
+use uv_python::installation::PythonInstallationKey;
 
 use crate::printer::Printer;
 
@@ -72,6 +73,7 @@ impl ProgressReporter {
             mode,
         }
     }
+
     fn on_build_start(&self, source: &BuildableSource) -> usize {
         let ProgressMode::Multi {
             multi_progress,
@@ -438,6 +440,48 @@ impl uv_installer::InstallReporter for InstallReporter {
     fn on_install_complete(&self) {
         self.progress.set_message("");
         self.progress.finish_and_clear();
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct DownloadReporter {
+    reporter: ProgressReporter,
+}
+
+impl DownloadReporter {
+    #[must_use]
+    pub(crate) fn with_length(self, length: u64) -> Self {
+        self.reporter.root.set_length(length);
+        self
+    }
+}
+
+impl From<Printer> for DownloadReporter {
+    fn from(printer: Printer) -> Self {
+        let multi_progress = MultiProgress::with_draw_target(printer.target());
+        let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
+        root.set_style(
+            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
+        );
+        root.set_message("Downloading Python...");
+
+        let reporter = ProgressReporter::new(root, multi_progress, printer);
+        Self { reporter }
+    }
+}
+
+impl uv_python::downloads::Reporter for DownloadReporter {
+    fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize {
+        self.reporter
+            .on_download_start(&PackageName::new(format!("{name}")).unwrap(), size)
+    }
+
+    fn on_download_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_download_progress(id, inc);
+    }
+
+    fn on_download_complete(&self, _name: &PythonInstallationKey, id: usize) {
+        self.reporter.on_download_complete(id);
     }
 }
 

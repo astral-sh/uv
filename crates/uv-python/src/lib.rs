@@ -20,7 +20,7 @@ mod discovery;
 pub mod downloads;
 mod environment;
 mod implementation;
-mod installation;
+pub mod installation;
 mod interpreter;
 pub mod managed;
 pub mod platform;

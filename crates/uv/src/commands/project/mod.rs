@@ -25,7 +25,7 @@ use uv_resolver::{FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, 
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::reporters::ResolverReporter;
+use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{pip, SharedState};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
@@ -138,6 +138,8 @@ impl FoundInterpreter {
     ) -> Result<Self, ProjectError> {
         let requires_python = find_requires_python(workspace)?;
 
+        let reporter = DownloadReporter::from(printer).with_length(1);
+
         // (1) Explicit request from user
         let python_request = if let Some(request) = python_request {
             Some(request)
@@ -188,6 +190,7 @@ impl FoundInterpreter {
             python_fetch,
             &client_builder,
             cache,
+            Some(&reporter),
         )
         .await?
         .into_interpreter();
