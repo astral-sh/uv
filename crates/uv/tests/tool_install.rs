@@ -111,6 +111,7 @@ fn tool_install() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/flask/bin/python
     Installed [N] packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
@@ -442,6 +443,7 @@ fn tool_install_already_installed() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Installed [N] packages in [TIME]
      - black==24.3.0
      + black==24.3.0
@@ -567,6 +569,7 @@ fn tool_install_entry_point_exists() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -1276,6 +1279,7 @@ fn tool_install_upgrade() {
     warning: `uv tool install` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python3
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     Installed: black, blackd
@@ -1403,6 +1407,7 @@ fn tool_install_python_request() {
     Existing environment for `black` does not satisfy the requested Python interpreter: `Python 3.11`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at tools/black/bin/python
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
