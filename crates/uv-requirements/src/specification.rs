@@ -40,7 +40,7 @@ use distribution_types::{
 use pep508_rs::{UnnamedRequirement, UnnamedRequirementUrl};
 use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
-use requirements_txt::{FindLink, RequirementsTxt, RequirementsTxtRequirement};
+use requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_distribution::pyproject::PyProjectToml;
@@ -143,10 +143,7 @@ impl RequirementsSpecification {
                     find_links: requirements_txt
                         .find_links
                         .into_iter()
-                        .map(|link| match link {
-                            FindLink::Url(url) => FlatIndexLocation::Url(url),
-                            FindLink::Path(path) => FlatIndexLocation::Path(path),
-                        })
+                        .map(FlatIndexLocation::from)
                         .collect(),
                     no_binary: requirements_txt.no_binary,
                     no_build: requirements_txt.only_binary,

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use futures::{FutureExt, StreamExt};
 use reqwest::Response;
@@ -7,7 +7,6 @@ use url::Url;
 
 use distribution_filename::DistFilename;
 use distribution_types::{File, FileLocation, FlatIndexLocation, IndexUrl};
-use pep508_rs::VerbatimUrl;
 use uv_cache::{Cache, CacheBucket};
 
 use crate::cached_client::{CacheControl, CachedClientError};
@@ -16,6 +15,9 @@ use crate::{Connectivity, Error, ErrorKind, RegistryClient};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
+    #[error("Expected a file URL, but received: {0}")]
+    NonFileUrl(Url),
+
     #[error("Failed to read `--find-links` directory: {0}")]
     FindLinksDirectory(PathBuf, #[source] FindLinksDirectoryError),
 
@@ -97,12 +99,17 @@ impl<'a> FlatIndexClient<'a> {
         let mut fetches = futures::stream::iter(indexes)
             .map(|index| async move {
                 let entries = match index {
-                    FlatIndexLocation::Path(path) => Self::read_from_directory(path)
-                        .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))?,
+                    FlatIndexLocation::Path(url) => {
+                        let path = url
+                            .to_file_path()
+                            .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
+                        Self::read_from_directory(&path, index)
+                            .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))?
+                    }
                     FlatIndexLocation::Url(url) => self
-                        .read_from_url(url)
+                        .read_from_url(url, index)
                         .await
-                        .map_err(|err| FlatIndexError::FindLinksUrl(url.clone(), err))?,
+                        .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err))?,
                 };
                 if entries.is_empty() {
                     warn!("No packages found in `--find-links` entry: {}", index);
@@ -126,7 +133,11 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Read a flat remote index from a `--find-links` URL.
-    async fn read_from_url(&self, url: &Url) -> Result<FlatIndexEntries, Error> {
+    async fn read_from_url(
+        &self,
+        url: &Url,
+        flat_index: &FlatIndexLocation,
+    ) -> Result<FlatIndexEntries, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::FlatIndex,
             "html",
@@ -189,14 +200,13 @@ impl<'a> FlatIndexClient<'a> {
             .await;
         match response {
             Ok(files) => {
-                let index_url = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
                 let files = files
                     .into_iter()
                     .filter_map(|file| {
                         Some((
                             DistFilename::try_from_normalized_filename(&file.filename)?,
                             file,
-                            index_url.clone(),
+                            IndexUrl::from(flat_index.clone()),
                         ))
                     })
                     .collect();
@@ -210,11 +220,10 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Read a flat remote index from a `--find-links` directory.
-    fn read_from_directory(path: &PathBuf) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
-        // Absolute paths are required for the URL conversion.
-        let path = fs_err::canonicalize(path)?;
-        let index_url = IndexUrl::Path(VerbatimUrl::from_path(&path)?);
-
+    fn read_from_directory(
+        path: &Path,
+        flat_index: &FlatIndexLocation,
+    ) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
         let mut dists = Vec::new();
         for entry in fs_err::read_dir(path)? {
             let entry = entry?;
@@ -249,7 +258,7 @@ impl<'a> FlatIndexClient<'a> {
                 );
                 continue;
             };
-            dists.push((filename, file, index_url.clone()));
+            dists.push((filename, file, IndexUrl::from(flat_index.clone())));
         }
         Ok(FlatIndexEntries::from_entries(dists))
     }
