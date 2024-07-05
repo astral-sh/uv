@@ -103,7 +103,7 @@ impl PythonInstallation {
             {
                 if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
                     debug!("Requested Python not found, checking for available download...");
-                    Self::fetch(request, client_builder, cache).await
+                    Self::fetch(request.fill(), client_builder, cache).await
                 } else {
                     err
                 }
