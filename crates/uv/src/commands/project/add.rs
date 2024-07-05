@@ -10,6 +10,7 @@ use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::{DistributionDatabase, ProjectWorkspace, VirtualProject, Workspace};
 use uv_normalize::PackageName;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
+
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
 use uv_types::{BuildIsolation, HashStrategy};
@@ -17,6 +18,7 @@ use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
+use crate::commands::project::lock::commit;
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -204,10 +206,14 @@ pub(crate) async fn add(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // Lock and sync the environment.
+    // Read the existing lockfile.
+    let existing = project::lock::read(project.workspace()).await?;
+
+    // Lock and sync the environment, if necessary.
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
+        existing.as_ref(),
         settings.as_ref().into(),
         &state,
         preview,
@@ -218,6 +224,9 @@ pub(crate) async fn add(
         printer,
     )
     .await?;
+    if !existing.is_some_and(|existing| existing == lock) {
+        commit(&lock, project.workspace()).await?;
+    }
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?

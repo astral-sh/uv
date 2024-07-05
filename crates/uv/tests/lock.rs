@@ -88,7 +88,7 @@ fn lock_wheel_registry() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -160,7 +160,7 @@ fn lock_sdist_registry() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove("UV_EXCLUDE_NEWER"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -229,7 +229,7 @@ fn lock_sdist_git() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -323,7 +323,7 @@ fn lock_wheel_url() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -417,7 +417,7 @@ fn lock_sdist_url() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -531,7 +531,7 @@ fn lock_project_extra() -> Result<()> {
     });
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -547,7 +547,7 @@ fn lock_project_extra() -> Result<()> {
     "###);
 
     // Install the extras from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("test"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -591,7 +591,7 @@ fn lock_project_with_overrides() -> Result<()> {
     "###);
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -772,7 +772,7 @@ fn lock_dependency_extra() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -998,7 +998,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1022,7 +1022,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     fs_err::copy(lockfile, context_38.temp_dir.join("uv.lock"))?;
 
     // Install from the lockfile.
-    uv_snapshot!(context_38.filters(), context_38.sync(), @r###"
+    uv_snapshot!(context_38.filters(), context_38.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1189,7 +1189,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1943,7 +1943,7 @@ fn lock_requires_python() -> Result<()> {
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
-    uv_snapshot!(filters, context38.sync().arg("--python-fetch").arg("manual"), @r###"
+    uv_snapshot!(filters, context38.sync().arg("--frozen").arg("--python-fetch").arg("manual"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2398,7 +2398,7 @@ fn lock_dev() -> Result<()> {
     });
 
     // Install from the lockfile, excluding development dependencies.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2412,7 +2412,7 @@ fn lock_dev() -> Result<()> {
     "###);
 
     // Install from the lockfile, including development dependencies (the default).
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2806,7 +2806,7 @@ fn lock_cycles() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

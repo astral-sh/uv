@@ -10,15 +10,15 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::Workspace;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
+
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::tree::DisplayDependencyGraph;
 use crate::commands::project::FoundInterpreter;
-use crate::commands::ExitStatus;
+use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
-use super::lock::do_lock;
 use super::SharedState;
 
 /// Run a command.
@@ -60,10 +60,14 @@ pub(crate) async fn tree(
     .await?
     .into_interpreter();
 
-    // Update the lock file.
-    let lock = do_lock(
+    // Read the existing lockfile.
+    let existing = project::lock::read(&workspace).await?;
+
+    // Update the lock file, if necessary.
+    let lock = project::lock::do_lock(
         &workspace,
         &interpreter,
+        existing.as_ref(),
         settings.as_ref(),
         &SharedState::default(),
         preview,
@@ -74,6 +78,9 @@ pub(crate) async fn tree(
         printer,
     )
     .await?;
+    if !existing.is_some_and(|existing| existing == lock) {
+        project::lock::commit(&lock, &workspace).await?;
+    }
 
     // Read packages from the lockfile.
     let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();

@@ -4961,7 +4961,6 @@ dependencies = [
 name = "uv-requirements"
 version = "0.1.0"
 dependencies = [
- "anstream",
  "anyhow",
  "cache-key",
  "configparser",

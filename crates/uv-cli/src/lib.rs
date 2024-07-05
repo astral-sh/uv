@@ -1784,6 +1784,14 @@ pub struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Install without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
     /// Include optional dependencies from the extra group name; may be provided more than once.
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -1811,7 +1819,7 @@ pub struct SyncArgs {
     pub no_clean: bool,
 
     #[command(flatten)]
-    pub installer: InstallerArgs,
+    pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
     pub build: BuildArgs,
