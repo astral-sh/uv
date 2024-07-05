@@ -3,9 +3,8 @@ use std::collections::BTreeMap;
 
 use rustc_hash::FxHashMap;
 
-use distribution_types::{CachedRegistryDist, FlatIndexLocation, Hashed, IndexLocations, IndexUrl};
+use distribution_types::{CachedRegistryDist, Hashed, IndexLocations, IndexUrl};
 use pep440_rs::Version;
-use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_fs::{directories, files, symlinks};
@@ -91,15 +90,7 @@ impl<'a> RegistryWheelIndex<'a> {
         // Collect into owned `IndexUrl`.
         let flat_index_urls: Vec<IndexUrl> = index_locations
             .flat_index()
-            .filter_map(|flat_index| match flat_index {
-                FlatIndexLocation::Path(path) => {
-                    let path = fs_err::canonicalize(path).ok()?;
-                    Some(IndexUrl::Path(VerbatimUrl::from_path(path).ok()?))
-                }
-                FlatIndexLocation::Url(url) => {
-                    Some(IndexUrl::Url(VerbatimUrl::from_url(url.clone())))
-                }
-            })
+            .map(|flat_index| IndexUrl::from(flat_index.clone()))
             .collect();
 
         for index_url in index_locations.indexes().chain(flat_index_urls.iter()) {

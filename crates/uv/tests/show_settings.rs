@@ -1287,20 +1287,25 @@ fn resolve_find_links() -> anyhow::Result<()> {
                 extra_index: [],
                 flat_index: [
                     Url(
-                        Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "download.pytorch.org",
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "download.pytorch.org",
+                                    ),
                                 ),
+                                port: None,
+                                path: "/whl/torch_stable.html",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://download.pytorch.org/whl/torch_stable.html",
                             ),
-                            port: None,
-                            path: "/whl/torch_stable.html",
-                            query: None,
-                            fragment: None,
                         },
                     ),
                 ],

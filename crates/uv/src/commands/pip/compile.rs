@@ -411,7 +411,7 @@ pub(crate) async fn pip_compile(
     // If necessary, include the `--find-links` locations.
     if include_find_links {
         for flat_index in index_locations.flat_index() {
-            writeln!(writer, "--find-links {flat_index}")?;
+            writeln!(writer, "--find-links {}", flat_index.verbatim())?;
             wrote_preamble = true;
         }
     }
