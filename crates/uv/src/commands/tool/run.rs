@@ -134,7 +134,7 @@ pub(crate) async fn run(
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
-/// [`PythonEnvironment`]. Otherwise, creates an ephemeral environment.
+/// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
 async fn get_or_create_environment(
     from: &str,
     with: &[String],
