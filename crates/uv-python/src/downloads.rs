@@ -463,13 +463,16 @@ impl ManagedPythonDownload {
         }
 
         // Extract the top-level directory.
-        let extracted = match uv_extract::strip_component(temp_dir.path()) {
+        let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
             Err(err) => return Err(Error::ExtractError(filename.to_string(), err)),
         };
 
         // Persist it to the target
+        if installation_has_build_info(&extracted) {
+            extracted = extracted.join("install");
+        }
         debug!("Moving {} to {}", extracted.display(), path.user_display());
         rename_with_retry(extracted, &path)
             .await
@@ -507,4 +510,19 @@ impl Display for ManagedPythonDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.key)
     }
+}
+
+fn installation_has_build_info(p: &Path) -> bool {
+    let mut has_install = false;
+    let mut has_build = false;
+    if let Ok(dir) = p.read_dir() {
+        for entry in dir.flatten() {
+            match entry.file_name().to_str() {
+                Some("install") => has_install = true,
+                Some("build") => has_build = true,
+                _ => {}
+            }
+        }
+    }
+    has_install && has_build
 }
