@@ -84,7 +84,7 @@ pub(crate) async fn uninstall(
         return Ok(ExitStatus::Failure);
     }
 
-    let tasks = futures::stream::iter(matching_installations.iter().unique())
+    let tasks = futures::stream::iter(matching_installations.iter())
         .map(|installation| async {
             (
                 installation.key(),
