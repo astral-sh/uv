@@ -537,6 +537,13 @@ impl Version {
         self
     }
 
+    /// Return the version with any segments apart from the release removed.
+    #[inline]
+    #[must_use]
+    pub fn only_release(&self) -> Self {
+        Self::new(self.release().iter().copied())
+    }
+
     /// Set the min-release component and return the updated version.
     ///
     /// The "min" component is internal-only, and does not exist in PEP 440.

@@ -21,7 +21,7 @@ uv-configuration = { workspace = true, features = ["clap"] }
 uv-normalize = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-settings = { workspace = true, features = ["schemars"] }
-uv-toolchain = { workspace = true, features = ["clap", "schemars"]}
+uv-python = { workspace = true, features = ["clap", "schemars"]}
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 

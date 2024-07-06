@@ -3,10 +3,10 @@
 // Generated with `{{generated_with}}`
 // From template at `{{generated_from}}`
 
-pub(crate) const PYTHON_DOWNLOADS: &[PythonDownload] = &[
+pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
     {{#versions}}
-    PythonDownload {
-        key: ToolchainKey {
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
             major: {{value.major}},
             minor: {{value.minor}},
             patch: {{value.patch}},

@@ -42,7 +42,7 @@ Testing uv requires multiple specific Python versions; they can be installed wit
 cargo run toolchain install
 ```
 
-The storage directory can be configured with `UV_TOOLCHAIN_DIR`.
+The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
 
 ### Local testing
 

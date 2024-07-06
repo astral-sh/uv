@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.2.21
+
+### Preview features
+
+- Replace tool environments on updated Python request ([#4746](https://github.com/astral-sh/uv/pull/4746))
+
+## 0.2.20
+
+<!-- No changes -->
+
+
+## 0.2.19
+
+### Preview features
+
+- Remove dangling environments in `uv tool uninstall` ([#4740](https://github.com/astral-sh/uv/pull/4740))
+- Respect upgrades in `uv tool install` ([#4736](https://github.com/astral-sh/uv/pull/4736))
+- Add PEP 723 support to `uv run` ([#4656](https://github.com/astral-sh/uv/pull/4656))
+- Add `tool dir` and `toolchain dir` commands ([#4695](https://github.com/astral-sh/uv/pull/4695))
+- Omit `pythonX.Y` segment in stdlib path for managed toolchains on Windows ([#4727](https://github.com/astral-sh/uv/pull/4727))
+- Add `uv toolchain uninstall` ([#4646](https://github.com/astral-sh/uv/pull/4646))
+- Add `uvx` alias for `uv tool run` ([#4632](https://github.com/astral-sh/uv/pull/4632))
+- Allow configuring the toolchain fetch strategy ([#4601](https://github.com/astral-sh/uv/pull/4601))
+- Drop `prefer` prefix from `toolchain-preference` values ([#4602](https://github.com/astral-sh/uv/pull/4602))
+- Enable projects to opt-out of workspace management ([#4565](https://github.com/astral-sh/uv/pull/4565))
+- Fetch managed toolchains if necessary in `uv tool install` and `uv tool run` ([#4717](https://github.com/astral-sh/uv/pull/4717))
+- Fix tool dist-info directory normalization ([#4686](https://github.com/astral-sh/uv/pull/4686))
+- Lock the toolchains directory during toolchain operations ([#4733](https://github.com/astral-sh/uv/pull/4733))
+- Log when we start solving a fork ([#4684](https://github.com/astral-sh/uv/pull/4684))
+- Reinstall entrypoints with `--force` ([#4697](https://github.com/astral-sh/uv/pull/4697))
+- Respect data scripts in `uv tool install` ([#4693](https://github.com/astral-sh/uv/pull/4693))
+- Set fork solution as preference when resolving ([#4662](https://github.com/astral-sh/uv/pull/4662))
+- Show dedicated message for tools with no entrypoints ([#4694](https://github.com/astral-sh/uv/pull/4694))
+- Support unnamed requirements in `uv tool install` ([#4716](https://github.com/astral-sh/uv/pull/4716))
+
 ## 0.2.18
 
 ### Preview features
@@ -39,6 +74,7 @@
 ## 0.2.15
 
 <!-- No changes -->
+
 
 ## 0.2.14
 
@@ -176,6 +212,7 @@
 
 <!-- No changes -->
 
+
 ## 0.2.3
 
 ### Preview features
@@ -185,6 +222,7 @@
 ## 0.2.2
 
 <!-- No changes -->
+
 
 ## 0.2.1
 
@@ -222,6 +260,7 @@
 
 <!-- No changes -->
 
+
 ## 0.1.43
 
 ### Preview features
@@ -242,6 +281,7 @@
 ## 0.1.41
 
 <!-- No changes -->
+
 
 ## 0.1.40
 

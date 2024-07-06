@@ -181,8 +181,8 @@ impl Cache {
 
     /// Create an ephemeral Python environment in the cache.
     pub fn environment(&self) -> io::Result<tempfile::TempDir> {
-        fs::create_dir_all(self.bucket(CacheBucket::Environments))?;
-        tempfile::tempdir_in(self.bucket(CacheBucket::Environments))
+        fs::create_dir_all(self.bucket(CacheBucket::Builds))?;
+        tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
     }
 
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
@@ -634,6 +634,8 @@ pub enum CacheBucket {
     /// other buckets directly would make atomic operations impossible.
     Archive,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
+    Builds,
+    /// Reusable virtual environments used to invoke Python tools.
     Environments,
 }
 
@@ -647,7 +649,8 @@ impl CacheBucket {
             Self::Simple => "simple-v9",
             Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
-            Self::Environments => "environments-v0",
+            Self::Builds => "builds-v0",
+            Self::Environments => "environments-v1",
         }
     }
 
@@ -758,6 +761,9 @@ impl CacheBucket {
             Self::Archive => {
                 // Nothing to do.
             }
+            Self::Builds => {
+                // Nothing to do.
+            }
             Self::Environments => {
                 // Nothing to do.
             }
@@ -775,6 +781,7 @@ impl CacheBucket {
             Self::Interpreter,
             Self::Simple,
             Self::Archive,
+            Self::Builds,
             Self::Environments,
         ]
         .iter()

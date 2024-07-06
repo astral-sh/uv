@@ -11,22 +11,22 @@ use distribution_types::Name;
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode, Reinstall};
+use uv_configuration::{Concurrency, PreviewMode};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_python::{
+    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
+};
 use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
-use uv_toolchain::{
-    EnvironmentPreference, Interpreter, Toolchain, ToolchainFetch, ToolchainPreference,
-    ToolchainRequest,
-};
 use uv_warnings::warn_user_once;
 
-use crate::commands::project::{update_environment, SharedState};
-use crate::commands::{project, ExitStatus};
+use crate::commands::project::{resolve_environment, sync_environment, update_environment};
+use crate::commands::tool::common::resolve_requirements;
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -39,8 +39,8 @@ pub(crate) async fn install(
     force: bool,
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -55,11 +55,15 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let interpreter = Toolchain::find_or_fetch(
-        python.as_deref().map(ToolchainRequest::parse),
+    let python_request = python.as_deref().map(PythonRequest::parse);
+
+    // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
+    // requirements, even if we end up using a different interpreter for the tool install itself.
+    let interpreter = PythonInstallation::find_or_fetch(
+        python_request.clone(),
         EnvironmentPreference::OnlySystem,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         &client_builder,
         cache,
     )
@@ -122,35 +126,6 @@ pub(crate) async fn install(
         .unwrap()
     };
 
-    let name = from.name.to_string();
-
-    let installed_tools = InstalledTools::from_settings()?;
-
-    let existing_tool_receipt = installed_tools.get_tool_receipt(&name)?;
-    // TODO(zanieb): Automatically replace an existing tool if the request differs
-    let reinstall_entry_points = if existing_tool_receipt.is_some() {
-        if force {
-            debug!("Replacing existing tool due to `--force` flag.");
-            true
-        } else {
-            match settings.reinstall {
-                Reinstall::All => {
-                    debug!("Replacing existing tool due to `--reinstall` flag.");
-                    true
-                }
-                // Do not replace the entry points unless the tool is explicitly requested
-                Reinstall::Packages(ref packages) => packages.contains(&from.name),
-                // If not reinstalling... then we're done
-                Reinstall::None => {
-                    writeln!(printer.stderr(), "Tool `{name}` is already installed")?;
-                    return Ok(ExitStatus::Failure);
-                }
-            }
-        }
-    } else {
-        false
-    };
-
     // Combine the `from` and `with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
@@ -173,44 +148,115 @@ pub(crate) async fn install(
         requirements
     };
 
-    // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory
-    // This lets us confirm the environment is valid before removing an existing install
-    let environment = installed_tools.environment(
-        &name,
-        // Do not remove the existing environment if we're reinstalling a subset of packages
-        !matches!(settings.reinstall, Reinstall::Packages(_)),
-        interpreter,
-        cache,
-    )?;
+    let installed_tools = InstalledTools::from_settings()?;
+    let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
+    let existing_environment =
+        installed_tools
+            .get_environment(&from.name, cache)?
+            .filter(|environment| {
+                python_request.as_ref().map_or(true, |python_request| {
+                    if python_request.satisfied(environment.interpreter(), cache) {
+                        debug!("Found existing environment for tool `{}`", from.name);
+                        true
+                    } else {
+                        let _ = writeln!(
+                            printer.stderr(),
+                            "Existing environment for `{}` does not satisfy the requested Python interpreter: `{}`",
+                            from.name,
+                            python_request
+                        );
+                        false
+                    }
+                })
+            });
 
-    // Install the ephemeral requirements.
+    // If the requested and receipt requirements are the same...
+    if existing_environment.is_some() {
+        if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
+            let receipt = tool_receipt
+                .requirements()
+                .iter()
+                .cloned()
+                .map(Requirement::from)
+                .collect::<Vec<_>>();
+            if requirements == receipt {
+                // And the user didn't request a reinstall or upgrade...
+                if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
+                    // We're done.
+                    writeln!(printer.stderr(), "Tool `{from}` is already installed")?;
+                    return Ok(ExitStatus::Failure);
+                }
+            }
+        }
+    }
+
+    // Replace entrypoints if the tool already exists (and we made it this far). If we find existing
+    // entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing the external tool's
+    // entrypoints (without `--force`).
+    let reinstall_entry_points = existing_tool_receipt.is_some();
+
+    // Resolve the requirements.
+    let state = SharedState::default();
     let spec = RequirementsSpecification::from_requirements(requirements.clone());
-    let environment = update_environment(
-        environment,
-        spec,
-        &settings,
-        &SharedState::default(),
-        preview,
-        connectivity,
-        concurrency,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?;
+
+    // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
+    // This lets us confirm the environment is valid before removing an existing install. However,
+    // entrypoints always contain an absolute path to the relevant Python interpreter, which would
+    // be invalidated by moving the environment.
+    let environment = if let Some(environment) = existing_environment {
+        update_environment(
+            environment,
+            spec,
+            &settings,
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+    } else {
+        // If we're creating a new environment, ensure that we can resolve the requirements prior
+        // to removing any existing tools.
+        let resolution = resolve_environment(
+            &interpreter,
+            spec,
+            settings.as_ref().into(),
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+
+        let environment = installed_tools.create_environment(&from.name, interpreter)?;
+
+        // Sync the environment with the resolved requirements.
+        sync_environment(
+            environment,
+            &resolution.into(),
+            settings.as_ref().into(),
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+    };
 
     let site_packages = SitePackages::from_environment(&environment)?;
     let installed = site_packages.get_packages(&from.name);
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
     };
-
-    // Exit early if we're not supposed to be reinstalling entry points
-    // e.g. `--reinstall-package` was used for some dependency
-    if existing_tool_receipt.is_some() && !reinstall_entry_points {
-        writeln!(printer.stderr(), "Updated environment for tool `{name}`")?;
-        return Ok(ExitStatus::Success);
-    }
 
     // Find a suitable path to install into
     // TODO(zanieb): Warn if this directory is not on the PATH
@@ -246,9 +292,9 @@ pub(crate) async fn install(
 
     if target_entry_points.is_empty() {
         // Clean up the environment we just created
-        installed_tools.remove_environment(&name)?;
+        installed_tools.remove_environment(&from.name)?;
 
-        bail!("No entry points found for tool `{name}`");
+        bail!("No entry points found for tool `{}`", from.name);
     }
 
     // Check if they exist, before installing
@@ -266,7 +312,7 @@ pub(crate) async fn install(
         }
     } else if existing_entry_points.peek().is_some() {
         // Clean up the environment we just created
-        installed_tools.remove_environment(&name)?;
+        installed_tools.remove_environment(&from.name)?;
 
         let existing_entry_points = existing_entry_points
             // SAFETY: We know the target has a filename because we just constructed it above
@@ -300,7 +346,7 @@ pub(crate) async fn install(
             .join(", ")
     )?;
 
-    debug!("Adding receipt for tool `{name}`");
+    debug!("Adding receipt for tool `{}`", from.name);
     let installed_tools = installed_tools.init()?;
     let tool = Tool::new(
         requirements
@@ -312,45 +358,7 @@ pub(crate) async fn install(
             .into_iter()
             .map(|(name, _, target_path)| ToolEntrypoint::new(name, target_path)),
     );
-    installed_tools.add_tool_receipt(&name, tool)?;
+    installed_tools.add_tool_receipt(&from.name, tool)?;
 
     Ok(ExitStatus::Success)
-}
-
-/// Resolve any [`UnnamedRequirements`].
-pub(crate) async fn resolve_requirements(
-    requirements: impl Iterator<Item = &str>,
-    interpreter: &Interpreter,
-    settings: &ResolverInstallerSettings,
-    state: &SharedState,
-    preview: PreviewMode,
-    connectivity: Connectivity,
-    concurrency: Concurrency,
-    native_tls: bool,
-    cache: &Cache,
-    printer: Printer,
-) -> Result<Vec<Requirement>> {
-    // Parse the requirements.
-    let requirements = {
-        let mut parsed = vec![];
-        for requirement in requirements {
-            parsed.push(RequirementsSpecification::parse_package(requirement)?);
-        }
-        parsed
-    };
-
-    // Resolve the parsed requirements.
-    project::resolve_names(
-        requirements,
-        interpreter,
-        settings,
-        state,
-        preview,
-        connectivity,
-        concurrency,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await
 }

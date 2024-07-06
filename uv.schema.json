@@ -201,6 +201,26 @@
         "null"
       ]
     },
+    "python-fetch": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PythonFetch"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "python-preference": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PythonPreference"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "reinstall": {
       "type": [
         "boolean",
@@ -450,6 +470,12 @@
       "type": "object",
       "properties": {
         "all-extras": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "allow-empty-requirements": {
           "type": [
             "boolean",
             "null"
@@ -876,6 +902,63 @@
         }
       ]
     },
+    "PythonFetch": {
+      "oneOf": [
+        {
+          "description": "Automatically fetch managed Python installations when needed.",
+          "type": "string",
+          "enum": [
+            "automatic"
+          ]
+        },
+        {
+          "description": "Do not automatically fetch managed Python installations; require explicit installation.",
+          "type": "string",
+          "enum": [
+            "manual"
+          ]
+        }
+      ]
+    },
+    "PythonPreference": {
+      "oneOf": [
+        {
+          "description": "Only use managed Python installations; never use system Python installations.",
+          "type": "string",
+          "enum": [
+            "only-managed"
+          ]
+        },
+        {
+          "description": "Prefer installed Python installations, only download managed Python installations if no system Python installation is found.\n\nInstalled managed Python installations are still preferred over system Python installations.",
+          "type": "string",
+          "enum": [
+            "installed"
+          ]
+        },
+        {
+          "description": "Prefer managed Python installations over system Python installations, even if fetching is required.",
+          "type": "string",
+          "enum": [
+            "managed"
+          ]
+        },
+        {
+          "description": "Prefer system Python installations over managed Python installations.\n\nIf a system Python installation cannot be found, a managed Python installation can be used.",
+          "type": "string",
+          "enum": [
+            "system"
+          ]
+        },
+        {
+          "description": "Only use system Python installations; never use managed Python installations.",
+          "type": "string",
+          "enum": [
+            "only-system"
+          ]
+        }
+      ]
+    },
     "PythonVersion": {
       "description": "A Python version specifier, e.g. `3.7` or `3.8.0`.",
       "type": "string",
@@ -1207,63 +1290,6 @@
           }
         }
       }
-    },
-    "ToolchainFetch": {
-      "oneOf": [
-        {
-          "description": "Automatically fetch managed toolchains when needed.",
-          "type": "string",
-          "enum": [
-            "automatic"
-          ]
-        },
-        {
-          "description": "Do not automatically fetch managed toolchains; require explicit installation.",
-          "type": "string",
-          "enum": [
-            "manual"
-          ]
-        }
-      ]
-    },
-    "ToolchainPreference": {
-      "oneOf": [
-        {
-          "description": "Only use managed toolchains; never use system toolchains.",
-          "type": "string",
-          "enum": [
-            "only-managed"
-          ]
-        },
-        {
-          "description": "Prefer installed toolchains, only download managed toolchains if no system toolchain is found.\n\nInstalled managed toolchains are still preferred over system toolchains.",
-          "type": "string",
-          "enum": [
-            "installed"
-          ]
-        },
-        {
-          "description": "Prefer managed toolchains over system toolchains, even if fetching is required.",
-          "type": "string",
-          "enum": [
-            "managed"
-          ]
-        },
-        {
-          "description": "Prefer system toolchains over managed toolchains.\n\nIf a system toolchain cannot be found, a managed toolchain can be used.",
-          "type": "string",
-          "enum": [
-            "system"
-          ]
-        },
-        {
-          "description": "Only use system toolchains; never use managed toolchains.",
-          "type": "string",
-          "enum": [
-            "only-system"
-          ]
-        }
-      ]
     }
   }
 }

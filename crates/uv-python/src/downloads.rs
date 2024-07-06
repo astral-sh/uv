@@ -6,17 +6,19 @@ use std::str::FromStr;
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
+use crate::installation::PythonInstallationKey;
 use crate::platform::{self, Arch, Libc, Os};
-use crate::toolchain::ToolchainKey;
-use crate::{Interpreter, PythonVersion, ToolchainRequest, VersionRequest};
+use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 use thiserror::Error;
-use uv_client::BetterReqwestError;
+use uv_client::WrappedReqwestError;
 
 use futures::TryStreamExt;
 
+use pypi_types::{HashAlgorithm, HashDigest};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, instrument};
 use url::Url;
+use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
 
 #[derive(Error, Debug)]
@@ -30,11 +32,19 @@ pub enum Error {
     #[error("Invalid request key, too many parts: {0}")]
     TooManyParts(String),
     #[error("Download failed")]
-    NetworkError(#[from] BetterReqwestError),
+    NetworkError(#[from] WrappedReqwestError),
     #[error("Download failed")]
     NetworkMiddlewareError(#[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
     ExtractError(String, #[source] uv_extract::Error),
+    #[error("Failed to hash installation")]
+    HashExhaustion(#[source] io::Error),
+    #[error("Hash mismatch for `{installation}`\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]
+    HashMismatch {
+        installation: String,
+        expected: String,
+        actual: String,
+    },
     #[error("Invalid download url")]
     InvalidUrl(#[from] url::ParseError),
     #[error("Failed to create download directory")]
@@ -45,26 +55,26 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to read toolchain directory: {0}", dir.user_display())]
+    #[error("Failed to read managed Python installation directory: {0}", dir.user_display())]
     ReadError {
         dir: PathBuf,
         #[source]
         err: io::Error,
     },
-    #[error("Failed to parse toolchain directory name: {0}")]
+    #[error("Failed to parse managed Python directory name: {0}")]
     NameError(String),
     #[error("Failed to parse request part")]
     InvalidRequestPlatform(#[from] platform::Error),
-    #[error("Cannot download toolchain for request: {0}")]
-    InvalidRequestKind(ToolchainRequest),
+    #[error("Cannot download managed Python for request: {0}")]
+    InvalidRequestKind(PythonRequest),
     // TODO(zanieb): Implement display for `PythonDownloadRequest`
     #[error("No download found for request: {0:?}")]
     NoDownloadFound(PythonDownloadRequest),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct PythonDownload {
-    key: ToolchainKey,
+pub struct ManagedPythonDownload {
+    key: PythonInstallationKey,
     url: &'static str,
     sha256: Option<&'static str>,
 }
@@ -125,30 +135,30 @@ impl PythonDownloadRequest {
         self
     }
 
-    /// Construct a new [`PythonDownloadRequest`] from a [`ToolchainRequest`] if possible.
+    /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`] if possible.
     ///
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
     /// a request for a specific directory or executable name.
-    pub fn try_from_request(request: &ToolchainRequest) -> Option<Self> {
+    pub fn try_from_request(request: &PythonRequest) -> Option<Self> {
         Self::from_request(request).ok()
     }
 
-    /// Construct a new [`PythonDownloadRequest`] from a [`ToolchainRequest`].
-    pub fn from_request(request: &ToolchainRequest) -> Result<Self, Error> {
+    /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`].
+    pub fn from_request(request: &PythonRequest) -> Result<Self, Error> {
         match request {
-            ToolchainRequest::Version(version) => Ok(Self::default().with_version(version.clone())),
-            ToolchainRequest::Implementation(implementation) => {
+            PythonRequest::Version(version) => Ok(Self::default().with_version(version.clone())),
+            PythonRequest::Implementation(implementation) => {
                 Ok(Self::default().with_implementation(*implementation))
             }
-            ToolchainRequest::ImplementationVersion(implementation, version) => Ok(Self::default()
+            PythonRequest::ImplementationVersion(implementation, version) => Ok(Self::default()
                 .with_implementation(*implementation)
                 .with_version(version.clone())),
-            ToolchainRequest::Key(request) => Ok(request.clone()),
-            ToolchainRequest::Any => Ok(Self::default()),
-            // We can't download a toolchain for these request kinds
-            ToolchainRequest::Directory(_)
-            | ToolchainRequest::ExecutableName(_)
-            | ToolchainRequest::File(_) => Err(Error::InvalidRequestKind(request.clone())),
+            PythonRequest::Key(request) => Ok(request.clone()),
+            PythonRequest::Any => Ok(Self::default()),
+            // We can't download a managed installation for these request kinds
+            PythonRequest::Directory(_)
+            | PythonRequest::ExecutableName(_)
+            | PythonRequest::File(_) => Err(Error::InvalidRequestKind(request.clone())),
         }
     }
 
@@ -204,11 +214,12 @@ impl PythonDownloadRequest {
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads(&self) -> impl Iterator<Item = &'static PythonDownload> + '_ {
-        PythonDownload::iter_all().filter(move |download| self.satisfied_by_download(download))
+    pub fn iter_downloads(&self) -> impl Iterator<Item = &'static ManagedPythonDownload> + '_ {
+        ManagedPythonDownload::iter_all()
+            .filter(move |download| self.satisfied_by_download(download))
     }
 
-    pub fn satisfied_by_key(&self, key: &ToolchainKey) -> bool {
+    pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
         if let Some(arch) = &self.arch {
             if key.arch != *arch {
                 return false;
@@ -232,7 +243,7 @@ impl PythonDownloadRequest {
         true
     }
 
-    pub fn satisfied_by_download(&self, download: &PythonDownload) -> bool {
+    pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
         self.satisfied_by_key(download.key())
     }
 
@@ -356,9 +367,11 @@ pub enum DownloadResult {
     Fetched(PathBuf),
 }
 
-impl PythonDownload {
+impl ManagedPythonDownload {
     /// Return the first [`PythonDownload`] matching a request, if any.
-    pub fn from_request(request: &PythonDownloadRequest) -> Result<&'static PythonDownload, Error> {
+    pub fn from_request(
+        request: &PythonDownloadRequest,
+    ) -> Result<&'static ManagedPythonDownload, Error> {
         request
             .iter_downloads()
             .next()
@@ -366,7 +379,7 @@ impl PythonDownload {
     }
 
     /// Iterate over all [`PythonDownload`]'s.
-    pub fn iter_all() -> impl Iterator<Item = &'static PythonDownload> {
+    pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
         PYTHON_DOWNLOADS.iter()
     }
 
@@ -374,7 +387,7 @@ impl PythonDownload {
         self.url
     }
 
-    pub fn key(&self) -> &ToolchainKey {
+    pub fn key(&self) -> &PythonInstallationKey {
         &self.key
     }
 
@@ -394,7 +407,7 @@ impl PythonDownload {
         parent_path: &Path,
     ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
-        let path = parent_path.join(self.key().to_string()).clone();
+        let path = parent_path.join(self.key().to_string());
 
         // If it already exists, return it
         if path.is_dir() {
@@ -416,13 +429,38 @@ impl PythonDownload {
         );
         let reader = response
             .bytes_stream()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
             .into_async_read();
 
         debug!("Extracting {filename}");
-        uv_extract::stream::archive(reader.compat(), filename, temp_dir.path())
-            .await
-            .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+
+        if let Some(expected) = self.sha256 {
+            let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
+            let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
+            uv_extract::stream::archive(&mut hasher, filename, temp_dir.path())
+                .await
+                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+
+            hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+            let actual = hashers
+                .into_iter()
+                .map(HashDigest::from)
+                .next()
+                .unwrap()
+                .digest;
+            if !actual.eq_ignore_ascii_case(expected) {
+                return Err(Error::HashMismatch {
+                    installation: self.key.to_string(),
+                    expected: expected.to_string(),
+                    actual: actual.to_string(),
+                });
+            }
+        } else {
+            uv_extract::stream::archive(reader.compat(), filename, temp_dir.path())
+                .await
+                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+        }
 
         // Extract the top-level directory.
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -450,7 +488,7 @@ impl PythonDownload {
 
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
-        Self::NetworkError(BetterReqwestError::from(error))
+        Self::NetworkError(WrappedReqwestError::from(error))
     }
 }
 
@@ -459,13 +497,13 @@ impl From<reqwest_middleware::Error> for Error {
         match error {
             reqwest_middleware::Error::Middleware(error) => Self::NetworkMiddlewareError(error),
             reqwest_middleware::Error::Reqwest(error) => {
-                Self::NetworkError(BetterReqwestError::from(error))
+                Self::NetworkError(WrappedReqwestError::from(error))
             }
         }
     }
 }
 
-impl Display for PythonDownload {
+impl Display for ManagedPythonDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.key)
     }

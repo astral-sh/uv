@@ -29,6 +29,7 @@ use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
+use uv_python::PythonEnvironment;
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
@@ -37,7 +38,6 @@ use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     Preferences, PythonRequirement, ResolutionGraph, Resolver,
 };
-use uv_toolchain::PythonEnvironment;
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
@@ -251,9 +251,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         printer.stderr(),
         "{}",
         format!(
-            "Resolved {} in {}",
+            "Resolved {} {}",
             format!("{} package{}", resolution.len(), s).bold(),
-            elapsed(start.elapsed())
+            format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
     )?;
@@ -342,9 +342,9 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Audited {} in {}",
+                "Audited {} {}",
                 format!("{} package{}", resolution.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;
@@ -386,9 +386,9 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Prepared {} in {}",
+                "Prepared {} {}",
                 format!("{} package{}", wheels.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;
@@ -433,9 +433,9 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Uninstalled {} in {}",
+                "Uninstalled {} {}",
                 format!("{} package{}", extraneous.len() + reinstalls.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;
@@ -455,9 +455,9 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Installed {} in {}",
+                "Installed {} {}",
                 format!("{} package{}", wheels.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;
@@ -501,9 +501,9 @@ fn report_dry_run(
             printer.stderr(),
             "{}",
             format!(
-                "Audited {} in {}",
+                "Audited {} {}",
                 format!("{} package{}", resolution.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;

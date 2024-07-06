@@ -37,15 +37,12 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
-    keyring: KeyringProviderType,
-    native_tls: bool,
-    retries: u32,
-    connectivity: Connectivity,
     cache: Cache,
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     trusted_host: Option<&'a str>,
+    base_client_builder: BaseClientBuilder<'a>,
 }
 
 impl RegistryClientBuilder<'_> {
@@ -53,18 +50,14 @@ impl RegistryClientBuilder<'_> {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            keyring: KeyringProviderType::default(),
-            native_tls: false,
             cache,
             connectivity: Connectivity::Online,
             retries: 3,
-            client: None,
             markers: None,
             platform: None,
             trusted_host: None,
-        }
+            base_client_builder: BaseClientBuilder::new(),
     }
-}
 
 impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
@@ -81,25 +74,25 @@ impl<'a> RegistryClientBuilder<'a> {
 
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
-        self.keyring = keyring_type;
+        self.base_client_builder = self.base_client_builder.keyring(keyring_type);
         self
     }
 
     #[must_use]
     pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
-        self.connectivity = connectivity;
+        self.base_client_builder = self.base_client_builder.connectivity(connectivity);
         self
     }
 
     #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
-        self.retries = retries;
+        self.base_client_builder = self.base_client_builder.retries(retries);
         self
     }
 
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.native_tls = native_tls;
+        self.base_client_builder = self.base_client_builder.native_tls(native_tls);
         self
     }
 
@@ -111,19 +104,19 @@ impl<'a> RegistryClientBuilder<'a> {
 
     #[must_use]
     pub fn client(mut self, client: Client) -> Self {
-        self.client = Some(client);
+        self.base_client_builder = self.base_client_builder.client(client);
         self
     }
 
     #[must_use]
     pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
-        self.markers = Some(markers);
+        self.base_client_builder = self.base_client_builder.markers(markers);
         self
     }
 
     #[must_use]
     pub fn platform(mut self, platform: &'a Platform) -> Self {
-        self.platform = Some(platform);
+        self.base_client_builder = self.base_client_builder.platform(platform);
         self
     }
 
@@ -135,26 +128,9 @@ impl<'a> RegistryClientBuilder<'a> {
 
     pub fn build(self) -> RegistryClient {
         // Build a base client
-        let mut builder = BaseClientBuilder::new();
+        let builder = self.base_client_builder;
 
-        if let Some(client) = self.client {
-            builder = builder.client(client);
-        }
-
-        if let Some(markers) = self.markers {
-            builder = builder.markers(markers);
-        }
-
-        if let Some(platform) = self.platform {
-            builder = builder.platform(platform);
-        }
-
-        let client = builder
-            .retries(self.retries)
-            .connectivity(self.connectivity)
-            .native_tls(self.native_tls)
-            .keyring(self.keyring)
-            .build();
+        let client = builder.build();
 
         let timeout = client.timeout();
         let connectivity = client.connectivity();
@@ -172,6 +148,17 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             timeout,
             trusted_host: trusted_host_owned,
+        }
+    }
+}
+
+impl<'a> From<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
+    fn from(value: BaseClientBuilder<'a>) -> Self {
+        Self {
+            index_urls: IndexUrls::default(),
+            index_strategy: IndexStrategy::default(),
+            cache: Cache::temp().unwrap(),
+            base_client_builder: value,
         }
     }
 }
@@ -247,7 +234,7 @@ impl RegistryClient {
                     ErrorKind::Offline(_) => continue,
 
                     // The package could not be found in the remote index.
-                    ErrorKind::ReqwestError(err) => {
+                    ErrorKind::WrappedReqwestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND)
                             || err.status() == Some(StatusCode::UNAUTHORIZED)
                             || err.status() == Some(StatusCode::FORBIDDEN)

@@ -12,8 +12,8 @@ use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
 use uv_normalize::{ExtraName, PackageName};
+use uv_python::{PythonFetch, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
-use uv_toolchain::{PythonVersion, ToolchainFetch, ToolchainPreference};
 
 pub mod compat;
 pub mod options;
@@ -49,18 +49,19 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
 }
 
 #[derive(Parser)]
-#[command(name = "uv", author, version = uv_version::version(), long_version = crate::version::version(), about)]
+#[command(name = "uv", author, version = uv_version::version(), long_version = crate::version::version())]
+#[command(about = "An extremely fast Python package manager.")]
 #[command(propagate_version = true)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Box<Commands>,
 
     #[command(flatten)]
-    pub global_args: GlobalArgs,
+    pub global_args: Box<GlobalArgs>,
 
     #[command(flatten)]
-    pub cache_args: CacheArgs,
+    pub cache_args: Box<CacheArgs>,
 
     /// The path to a `uv.toml` file to use for configuration.
     #[arg(global = true, long, env = "UV_CONFIG_FILE")]
@@ -118,13 +119,13 @@ pub struct GlobalArgs {
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
 
-    /// Whether to prefer Python toolchains from uv or on the system.
+    /// Whether to prefer using Python from uv or on the system.
     #[arg(global = true, long)]
-    pub toolchain_preference: Option<ToolchainPreference>,
+    pub python_preference: Option<PythonPreference>,
 
-    /// Whether to automatically download Python toolchains when required.
+    /// Whether to automatically download Python when required.
     #[arg(global = true, long)]
-    pub toolchain_fetch: Option<ToolchainFetch>,
+    pub python_fetch: Option<PythonFetch>,
 
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
@@ -173,10 +174,10 @@ pub enum Commands {
     /// Run and manage executable Python packages.
     Tool(ToolNamespace),
     /// Manage Python installations.
-    Toolchain(ToolchainNamespace),
+    Python(PythonNamespace),
     /// Manage Python projects.
     #[command(flatten)]
-    Project(ProjectCommand),
+    Project(Box<ProjectCommand>),
     /// Create a virtual environment.
     #[command(alias = "virtualenv", alias = "v")]
     Venv(VenvArgs),
@@ -254,9 +255,9 @@ pub enum PipCommand {
     Install(PipInstallArgs),
     /// Uninstall packages from an environment.
     Uninstall(PipUninstallArgs),
-    /// Enumerate the installed packages in an environment.
+    /// List, in requirements format, packages installed in an environment.
     Freeze(PipFreezeArgs),
-    /// Enumerate the installed packages in an environment.
+    /// List, in tabular format, packages installed in an environment.
     List(PipListArgs),
     /// Show information about one or more installed packages.
     Show(PipShowArgs),
@@ -372,8 +373,8 @@ pub struct PipCompileArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, value_parser = parse_file_path)]
-    pub r#override: Vec<PathBuf>,
+    #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub r#override: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the extra group name; may be provided more than once.
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -667,13 +668,6 @@ pub struct PipSyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Limit candidate packages to those that were uploaded prior to the given date.
-    ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
-    pub exclude_newer: Option<ExcludeNewer>,
-
     /// Require a matching hash for each requirement.
     ///
     /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
@@ -826,6 +820,13 @@ pub struct PipSyncArgs {
     #[arg(long, conflicts_with = "no_build")]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
+    /// Allow sync of empty requirements, which will clear the environment of all packages.
+    #[arg(long, overrides_with("no_allow_empty_requirements"))]
+    pub allow_empty_requirements: bool,
+
+    #[arg(long, overrides_with("allow_empty_requirements"))]
+    pub no_allow_empty_requirements: bool,
+
     /// The minimum Python version that should be supported by the requirements (e.g.,
     /// `3.7` or `3.7.9`).
     ///
@@ -905,8 +906,8 @@ pub struct PipInstallArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, value_parser = parse_file_path)]
-    pub r#override: Vec<PathBuf>,
+    #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub r#override: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the extra group name; may be provided more than once.
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -1898,9 +1899,16 @@ pub struct ToolNamespace {
 
 #[derive(Subcommand)]
 pub enum ToolCommand {
-    /// Run a tool
+    /// Run a tool.
     Run(ToolRunArgs),
-    /// Install a tool
+    /// Hidden alias for `uv tool run` for invocation from the `uvx` command
+    #[command(
+        hide = true,
+        override_usage = "uvx [OPTIONS] <COMMAND>",
+        about = "Run a tool."
+    )]
+    Uvx(ToolRunArgs),
+    /// Install a tool.
     Install(ToolInstallArgs),
     /// List installed tools.
     List(ToolListArgs),
@@ -2011,77 +2019,78 @@ pub struct ToolListArgs;
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolUninstallArgs {
-    pub name: String,
+    /// The name of the tool to uninstall.
+    pub name: PackageName,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainNamespace {
+pub struct PythonNamespace {
     #[command(subcommand)]
-    pub command: ToolchainCommand,
+    pub command: PythonCommand,
 }
 
 #[derive(Subcommand)]
-pub enum ToolchainCommand {
-    /// List the available toolchains.
-    List(ToolchainListArgs),
+pub enum PythonCommand {
+    /// List the available Python installations.
+    List(PythonListArgs),
 
-    /// Download and install toolchains.
-    Install(ToolchainInstallArgs),
+    /// Download and install Python versions.
+    Install(PythonInstallArgs),
 
-    /// Search for a toolchain.
-    #[command(disable_version_flag = true)]
-    Find(ToolchainFindArgs),
+    /// Search for a Python installation.
+    Find(PythonFindArgs),
 
-    /// Show the toolchains directory.
+    /// Show the uv Python installation directory.
     Dir,
 
-    /// Uninstall toolchains.
-    Uninstall(ToolchainUninstallArgs),
+    /// Uninstall Python versions.
+    Uninstall(PythonUninstallArgs),
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainListArgs {
-    /// List all toolchain versions, including outdated patch versions.
+pub struct PythonListArgs {
+    /// List all Python versions, including outdated patch versions.
     #[arg(long)]
     pub all_versions: bool,
 
-    /// List toolchains for all platforms.
+    /// List Python installations for all platforms.
     #[arg(long)]
     pub all_platforms: bool,
 
-    /// Only show installed toolchains, exclude available downloads.
+    /// Only show installed Python versions, exclude available downloads.
     #[arg(long)]
     pub only_installed: bool,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainInstallArgs {
-    /// The toolchains to install.
+pub struct PythonInstallArgs {
+    /// The Python version(s) to install.
     ///
-    /// If not provided, the requested toolchain(s) will be read from the `.python-versions`
-    ///  or `.python-version` files. If neither file is present, uv will check if it has
-    /// installed any toolchains. If not, it will install the latest stable version of Python.
+    /// If not provided, the requested Python version(s) will be read from the `.python-versions`
+    /// or `.python-version` files. If neither file is present, uv will check if it has
+    /// installed any Python versions. If not, it will install the latest stable version of Python.
     pub targets: Vec<String>,
 
-    /// Force the installation of the toolchain, even if it is already installed.
+    /// Force the installation of the requested Python, even if it is already installed.
     #[arg(long, short)]
     pub force: bool,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainUninstallArgs {
-    /// The toolchains to uninstall.
+pub struct PythonUninstallArgs {
+    /// The Python version(s) to uninstall.
+    #[arg(required = true)]
     pub targets: Vec<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolchainFindArgs {
-    /// The toolchain request.
+pub struct PythonFindArgs {
+    /// The Python request.
     pub request: Option<String>,
 }
 
@@ -2220,6 +2229,13 @@ pub struct InstallerArgs {
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    pub exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
     ///

@@ -140,6 +140,25 @@ impl Interpreter {
         }
     }
 
+    /// Return the [`Interpreter`] for the base executable, if it's available.
+    ///
+    /// If no such base executable is available, or if the base executable is the same as the
+    /// current executable, this method returns `None`.
+    pub fn to_base_interpreter(&self, cache: &Cache) -> Result<Option<Self>, Error> {
+        if let Some(base_executable) = self
+            .sys_base_executable()
+            .filter(|base_executable| *base_executable != self.sys_executable())
+        {
+            match Self::query(base_executable, cache) {
+                Ok(base_interpreter) => Ok(Some(base_interpreter)),
+                Err(Error::NotFound(_)) => Ok(None),
+                Err(err) => Err(err),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Returns the path to the Python virtual environment.
     #[inline]
     pub fn platform(&self) -> &Platform {
@@ -697,7 +716,7 @@ impl InterpreterInfo {
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.
-        if same_file::is_same_file(executable, &info.sys_executable).unwrap_or(false) {
+        if is_same_file(executable, &info.sys_executable).unwrap_or(false) {
             fs::create_dir_all(cache_entry.dir())?;
             write_atomic_sync(
                 cache_entry.path(),

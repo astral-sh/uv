@@ -402,3 +402,16 @@ By default, uv does not write any index URLs to the output file, while `pip-comp
 `--index-url` or `--extra-index-url` that does not match the default (PyPI). To include index URLs
 in the output file, pass the `--emit-index-url` flag to `uv pip compile`. Unlike `pip-compile`,
 uv will include all index URLs when `--emit-index-url` is passed, including the default index URL.
+
+## `requires-python` enforcement
+
+When evaluating Python versions against `requires-python` specifiers, uv truncates the candidate
+version to the major, minor, and patch components, ignoring (e.g.) pre-release and post-release
+identifiers.
+
+For example, a project that declares `requires-python: >=3.13` will accept Python 3.13.0b1. While
+3.13.0b1 is not strictly greater than 3.13, it is greater than 3.13 when the pre-release identifier
+is omitted.
+
+While this is not strictly compliant with [PEP 440](https://peps.python.org/pep-0440/),
+it _is_ consistent with [pip](https://github.com/pypa/pip/blob/24.1.1/src/pip/_internal/resolution/resolvelib/candidates.py#L540).

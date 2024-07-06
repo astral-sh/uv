@@ -8,19 +8,17 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::pyproject::{DependencyType, Source, SourceError};
 use uv_distribution::pyproject_mut::PyProjectTomlMut;
 use uv_distribution::{DistributionDatabase, ProjectWorkspace, VirtualProject, Workspace};
-use uv_git::GitResolver;
 use uv_normalize::PackageName;
+use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::{FlatIndex, InMemoryIndex};
-use uv_toolchain::{ToolchainFetch, ToolchainPreference, ToolchainRequest};
-use uv_types::{BuildIsolation, HashStrategy, InFlight};
+use uv_resolver::FlatIndex;
+use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
-use crate::commands::project::SharedState;
 use crate::commands::reporters::ResolverReporter;
-use crate::commands::{project, ExitStatus};
+use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -38,8 +36,8 @@ pub(crate) async fn add(
     package: Option<PackageName>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -64,9 +62,9 @@ pub(crate) async fn add(
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
         project.workspace(),
-        python.as_deref().map(ToolchainRequest::parse),
-        toolchain_preference,
-        toolchain_fetch,
+        python.as_deref().map(PythonRequest::parse),
+        python_preference,
+        python_fetch,
         connectivity,
         native_tls,
         cache,
@@ -96,20 +94,15 @@ pub(crate) async fn add(
         resolution_environment(python_version, python_platform, venv.interpreter())?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(native_tls)
-        .connectivity(connectivity)
+    let client = RegistryClientBuilder::from(client_builder)
         .index_urls(settings.index_locations.index_urls())
         .index_strategy(settings.index_strategy)
-        .keyring(settings.keyring_provider)
         .markers(&markers)
         .platform(venv.interpreter().platform())
         .build();
 
     // Initialize any shared state.
-    let git = GitResolver::default();
-    let in_flight = InFlight::default();
-    let index = InMemoryIndex::default();
+    let state = SharedState::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -125,9 +118,9 @@ pub(crate) async fn add(
         venv.interpreter(),
         &settings.index_locations,
         &flat_index,
-        &index,
-        &git,
-        &in_flight,
+        &state.index,
+        &state.git,
+        &state.in_flight,
         settings.index_strategy,
         setup_py,
         &settings.config_setting,
@@ -143,7 +136,7 @@ pub(crate) async fn add(
     let requirements = NamedRequirementsResolver::new(
         requirements,
         &hasher,
-        &index,
+        &state.index,
         DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
     )
     .with_reporter(ResolverReporter::from(printer))

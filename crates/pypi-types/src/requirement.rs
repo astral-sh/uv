@@ -5,7 +5,7 @@ use url::Url;
 
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
-use uv_git::{GitReference, GitSha};
+use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::{
@@ -61,6 +61,80 @@ impl From<Requirement> for pep508_rs::Requirement<VerbatimUrl> {
                 | RequirementSource::Git { url, .. }
                 | RequirementSource::Path { url, .. }
                 | RequirementSource::Directory { url, .. } => Some(VersionOrUrl::Url(url)),
+            },
+        }
+    }
+}
+
+impl From<Requirement> for pep508_rs::Requirement<VerbatimParsedUrl> {
+    /// Convert a [`Requirement`] to a [`pep508_rs::Requirement`].
+    fn from(requirement: Requirement) -> Self {
+        pep508_rs::Requirement {
+            name: requirement.name,
+            extras: requirement.extras,
+            marker: requirement.marker,
+            origin: requirement.origin,
+            version_or_url: match requirement.source {
+                RequirementSource::Registry { specifier, .. } => {
+                    Some(VersionOrUrl::VersionSpecifier(specifier))
+                }
+                RequirementSource::Url {
+                    subdirectory,
+                    location,
+                    url,
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
+                    parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
+                        url: location,
+                        subdirectory,
+                    }),
+                    verbatim: url,
+                })),
+                RequirementSource::Git {
+                    repository,
+                    reference,
+                    precise,
+                    subdirectory,
+                    url,
+                } => {
+                    let git_url = if let Some(precise) = precise {
+                        GitUrl::new(repository, reference).with_precise(precise)
+                    } else {
+                        GitUrl::new(repository, reference)
+                    };
+                    Some(VersionOrUrl::Url(VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::Git(ParsedGitUrl {
+                            url: git_url,
+                            subdirectory,
+                        }),
+                        verbatim: url,
+                    }))
+                }
+                RequirementSource::Path {
+                    install_path,
+                    lock_path,
+                    url,
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
+                    parsed_url: ParsedUrl::Path(ParsedPathUrl {
+                        url: url.to_url(),
+                        install_path,
+                        lock_path,
+                    }),
+                    verbatim: url,
+                })),
+                RequirementSource::Directory {
+                    install_path,
+                    lock_path,
+                    editable,
+                    url,
+                } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
+                    parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
+                        url: url.to_url(),
+                        install_path,
+                        lock_path,
+                        editable,
+                    }),
+                    verbatim: url,
+                })),
             },
         }
     }
@@ -251,6 +325,12 @@ impl RequirementSource {
                 subdirectory: archive.subdirectory,
             },
         }
+    }
+
+    /// Construct a [`RequirementSource`] for a URL source, given a URL parsed into components.
+    pub fn from_verbatim_parsed_url(parsed_url: ParsedUrl) -> Self {
+        let verbatim_url = VerbatimUrl::from_url(Url::from(parsed_url.clone()));
+        RequirementSource::from_parsed_url(parsed_url, verbatim_url)
     }
 
     /// Convert the source to a [`VerbatimParsedUrl`], if it's a URL source.

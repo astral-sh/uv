@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import re
+import os
 import urllib.error
 import urllib.request
 from itertools import chain
@@ -36,9 +37,6 @@ FLAVOR_PREFERENCES = [
     "shared-noopt",
     "shared-noopt",
     "static-noopt",
-    "gnu-pgo+lto",
-    "gnu-lto",
-    "gnu-pgo",
     "pgo+lto",
     "lto",
     "pgo",
@@ -68,7 +66,7 @@ _filename_re = re.compile(
     $
 """
 )
-_suffix_re = re.compile(
+_flavor_re = re.compile(
     r"""(?x)^(.*?)-(%s)$"""
     % (
         "|".join(
@@ -94,12 +92,13 @@ def parse_filename(filename):
     version, triple = match.groups()
     if triple.endswith("-full"):
         triple = triple[:-5]
-    match = _suffix_re.match(triple)
+    match = _flavor_re.match(triple)
     if match is not None:
-        triple, suffix = match.groups()
+        triple, flavor = match.groups()
     else:
-        suffix = None
-    return (version, triple, suffix)
+        flavor = None
+
+    return (version, triple, flavor)
 
 
 def normalize_triple(triple):
@@ -135,7 +134,7 @@ def normalize_os(os):
 
 def read_sha256(url):
     try:
-        resp = urllib.request.urlopen(url + ".sha256")
+        resp = request(url + ".sha256")
     except urllib.error.HTTPError:
         return None
     assert resp.status == 200
@@ -156,8 +155,9 @@ def sha256(path):
     return h.hexdigest()
 
 
-def _sort_by_flavor_preference(info):
-    _triple, flavor, _url = info
+def _get_flavor_priority(flavor):
+    """
+    Returns the priority of a flavor. Lower is better."""
     try:
         pref = FLAVOR_PREFERENCES.index(flavor)
     except ValueError:
@@ -170,6 +170,14 @@ def _sort_by_interpreter_and_version(info):
     return (interpreter, version_tuple)
 
 
+def request(url):
+    request = urllib.request.Request(url)
+    token = os.getenv("GH_TOKEN")
+    if token:
+        request.add_header("Authorization", "Bearer: {token}")
+    return urllib.request.urlopen(request)
+
+
 def find():
     """
     Find available Python versions and write metadata to a file.
@@ -179,7 +187,7 @@ def find():
     # Collect all available Python downloads
     for page in range(1, 100):
         logging.debug("Reading release page %s...", page)
-        resp = urllib.request.urlopen("%s?page=%d" % (RELEASE_URL, page))
+        resp = request("%s?page=%d" % (RELEASE_URL, page))
         rows = json.loads(resp.read())
         if not rows:
             break
@@ -197,6 +205,7 @@ def find():
                     continue
                 triple = normalize_triple(triple)
                 if triple is None:
+                    logging.debug("Skipping %s: unsupported triple", url)
                     continue
                 results.setdefault(py_ver, []).append((triple, flavor, url))
 
@@ -204,13 +213,21 @@ def find():
     cpython_results: dict[tuple[int, int, int], dict[tuple[str, str, str], str]] = {}
     for py_ver, choices in results.items():
         urls = {}
-        for triple, flavor, url in sorted(choices, key=_sort_by_flavor_preference):
+        for triple, flavor, url in choices:
             triple = tuple(triple.split("-"))
-            # Skip existing triples, preferring the first flavor
-            if triple in urls:
-                continue
-            urls[triple] = url
-        cpython_results[tuple(map(int, py_ver.split(".")))] = urls
+            priority = _get_flavor_priority(flavor)
+            existing = urls.get(triple)
+            if existing:
+                _, _, existing_priority = existing
+                # Skip if we have a flavor with higher priority already
+                if priority >= existing_priority:
+                    continue
+            urls[triple] = (url, flavor, priority)
+
+        # Drop the priorities
+        cpython_results[tuple(map(int, py_ver.split(".")))] = {
+            triple: (url, flavor) for triple, (url, flavor, _) in urls.items()
+        }
 
     # Collect variants across interpreter kinds
     # TODO(zanieb): Note we only support CPython downloads at this time
@@ -226,7 +243,7 @@ def find():
     ):
         # Sort by the remaining information for determinism
         # This groups download metadata in triple component order
-        for (arch, operating_system, libc), url in sorted(choices.items()):
+        for (arch, operating_system, libc), (url, flavor) in sorted(choices.items()):
             key = "%s-%s.%s.%s-%s-%s-%s" % (
                 interpreter,
                 *py_ver,
@@ -234,9 +251,8 @@ def find():
                 arch,
                 libc,
             )
-            logging.info("Found %s", key)
+            logging.info("Found %s (%s)", key, flavor)
             sha256 = read_sha256(url)
-
             final_results[key] = {
                 "name": interpreter,
                 "arch": arch,

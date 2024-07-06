@@ -14,12 +14,12 @@ use crate::downloads::Error as DownloadError;
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
+use crate::installation::{self, PythonInstallationKey};
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::toolchain::{self, ToolchainKey};
-use crate::ToolchainRequest;
-use uv_fs::Simplified;
+use crate::PythonRequest;
+use uv_fs::{LockedFile, Simplified};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -41,58 +41,81 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to read toolchain directory: {0}", dir.user_display())]
+    #[error("Failed to read Python installation directory: {0}", dir.user_display())]
     ReadError {
         dir: PathBuf,
         #[source]
         err: io::Error,
     },
-    #[error("Failed to read toolchain directory name: {0}")]
+    #[error("Failed to read managed Python directory name: {0}")]
     NameError(String),
     #[error(transparent)]
-    NameParseError(#[from] toolchain::ToolchainKeyError),
+    NameParseError(#[from] installation::PythonInstallationKeyError),
 }
-/// A collection of uv-managed Python toolchains installed on the current system.
+/// A collection of uv-managed Python installations installed on the current system.
 #[derive(Debug, Clone)]
-pub struct InstalledToolchains {
-    /// The path to the top-level directory of the installed toolchains.
+pub struct ManagedPythonInstallations {
+    /// The path to the top-level directory of the installed Python versions.
     root: PathBuf,
 }
 
-impl InstalledToolchains {
-    /// A directory for installed toolchains at `root`.
+impl ManagedPythonInstallations {
+    /// A directory for Python installations at `root`.
     fn from_path(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
+    /// Lock the toolchains directory.
+    pub fn acquire_lock(&self) -> Result<LockedFile, Error> {
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            self.root.user_display(),
+        )?)
+    }
+
     /// Prefer, in order:
-    /// 1. The specific toolchain directory specified by the user, i.e., `UV_TOOLCHAIN_DIR`
-    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/toolchains`
-    /// 3. A directory in the local data directory, e.g., `./.uv/toolchains`
+    /// 1. The specific Python directory specified by the user, i.e., `UV_PYTHON_INSTALL_DIR`
+    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`
+    /// 3. A directory in the local data directory, e.g., `./.uv/python`
     pub fn from_settings() -> Result<Self, Error> {
-        if let Some(toolchain_dir) = std::env::var_os("UV_TOOLCHAIN_DIR") {
-            Ok(Self::from_path(toolchain_dir))
+        if let Some(install_dir) = std::env::var_os("UV_PYTHON_INSTALL_DIR") {
+            Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
-                StateStore::from_settings(None)?.bucket(StateBucket::Toolchains),
+                StateStore::from_settings(None)?.bucket(StateBucket::ManagedPython),
             ))
         }
     }
 
-    /// Create a temporary installed toolchain directory.
+    /// Create a temporary Python installation directory.
     pub fn temp() -> Result<Self, Error> {
         Ok(Self::from_path(
-            StateStore::temp()?.bucket(StateBucket::Toolchains),
+            StateStore::temp()?.bucket(StateBucket::ManagedPython),
         ))
     }
 
-    /// Initialize the installed toolchain directory.
+    /// Initialize the Python installation directory.
     ///
     /// Ensures the directory is created.
     pub fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
-        // Create the toolchain directory, if it doesn't exist.
+        // Support `toolchains` -> `python` migration transparently.
+        if !root.exists()
+            && root
+                .parent()
+                .is_some_and(|parent| parent.join("toolchains").exists())
+        {
+            let deprecated = root.parent().unwrap().join("toolchains");
+            // Move the deprecated directory to the new location.
+            fs::rename(&deprecated, root)?;
+            // Create a link or junction to at the old location
+            uv_fs::replace_symlink(root, &deprecated)?;
+        } else {
+            fs::create_dir_all(root)?;
+        }
+
+        // Create the directory, if it doesn't exist.
         fs::create_dir_all(root)?;
 
         // Add a .gitignore.
@@ -109,17 +132,19 @@ impl InstalledToolchains {
         Ok(self)
     }
 
-    /// Iterate over each installed toolchain in this directory.
+    /// Iterate over each Python installation in this directory.
     ///
-    /// Toolchains are sorted descending by name, such that we get deterministic
+    /// Pythons are sorted descending by name, such that we get deterministic
     /// ordering across platforms. This also results in newer Python versions coming first,
-    /// but should not be relied on — instead the toolchains should be sorted later by
+    /// but should not be relied on — instead the installations should be sorted later by
     /// the parsed Python version.
-    pub fn find_all(&self) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
+    pub fn find_all(
+        &self,
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
-            Ok(toolchain_dirs) => {
+            Ok(installation_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
-                let directories: BTreeSet<_> = toolchain_dirs
+                let directories: BTreeSet<_> = installation_dirs
                     .filter_map(|read_dir| match read_dir {
                         Ok(entry) => match entry.file_type() {
                             Ok(file_type) => file_type.is_dir().then_some(Ok(entry.path())),
@@ -145,25 +170,25 @@ impl InstalledToolchains {
         Ok(dirs
             .into_iter()
             .filter_map(|path| {
-                InstalledToolchain::new(path)
+                ManagedPythonInstallation::new(path)
                     .inspect_err(|err| {
-                        warn!("Ignoring malformed toolchain entry:\n    {err}");
+                        warn!("Ignoring malformed managed Python entry:\n    {err}");
                     })
                     .ok()
             })
             .rev())
     }
 
-    /// Iterate over toolchains that support the current platform.
+    /// Iterate over Python installations that support the current platform.
     pub fn find_matching_current_platform(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
         let platform_key = platform_key_from_env();
 
-        let iter = InstalledToolchains::from_settings()?
+        let iter = ManagedPythonInstallations::from_settings()?
             .find_all()?
-            .filter(move |toolchain| {
-                toolchain
+            .filter(move |installation| {
+                installation
                     .path
                     .file_name()
                     .map(OsStr::to_string_lossy)
@@ -173,20 +198,20 @@ impl InstalledToolchains {
         Ok(iter)
     }
 
-    /// Iterate over toolchains that satisfy the given Python version on this platform.
+    /// Iterate over managed Python installations that satisfy the requested version on this platform.
     ///
     /// ## Errors
     ///
     /// - The platform metadata cannot be read
-    /// - A directory in the toolchain directory cannot be read
+    /// - A directory for the installation cannot be read
     pub fn find_version<'a>(
         &self,
         version: &'a PythonVersion,
-    ) -> Result<impl DoubleEndedIterator<Item = InstalledToolchain> + 'a, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         Ok(self
             .find_matching_current_platform()?
-            .filter(move |toolchain| {
-                toolchain
+            .filter(move |installation| {
+                installation
                     .path
                     .file_name()
                     .map(OsStr::to_string_lossy)
@@ -200,21 +225,21 @@ impl InstalledToolchains {
 }
 
 static EXTERNALLY_MANAGED: &str = "[externally-managed]
-Error=This toolchain is managed by uv and should not be modified.
+Error=This Python installation is managed by uv and should not be modified.
 ";
 
-/// A uv-managed Python toolchain installed on the current system..
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct InstalledToolchain {
-    /// The path to the top-level directory of the installed toolchain.
+/// A uv-managed Python installation on the current system..
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct ManagedPythonInstallation {
+    /// The path to the top-level directory of the installed Python.
     path: PathBuf,
-    /// An install key for the toolchain.
-    key: ToolchainKey,
+    /// An install key for the Python version.
+    key: PythonInstallationKey,
 }
 
-impl InstalledToolchain {
+impl ManagedPythonInstallation {
     pub fn new(path: PathBuf) -> Result<Self, Error> {
-        let key = ToolchainKey::from_str(
+        let key = PythonInstallationKey::from_str(
             path.file_name()
                 .ok_or(Error::NameError("name is empty".to_string()))?
                 .to_str()
@@ -224,6 +249,7 @@ impl InstalledToolchain {
         Ok(Self { path, key })
     }
 
+    /// The path to this toolchain's Python executable.
     pub fn executable(&self) -> PathBuf {
         if cfg!(windows) {
             self.path.join("install").join("python.exe")
@@ -234,6 +260,7 @@ impl InstalledToolchain {
         }
     }
 
+    /// The [`PythonVersion`] of the toolchain.
     pub fn version(&self) -> PythonVersion {
         self.key.version()
     }
@@ -242,7 +269,7 @@ impl InstalledToolchain {
         match self.key.implementation() {
             LenientImplementationName::Known(implementation) => implementation,
             LenientImplementationName::Unknown(_) => {
-                panic!("Managed toolchains should have a known implementation")
+                panic!("Managed Python installations should have a known implementation")
             }
         }
     }
@@ -251,41 +278,43 @@ impl InstalledToolchain {
         &self.path
     }
 
-    pub fn key(&self) -> &ToolchainKey {
+    pub fn key(&self) -> &PythonInstallationKey {
         &self.key
     }
 
-    pub fn satisfies(&self, request: &ToolchainRequest) -> bool {
+    pub fn satisfies(&self, request: &PythonRequest) -> bool {
         match request {
-            ToolchainRequest::File(path) => self.executable() == *path,
-            ToolchainRequest::Any => true,
-            ToolchainRequest::Directory(path) => self.path() == *path,
-            ToolchainRequest::ExecutableName(name) => self
+            PythonRequest::File(path) => self.executable() == *path,
+            PythonRequest::Any => true,
+            PythonRequest::Directory(path) => self.path() == *path,
+            PythonRequest::ExecutableName(name) => self
                 .executable()
                 .file_name()
                 .is_some_and(|filename| filename.to_string_lossy() == *name),
-            ToolchainRequest::Implementation(implementation) => {
+            PythonRequest::Implementation(implementation) => {
                 implementation == self.implementation()
             }
-            ToolchainRequest::ImplementationVersion(implementation, version) => {
+            PythonRequest::ImplementationVersion(implementation, version) => {
                 implementation == self.implementation() && version.matches_version(&self.version())
             }
-            ToolchainRequest::Version(version) => version.matches_version(&self.version()),
-            ToolchainRequest::Key(request) => request.satisfied_by_key(self.key()),
+            PythonRequest::Version(version) => version.matches_version(&self.version()),
+            PythonRequest::Key(request) => request.satisfied_by_key(self.key()),
         }
     }
 
-    /// Ensure the toolchain is marked as externally managed with the
+    /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
-        let lib = if cfg!(windows) { "Lib" } else { "lib" };
-        let file = self
-            .path
-            .join("install")
-            .join(lib)
-            // Note the Python version must not include the patch.
-            .join(format!("python{}", self.key.version().python_version()))
-            .join("EXTERNALLY-MANAGED");
+        // Construct the path to the `stdlib` directory.
+        let stdlib = if cfg!(windows) {
+            self.path.join("install").join("Lib")
+        } else {
+            self.path
+                .join("install")
+                .join("lib")
+                .join(format!("python{}", self.key.version().python_version()))
+        };
+        let file = stdlib.join("EXTERNALLY-MANAGED");
         fs_err::write(file, EXTERNALLY_MANAGED)?;
         Ok(())
     }
@@ -299,7 +328,7 @@ fn platform_key_from_env() -> String {
     format!("{os}-{arch}-{libc}").to_lowercase()
 }
 
-impl fmt::Display for InstalledToolchain {
+impl fmt::Display for ManagedPythonInstallation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

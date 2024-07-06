@@ -41,30 +41,30 @@ Sometimes it is preferable to install the toolchains before they are needed.
 To install a toolchain at a specific version:
 
 ```bash
-uv toolchain install 3.12.3
+uv python install 3.12.3
 ```
 
 To install the latest patch version:
 
 ```bash
-uv toolchain install 3.12
+uv python install 3.12
 ```
 
 To install a version that satisfies constraints:
 
 ```bash
-uv toolchain install '>=3.8,<3.10'
+uv python install '>=3.8,<3.10'
 ```
 
 To install multiple versions:
 
 ```bash
-uv toolchain install 3.9 3.10 3.11
+uv python install 3.9 3.10 3.11
 ```
 
 ## Installing project toolchains
 
-By default `uv toolchain install` will verify that a managed toolchain is installed or install the latest version.
+By default `uv python install` will verify that a managed toolchain is installed or install the latest version.
 
 However, a project may define a `.python-version` file specifying the default Python toolchain to be used. If present,
 uv will install the toolchain listed in the file.
@@ -79,7 +79,7 @@ uv will also respect Python requirements defined in a `pyproject.toml` file duri
 To list installed and available toolchains:
 
 ```bash
-uv toolchain list
+uv python list
 ```
 
 By default, downloads for other platforms and old patch versions are hidden.
@@ -87,19 +87,19 @@ By default, downloads for other platforms and old patch versions are hidden.
 To view all versions:
 
 ```bash
-uv toolchain list --all-versions
+uv python list --all-versions
 ```
 
 To view toolchains for other platforms:
 
 ```bash
-uv toolchain list --all-platforms
+uv python list --all-platforms
 ```
 
 To exclude downloads and only show installed toolchains:
 
 ```bash
-uv toolchain list --only-installed
+uv python list --only-installed
 ```
 
 ## Adjusting toolchain preferences
@@ -115,3 +115,16 @@ However, It's possible to adjust uv's toolchain selection preference with the `t
 - `only-system`: Only use system toolchains, never use managed toolchains.
 
 These options allow disabling uv's managed toolchains entirely or always using them and ignoring any existing system installations.
+
+## Discovery order
+
+When searching for a toolchain, the following locations are checked:
+
+- Managed toolchains in the `UV_PYTHON_INSTALL_DIR`.
+- A Python interpreter on the `PATH` as `python3` on macOS and Linux, or `python.exe` on Windows.
+- On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
+  version.
+
+If a specific Python version is requested, e.g. `--python 3.7`, additional executable names are included in the search:
+
+- A Python interpreter on the `PATH` as, e.g., `python3.7` on macOS and Linux.

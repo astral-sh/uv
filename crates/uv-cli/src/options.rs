@@ -77,6 +77,7 @@ impl From<InstallerArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             config_setting,
+            exclude_newer,
             link_mode,
             compile_bytecode,
             no_compile_bytecode,
@@ -90,6 +91,7 @@ impl From<InstallerArgs> for PipOptions {
             keyring_provider,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            exclude_newer,
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
             ..PipOptions::from(index_args)
@@ -177,6 +179,7 @@ pub fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -
         index_strategy,
         keyring_provider,
         config_setting,
+        exclude_newer,
         link_mode,
         compile_bytecode,
         no_compile_bytecode,
@@ -212,6 +215,7 @@ pub fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -
         keyring_provider,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        exclude_newer,
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
         no_build: flag(no_build, build),

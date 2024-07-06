@@ -21,29 +21,24 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_git::GitResolver;
-use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex};
-use uv_toolchain::{
-    request_from_version_file, EnvironmentPreference, Toolchain, ToolchainFetch,
-    ToolchainPreference, ToolchainRequest,
+use uv_python::{
+    request_from_version_file, EnvironmentPreference, PythonFetch, PythonInstallation,
+    PythonPreference, PythonRequest,
 };
-use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
+use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 
-use crate::commands::{pip, ExitStatus};
+use crate::commands::{pip, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::shell::Shell;
 
 /// Create a virtual environment.
-#[allow(
-    clippy::unnecessary_wraps,
-    clippy::too_many_arguments,
-    clippy::fn_params_excessive_bools
-)]
+#[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
@@ -71,8 +66,8 @@ pub(crate) async fn venv(
         connectivity,
         seed,
         preview,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         allow_existing,
         exclude_newer,
         native_tls,
@@ -122,8 +117,8 @@ async fn venv_impl(
     connectivity: Connectivity,
     seed: bool,
     preview: PreviewMode,
-    toolchain_preference: ToolchainPreference,
-    toolchain_fetch: ToolchainFetch,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
@@ -134,17 +129,19 @@ async fn venv_impl(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let mut interpreter_request = python_request.map(ToolchainRequest::parse);
+    let client_builder_clone = client_builder.clone();
+
+    let mut interpreter_request = python_request.map(PythonRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {
         interpreter_request = request_from_version_file().await.into_diagnostic()?;
     }
 
     // Locate the Python interpreter to use in the environment
-    let interpreter = Toolchain::find_or_fetch(
+    let interpreter = PythonInstallation::find_or_fetch(
         interpreter_request,
         EnvironmentPreference::OnlySystem,
-        toolchain_preference,
-        toolchain_fetch,
+        python_preference,
+        python_fetch,
         &client_builder,
         cache,
     )
@@ -189,12 +186,11 @@ async fn venv_impl(
         let interpreter = venv.interpreter();
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::new(cache.clone())
-            .native_tls(native_tls)
+        let client = RegistryClientBuilder::from(client_builder_clone)
+            .cache(cache.clone())
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
-            .connectivity(connectivity)
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();
@@ -215,12 +211,8 @@ async fn venv_impl(
             )
         };
 
-        // Create a shared in-memory index.
-        let index = InMemoryIndex::default();
-        let git = GitResolver::default();
-
-        // Track in-flight downloads, builds, etc., across resolutions.
-        let in_flight = InFlight::default();
+        // Initialize any shared state.
+        let state = SharedState::default();
 
         // For seed packages, assume the default settings and concurrency is sufficient.
         let config_settings = ConfigSettings::default();
@@ -236,9 +228,9 @@ async fn venv_impl(
             interpreter,
             index_locations,
             &flat_index,
-            &index,
-            &git,
-            &in_flight,
+            &state.index,
+            &state.git,
+            &state.in_flight,
             index_strategy,
             SetupPyStrategy::default(),
             &config_settings,

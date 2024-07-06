@@ -11,7 +11,7 @@ fn run() -> Result<ExitStatus, anyhow::Error> {
         bail!("Could not determine the location of the `uvx` binary")
     };
     let uv = bin.join("uv");
-    let args = ["tool", "run"]
+    let args = ["tool", "uvx"]
         .iter()
         .map(OsString::from)
         // Skip the `uvx` name
