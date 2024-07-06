@@ -987,7 +987,7 @@ fn main() -> ExitCode {
                 .thread_stack_size(stack_size)
                 .build()
                 .expect("Failed building the Runtime");
-            let result = runtime.block_on(run());
+            let result = runtime.block_on(Box::pin(run()));
             // Avoid waiting for pending tasks to complete.
             //
             // The resolver may have kicked off HTTP requests during resolution that
@@ -1007,7 +1007,7 @@ fn main() -> ExitCode {
             .enable_all()
             .build()
             .expect("Failed building the Runtime");
-        let result = runtime.block_on(run());
+        let result = runtime.block_on(Box::pin(run()));
         runtime.shutdown_background();
         result
     };
