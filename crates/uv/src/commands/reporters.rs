@@ -37,7 +37,7 @@ enum ProgressMode {
 struct BarState {
     // The number of bars that precede any download bars (i.e. build/checkout status).
     headers: usize,
-    // A list of donwnload bar sizes, in descending order.
+    // A list of download bar sizes, in descending order.
     sizes: Vec<u64>,
     // A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
@@ -121,7 +121,7 @@ impl ProgressReporter {
         ));
     }
 
-    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+    fn on_download_start(&self, name: String, size: Option<u64>) -> usize {
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -150,10 +150,10 @@ impl ProgressReporter {
                 .unwrap()
                 .progress_chars("--"),
             );
-            progress.set_message(name.to_string());
+            progress.set_message(name);
         } else {
             progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} ....").unwrap());
-            progress.set_message(name.to_string());
+            progress.set_message(name);
             progress.finish();
         }
 
@@ -281,7 +281,7 @@ impl uv_installer::PrepareReporter for PrepareReporter {
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name, size)
+        self.reporter.on_download_start(name.to_string(), size)
     }
 
     fn on_download_progress(&self, id: usize, bytes: u64) {
@@ -365,7 +365,7 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name, size)
+        self.reporter.on_download_start(name.to_string(), size)
     }
 
     fn on_download_progress(&self, id: usize, bytes: u64) {
@@ -387,7 +387,7 @@ impl uv_distribution::Reporter for ResolverReporter {
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name, size)
+        self.reporter.on_download_start(name.to_string(), size)
     }
 
     fn on_download_progress(&self, id: usize, bytes: u64) {
@@ -445,13 +445,14 @@ impl uv_installer::InstallReporter for InstallReporter {
 
 #[derive(Debug)]
 pub(crate) struct DownloadReporter {
+    length: u64,
     reporter: ProgressReporter,
 }
 
 impl DownloadReporter {
     #[must_use]
-    pub(crate) fn with_length(self, length: u64) -> Self {
-        self.reporter.root.set_length(length);
+    pub(crate) fn with_length(mut self, length: u64) -> Self {
+        self.length = length;
         self
     }
 }
@@ -463,25 +464,38 @@ impl From<Printer> for DownloadReporter {
         root.set_style(
             ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
         );
-        root.set_message("Downloading Python...");
 
         let reporter = ProgressReporter::new(root, multi_progress, printer);
-        Self { reporter }
+        Self {
+            length: 0,
+            reporter,
+        }
     }
 }
 
 impl uv_python::downloads::Reporter for DownloadReporter {
+    fn on_progress(&self, _name: &PythonInstallationKey, id: usize) {
+        self.reporter.root.inc(1);
+        self.reporter.on_download_complete(id);
+
+        if self.reporter.root.position() == self.reporter.root.length().unwrap_or_default() {
+            self.on_download_complete();
+        }
+    }
+
     fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize {
-        self.reporter
-            .on_download_start(&PackageName::new(format!("{name}")).unwrap(), size)
+        self.reporter.root.set_length(self.length);
+        self.reporter.root.set_message("Downloading Python...");
+        self.reporter.on_download_start(name.to_string(), size)
     }
 
     fn on_download_progress(&self, id: usize, inc: u64) {
         self.reporter.on_download_progress(id, inc);
     }
 
-    fn on_download_complete(&self, _name: &PythonInstallationKey, id: usize) {
-        self.reporter.on_download_complete(id);
+    fn on_download_complete(&self) {
+        self.reporter.root.set_message("");
+        self.reporter.root.finish_and_clear();
     }
 }
 

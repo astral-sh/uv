@@ -468,7 +468,7 @@ impl ManagedPythonDownload {
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
         if let Some((&reporter, progress)) = progress {
-            reporter.on_download_complete(&self.key, progress);
+            reporter.on_progress(&self.key, progress);
         }
 
         // Check the hash
@@ -531,9 +531,10 @@ impl Display for ManagedPythonDownload {
 }
 
 pub trait Reporter: Send + Sync {
+    fn on_progress(&self, name: &PythonInstallationKey, id: usize);
     fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize;
     fn on_download_progress(&self, id: usize, inc: u64);
-    fn on_download_complete(&self, name: &PythonInstallationKey, id: usize);
+    fn on_download_complete(&self);
 }
 
 /// An asynchronous reader that reports progress as bytes are read.

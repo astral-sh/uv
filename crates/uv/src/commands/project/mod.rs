@@ -138,8 +138,6 @@ impl FoundInterpreter {
     ) -> Result<Self, ProjectError> {
         let requires_python = find_requires_python(workspace)?;
 
-        let reporter = DownloadReporter::from(printer).with_length(1);
-
         // (1) Explicit request from user
         let python_request = if let Some(request) = python_request {
             Some(request)
@@ -181,6 +179,8 @@ impl FoundInterpreter {
         let client_builder = BaseClientBuilder::default()
             .connectivity(connectivity)
             .native_tls(native_tls);
+
+        let reporter = DownloadReporter::from(printer).with_length(1);
 
         // Locate the Python interpreter to use in the environment
         let interpreter = PythonInstallation::find_or_fetch(
