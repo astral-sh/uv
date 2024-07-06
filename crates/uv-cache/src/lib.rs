@@ -388,12 +388,20 @@ impl Cache {
             }
         }
 
-        for entry in fs::read_dir(self.bucket(CacheBucket::Archive))? {
-            let entry = entry?;
-            let path = entry.path().canonicalize()?;
-            if !references.contains(&path) {
-                debug!("Removing dangling cache entry: {}", path.display());
-                summary += rm_rf(path)?;
+        for bucket in [CacheBucket::Archive, CacheBucket::Environments]
+            .iter()
+            .copied()
+        {
+            let bucket = self.bucket(bucket);
+            if bucket.is_dir() {
+                for entry in fs::read_dir(bucket)? {
+                    let entry = entry?;
+                    let path = entry.path().canonicalize()?;
+                    if !references.contains(&path) {
+                        debug!("Removing dangling cache entry: {}", path.display());
+                        summary += rm_rf(path)?;
+                    }
+                }
             }
         }
 
