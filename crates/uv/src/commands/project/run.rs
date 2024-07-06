@@ -231,12 +231,14 @@ pub(crate) async fn run(
         );
     }
 
-    // If necessary, create an environment for the ephemeral requirements.
+    // If necessary, create an environment for the ephemeral requirements or command.
     let temp_dir;
-    let ephemeral_env = if requirements.is_empty() {
+    let ephemeral_env = if requirements.is_empty() && base_interpreter.is_some() {
+        // If we don't have any `--with` requirements, and we already have a base environment, then
+        // there's no need to create an additional environment.
         None
     } else {
-        debug!("Syncing ephemeral environment.");
+        debug!("Creating ephemeral environment");
 
         // Discover an interpreter.
         let interpreter = if let Some(base_interpreter) = &base_interpreter {
@@ -274,29 +276,36 @@ pub(crate) async fn run(
             false,
         )?;
 
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
+        if requirements.is_empty() {
+            Some(venv)
+        } else {
+            debug!("Syncing ephemeral requirements");
 
-        let spec =
-            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+            let client_builder = BaseClientBuilder::new()
+                .connectivity(connectivity)
+                .native_tls(native_tls);
 
-        // Install the ephemeral requirements.
-        Some(
-            project::update_environment(
-                venv,
-                spec,
-                &settings,
-                &state,
-                preview,
-                connectivity,
-                concurrency,
-                native_tls,
-                cache,
-                printer,
+            let spec =
+                RequirementsSpecification::from_simple_sources(&requirements, &client_builder)
+                    .await?;
+
+            // Install the ephemeral requirements.
+            Some(
+                project::update_environment(
+                    venv,
+                    spec,
+                    &settings,
+                    &state,
+                    preview,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    cache,
+                    printer,
+                )
+                .await?,
             )
-            .await?,
-        )
+        }
     };
 
     debug!("Running `{command}`");
