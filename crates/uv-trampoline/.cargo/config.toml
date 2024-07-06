@@ -1,3 +1,3 @@
 [unstable]
-build-std = ["core", "panic_abort", "alloc", "std"]
-build-std-features = ["compiler-builtins-mem"]
+build-std = ["std", "panic_abort"]
+build-std-features = ["compiler-builtins-mem", "panic_immediate_abort"]
