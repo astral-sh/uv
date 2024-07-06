@@ -131,7 +131,7 @@ pub(crate) async fn install(
 
     let reporter = DownloadReporter::from(printer).with_length(downloads.len() as u64);
 
-    let tasks = futures::stream::iter(downloads.iter())
+    let results = futures::stream::iter(downloads.iter())
         .map(|download| async {
             let result = download
                 .fetch(&client, installations_dir, Some(&reporter))
@@ -142,40 +142,30 @@ pub(crate) async fn install(
         .collect::<Vec<_>>()
         .await;
 
-    let mut installed = 0;
-    for (version, result) in &tasks {
-        let path = match result {
+    for (version, result) in results {
+        let path = match result? {
             // We should only encounter already-available during concurrent installs
-            Ok(DownloadResult::AlreadyAvailable(path)) => Some(path),
-            Ok(DownloadResult::Fetched(path)) => {
-                installed += 1;
+            DownloadResult::AlreadyAvailable(path) => path,
+            DownloadResult::Fetched(path) => {
                 writeln!(
                     printer.stderr(),
                     "Installed Python {version} to {}",
                     path.user_display()
                 )?;
-                Some(path)
-            }
-            Err(err) => {
-                writeln!(
-                    printer.stderr(),
-                    "Failed to install Python {version}: {err}"
-                )?;
-                None
+                path
             }
         };
-        if let Some(path) = path {
-            // Ensure the installations have externally managed markers
-            let installed = ManagedPythonInstallation::new(path.clone())?;
-            installed.ensure_externally_managed()?;
-        }
+
+        // Ensure the installations have externally managed markers
+        let installed = ManagedPythonInstallation::new(path.clone())?;
+        installed.ensure_externally_managed()?;
     }
 
-    let s = if installed == 1 { "" } else { "s" };
+    let s = if downloads.len() == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
         "Installed {} version{s} in {}s",
-        installed,
+        downloads.len(),
         start.elapsed().as_secs()
     )?;
 
