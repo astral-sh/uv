@@ -116,13 +116,11 @@ pub(crate) async fn install(
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
 
-    if downloads.len() > 0 {
-        writeln!(
-            printer.stderr(),
-            "Found {} versions requiring installation",
-            downloads.len()
-        )?;
-    }
+    writeln!(
+        printer.stderr(),
+        "Found {} versions requiring installation",
+        downloads.len()
+    )?;
 
     // Construct a client
     let client = uv_client::BaseClientBuilder::new()
