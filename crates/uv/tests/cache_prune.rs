@@ -120,7 +120,6 @@ fn prune_cached_env() {
                 r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
-            (r"\d+ files", "[N] files"),
         ])
         .collect();
 
