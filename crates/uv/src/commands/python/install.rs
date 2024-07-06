@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -36,6 +37,7 @@ pub(crate) async fn install(
     let installations_dir = installations.root();
     let _lock = installations.acquire_lock()?;
 
+    let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
         if let Some(requests) = requests_from_version_file().await? {
             requests
@@ -45,7 +47,6 @@ pub(crate) async fn install(
     } else {
         targets
             .iter()
-            .dedup()
             .map(|target| PythonRequest::parse(target.as_str()))
             .collect()
     };
@@ -102,21 +103,26 @@ pub(crate) async fn install(
         return Ok(ExitStatus::Success);
     }
 
-    if unfilled_requests.len() > 1 {
-        writeln!(
-            printer.stderr(),
-            "Found {}/{} versions requiring installation",
-            unfilled_requests.len(),
-            requests.len()
-        )?;
-    }
-
     let downloads = unfilled_requests
         .into_iter()
         // Populate the download requests with defaults
         .map(PythonDownloadRequest::fill)
         .map(|request| ManagedPythonDownload::from_request(&request))
         .collect::<Result<Vec<_>, uv_python::downloads::Error>>()?;
+
+    // Ensure we only download each version once
+    let downloads = downloads
+        .into_iter()
+        .unique_by(|download| download.key())
+        .collect::<Vec<_>>();
+
+    if downloads.len() > 0 {
+        writeln!(
+            printer.stderr(),
+            "Found {} versions requiring installation",
+            downloads.len()
+        )?;
+    }
 
     // Construct a client
     let client = uv_client::BaseClientBuilder::new()
