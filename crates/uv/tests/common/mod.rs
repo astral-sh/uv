@@ -108,6 +108,10 @@ impl TestContext {
                 format!("{verb} [N] packages"),
             ));
         }
+        self.filters.push((
+            "Removed \\d+ files?".to_string(),
+            "Removed [N] files".to_string(),
+        ));
         self
     }
 

@@ -388,13 +388,34 @@ impl Cache {
             }
         }
 
-        for entry in fs::read_dir(self.bucket(CacheBucket::Archive))? {
-            let entry = entry?;
-            let path = entry.path().canonicalize()?;
-            if !references.contains(&path) {
-                debug!("Removing dangling cache entry: {}", path.display());
-                summary += rm_rf(path)?;
+        match fs::read_dir(self.bucket(CacheBucket::Archive)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path().canonicalize()?;
+                    if !references.contains(&path) {
+                        debug!("Removing dangling cache entry: {}", path.display());
+                        summary += rm_rf(path)?;
+                    }
+                }
             }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
+        }
+
+        // Third, remove any cached environments. These are never referenced by symlinks, so we can
+        // remove them directly.
+        match fs::read_dir(self.bucket(CacheBucket::Environments)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path().canonicalize()?;
+                    debug!("Removing dangling cache entry: {}", path.display());
+                    summary += rm_rf(path)?;
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
         }
 
         Ok(summary)
