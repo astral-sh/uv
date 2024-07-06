@@ -120,6 +120,7 @@ fn prune_cached_env() {
                 r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
                 "[CACHE_DIR]/$2/[ENTRY]",
             ),
+            (r"\d+ files", "[N] files"),
         ])
         .collect();
 
@@ -132,7 +133,7 @@ fn prune_cached_env() {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache entry: [CACHE_DIR]/environments-v1/[ENTRY]
-    Removed 235 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###);
 }
 
