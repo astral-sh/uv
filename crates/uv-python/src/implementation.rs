@@ -10,14 +10,14 @@ pub enum Error {
     UnknownImplementation(String),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord, Hash)]
 pub enum ImplementationName {
     #[default]
     CPython,
     PyPy,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd, Hash)]
 pub enum LenientImplementationName {
     Known(ImplementationName),
     Unknown(String),

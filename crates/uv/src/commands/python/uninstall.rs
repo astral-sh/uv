@@ -27,6 +27,7 @@ pub(crate) async fn uninstall(
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
     let _lock = installations.acquire_lock()?;
 
+    let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests = targets
         .iter()
         .map(|target| PythonRequest::parse(target.as_str()))
@@ -83,7 +84,7 @@ pub(crate) async fn uninstall(
         return Ok(ExitStatus::Failure);
     }
 
-    let tasks = futures::stream::iter(matching_installations.iter())
+    let tasks = futures::stream::iter(matching_installations.iter().unique())
         .map(|installation| async {
             (
                 installation.key(),

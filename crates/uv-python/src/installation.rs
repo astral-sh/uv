@@ -208,7 +208,7 @@ pub enum PythonInstallationKeyError {
     ParseError(String, String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PythonInstallationKey {
     pub(crate) implementation: LenientImplementationName,
     pub(crate) major: u8,
