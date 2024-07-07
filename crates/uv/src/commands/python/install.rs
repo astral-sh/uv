@@ -14,6 +14,7 @@ use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{requests_from_version_file, PythonRequest};
 use uv_warnings::warn_user_once;
 
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -128,17 +129,20 @@ pub(crate) async fn install(
         .native_tls(native_tls)
         .build();
 
-    let mut tasks = futures::stream::iter(downloads.iter())
+    let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
+
+    let results = futures::stream::iter(downloads.iter())
         .map(|download| async {
-            let _ = writeln!(printer.stderr(), "Downloading {}", download.key());
-            let result = download.fetch(&client, installations_dir).await;
+            let result = download
+                .fetch(&client, installations_dir, Some(&reporter))
+                .await;
             (download.python_version(), result)
         })
-        .buffered(4);
+        .buffered(4)
+        .collect::<Vec<_>>()
+        .await;
 
-    let mut results = Vec::new();
-    while let Some(task) = tasks.next().await {
-        let (version, result) = task;
+    for (version, result) in results {
         let path = match result? {
             // We should only encounter already-available during concurrent installs
             DownloadResult::AlreadyAvailable(path) => path,
@@ -151,10 +155,10 @@ pub(crate) async fn install(
                 path
             }
         };
+
         // Ensure the installations have externally managed markers
         let installed = ManagedPythonInstallation::new(path.clone())?;
         installed.ensure_externally_managed()?;
-        results.push((version, path));
     }
 
     let s = if downloads.len() == 1 { "" } else { "s" };

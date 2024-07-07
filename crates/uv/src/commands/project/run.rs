@@ -22,6 +22,7 @@ use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -55,6 +56,8 @@ pub(crate) async fn run(
     // Initialize any shared state.
     let state = SharedState::default();
 
+    let reporter = PythonDownloadReporter::single(printer);
+
     // Determine whether the command to execute is a PEP 723 script.
     let script_interpreter = if let RunCommand::Python(target, _) = &command {
         if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
@@ -84,6 +87,7 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
+                Some(&reporter),
             )
             .await?
             .into_interpreter();
@@ -214,6 +218,7 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
+                Some(&reporter),
             )
             .await?;
 
@@ -256,6 +261,7 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
+                Some(&reporter),
             )
             .await?
             .into_interpreter()

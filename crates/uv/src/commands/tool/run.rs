@@ -24,6 +24,7 @@ use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
 use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -154,6 +155,8 @@ async fn get_or_create_environment(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
+    let reporter = PythonDownloadReporter::single(printer);
+
     let python_request = python.map(PythonRequest::parse);
 
     // Discover an interpreter.
@@ -164,6 +167,7 @@ async fn get_or_create_environment(
         python_fetch,
         &client_builder,
         cache,
+        Some(&reporter),
     )
     .await?
     .into_interpreter();

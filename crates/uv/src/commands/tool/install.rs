@@ -25,6 +25,7 @@ use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool,
 use uv_warnings::warn_user_once;
 
 use crate::commands::project::{resolve_environment, sync_environment, update_environment};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -55,6 +56,8 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
+    let reporter = PythonDownloadReporter::single(printer);
+
     let python_request = python.as_deref().map(PythonRequest::parse);
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
@@ -66,6 +69,7 @@ pub(crate) async fn install(
         python_fetch,
         &client_builder,
         cache,
+        Some(&reporter),
     )
     .await?
     .into_interpreter();

@@ -1,7 +1,21 @@
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::{Context, Poll};
+
+use futures::TryStreamExt;
+use thiserror::Error;
+use tokio::io::{AsyncRead, ReadBuf};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::{debug, instrument};
+use url::Url;
+
+use pypi_types::{HashAlgorithm, HashDigest};
+use uv_client::WrappedReqwestError;
+use uv_extract::hash::Hasher;
+use uv_fs::{rename_with_retry, Simplified};
 
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
@@ -9,17 +23,6 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::platform::{self, Arch, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
-use thiserror::Error;
-use uv_client::WrappedReqwestError;
-
-use futures::TryStreamExt;
-
-use pypi_types::{HashAlgorithm, HashDigest};
-use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, instrument};
-use url::Url;
-use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, Simplified};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -400,11 +403,12 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract
-    #[instrument(skip(client, parent_path), fields(download = %self.key()))]
+    #[instrument(skip(client, parent_path, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
         parent_path: &Path,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
         let path = parent_path.join(self.key().to_string());
@@ -420,6 +424,11 @@ impl ManagedPythonDownload {
         // Ensure the request was successful.
         response.error_for_status_ref()?;
 
+        let size = response.content_length();
+        let progress = reporter
+            .as_ref()
+            .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
+
         // Download and extract into a temporary directory.
         let temp_dir = tempfile::tempdir_in(parent_path).map_err(Error::DownloadDirError)?;
 
@@ -427,28 +436,44 @@ impl ManagedPythonDownload {
             "Downloading {url} to temporary location {}",
             temp_dir.path().display()
         );
-        let reader = response
+
+        let stream = response
             .bytes_stream()
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
             .into_async_read();
 
+        let mut hashers = self
+            .sha256
+            .into_iter()
+            .map(|_| Hasher::from(HashAlgorithm::Sha256))
+            .collect::<Vec<_>>();
+        let mut hasher = uv_extract::hash::HashReader::new(stream.compat(), &mut hashers);
+
         debug!("Extracting {filename}");
 
+        match progress {
+            Some((&reporter, progress)) => {
+                let mut reader = ProgressReader::new(&mut hasher, progress, reporter);
+                uv_extract::stream::archive(&mut reader, filename, temp_dir.path())
+                    .await
+                    .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+            }
+            None => {
+                uv_extract::stream::archive(&mut hasher, filename, temp_dir.path())
+                    .await
+                    .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+            }
+        };
+
+        hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+        if let Some((&reporter, progress)) = progress {
+            reporter.on_progress(&self.key, progress);
+        }
+
+        // Check the hash
         if let Some(expected) = self.sha256 {
-            let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
-            let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
-            uv_extract::stream::archive(&mut hasher, filename, temp_dir.path())
-                .await
-                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
-
-            hasher.finish().await.map_err(Error::HashExhaustion)?;
-
-            let actual = hashers
-                .into_iter()
-                .map(HashDigest::from)
-                .next()
-                .unwrap()
-                .digest;
+            let actual = HashDigest::from(hashers.pop().unwrap()).digest;
             if !actual.eq_ignore_ascii_case(expected) {
                 return Err(Error::HashMismatch {
                     installation: self.key.to_string(),
@@ -456,10 +481,6 @@ impl ManagedPythonDownload {
                     actual: actual.to_string(),
                 });
             }
-        } else {
-            uv_extract::stream::archive(reader.compat(), filename, temp_dir.path())
-                .await
-                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
         }
 
         // Extract the top-level directory.
@@ -511,5 +532,48 @@ impl From<reqwest_middleware::Error> for Error {
 impl Display for ManagedPythonDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.key)
+    }
+}
+
+pub trait Reporter: Send + Sync {
+    fn on_progress(&self, name: &PythonInstallationKey, id: usize);
+    fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize;
+    fn on_download_progress(&self, id: usize, inc: u64);
+    fn on_download_complete(&self);
+}
+
+/// An asynchronous reader that reports progress as bytes are read.
+struct ProgressReader<'a, R> {
+    reader: R,
+    index: usize,
+    reporter: &'a dyn Reporter,
+}
+
+impl<'a, R> ProgressReader<'a, R> {
+    /// Create a new [`ProgressReader`] that wraps another reader.
+    fn new(reader: R, index: usize, reporter: &'a dyn Reporter) -> Self {
+        Self {
+            reader,
+            index,
+            reporter,
+        }
+    }
+}
+
+impl<R> AsyncRead for ProgressReader<'_, R>
+where
+    R: AsyncRead + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.as_mut().reader)
+            .poll_read(cx, buf)
+            .map_ok(|()| {
+                self.reporter
+                    .on_download_progress(self.index, buf.filled().len() as u64);
+            })
     }
 }
