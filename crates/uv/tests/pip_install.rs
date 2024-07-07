@@ -4987,13 +4987,8 @@ fn already_installed_remote_url() {
 
 /// Sync using `--find-links` with a local directory.
 #[test]
-fn find_links() -> Result<()> {
+fn find_links() {
     let context = TestContext::new("3.12");
-
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(indoc! {r"
-        tqdm
-    "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("tqdm")
@@ -5010,19 +5005,12 @@ fn find_links() -> Result<()> {
      + tqdm==1000.0.0
     "###
     );
-
-    Ok(())
 }
 
 /// Sync using `--find-links` with a local directory, with wheels disabled.
 #[test]
-fn find_links_no_binary() -> Result<()> {
+fn find_links_no_binary() {
     let context = TestContext::new("3.12");
-
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(indoc! {r"
-        tqdm
-    "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("tqdm")
@@ -5041,8 +5029,6 @@ fn find_links_no_binary() -> Result<()> {
      + tqdm==999.0.0
     "###
     );
-
-    Ok(())
 }
 
 /// Provide valid hashes for all dependencies with `--require-hashes`.
