@@ -14,7 +14,7 @@ use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{requests_from_version_file, PythonRequest};
 use uv_warnings::warn_user_once;
 
-use crate::commands::reporters::DownloadReporter;
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -129,7 +129,7 @@ pub(crate) async fn install(
         .native_tls(native_tls)
         .build();
 
-    let reporter = DownloadReporter::new(printer, downloads.len() as u64);
+    let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
 
     let results = futures::stream::iter(downloads.iter())
         .map(|download| async {

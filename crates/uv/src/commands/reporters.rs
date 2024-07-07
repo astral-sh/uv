@@ -26,7 +26,7 @@ struct ProgressReporter {
 enum ProgressMode {
     /// Reports top-level progress.
     Single,
-    /// Reports progress of all concurrent download/build/checkout processes.
+    /// Reports progress of all concurrent download, build, and checkout processes.
     Multi {
         multi_progress: MultiProgress,
         state: Arc<Mutex<BarState>>,
@@ -444,18 +444,18 @@ impl uv_installer::InstallReporter for InstallReporter {
 }
 
 #[derive(Debug)]
-pub(crate) struct DownloadReporter {
+pub(crate) struct PythonDownloadReporter {
     reporter: ProgressReporter,
     multiple: bool,
 }
 
-impl DownloadReporter {
-    /// Initialize a [`DownloadReporter`] for a single download.
+impl PythonDownloadReporter {
+    /// Initialize a [`PythonDownloadReporter`] for a single Python download.
     pub(crate) fn single(printer: Printer) -> Self {
         Self::new(printer, 1)
     }
 
-    /// Initialize a [`DownloadReporter`] for multiple downloads.
+    /// Initialize a [`PythonDownloadReporter`] for multiple Python downloads.
     pub(crate) fn new(printer: Printer, length: u64) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
         let root = multi_progress.add(ProgressBar::with_draw_target(
@@ -475,7 +475,7 @@ impl DownloadReporter {
     }
 }
 
-impl uv_python::downloads::Reporter for DownloadReporter {
+impl uv_python::downloads::Reporter for PythonDownloadReporter {
     fn on_progress(&self, _name: &PythonInstallationKey, id: usize) {
         self.reporter.on_download_complete(id);
 

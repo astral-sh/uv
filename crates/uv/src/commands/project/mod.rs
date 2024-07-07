@@ -25,7 +25,7 @@ use uv_resolver::{FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, 
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::reporters::{DownloadReporter, ResolverReporter};
+use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, SharedState};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
@@ -180,7 +180,7 @@ impl FoundInterpreter {
             .connectivity(connectivity)
             .native_tls(native_tls);
 
-        let reporter = DownloadReporter::single(printer);
+        let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment
         let interpreter = PythonInstallation::find_or_fetch(

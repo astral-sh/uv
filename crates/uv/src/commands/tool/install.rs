@@ -25,7 +25,7 @@ use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool,
 use uv_warnings::warn_user_once;
 
 use crate::commands::project::{resolve_environment, sync_environment, update_environment};
-use crate::commands::reporters::DownloadReporter;
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -56,7 +56,7 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let reporter = DownloadReporter::single(printer);
+    let reporter = PythonDownloadReporter::single(printer);
 
     let python_request = python.as_deref().map(PythonRequest::parse);
 
