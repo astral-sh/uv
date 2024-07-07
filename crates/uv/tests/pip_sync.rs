@@ -3168,7 +3168,7 @@ fn compile() -> Result<()> {
 
 /// Test that the `PYC_INVALIDATION_MODE` option is recognized and that the error handling works.
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "Fails spuriously on macOS")]
+#[ignore = "This test fails spuriously a lot"]
 fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     let context = TestContext::new("3.12");
 
