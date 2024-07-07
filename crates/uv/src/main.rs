@@ -975,11 +975,12 @@ async fn run_project(
 }
 
 fn main() -> ExitCode {
+    // Windows has a default stack size of 1MB, which is lower than the linux and mac default.
+    // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
+    // We support increasing the stack size to avoid stack overflows in debug mode on Windows. In
+    // addition, we box types and futures in various places. This includes the `Box::pin(run())`
+    // here, which prevents the large (non-send) main future alone from overflowing the stack.
     let result = if let Ok(stack_size) = env::var("UV_STACK_SIZE") {
-        // Artificially limit or increase the stack size to test without stack overflows in debug
-        // mode. Windows has a default stack size of 1MB, which is lower than the linux and mac
-        // default.
-        // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
         let stack_size = stack_size.parse().expect("Invalid stack size");
         let tokio_main = move || {
             let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -987,6 +988,7 @@ fn main() -> ExitCode {
                 .thread_stack_size(stack_size)
                 .build()
                 .expect("Failed building the Runtime");
+            // Box the large main future to avoid stack overflows.
             let result = runtime.block_on(Box::pin(run()));
             // Avoid waiting for pending tasks to complete.
             //
@@ -1007,6 +1009,7 @@ fn main() -> ExitCode {
             .enable_all()
             .build()
             .expect("Failed building the Runtime");
+        // Box the large main future to avoid stack overflows.
         let result = runtime.block_on(Box::pin(run()));
         runtime.shutdown_background();
         result
