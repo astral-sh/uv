@@ -463,11 +463,16 @@ impl ManagedPythonDownload {
         }
 
         // Extract the top-level directory.
-        let extracted = match uv_extract::strip_component(temp_dir.path()) {
+        let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
             Err(err) => return Err(Error::ExtractError(filename.to_string(), err)),
         };
+
+        // If the distribution is a `full` archive, the Python installation is in the `install` directory.
+        if extracted.join("install").is_dir() {
+            extracted = extracted.join("install");
+        }
 
         // Persist it to the target
         debug!("Moving {} to {}", extracted.display(), path.user_display());

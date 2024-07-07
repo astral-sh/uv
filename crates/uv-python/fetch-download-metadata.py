@@ -33,6 +33,7 @@ HEADERS = {
 }
 VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 FLAVOR_PREFERENCES = [
+    "install_only",
     "shared-pgo",
     "shared-noopt",
     "shared-noopt",
@@ -44,7 +45,6 @@ FLAVOR_PREFERENCES = [
 HIDDEN_FLAVORS = [
     "debug",
     "noopt",
-    "install_only",
 ]
 SPECIAL_TRIPLES = {
     "macos": "x86_64-apple-darwin",
