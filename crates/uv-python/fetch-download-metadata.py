@@ -363,9 +363,7 @@ def render(downloads: list[PythonDownload]) -> None:
 async def find() -> None:
     token = os.environ.get("GH_TOKEN")
     if not token:
-        logging.error(
-            "Please set `GH_TOKEN` environment variable."
-        )
+        logging.error("Please set `GH_TOKEN` environment variable.")
         sys.exit(1)
 
     headers = {
