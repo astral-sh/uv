@@ -31,7 +31,7 @@ import sys
 from enum import StrEnum
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple, Self
+from typing import Iterable, Generator, NamedTuple, Self
 from urllib.parse import unquote
 
 import httpx
@@ -40,7 +40,7 @@ SELF_DIR = Path(__file__).parent
 VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 
 
-def batched(iterable, n):
+def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
     """Batch data into tuples of length n. The last batch may be shorter."""
     # batched('ABCDEFG', 3) --> ABC DEF G
     if n < 1:
