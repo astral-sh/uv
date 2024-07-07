@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.22
+
+### Preview features
+
+- Always use base interpreter for cached environments ([#4805](https://github.com/astral-sh/uv/pull/4805))
+- Cache tool environments in `uv tool run` ([#4784](https://github.com/astral-sh/uv/pull/4784))
+- Check hash of downloaded python toolchain ([#4806](https://github.com/astral-sh/uv/pull/4806))
+- Remove incompatible wheels from `uv.lock` ([#4799](https://github.com/astral-sh/uv/pull/4799))
+- `uv cache prune` removes all cached environments ([#4845](https://github.com/astral-sh/uv/pull/4845))
+- Add dedicated help menu for `uvx` ([#4770](https://github.com/astral-sh/uv/pull/4770))
+- Change "toolchain" to "python" ([#4735](https://github.com/astral-sh/uv/pull/4735))
+- Create empty environment for `uv run --isolated` ([#4849](https://github.com/astral-sh/uv/pull/4849))
+- Deduplicate when install or uninstall python ([#4841](https://github.com/astral-sh/uv/pull/4841))
+- Require at least one target for toolchain uninstalls ([#4820](https://github.com/astral-sh/uv/pull/4820))
+- Resolve requirements prior to nuking tool environments ([#4788](https://github.com/astral-sh/uv/pull/4788))
+- Tweak installation language in toolchain install ([#4811](https://github.com/astral-sh/uv/pull/4811))
+- Use already-installed tools in `uv tool run` ([#4750](https://github.com/astral-sh/uv/pull/4750))
+- Use cached environments in PEP 723 execution ([#4789](https://github.com/astral-sh/uv/pull/4789))
+- Use optimized versions of managed Python on Linux ([#4775](https://github.com/astral-sh/uv/pull/4775))
+- Fill Python requests with platform information during automatic fetches ([#4810](https://github.com/astral-sh/uv/pull/4810))
+- Remove installed python for force installation ([#4807](https://github.com/astral-sh/uv/pull/4807))
+- Add tool version to list command ([#4674](https://github.com/astral-sh/uv/pull/4674))
+- Add entrypoints to tool list ([#4661](https://github.com/astral-sh/uv/pull/4661))
+
 ## 0.2.21
 
 ### Preview features
@@ -9,7 +33,6 @@
 ## 0.2.20
 
 <!-- No changes -->
-
 
 ## 0.2.19
 
