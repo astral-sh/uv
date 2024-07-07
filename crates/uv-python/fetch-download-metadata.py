@@ -1,4 +1,9 @@
-#!/usr/bin/env python3.12
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "httpx < 1",
+# ]
+# ///
 """
 Fetch Python version download metadata.
 
@@ -6,7 +11,7 @@ Generates the `download-metadata.json` file.
 
 Usage:
 
-    python fetch-download-metadata.py
+    uv run --isolated -- crates/uv-python/fetch-download-metadata.py
 
 Acknowledgements:
 
@@ -66,6 +71,7 @@ _filename_re = re.compile(
     $
 """
 )
+
 _flavor_re = re.compile(
     r"""(?x)^(.*?)-(%s)$"""
     % (

@@ -1,4 +1,9 @@
-#!/usr/bin/env python3.12
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "chevron-blue < 1",
+# ]
+# ///
 """
 Generate static Rust code from Python version download metadata.
 
@@ -6,7 +11,7 @@ Generates the `downloads.inc` file from the `downloads.inc.mustache` template.
 
 Usage:
 
-    uv run --isolated --with chevron-blue -- crates/uv-python/template-download-metadata.py
+    uv run --isolated -- crates/uv-python/template-download-metadata.py
 """
 
 import sys
@@ -16,21 +21,13 @@ import json
 import subprocess
 from pathlib import Path
 
+import chevron_blue
+
 CRATE_ROOT = Path(__file__).parent
 WORKSPACE_ROOT = CRATE_ROOT.parent.parent
 VERSION_METADATA = CRATE_ROOT / "download-metadata.json"
 TEMPLATE = CRATE_ROOT / "src" / "downloads.inc.mustache"
 TARGET = TEMPLATE.with_suffix("")
-
-
-try:
-    import chevron_blue
-except ImportError:
-    print(
-        "missing requirement `chevron-blue`",
-        file=sys.stderr,
-    )
-    exit(1)
 
 
 def prepare_name(name: str) -> str:
@@ -73,8 +70,8 @@ def main():
     debug = logging.getLogger().getEffectiveLevel() <= logging.DEBUG
 
     data = {}
-    data["generated_with"] = Path(__file__).relative_to(WORKSPACE_ROOT)
-    data["generated_from"] = TEMPLATE.relative_to(WORKSPACE_ROOT)
+    data["generated_with"] = Path(__file__).relative_to(WORKSPACE_ROOT).as_posix()
+    data["generated_from"] = TEMPLATE.relative_to(WORKSPACE_ROOT).as_posix()
     data["versions"] = [
         {"key": key, "value": prepare_value(value)}
         for key, value in json.loads(VERSION_METADATA.read_text()).items()
