@@ -11,7 +11,11 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List installed tools.
-pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn list(
+    preview: PreviewMode,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`uv tool list` is experimental and may change without warning.");
     }
@@ -28,14 +32,13 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
 
     for (name, tool) in tools {
         // Output tool name and version
-        let version =
-            match installed_tools.version(&name, &Cache::from_path(installed_tools.root())) {
-                Ok(version) => version,
-                Err(e) => {
-                    writeln!(printer.stderr(), "{e}")?;
-                    continue;
-                }
-            };
+        let version = match installed_tools.version(&name, cache) {
+            Ok(version) => version,
+            Err(e) => {
+                writeln!(printer.stderr(), "{e}")?;
+                continue;
+            }
+        };
 
         writeln!(printer.stdout(), "{name} v{version}")?;
 
