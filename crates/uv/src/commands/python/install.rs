@@ -117,9 +117,10 @@ pub(crate) async fn install(
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
 
+    let s = if downloads.len() == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
-        "Found {} versions requiring installation",
+        "Found {} version{s} requiring installation",
         downloads.len()
     )?;
 
