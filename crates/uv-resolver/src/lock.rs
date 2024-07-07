@@ -394,7 +394,7 @@ impl Lock {
             }
             let name = dist.id.name.clone();
             let resolved_dist =
-                ResolvedDist::Installable(dist.to_dist(project.workspace().root(), tags)?);
+                ResolvedDist::Installable(dist.to_dist(project.workspace().install_path(), tags)?);
             map.insert(name, resolved_dist);
         }
         let diagnostics = vec![];

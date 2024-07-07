@@ -48,7 +48,7 @@ pub enum WorkspaceError {
 pub struct Workspace {
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
-    root: PathBuf,
+    install_path: PathBuf,
     /// The members of the workspace.
     packages: BTreeMap<PackageName, WorkspaceMember>,
     /// The sources table from the workspace `pyproject.toml`. It is overridden by the project
@@ -198,7 +198,7 @@ impl Workspace {
                         install_path: member.root.clone(),
                         lock_path: member
                             .root
-                            .strip_prefix(&self.root)
+                            .strip_prefix(&self.install_path)
                             .expect("Project must be below workspace root")
                             .to_path_buf(),
                         editable: true,
@@ -215,7 +215,7 @@ impl Workspace {
         let Some(workspace_package) = self
             .packages
             .values()
-            .find(|workspace_package| workspace_package.root() == self.root())
+            .find(|workspace_package| workspace_package.root() == self.install_path())
         else {
             return vec![];
         };
@@ -244,13 +244,13 @@ impl Workspace {
 
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
-    pub fn root(&self) -> &PathBuf {
-        &self.root
+    pub fn install_path(&self) -> &PathBuf {
+        &self.install_path
     }
 
     /// The path to the workspace virtual environment.
     pub fn venv(&self) -> PathBuf {
-        self.root.join(".venv")
+        self.install_path.join(".venv")
     }
 
     /// The members of the workspace.
@@ -386,7 +386,7 @@ impl Workspace {
         check_nested_workspaces(&workspace_root, stop_discovery_at);
 
         Ok(Workspace {
-            root: workspace_root,
+            install_path: workspace_root,
             packages: workspace_members,
             sources: workspace_sources,
         })
@@ -668,7 +668,7 @@ impl ProjectWorkspace {
                 project_root: project_path.clone(),
                 project_name: project.name.clone(),
                 workspace: Workspace {
-                    root: project_path.clone(),
+                    install_path: project_path.clone(),
                     packages: current_project_as_members,
                     // There may be package sources, but we don't need to duplicate them into the
                     // workspace sources.
@@ -1031,7 +1031,7 @@ mod tests {
           "project_root": "[ROOT]/albatross-in-example/examples/bird-feeder",
           "project_name": "bird-feeder",
           "workspace": {
-            "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
+            "install_path": "[ROOT]/albatross-in-example/examples/bird-feeder",
             "packages": {
               "bird-feeder": {
                 "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
@@ -1066,7 +1066,7 @@ mod tests {
               "project_root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
               "project_name": "bird-feeder",
               "workspace": {
-                "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
+                "install_path": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
                 "packages": {
                   "bird-feeder": {
                     "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
@@ -1100,7 +1100,7 @@ mod tests {
               "project_root": "[ROOT]/albatross-root-workspace",
               "project_name": "albatross",
               "workspace": {
-                "root": "[ROOT]/albatross-root-workspace",
+                "install_path": "[ROOT]/albatross-root-workspace",
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-root-workspace",
@@ -1158,7 +1158,7 @@ mod tests {
               "project_root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
               "project_name": "albatross",
               "workspace": {
-                "root": "[ROOT]/albatross-virtual-workspace",
+                "install_path": "[ROOT]/albatross-virtual-workspace",
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
@@ -1210,7 +1210,7 @@ mod tests {
               "project_root": "[ROOT]/albatross-just-project",
               "project_name": "albatross",
               "workspace": {
-                "root": "[ROOT]/albatross-just-project",
+                "install_path": "[ROOT]/albatross-just-project",
                 "packages": {
                   "albatross": {
                     "root": "[ROOT]/albatross-just-project",

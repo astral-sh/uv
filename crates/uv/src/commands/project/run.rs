@@ -145,12 +145,12 @@ pub(crate) async fn run(
             if let Some(project_name) = project.project_name() {
                 debug!(
                     "Discovered project `{project_name}` at: {}",
-                    project.workspace().root().display()
+                    project.workspace().install_path().display()
                 );
             } else {
                 debug!(
                     "Discovered virtual workspace at: {}",
-                    project.workspace().root().display()
+                    project.workspace().install_path().display()
                 );
             }
 

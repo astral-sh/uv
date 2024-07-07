@@ -237,7 +237,7 @@ pub(super) async fn do_lock(
     // Write the lockfile to disk.
     let lock = Lock::from_resolution_graph(&resolution)?;
     let encoded = lock.to_toml()?;
-    fs_err::tokio::write(workspace.root().join("uv.lock"), encoded.as_bytes()).await?;
+    fs_err::tokio::write(workspace.install_path().join("uv.lock"), encoded.as_bytes()).await?;
 
     Ok(lock)
 }

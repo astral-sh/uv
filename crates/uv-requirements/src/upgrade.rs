@@ -71,7 +71,7 @@ pub async fn read_lockfile(workspace: &Workspace, upgrade: &Upgrade) -> Result<L
     }
 
     // If an existing lockfile exists, build up a set of preferences.
-    let lockfile = workspace.root().join("uv.lock");
+    let lockfile = workspace.install_path().join("uv.lock");
     let lock = match fs_err::tokio::read_to_string(&lockfile).await {
         Ok(encoded) => match toml::from_str::<Lock>(&encoded) {
             Ok(lock) => lock,
