@@ -180,7 +180,7 @@ impl FoundInterpreter {
             .connectivity(connectivity)
             .native_tls(native_tls);
 
-        let reporter = DownloadReporter::new(printer, 1);
+        let reporter = DownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment
         let interpreter = PythonInstallation::find_or_fetch(

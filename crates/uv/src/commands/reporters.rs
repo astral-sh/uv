@@ -11,7 +11,7 @@ use distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
-use uv_python::installation::PythonInstallationKey;
+use uv_python::PythonInstallationKey;
 
 use crate::printer::Printer;
 
@@ -24,9 +24,9 @@ struct ProgressReporter {
 
 #[derive(Debug)]
 enum ProgressMode {
-    // Reports top-level progress.
+    /// Reports top-level progress.
     Single,
-    // Reports progress of all concurrent download/build/checkout processes.
+    /// Reports progress of all concurrent download/build/checkout processes.
     Multi {
         multi_progress: MultiProgress,
         state: Arc<Mutex<BarState>>,
@@ -35,18 +35,18 @@ enum ProgressMode {
 
 #[derive(Default, Debug)]
 struct BarState {
-    // The number of bars that precede any download bars (i.e. build/checkout status).
+    /// The number of bars that precede any download bars (i.e. build/checkout status).
     headers: usize,
-    // A list of download bar sizes, in descending order.
+    /// A list of download bar sizes, in descending order.
     sizes: Vec<u64>,
-    // A map of progress bars, by ID.
+    /// A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
-    // A monotonic counter for bar IDs.
+    /// A monotonic counter for bar IDs.
     id: usize,
 }
 
 impl BarState {
-    // Returns a unique ID for a new bar.
+    /// Returns a unique ID for a new progress bar.
     fn id(&mut self) -> usize {
         self.id += 1;
         self.id
@@ -450,6 +450,12 @@ pub(crate) struct DownloadReporter {
 }
 
 impl DownloadReporter {
+    /// Initialize a [`DownloadReporter`] for a single download.
+    pub(crate) fn single(printer: Printer) -> Self {
+        Self::new(printer, 1)
+    }
+
+    /// Initialize a [`DownloadReporter`] for multiple downloads.
     pub(crate) fn new(printer: Printer, length: u64) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
         let root = multi_progress.add(ProgressBar::with_draw_target(
@@ -475,8 +481,13 @@ impl uv_python::downloads::Reporter for DownloadReporter {
 
         if self.multiple {
             self.reporter.root.inc(1);
-            if self.reporter.root.position() == self.reporter.root.length().unwrap_or_default() {
-                self.on_download_complete();
+            if self
+                .reporter
+                .root
+                .length()
+                .is_some_and(|len| self.reporter.root.position() == len)
+            {
+                self.reporter.root.finish_and_clear();
             }
         }
     }

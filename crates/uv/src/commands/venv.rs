@@ -132,7 +132,7 @@ async fn venv_impl(
 
     let client_builder_clone = client_builder.clone();
 
-    let reporter = DownloadReporter::new(printer, 1);
+    let reporter = DownloadReporter::single(printer);
 
     let mut interpreter_request = python_request.map(PythonRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {

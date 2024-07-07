@@ -56,7 +56,7 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let reporter = DownloadReporter::new(printer, 1);
+    let reporter = DownloadReporter::single(printer);
 
     let python_request = python.as_deref().map(PythonRequest::parse);
 
