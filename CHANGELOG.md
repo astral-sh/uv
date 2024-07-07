@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.22
+
+### CLI
+
+- Add `--exclude-newer` to installer arguments ([#4785](https://github.com/astral-sh/uv/pull/4785))
+- Bold durations in CLI messages ([#4818](https://github.com/astral-sh/uv/pull/4818))
+- Drop crate description from the `uv` help menu ([#4773](https://github.com/astral-sh/uv/pull/4773))
+- Update "about" in help menu ([#4782](https://github.com/astral-sh/uv/pull/4782))
+
+### Configuration
+
+- Add `UV_OVERRIDE` environment variable for `--override` ([#4836](https://github.com/astral-sh/uv/pull/4836))
+
+### Bug fixes
+
+- Always use release-only comparisons for `requires-python` ([#4794](https://github.com/astral-sh/uv/pull/4794))
+- Avoid hangs before exiting CLI ([#4793](https://github.com/astral-sh/uv/pull/4793))
+- Preserve verbatim URLs for `--find-links` ([#4838](https://github.com/astral-sh/uv/pull/4838))
+
 ## 0.2.21
 
 - Fix issue where standalone installer failed to due missing `uvx.exe` binary on Windows ([#4756](https://github.com/astral-sh/uv/pull/4756))
@@ -356,7 +375,7 @@ requested version, skipping interpreters that are broken or do not satisfy the r
 
 Additionally, uv now allows requests for interpreter implementations such as `pypy` and `cpython`. For example,
 the request `--python cpython` will ignore a `python` executable that's implemented by `pypy`. These requests may
-also include a version, e.g., `--python pypy@3.10`. By default, uv will accept _any_ interpreter implementation.
+also include a version, e.g., `--python pypy@3.10`. By default, uv will accept *any* interpreter implementation.
 
 In summary, the following Python interpreter requests are now allowed:
 
@@ -374,7 +393,7 @@ To align the user expectations, uv now respects the interpreter that starts it. 
 now prefer the `python` interpreter that was used to start uv instead of searching for a virtual environment.
 
 We now check if discovered interpreters are virtual environments. This means that setting `VIRTUAL_ENV` to a Python
-installation directory that is _not_ a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
+installation directory that is *not* a virtual environment will no longer work. Instead, use `--system` or `--python <path>`
 to request the interpreter.
 
 ### Enhancements
