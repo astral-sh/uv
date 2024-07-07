@@ -469,10 +469,12 @@ impl ManagedPythonDownload {
             Err(err) => return Err(Error::ExtractError(filename.to_string(), err)),
         };
 
-        // Persist it to the target
-        if installation_has_build_info(&extracted) {
+        // If the distribution is a `full` archive, the Python installation is in the `install` directory.
+        if extracted.join("install").is_dir() {
             extracted = extracted.join("install");
         }
+
+        // Persist it to the target
         debug!("Moving {} to {}", extracted.display(), path.user_display());
         rename_with_retry(extracted, &path)
             .await
@@ -510,19 +512,4 @@ impl Display for ManagedPythonDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.key)
     }
-}
-
-fn installation_has_build_info(p: &Path) -> bool {
-    let mut has_install = false;
-    let mut has_build = false;
-    if let Ok(dir) = p.read_dir() {
-        for entry in dir.flatten() {
-            match entry.file_name().to_str() {
-                Some("install") => has_install = true,
-                Some("build") => has_build = true,
-                _ => {}
-            }
-        }
-    }
-    has_install && has_build
 }

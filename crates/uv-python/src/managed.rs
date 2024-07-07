@@ -252,11 +252,20 @@ impl ManagedPythonInstallation {
     /// The path to this toolchain's Python executable.
     pub fn executable(&self) -> PathBuf {
         if cfg!(windows) {
-            self.path.join("python.exe")
+            self.python_dir().join("python.exe")
         } else if cfg!(unix) {
-            self.path.join("bin").join("python3")
+            self.python_dir().join("bin").join("python3")
         } else {
             unimplemented!("Only Windows and Unix systems are supported.")
+        }
+    }
+
+    fn python_dir(&self) -> PathBuf {
+        let install = self.path.join("install");
+        if install.is_dir() {
+            install
+        } else {
+            self.path.clone()
         }
     }
 
@@ -307,9 +316,9 @@ impl ManagedPythonInstallation {
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
         // Construct the path to the `stdlib` directory.
         let stdlib = if cfg!(windows) {
-            self.path.join("Lib")
+            self.python_dir().join("Lib")
         } else {
-            self.path
+            self.python_dir()
                 .join("lib")
                 .join(format!("python{}", self.key.version().python_version()))
         };
