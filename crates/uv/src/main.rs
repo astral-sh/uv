@@ -136,7 +136,7 @@ async fn run() -> Result<ExitStatus> {
     } else if cli.global_args.isolated {
         None
     } else if let Ok(project) = Workspace::discover(&env::current_dir()?, None).await {
-        let project = uv_settings::FilesystemOptions::from_directory(project.root())?;
+        let project = uv_settings::FilesystemOptions::from_directory(project.install_path())?;
         let user = uv_settings::FilesystemOptions::user()?;
         project.combine(user)
     } else {

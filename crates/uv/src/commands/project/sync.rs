@@ -56,7 +56,8 @@ pub(crate) async fn sync(
     // Read the lockfile.
     let lock: Lock = {
         let encoded =
-            fs_err::tokio::read_to_string(project.workspace().root().join("uv.lock")).await?;
+            fs_err::tokio::read_to_string(project.workspace().install_path().join("uv.lock"))
+                .await?;
         toml::from_str(&encoded)?
     };
 
