@@ -288,7 +288,7 @@ fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
 
     // e.g. ignore `git+https://github.com/uv/uv.git@main`
     if PackageName::from_str(name).is_err() {
-        debug!("Ignoring non-package name `{}` in command", name);
+        debug!("Ignoring non-package name `{name}` in command");
         return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
     }
 
@@ -301,6 +301,6 @@ fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
     }
 
     // e.g. `uv@invalid`, warn and treat the whole thing as the command
-    debug!("Ignoring invalid version request `{}` in command", version);
+    debug!("Ignoring invalid version request `{version}` in command");
     Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)))
 }
