@@ -715,7 +715,10 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::ToolListSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::tool_list(globals.preview, printer).await
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::tool_list(globals.preview, &cache, printer).await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Uninstall(args),
