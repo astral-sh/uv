@@ -445,47 +445,46 @@ impl uv_installer::InstallReporter for InstallReporter {
 
 #[derive(Debug)]
 pub(crate) struct DownloadReporter {
-    length: u64,
     reporter: ProgressReporter,
+    multiple: bool,
 }
 
 impl DownloadReporter {
-    #[must_use]
-    pub(crate) fn with_length(mut self, length: u64) -> Self {
-        self.length = length;
-        self
-    }
-}
-
-impl From<Printer> for DownloadReporter {
-    fn from(printer: Printer) -> Self {
+    pub(crate) fn new(printer: Printer, length: u64) -> Self {
         let multi_progress = MultiProgress::with_draw_target(printer.target());
-        let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
+        let root = multi_progress.add(ProgressBar::with_draw_target(
+            Some(length),
+            printer.target(),
+        ));
         root.set_style(
             ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
         );
 
         let reporter = ProgressReporter::new(root, multi_progress, printer);
+
         Self {
-            length: 0,
             reporter,
+            multiple: length > 1,
         }
     }
 }
 
 impl uv_python::downloads::Reporter for DownloadReporter {
     fn on_progress(&self, _name: &PythonInstallationKey, id: usize) {
-        self.reporter.root.inc(1);
         self.reporter.on_download_complete(id);
 
-        if self.reporter.root.position() == self.reporter.root.length().unwrap_or_default() {
-            self.on_download_complete();
+        if self.multiple {
+            self.reporter.root.inc(1);
+            if self.reporter.root.position() == self.reporter.root.length().unwrap_or_default() {
+                self.on_download_complete();
+            }
         }
     }
 
     fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize {
-        self.reporter.root.set_length(self.length);
-        self.reporter.root.set_message("Downloading Python...");
+        if self.multiple {
+            self.reporter.root.set_message("Downloading Python...");
+        }
         self.reporter.on_download_start(name.to_string(), size)
     }
 

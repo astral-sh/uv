@@ -129,7 +129,7 @@ pub(crate) async fn install(
         .native_tls(native_tls)
         .build();
 
-    let reporter = DownloadReporter::from(printer).with_length(downloads.len() as u64);
+    let reporter = DownloadReporter::new(printer, downloads.len() as u64);
 
     let results = futures::stream::iter(downloads.iter())
         .map(|download| async {

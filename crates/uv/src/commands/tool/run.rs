@@ -155,7 +155,7 @@ async fn get_or_create_environment(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let reporter = DownloadReporter::from(printer).with_length(1);
+    let reporter = DownloadReporter::new(printer, 1);
 
     let python_request = python.map(PythonRequest::parse);
 

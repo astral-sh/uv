@@ -56,7 +56,7 @@ pub(crate) async fn run(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    let reporter = DownloadReporter::from(printer).with_length(1);
+    let reporter = DownloadReporter::new(printer, 1);
 
     // Determine whether the command to execute is a PEP 723 script.
     let script_interpreter = if let RunCommand::Python(target, _) = &command {
