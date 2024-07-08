@@ -472,6 +472,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv tree` command with options shared across scenarios.
+    pub fn tree(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("tree");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv clean` command.
     pub fn clean(&self) -> Command {
         let mut command = Command::new(get_bin());

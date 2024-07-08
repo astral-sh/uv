@@ -974,6 +974,33 @@ async fn run_project(
             )
             .await
         }
+        ProjectCommand::Tree(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::TreeSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::tree(
+                args.depth,
+                args.prune,
+                args.package,
+                args.no_dedupe,
+                args.invert,
+                args.python,
+                args.resolver,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
     }
 }
 
