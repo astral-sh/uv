@@ -54,16 +54,16 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
         return false;
     };
 
-    // distinct string expressions are not disjoint
+    // Distinct string expressions are not disjoint.
     if key != key2 {
         return false;
     }
 
     match (operator, operator2) {
-        // the only disjoint expressions involving strict inequality are `key != value` and `key == value`
+        // The only disjoint expressions involving strict inequality are `key != value` and `key == value`.
         (NotEqual, Equal) | (Equal, NotEqual) => return value == value2,
         (NotEqual, _) | (_, NotEqual) => return false,
-        // similarly for `in` and `not in`
+        // Similarly for `in` and `not in`.
         (In, NotIn) | (NotIn, In) => return value == value2,
         (In | NotIn, _) | (_, In | NotIn) => return false,
         _ => {}
@@ -72,7 +72,7 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
     let bounds = string_bounds(value, operator);
     let bounds2 = string_bounds(value2, operator2);
 
-    // make sure the ranges do not intersection
+    // Make sure the ranges do not intersect.
     if range_exists::<&str>(&bounds2.start_bound(), &bounds.end_bound())
         && range_exists::<&str>(&bounds.start_bound(), &bounds2.end_bound())
     {
@@ -288,7 +288,12 @@ pub(crate) fn filter_all(tree: &mut MarkerTree) {
     }
 }
 
-// Collect all expressions from a tree.
+/// Collects all direct leaf expressions from a list of marker trees.
+///
+/// The expressions that are directly present within a conjunction or disjunction
+/// can be used to filter out redundant expressions recursively in sibling trees. Importantly,
+/// this function only returns expressions present at the top-level and does not search
+/// recursively.
 fn collect_expressions(trees: &[MarkerTree]) -> Vec<MarkerExpression> {
     trees
         .iter()
@@ -299,7 +304,11 @@ fn collect_expressions(trees: &[MarkerTree]) -> Vec<MarkerExpression> {
         .collect()
 }
 
-// Filters out matching expressions from any nested disjunctions.
+/// Filters out the given expression recursively from any disjunctions in a marker tree.
+///
+/// If a given expression is directly present in an outer disjunction, the tree can be satisfied
+/// by the singular expression and thus we can filter it out from any disjunctions in sibling trees.
+/// For example, `a or (b or a)` can be simplified to `a or b`.
 fn filter_disjunct_exprs(tree: &mut MarkerTree, disjunct: &MarkerExpression) {
     match tree {
         MarkerTree::Or(trees) => {
@@ -311,6 +320,7 @@ fn filter_disjunct_exprs(tree: &mut MarkerTree, disjunct: &MarkerExpression) {
                 }
             });
         }
+
         MarkerTree::And(trees) => {
             for tree in trees {
                 filter_disjunct_exprs(tree, disjunct);
@@ -321,7 +331,11 @@ fn filter_disjunct_exprs(tree: &mut MarkerTree, disjunct: &MarkerExpression) {
     }
 }
 
-// Filters out matching expressions from any nested conjunctions.
+/// Filters out the given expression recursively from any conjunctions in a marker tree.
+///
+/// If a given expression is directly present in an outer conjunction, we can assume it is
+/// true in all sibling trees and thus filter it out from any nested conjunctions. For example,
+/// `a and (b and a)` can be simplified to `a and b`.
 fn filter_conjunct_exprs(tree: &mut MarkerTree, conjunct: &MarkerExpression) {
     match tree {
         MarkerTree::And(trees) => {
@@ -333,18 +347,24 @@ fn filter_conjunct_exprs(tree: &mut MarkerTree, conjunct: &MarkerExpression) {
                 }
             });
         }
+
         MarkerTree::Or(trees) => {
             for tree in trees {
                 filter_conjunct_exprs(tree, conjunct);
             }
         }
+
         MarkerTree::Expression(_) => {}
     }
 }
 
-// Filters out disjunctions that contain the given expression.
-//
-// Returns `true` if the outer tree should be removed.
+/// Filters out disjunctions recursively from a marker tree that contain the given expression.
+///
+/// If a given expression is directly present in an outer conjunction, we can assume it is
+/// true in all sibling trees and thus filter out any disjunctions that contain it. For example,
+/// `a and (b or a)` can be simplified to `a`.
+///
+/// Returns `true` if the outer tree should be removed.
 fn filter_disjunctions(tree: &mut MarkerTree, conjunct: &MarkerExpression) -> bool {
     let disjunction = match tree {
         MarkerTree::Or(trees) => trees,
@@ -380,9 +400,13 @@ fn filter_disjunctions(tree: &mut MarkerTree, conjunct: &MarkerExpression) -> bo
     false
 }
 
-// Filters out conjunctions that contain the given expression.
-//
-// Returns `true` if the outer tree should be removed.
+/// Filters out conjunctions recursively from a marker tree that contain the given expression.
+///
+/// If a given expression is directly present in an outer disjunction, the tree can be satisfied
+/// by the singular expression and thus we can filter out any conjunctions in sibling trees that
+/// contain it. For example, `a or (b and a)` can be simplified to `a`.
+///
+/// Returns `true` if the outer tree should be removed.
 fn filter_conjunctions(tree: &mut MarkerTree, disjunct: &MarkerExpression) -> bool {
     let conjunction = match tree {
         MarkerTree::And(trees) => trees,
@@ -418,7 +442,7 @@ fn filter_conjunctions(tree: &mut MarkerTree, disjunct: &MarkerExpression) -> bo
     false
 }
 
-// Simplify version expressions.
+/// Simplify version expressions.
 fn simplify_ranges(
     reduced: &mut Vec<MarkerTree>,
     versions: HashMap<MarkerValueVersion, Vec<PubGrubRange<Version>>>,
