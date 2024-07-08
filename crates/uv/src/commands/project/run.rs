@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
+use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -13,6 +15,7 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::{VirtualProject, Workspace, WorkspaceError};
+use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -63,7 +66,11 @@ pub(crate) async fn run(
     // Determine whether the command to execute is a PEP 723 script.
     let script_interpreter = if let RunCommand::Python(target, _) = &command {
         if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
-            debug!("Found PEP 723 script at: {}", target.display());
+            writeln!(
+                printer.stderr(),
+                "Reading inline script metadata from: {}",
+                target.user_display().cyan()
+            )?;
 
             // (1) Explicit request from user
             let python_request = if let Some(request) = python.as_deref() {

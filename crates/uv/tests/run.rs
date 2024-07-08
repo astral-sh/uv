@@ -225,16 +225,17 @@ fn run_script() -> Result<()> {
 
     // Running the script should install the requirements.
     uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Prepared 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + iniconfig==2.0.0
-        "###);
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
 
     // Running again should use the existing environment.
     uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
@@ -243,6 +244,7 @@ fn run_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Reading inline script metadata from: main.py
     Resolved 1 package in [TIME]
     "###);
 
