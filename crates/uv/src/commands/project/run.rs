@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use itertools::Itertools;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -12,6 +13,7 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::{VirtualProject, Workspace, WorkspaceError};
+use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
@@ -236,11 +238,65 @@ pub(crate) async fn run(
         );
     }
 
+    // Read the `--with` requirements.
+    let spec = if requirements.is_empty() {
+        None
+    } else {
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+
+        let spec =
+            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+
+        Some(spec)
+    };
+
+    // Determine whether the base environment satisfies the ephemeral requirements. If we don't have
+    // any `--with` requirements, and we already have a base environment, then there's no need to
+    // create an additional environment.
+    let skip_ephemeral = base_interpreter.as_ref().is_some_and(|base_interpreter| {
+        let Some(spec) = spec.as_ref() else {
+            return true;
+        };
+
+        let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
+            return false;
+        };
+
+        if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
+            return false;
+        }
+
+        match site_packages.satisfies(&spec.requirements, &spec.constraints) {
+            // If the requirements are already satisfied, we're done.
+            Ok(SatisfiesResult::Fresh {
+                recursive_requirements,
+            }) => {
+                debug!(
+                    "Base environment satisfies requirements: {}",
+                    recursive_requirements
+                        .iter()
+                        .map(|entry| entry.requirement.to_string())
+                        .sorted()
+                        .join(" | ")
+                );
+                true
+            }
+            Ok(SatisfiesResult::Unsatisfied(requirement)) => {
+                debug!("At least one requirement is not satisfied in the base environment: {requirement}");
+                false
+            }
+            Err(err) => {
+                debug!("Failed to check requirements against base environment: {err}");
+                false
+            }
+        }
+    });
+
     // If necessary, create an environment for the ephemeral requirements or command.
     let temp_dir;
-    let ephemeral_env = if requirements.is_empty() && base_interpreter.is_some() {
-        // If we don't have any `--with` requirements, and we already have a base environment, then
-        // there's no need to create an additional environment.
+    let ephemeral_env = if skip_ephemeral {
         None
     } else {
         debug!("Creating ephemeral environment");
@@ -351,8 +407,7 @@ pub(crate) async fn run(
                     .as_ref()
                     .map(Interpreter::site_packages)
                     .into_iter()
-                    .flatten()
-                    .map(Cow::Borrowed),
+                    .flatten(),
             )
             .map(PathBuf::from)
             .chain(
