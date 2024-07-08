@@ -136,15 +136,13 @@ pub(crate) async fn pip_install(
             "Using `--target` directory at {}",
             target.root().user_display()
         );
-        target.init()?;
-        environment.with_target(target)
+        environment.with_target(target)?
     } else if let Some(prefix) = prefix {
         debug!(
             "Using `--prefix` directory at {}",
             prefix.root().user_display()
         );
-        prefix.init()?;
-        environment.with_prefix(prefix)
+        environment.with_prefix(prefix)?
     } else {
         environment
     };

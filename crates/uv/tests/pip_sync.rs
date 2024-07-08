@@ -5104,10 +5104,6 @@ fn target_no_build_isolation() -> Result<()> {
 
 /// Sync to a `--prefix` directory.
 #[test]
-#[cfg_attr(
-    target_os = "macos",
-    ignore = "On macOS, we fail to reflink due to a non-existent site-packages directory"
-)]
 fn prefix() -> Result<()> {
     let context = TestContext::new("3.12");
 

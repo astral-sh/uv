@@ -124,21 +124,21 @@ impl Interpreter {
     }
 
     /// Return a new [`Interpreter`] to install into the given `--target` directory.
-    #[must_use]
-    pub fn with_target(self, target: Target) -> Self {
-        Self {
+    pub fn with_target(self, target: Target) -> io::Result<Self> {
+        target.init()?;
+        Ok(Self {
             target: Some(target),
             ..self
-        }
+        })
     }
 
     /// Return a new [`Interpreter`] to install into the given `--prefix` directory.
-    #[must_use]
-    pub fn with_prefix(self, prefix: Prefix) -> Self {
-        Self {
+    pub fn with_prefix(self, prefix: Prefix) -> io::Result<Self> {
+        prefix.init(self.virtualenv())?;
+        Ok(Self {
             prefix: Some(prefix),
             ..self
-        }
+        })
     }
 
     /// Return the [`Interpreter`] for the base executable, if it's available.
