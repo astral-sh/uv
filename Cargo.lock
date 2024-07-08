@@ -275,13 +275,15 @@ checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
 name = "axoasset"
-version = "0.9.5"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83394fb98d130ef5a4713d26dccc1bb25c66e1d58f351fed710af62c57abb8fa"
+checksum = "45e7b7ac1c1cd4fdcaa2f9e704defa9defd996039083d85e17efa5e8eefb3bd2"
 dependencies = [
  "camino",
+ "image",
  "miette",
  "mime",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror",
@@ -313,9 +315,9 @@ dependencies = [
 
 [[package]]
 name = "axoupdater"
-version = "0.6.6"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cc5997cf9d00fa790ba6f19688d93b89760bd641d1c2482bcfbc2bf56988576"
+checksum = "d51e87c9280d6f722419f783fdcef745dffd6b45d38d665380ae6b7f237d3b74"
 dependencies = [
  "axoasset",
  "axoprocess",
@@ -323,7 +325,6 @@ dependencies = [
  "camino",
  "homedir",
  "miette",
- "reqwest",
  "serde",
  "tempfile",
  "thiserror",
@@ -1756,6 +1757,17 @@ dependencies = [
  "same-file",
  "walkdir",
  "winapi-util",
+]
+
+[[package]]
+name = "image"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd54d660e773627692c524beaad361aca785a4f9f5730ce91f42aabe5bce3d11"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "num-traits",
 ]
 
 [[package]]
