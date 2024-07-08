@@ -258,12 +258,12 @@ pub(crate) fn filter_all(tree: &mut MarkerTree) {
             }
 
             for conjunct in collect_expressions(trees) {
-                // Filter out redundant disjunctions.
+                // Filter out redundant disjunctions (by the Absorption Law).
                 trees.retain_mut(|tree| !filter_disjunctions(tree, &conjunct));
 
-                // Filter out redundant conjunctions.
+                // Filter out redundant expressions in this conjunction.
                 for tree in &mut *trees {
-                    filter_conjuncts(tree, &conjunct);
+                    filter_conjunct_exprs(tree, &conjunct);
                 }
             }
         }
@@ -274,12 +274,12 @@ pub(crate) fn filter_all(tree: &mut MarkerTree) {
             }
 
             for disjunct in collect_expressions(trees) {
-                // Filter out redundant conjunctions.
+                // Filter out redundant conjunctions (by the Absorption Law).
                 trees.retain_mut(|tree| !filter_conjunctions(tree, &disjunct));
 
-                // Filter out redundant disjunctions.
+                // Filter out redundant expressions in this disjunction.
                 for tree in &mut *trees {
-                    filter_disjuncts(tree, &disjunct);
+                    filter_disjunct_exprs(tree, &disjunct);
                 }
             }
         }
@@ -300,20 +300,20 @@ fn collect_expressions(trees: &[MarkerTree]) -> Vec<MarkerExpression> {
 }
 
 // Filters out matching expressions from any nested disjunctions.
-fn filter_disjuncts(tree: &mut MarkerTree, disjunct: &MarkerExpression) {
+fn filter_disjunct_exprs(tree: &mut MarkerTree, disjunct: &MarkerExpression) {
     match tree {
         MarkerTree::Or(trees) => {
             trees.retain_mut(|tree| match tree {
                 MarkerTree::Expression(expr) => expr != disjunct,
                 _ => {
-                    filter_disjuncts(tree, disjunct);
+                    filter_disjunct_exprs(tree, disjunct);
                     true
                 }
             });
         }
         MarkerTree::And(trees) => {
             for tree in trees {
-                filter_disjuncts(tree, disjunct);
+                filter_disjunct_exprs(tree, disjunct);
             }
         }
 
@@ -322,27 +322,27 @@ fn filter_disjuncts(tree: &mut MarkerTree, disjunct: &MarkerExpression) {
 }
 
 // Filters out matching expressions from any nested conjunctions.
-fn filter_conjuncts(tree: &mut MarkerTree, conjunct: &MarkerExpression) {
+fn filter_conjunct_exprs(tree: &mut MarkerTree, conjunct: &MarkerExpression) {
     match tree {
         MarkerTree::And(trees) => {
             trees.retain_mut(|tree| match tree {
                 MarkerTree::Expression(expr) => expr != conjunct,
                 _ => {
-                    filter_conjuncts(tree, conjunct);
+                    filter_conjunct_exprs(tree, conjunct);
                     true
                 }
             });
         }
         MarkerTree::Or(trees) => {
             for tree in trees {
-                filter_conjuncts(tree, conjunct);
+                filter_conjunct_exprs(tree, conjunct);
             }
         }
         MarkerTree::Expression(_) => {}
     }
 }
 
-// Filters out disjunctions that contain the given expression which appears in an outer conjunction.
+// Filters out disjunctions that contain the given expression.
 //
 // Returns `true` if the outer tree should be removed.
 fn filter_disjunctions(tree: &mut MarkerTree, conjunct: &MarkerExpression) -> bool {
@@ -380,7 +380,7 @@ fn filter_disjunctions(tree: &mut MarkerTree, conjunct: &MarkerExpression) -> bo
     false
 }
 
-// Filters out conjunctions that contain the given expression which appears in an outer disjunction.
+// Filters out conjunctions that contain the given expression.
 //
 // Returns `true` if the outer tree should be removed.
 fn filter_conjunctions(tree: &mut MarkerTree, disjunct: &MarkerExpression) -> bool {
