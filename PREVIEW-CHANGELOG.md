@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.23
+
+### Preview features
+
+- Avoid creating cache directories in tool directory ([#4868](https://github.com/astral-sh/uv/pull/4868))
+- Add progress bar when downloading python ([#4840](https://github.com/astral-sh/uv/pull/4840))
+- Add some decoration to tool CLI ([#4865](https://github.com/astral-sh/uv/pull/4865))
+- Add some text decoration to toolchain CLI ([#4882](https://github.com/astral-sh/uv/pull/4882))
+- Add user-facing output to indicate PEP 723 script ([#4881](https://github.com/astral-sh/uv/pull/4881))
+- Ensure Pythons are aligned in `uv python list` ([#4884](https://github.com/astral-sh/uv/pull/4884))
+- Fix always-plural message in uv python install ([#4866](https://github.com/astral-sh/uv/pull/4866))
+- Skip installing `--with` requirements if present in base environment ([#4879](https://github.com/astral-sh/uv/pull/4879))
+- Sort dependencies before wheels and source distributions ([#4897](https://github.com/astral-sh/uv/pull/4897))
+- Improve logging during resolver forking ([#4894](https://github.com/astral-sh/uv/pull/4894))
+
 ## 0.2.22
 
 ### Preview features
@@ -33,6 +48,7 @@
 ## 0.2.20
 
 <!-- No changes -->
+
 
 ## 0.2.19
 

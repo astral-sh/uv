@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.23
+
+### Enhancements
+
+- Update Windows trampoline binaries ([#4864](https://github.com/astral-sh/uv/pull/4864))
+- Show user-facing warning when falling back to copy installs ([#4880](https://github.com/astral-sh/uv/pull/4880))
+
+### Bug fixes
+
+- Initialize all `--prefix` subdirectories ([#4895](https://github.com/astral-sh/uv/pull/4895))
+- Respect `requires-python` when prefetching ([#4900](https://github.com/astral-sh/uv/pull/4900))
+- Partially revert `Requires-Python` version narrowing ([#4902](https://github.com/astral-sh/uv/pull/4902))
+
 ## 0.2.22
 
 ### CLI
