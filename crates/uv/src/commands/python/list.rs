@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 
 use anyhow::Result;
+use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
@@ -107,6 +108,7 @@ pub(crate) async fn list(
 
     let mut seen_minor = HashSet::new();
     let mut seen_patch = HashSet::new();
+    let mut include = Vec::new();
     for (version, os, key, kind, path) in output.iter().rev() {
         // Only show the latest patch version for each download unless all were requested
         if !matches!(kind, Kind::System) {
@@ -125,10 +127,28 @@ pub(crate) async fn list(
                 }
             }
         }
+        include.push((key, path));
+    }
+
+    // Compute the width of the first column.
+    let width = include
+        .iter()
+        .fold(0usize, |acc, (key, _)| acc.max(key.to_string().len()));
+
+    for (key, path) in include {
+        let key = key.to_string();
         if let Some(path) = path {
-            writeln!(printer.stdout(), "{key}\t{}", path.user_display())?;
+            writeln!(
+                printer.stdout(),
+                "{key:width$}    {}",
+                path.user_display().cyan()
+            )?;
         } else {
-            writeln!(printer.stdout(), "{key}\t<download available>")?;
+            writeln!(
+                printer.stdout(),
+                "{key:width$}    {}",
+                "<download available>".dimmed()
+            )?;
         }
     }
 
