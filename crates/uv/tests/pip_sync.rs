@@ -5104,6 +5104,10 @@ fn target_no_build_isolation() -> Result<()> {
 
 /// Sync to a `--prefix` directory.
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "On macOS, we fail to reflink due to a non-existent site-packages directory"
+)]
 fn prefix() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -5111,10 +5115,12 @@ fn prefix() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
+    let prefix = context.temp_dir.child("prefix");
+
     uv_snapshot!(context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
-        .arg("prefix"), @r###"
+        .arg(prefix.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5149,7 +5155,7 @@ fn prefix() -> Result<()> {
     uv_snapshot!(context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
-        .arg("prefix"), @r###"
+        .arg(prefix.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -23,9 +23,10 @@ name = "install_wheel_rs"
 distribution-filename = { workspace = true }
 pep440_rs = { workspace = true }
 platform-tags = { workspace = true }
-uv-normalize = { workspace = true }
-uv-fs = { workspace = true }
 pypi-types = { workspace = true }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
+uv-warnings = { workspace = true }
 
 clap = { workspace = true, optional = true, features = ["derive"] }
 configparser = { workspace = true }

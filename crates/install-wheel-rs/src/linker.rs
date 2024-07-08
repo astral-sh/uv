@@ -16,6 +16,7 @@ use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use pypi_types::DirectUrl;
 use uv_normalize::PackageName;
+use uv_warnings::warn_user_once;
 
 use crate::script::{scripts_from_ini, Script};
 use crate::wheel::{
@@ -355,7 +356,8 @@ fn clone_recursive(
                             debug!(
                                 "Failed to clone `{}` to temporary location `{}`, attempting to copy files as a fallback",
                                 from.display(),
-                                tempfile.display());
+                                tempfile.display(),
+                            );
                             *attempt = Attempt::UseCopyFallback;
                             fs::copy(&from, &to)?;
                         }
@@ -401,6 +403,7 @@ fn clone_recursive(
             } else {
                 fs::copy(&from, &to)?;
             }
+            warn_user_once!("Failed to clone files; falling back to full copy. This may lead to degraded performance. If this is intentional, use `--link-mode=copy` to suppress this warning.\n\nhint: If the cache and target directories are on different filesystems, reflinking may not be supported.");
         }
     }
 
@@ -524,6 +527,7 @@ fn hardlink_wheel_files(
             }
             Attempt::UseCopyFallback => {
                 fs::copy(path, &out_path)?;
+                warn_user_once!("Failed to hardlink files; falling back to full copy. This may lead to degraded performance. If this is intentional, use `--link-mode=copy` to suppress this warning.\n\nhint: If the cache and target directories are on different filesystems, hardlinking may not be supported.");
             }
         }
 
