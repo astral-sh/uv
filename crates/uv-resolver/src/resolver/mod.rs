@@ -44,7 +44,7 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::error::ResolveError;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
-use crate::marker::{normalize, requires_python_marker};
+use crate::marker::requires_python_marker;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
@@ -578,8 +578,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
 
                                 forked_state.markers.and(fork.markers);
-                                forked_state.markers = normalize(forked_state.markers)
-                                    .unwrap_or(MarkerTree::And(Vec::new()));
+                                // forked_state.markers = normalize(forked_state.markers, forked_state.python_requirement)
+                                //     .unwrap_or(MarkerTree::And(Vec::new()));
 
                                 // If the fork contains a narrowed Python requirement, apply it.
                                 let python_requirement = requires_python_marker(
@@ -2484,7 +2484,7 @@ impl Dependencies {
         // are solved first. This decreases divergence between the forks, as dependencies that
         // satisfy a lower Python version will _also_ satisfy a higher Python version (while the
         // inverse is not true).
-        forks.sort_unstable_by_key(|fork| requires_python_marker(&fork.markers));
+        // forks.sort_unstable_by_key(|fork| requires_python_marker(&fork.markers));
 
         ForkedDependencies::Forked {
             forks,

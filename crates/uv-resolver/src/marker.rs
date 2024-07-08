@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
 
-use pubgrub::range::Range as PubGrubRange;
+use pubgrub::range::{Range as PubGrubRange, Range};
 
 use pep440_rs::{Operator, Version, VersionSpecifier};
 use pep508_rs::{
@@ -82,35 +82,41 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
     true
 }
 
-/// Returns the minimum Python version that can satisfy the [`MarkerTree`], if it's constrained.
-pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPythonBound> {
-    match tree {
-        MarkerTree::Expression(MarkerExpression::Version {
+pub(crate) fn python_range(expr: &MarkerExpression) -> Option<Range<Version>> {
+    match expr {
+        MarkerExpression::Version {
             key: MarkerValueVersion::PythonFullVersion,
             specifier,
-        }) => {
+        } => {
             // Simplify using PEP 440 semantics.
             let specifier = PubGrubSpecifier::from_pep440_specifier(specifier).ok()?;
 
-            // Convert to PubGrub range and perform a union.
-            let range = PubGrubRange::from(specifier);
-            let (lower, _) = range.iter().next()?;
-
-            // Extract the lower bound.
-            Some(RequiresPythonBound::new(lower.clone()))
+            // Convert to PubGrub.
+            Some(PubGrubRange::from(specifier))
         }
-        MarkerTree::Expression(MarkerExpression::Version {
+        MarkerExpression::Version {
             key: MarkerValueVersion::PythonVersion,
             specifier,
-        }) => {
+        } => {
             // Simplify using release-only semantics, since `python_version` is always `major.minor`.
             let specifier = PubGrubSpecifier::from_release_specifier(specifier).ok()?;
 
-            // Convert to PubGrub range and perform a union.
-            let range = PubGrubRange::from(specifier);
-            let (lower, _) = range.iter().next()?;
+            // Convert to PubGrub.
+            Some(PubGrubRange::from(specifier))
+        }
+        _ => None,
+    }
+}
+
+/// Returns the minimum Python version that can satisfy the [`MarkerTree`], if it's constrained.
+pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPythonBound> {
+    match tree {
+        MarkerTree::Expression(expr) => {
+            // Extract the supported Python range.
+            let range = python_range(expr)?;
 
             // Extract the lower bound.
+            let (lower, _) = range.iter().next()?;
             Some(RequiresPythonBound::new(lower.clone()))
         }
         MarkerTree::And(trees) => {
@@ -129,7 +135,6 @@ pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPython
             }
             min_version
         }
-        MarkerTree::Expression(_) => None,
     }
 }
 
@@ -137,34 +142,40 @@ pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPython
 ///
 /// This function does a number of operations to normalize a marker tree recursively:
 /// - Sort and flatten all nested expressions.
-/// - Simplify expressions. This includes combining overlapping version ranges and removing duplicate
-///   expressions.
+/// - Simplify expressions. This includes combining overlapping version ranges, removing duplicate
+///   expressions, and removing redundant expressions.
 /// - Normalize the order of version expressions to the form `<version key> <version op> <version>`
 ///   (i.e., not the reverse).
 ///
 /// This is useful in cases where creating conjunctions or disjunctions might occur in a non-deterministic
 /// order. This routine will attempt to erase the distinction created by such a construction.
-pub(crate) fn normalize(mut tree: MarkerTree) -> Option<MarkerTree> {
+pub(crate) fn normalize(
+    mut tree: MarkerTree,
+    bound: Option<&RequiresPythonBound>,
+) -> Option<MarkerTree> {
     // Filter out redundant expressions that show up before and after normalization.
     filter_all(&mut tree);
-    let mut tree = normalize_all(tree)?;
+    let mut tree = normalize_all(tree, bound)?;
     filter_all(&mut tree);
     Some(tree)
 }
 
 /// Normalize the marker tree recursively.
-pub(crate) fn normalize_all(tree: MarkerTree) -> Option<MarkerTree> {
+pub(crate) fn normalize_all(
+    tree: MarkerTree,
+    bound: Option<&RequiresPythonBound>,
+) -> Option<MarkerTree> {
     match tree {
         MarkerTree::And(trees) => {
             let mut reduced = Vec::new();
             let mut versions: HashMap<_, Vec<_>> = HashMap::new();
 
             for subtree in trees {
-                // Simplify nested expressions as much as possible first.
+                // Normalize nested expressions as much as possible first.
                 //
                 // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`),
                 // omit it.
-                let Some(subtree) = normalize_all(subtree) else {
+                let Some(subtree) = normalize_all(subtree, bound) else {
                     continue;
                 };
 
@@ -206,11 +217,11 @@ pub(crate) fn normalize_all(tree: MarkerTree) -> Option<MarkerTree> {
             let mut versions: HashMap<_, Vec<_>> = HashMap::new();
 
             for subtree in trees {
-                // Simplify nested expressions as much as possible first.
+                // Normalize nested expressions as much as possible first.
                 //
                 // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`),
                 // return `true`.
-                let subtree = normalize_all(subtree)?;
+                let subtree = normalize_all(subtree, bound)?;
 
                 match subtree {
                     MarkerTree::And(_) => reduced.push(subtree),
@@ -258,6 +269,19 @@ pub(crate) fn normalize_all(tree: MarkerTree) -> Option<MarkerTree> {
                 1 => Some(reduced.remove(0)),
                 _ => Some(MarkerTree::Or(reduced)),
             }
+        }
+
+        // If the marker is redundant given the supported Python range, remove it.
+        //
+        // For example, `python_version >= '3.7'` is redundant with `requires-python: '>=3.8'`.
+        MarkerTree::Expression(expr)
+            if bound.is_some_and(|bound| {
+                python_range(&expr).is_some_and(|supported_range| {
+                    Range::from(bound.clone()).subset_of(&supported_range)
+                })
+            }) =>
+        {
+            None
         }
 
         MarkerTree::Expression(ref expr) => {
@@ -681,8 +705,8 @@ mod tests {
     #[test]
     fn simplify() {
         assert_marker_equal(
-            "python_version == '3.1' or python_version == '3.1'",
-            "python_version == '3.1'",
+            "python_version == '3.9' or python_version == '3.9'",
+            "python_version == '3.9'",
         );
 
         assert_marker_equal(
@@ -824,6 +848,25 @@ mod tests {
         assert_normalizes_to(
             "python_version != '3.8' and python_version != '3.9'",
             "(python_version < '3.8' or python_version > '3.8') and (python_version < '3.9' or python_version > '3.9')",
+        );
+    }
+
+    #[test]
+    fn requires_python() {
+        assert_normalizes_out("python_version >= '3.8'");
+        assert_normalizes_out("python_version >= '3.8' or sys_platform == 'win32'");
+
+        assert_normalizes_to(
+            "python_version >= '3.8' and sys_platform == 'win32'",
+            "sys_platform == 'win32'",
+        );
+        assert_normalizes_to("python_version == '3.8'", "python_version == '3.8'");
+        assert_normalizes_to("python_version <= '3.10'", "python_version <= '3.10'");
+
+        // TODO(charlie): This looks wrong.
+        assert_normalizes_to(
+            "python_version != '3.8' and python_version < '3.10'",
+            "python_version < '3.8' and python_version < '3.10' and python_version > '3.8'",
         );
     }
 
@@ -987,8 +1030,9 @@ mod tests {
     }
 
     fn assert_marker_equal(one: impl AsRef<str>, two: impl AsRef<str>) {
+        let bound = RequiresPythonBound::new(Included(Version::new([3, 8])));
         let tree1 = MarkerTree::parse_reporter(one.as_ref(), &mut TracingReporter).unwrap();
-        let tree1 = normalize(tree1).unwrap();
+        let tree1 = normalize(tree1, Some(&bound)).unwrap();
         let tree2 = MarkerTree::parse_reporter(two.as_ref(), &mut TracingReporter).unwrap();
         assert_eq!(
             tree1.to_string(),
@@ -999,17 +1043,19 @@ mod tests {
     }
 
     fn assert_normalizes_to(before: impl AsRef<str>, after: impl AsRef<str>) {
+        let bound = RequiresPythonBound::new(Included(Version::new([3, 8])));
         let normalized = MarkerTree::parse_reporter(before.as_ref(), &mut TracingReporter)
             .unwrap()
             .clone();
-        let normalized = normalize(normalized).unwrap();
+        let normalized = normalize(normalized, Some(&bound)).unwrap();
         assert_eq!(normalized.to_string(), after.as_ref());
     }
 
     fn assert_normalizes_out(before: impl AsRef<str>) {
+        let bound = RequiresPythonBound::new(Included(Version::new([3, 8])));
         let normalized = MarkerTree::parse_reporter(before.as_ref(), &mut TracingReporter)
             .unwrap()
             .clone();
-        assert!(normalize(normalized).is_none());
+        assert!(normalize(normalized, Some(&bound)).is_none());
     }
 }

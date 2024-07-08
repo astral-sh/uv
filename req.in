@@ -1,2 +1,3 @@
-pylint
-sphinx
+#sphinx
+pylint ; python_version >= '3.5' and sys_platform == 'win32'
+#sphinxcontrib-applehelp==1.0.7

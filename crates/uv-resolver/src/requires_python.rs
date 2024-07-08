@@ -155,6 +155,10 @@ impl RequiresPython {
         self.bound.as_ref() == Bound::Unbounded
     }
 
+    pub fn bound(&self) -> &RequiresPythonBound {
+        &self.bound
+    }
+
     /// Returns this `Requires-Python` specifier as an equivalent marker
     /// expression utilizing the `python_version` marker field.
     ///
@@ -251,6 +255,16 @@ impl RequiresPythonBound {
             Bound::Excluded(version) => Bound::Excluded(version.only_release()),
             Bound::Unbounded => Bound::Unbounded,
         })
+    }
+}
+
+impl From<RequiresPythonBound> for Range<Version> {
+    fn from(value: RequiresPythonBound) -> Self {
+        match value.0 {
+            Bound::Included(version) => Range::higher_than(version),
+            Bound::Excluded(version) => Range::strictly_higher_than(version),
+            Bound::Unbounded => Range::full(),
+        }
     }
 }
 

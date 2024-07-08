@@ -12,7 +12,7 @@ use pep508_rs::MarkerTree;
 use uv_normalize::PackageName;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
-use crate::{marker, ResolutionGraph};
+use crate::{marker, RequiresPython, ResolutionGraph};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
@@ -148,7 +148,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         let petgraph = to_requirements_txt_graph(&self.resolution.petgraph);
 
         // Propagate markers across the graph.
-        let petgraph = propagate_markers(petgraph);
+        let petgraph = propagate_markers(petgraph, self.resolution.requires_python.as_ref());
 
         // Reduce the graph, such that all nodes for a single package are combined, regardless of
         // the extras.
@@ -348,7 +348,10 @@ fn to_requirements_txt_graph(graph: &ResolutionPetGraph) -> IntermediatePetGraph
 ///
 /// The graph is directed, so if any edge contains a marker, we need to propagate it to all
 /// downstream nodes.
-fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
+fn propagate_markers(
+    mut graph: IntermediatePetGraph,
+    requires_python: Option<&RequiresPython>,
+) -> IntermediatePetGraph {
     // Remove any cycles. By absorption, it should be fine to ignore cycles.
     //
     // Imagine a graph: `A -> B -> C -> A`. Assume that `A` has weight `1`, `B` has weight `2`,
@@ -406,7 +409,9 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
         }
 
         if let DisplayResolutionGraphNode::Dist(node) = &mut graph[index] {
-            node.markers = marker_tree.and_then(marker::normalize);
+            node.markers = marker_tree.and_then(|marker| {
+                marker::normalize(marker, requires_python.map(RequiresPython::bound))
+            });
         };
     }
 
