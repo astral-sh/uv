@@ -136,18 +136,20 @@ pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPython
 /// Normalizes this marker tree.
 ///
 /// This function does a number of operations to normalize a marker tree recursively:
-/// - Sort all nested expressions.
+/// - Sort and flatten all nested expressions.
 /// - Simplify expressions. This includes combining overlapping version ranges and removing duplicate
-///   expressions at the same level of precedence. For example, `(a == 'a' and a == 'a') or b == 'b'` can
-///   be reduced, but `a == 'a' and (a == 'a' or b == 'b')` cannot.
+///   expressions.
 /// - Normalize the order of version expressions to the form `<version key> <version op> <version>`
 ///  (i.e. not the reverse).
 ///
 /// This is useful in cases where creating conjunctions or disjunctions might occur in a non-deterministic
 /// order. This routine will attempt to erase the distinction created by such a construction.
 pub(crate) fn normalize(mut tree: MarkerTree) -> Option<MarkerTree> {
+    // Filter out redundant expressions that show up before and after normalization.
     filter_all(&mut tree);
-    normalize_all(tree)
+    let mut tree = normalize_all(tree)?;
+    filter_all(&mut tree);
+    Some(tree)
 }
 
 /// Normalize the marker tree recursively.
@@ -247,7 +249,7 @@ pub(crate) fn normalize_all(tree: MarkerTree) -> Option<MarkerTree> {
 
 /// Removes redundant expressions from the tree recursively.
 ///
-/// This function does not attempt to flatten or clean trees and may leave it in a denormalized state.
+/// This function does not attempt to flatten or clean the tree and may leave it in a denormalized state.
 pub(crate) fn filter_all(tree: &mut MarkerTree) {
     match tree {
         MarkerTree::And(trees) => {
@@ -717,6 +719,12 @@ mod tests {
         assert_marker_equal(
             "((extra == 'a' or extra == 'b') and extra == 'c') or extra == 'b'",
             "extra == 'b' or (extra == 'a' and extra == 'c')",
+        );
+
+        // post-normalization filtering
+        assert_marker_equal(
+            "(python_version < '3.1' or python_version < '3.2') and (python_version < '3.2' or python_version == '3.3')",
+            "python_version < '3.2'",
         );
 
         // normalize out redundant ranges
