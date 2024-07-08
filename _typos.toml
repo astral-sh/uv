@@ -13,6 +13,7 @@ extend-ignore-re = [
     "eb1ba5f5",
     "github_pat_[0-9a-zA-Z_]+",
     "LICENSEs",
+    "astroid",
 ]
 
 [default.extend-identifiers]
