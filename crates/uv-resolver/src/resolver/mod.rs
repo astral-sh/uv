@@ -340,7 +340,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         'FORK: while let Some(mut state) = forked_states.pop() {
             if !state.markers.is_universal() {
                 if let Some(requires_python) = state.requires_python.as_ref() {
-                    debug!("Solving split {} ({})", state.markers, requires_python);
+                    debug!(
+                        "Solving split {} (requires-python: {})",
+                        state.markers, requires_python
+                    );
                 } else {
                     debug!("Solving split {}", state.markers);
                 }
@@ -548,8 +551,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             diverging_packages,
                         } => {
                             debug!(
-                                "Splitting resolution on {} over {}",
+                                "Splitting resolution on {}=={} over {}",
                                 state.next,
+                                version,
                                 diverging_packages
                                     .iter()
                                     .map(ToString::to_string)
