@@ -551,7 +551,7 @@ fn help_unknown_subcommand() {
 
     Usage: uv [OPTIONS] <COMMAND>
 
-    For more information, try 'help'.
+    For more information, try '--help'.
     "###);
 
     uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r###"
@@ -564,7 +564,7 @@ fn help_unknown_subcommand() {
 
     Usage: uv [OPTIONS] <COMMAND>
 
-    For more information, try 'help'.
+    For more information, try '--help'.
     "###);
 }
 
@@ -582,7 +582,7 @@ fn help_unknown_subsubcommand() {
 
     Usage: uv python [OPTIONS] <COMMAND>
 
-    For more information, try 'help'.
+    For more information, try '--help'.
     "###);
 }
 
@@ -600,7 +600,7 @@ fn help_with_global_option() {
 
     Usage: uv [OPTIONS] <COMMAND>
 
-    For more information, try 'help'.
+    For more information, try '--help'.
     "###);
 }
 
@@ -618,7 +618,7 @@ fn help_with_help() {
 
     Usage: uv [OPTIONS] <COMMAND>
 
-    For more information, try 'help'.
+    For more information, try '--help'.
     "###);
 }
 
@@ -636,6 +636,6 @@ fn help_with_version() {
 
     Usage: uv [OPTIONS] <COMMAND>
 
-    For more information, try 'help'.
+    For more information, try '--help'.
     "###);
 }

@@ -200,9 +200,9 @@ pub enum Commands {
         #[arg(long, value_enum, default_value = "text")]
         output_format: VersionFormat,
     },
-    /// Generate shell completion
-    #[command(alias = "--generate-shell-completion", hide = true)]
-    GenerateShellCompletion { shell: clap_complete_command::Shell },
+    // Generate shell completion
+    // #[command(alias = "--generate-shell-completion", hide = true)]
+    // GenerateShellCompletion { shell: clap_complete_command::Shell },
 }
 
 #[derive(Args)]

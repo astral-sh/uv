@@ -689,7 +689,15 @@ version = "4.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84b3edb18336f4df585bc9aa31dd99c036dfa5dc5e9a2939a722a188f3a8970d"
 dependencies = [
- "clap_builder",
+ "clap_builder 4.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "clap"
+version = "4.5.8"
+source = "git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7#4431d9946d0dba798b06a8576b9e32e60ac8cdf7"
+dependencies = [
+ "clap_builder 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "clap_derive",
 ]
 
@@ -701,7 +709,18 @@ checksum = "c1c09dd5ada6c6c78075d6fd0da3f90d8080651e2d6cc8eb2f1aaa4034ced708"
 dependencies = [
  "anstream",
  "anstyle",
- "clap_lex",
+ "clap_lex 0.7.0",
+ "strsim",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.5.8"
+source = "git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7#4431d9946d0dba798b06a8576b9e32e60ac8cdf7"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "clap_lex 0.7.1",
  "strsim",
  "terminal_size",
 ]
@@ -712,7 +731,7 @@ version = "4.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd79504325bf38b10165b02e89b4347300f855f273c4cb30c4a3209e6583275e"
 dependencies = [
- "clap",
+ "clap 4.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -721,7 +740,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "183495371ea78d4c9ff638bfc6497d46fed2396e4f9c50aebc1278a4a9919a3d"
 dependencies = [
- "clap",
+ "clap 4.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap_complete",
  "clap_complete_fig",
  "clap_complete_nushell",
@@ -733,7 +752,7 @@ version = "4.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b3e65f91fabdd23cac3d57d39d5d938b4daabd070c335c006dccb866a61110"
 dependencies = [
- "clap",
+ "clap 4.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap_complete",
 ]
 
@@ -743,15 +762,14 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d02bc8b1a18ee47c4d2eec3fb5ac034dc68ebea6125b1509e9ccdffcddce66e"
 dependencies = [
- "clap",
+ "clap 4.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap_complete",
 ]
 
 [[package]]
 name = "clap_derive"
 version = "4.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bac35c6dafb060fd4d275d9a4ffae97917c13a6327903a8be2153cd964f7085"
+source = "git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7#4431d9946d0dba798b06a8576b9e32e60ac8cdf7"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -764,6 +782,11 @@ name = "clap_lex"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
+
+[[package]]
+name = "clap_lex"
+version = "0.7.1"
+source = "git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7#4431d9946d0dba798b06a8576b9e32e60ac8cdf7"
 
 [[package]]
 name = "cmake"
@@ -889,7 +912,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap",
+ "clap 4.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "criterion-plot",
  "futures",
  "is-terminal",
@@ -1828,7 +1851,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
- "clap",
+ "clap 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "configparser",
  "csv",
  "data-encoding",
@@ -4449,7 +4472,7 @@ dependencies = [
  "byteorder",
  "cache-key",
  "chrono",
- "clap",
+ "clap 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "distribution-types",
  "filetime",
  "flate2",
@@ -4567,7 +4590,7 @@ name = "uv-cache"
 version = "0.0.1"
 dependencies = [
  "cache-key",
- "clap",
+ "clap 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "directories",
  "distribution-types",
  "fs-err",
@@ -4590,7 +4613,7 @@ version = "0.0.1"
 dependencies = [
  "anstream",
  "anyhow",
- "clap",
+ "clap 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "clap_complete_command",
  "distribution-types",
  "fs-err",
@@ -4663,7 +4686,7 @@ name = "uv-configuration"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "clap",
+ "clap 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "either",
  "pep508_rs",
  "platform-tags",
@@ -4683,7 +4706,7 @@ version = "0.0.1"
 dependencies = [
  "anstream",
  "anyhow",
- "clap",
+ "clap 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -4915,7 +4938,7 @@ dependencies = [
  "anyhow",
  "assert_fs",
  "cache-key",
- "clap",
+ "clap 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "configparser",
  "fs-err",
  "futures",
@@ -4996,7 +5019,7 @@ dependencies = [
  "anyhow",
  "cache-key",
  "chrono",
- "clap",
+ "clap 4.5.8 (git+https://github.com/zanieb/clap?rev=4431d9946d0dba798b06a8576b9e32e60ac8cdf7)",
  "dashmap",
  "derivative",
  "distribution-filename",
