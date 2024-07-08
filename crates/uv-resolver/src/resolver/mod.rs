@@ -2479,6 +2479,13 @@ impl Dependencies {
             forks = new_forks;
             diverging_packages.push(name.clone());
         }
+
+        // Sort forks by Python requirement, such that the forks with the strict Python requirement
+        // are solved first. This decreases divergence between the forks, as dependencies that
+        // satisfy a lower Python version will _also_ satisfy a higher Python version (while the
+        // inverse is not true).
+        forks.sort_unstable_by_key(|fork| requires_python_marker(&fork.markers));
+
         ForkedDependencies::Forked {
             forks,
             diverging_packages,

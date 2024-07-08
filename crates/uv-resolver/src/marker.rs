@@ -140,7 +140,7 @@ pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPython
 /// - Simplify expressions. This includes combining overlapping version ranges and removing duplicate
 ///   expressions.
 /// - Normalize the order of version expressions to the form `<version key> <version op> <version>`
-///  (i.e. not the reverse).
+///   (i.e., not the reverse).
 ///
 /// This is useful in cases where creating conjunctions or disjunctions might occur in a non-deterministic
 /// order. This routine will attempt to erase the distinction created by such a construction.
