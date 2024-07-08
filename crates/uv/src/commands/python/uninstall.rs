@@ -4,6 +4,7 @@ use std::fmt::Write;
 use anyhow::Result;
 use futures::StreamExt;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 
 use uv_configuration::PreviewMode;
 use uv_python::downloads::{self, PythonDownloadRequest};
@@ -11,7 +12,7 @@ use uv_python::managed::ManagedPythonInstallations;
 use uv_python::PythonRequest;
 use uv_warnings::warn_user_once;
 
-use crate::commands::ExitStatus;
+use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Uninstall managed Python versions.
@@ -23,6 +24,8 @@ pub(crate) async fn uninstall(
     if preview.is_disabled() {
         warn_user_once!("`uv python uninstall` is experimental and may change without warning.");
     }
+
+    let start = std::time::Instant::now();
 
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
     let _lock = installations.acquire_lock()?;
@@ -43,7 +46,8 @@ pub(crate) async fn uninstall(
     for (request, download_request) in requests.iter().zip(download_requests) {
         writeln!(
             printer.stderr(),
-            "Looking for Python installations matching {request} ({download_request})"
+            "Searching for Python versions matching: {}",
+            request.cyan()
         )?;
         let mut found = false;
         for installation in installed_installations
@@ -54,31 +58,28 @@ pub(crate) async fn uninstall(
             if matching_installations.insert(installation.clone()) {
                 writeln!(
                     printer.stderr(),
-                    "Found installation `{}` that matches {request}",
-                    installation.key()
+                    "Found existing installation for {}: {}",
+                    request.cyan(),
+                    installation.key().green(),
                 )?;
             }
         }
         if !found {
             writeln!(
                 printer.stderr(),
-                "No installations found matching {request}"
+                "No existing installations found for: {}",
+                request.cyan()
             )?;
         }
     }
 
     if matching_installations.is_empty() {
         if matches!(requests.as_slice(), [PythonRequest::Any]) {
-            writeln!(printer.stderr(), "No installed installations found")?;
+            writeln!(printer.stderr(), "No Python installations found")?;
         } else if requests.len() > 1 {
             writeln!(
                 printer.stderr(),
-                "No installations found matching the requests"
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "No installations found matching the request"
+                "No Python installations found matching the requests"
             )?;
         }
         return Ok(ExitStatus::Failure);
@@ -98,18 +99,19 @@ pub(crate) async fn uninstall(
     for (key, result) in results.iter().sorted_by_key(|(key, _)| key) {
         if let Err(err) = result {
             failed = true;
-            writeln!(printer.stderr(), "Failed to uninstall `{key}`: {err}")?;
+            writeln!(
+                printer.stderr(),
+                "Failed to uninstall {}: {err}",
+                key.green()
+            )?;
         } else {
-            writeln!(printer.stderr(), "Uninstalled `{key}`")?;
+            writeln!(printer.stderr(), "Uninstalled {}", key.green())?;
         }
     }
 
     if failed {
         if matching_installations.len() > 1 {
-            writeln!(
-                printer.stderr(),
-                "Failed to remove some Python installations"
-            )?;
+            writeln!(printer.stderr(), "Failed to uninstall some Python versions")?;
         }
         return Ok(ExitStatus::Failure);
     }
@@ -119,11 +121,15 @@ pub(crate) async fn uninstall(
     } else {
         "s"
     };
-
     writeln!(
         printer.stderr(),
-        "Removed {} Python installation{s}",
-        matching_installations.len()
+        "{}",
+        format!(
+            "Uninstalled {} {}",
+            format!("{} version{s}", matching_installations.len()).bold(),
+            format!("in {}", elapsed(start.elapsed())).dimmed()
+        )
+        .dimmed()
     )?;
 
     Ok(ExitStatus::Success)

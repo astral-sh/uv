@@ -5,6 +5,7 @@ use anyhow::Result;
 use fs_err as fs;
 use futures::StreamExt;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
@@ -15,7 +16,7 @@ use uv_python::{requests_from_version_file, PythonRequest};
 use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
+use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Download and install Python versions.
@@ -62,7 +63,8 @@ pub(crate) async fn install(
     for (request, download_request) in requests.iter().zip(download_requests) {
         writeln!(
             printer.stderr(),
-            "Looking for installation {request} ({download_request})"
+            "Searching for Python versions matching: {}",
+            request.cyan()
         )?;
         if let Some(installation) = installed_installations
             .iter()
@@ -70,14 +72,15 @@ pub(crate) async fn install(
         {
             writeln!(
                 printer.stderr(),
-                "Found existing installation `{}` that satisfies {request}",
-                installation.key()
+                "Found existing installation for {}: {}",
+                request.cyan(),
+                installation.key().green(),
             )?;
             if force {
                 writeln!(
                     printer.stderr(),
-                    "Removing existing installation `{}`",
-                    installation.key()
+                    "Uninstalling {}",
+                    installation.key().green()
                 )?;
                 fs::remove_dir_all(installation.path())?;
                 unfilled_requests.push(download_request);
@@ -94,12 +97,7 @@ pub(crate) async fn install(
                 "Python is already available. Use `uv python install <request>` to install a specific version.",
             )?;
         } else if requests.len() > 1 {
-            writeln!(
-                printer.stderr(),
-                "All requested versions already installed."
-            )?;
-        } else {
-            writeln!(printer.stderr(), "Requested versions already installed.")?;
+            writeln!(printer.stderr(), "All requested versions already installed")?;
         }
         return Ok(ExitStatus::Success);
     }
@@ -116,13 +114,6 @@ pub(crate) async fn install(
         .into_iter()
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
-
-    let s = if downloads.len() == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "Found {} version{s} requiring installation",
-        downloads.len()
-    )?;
 
     // Construct a client
     let client = uv_client::BaseClientBuilder::new()
@@ -150,8 +141,9 @@ pub(crate) async fn install(
             DownloadResult::Fetched(path) => {
                 writeln!(
                     printer.stderr(),
-                    "Installed Python {version} to {}",
-                    path.user_display()
+                    "Installed {} to: {}",
+                    format!("Python {version}").cyan(),
+                    path.user_display().cyan()
                 )?;
                 path
             }
@@ -165,9 +157,13 @@ pub(crate) async fn install(
     let s = if downloads.len() == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
-        "Installed {} version{s} in {}s",
-        downloads.len(),
-        start.elapsed().as_secs()
+        "{}",
+        format!(
+            "Installed {} {}",
+            format!("{} version{s}", downloads.len()).bold(),
+            format!("in {}", elapsed(start.elapsed())).dimmed()
+        )
+        .dimmed()
     )?;
 
     Ok(ExitStatus::Success)

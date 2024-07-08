@@ -78,7 +78,7 @@ pub(crate) async fn list(
     .collect::<Result<Vec<Result<PythonInstallation, PythonNotFound>>, DiscoveryError>>()?
     .into_iter()
     // Drop any "missing" installations
-    .filter_map(std::result::Result::ok);
+    .filter_map(Result::ok);
 
     let mut output = BTreeSet::new();
     for installation in installed {
