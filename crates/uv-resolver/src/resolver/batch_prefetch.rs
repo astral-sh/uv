@@ -6,13 +6,13 @@ use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
-use distribution_types::DistributionMetadata;
+use distribution_types::{CompatibleDist, DistributionMetadata};
 use pep440_rs::Version;
 
-use crate::candidate_selector::{CandidateDist, CandidateSelector};
+use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::Request;
-use crate::{InMemoryIndex, ResolveError, VersionsResponse};
+use crate::{InMemoryIndex, PythonRequirement, ResolveError, VersionsResponse};
 
 enum BatchPrefetchStrategy {
     /// Go through the next versions assuming the existing selection and its constraints
@@ -49,6 +49,7 @@ impl BatchPrefetcher {
         next: &PubGrubPackage,
         version: &Version,
         current_range: &Range<Version>,
+        python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
         index: &InMemoryIndex,
         selector: &CandidateSelector,
@@ -128,7 +129,7 @@ impl BatchPrefetcher {
                 }
             };
 
-            let CandidateDist::Compatible(dist) = candidate.dist() else {
+            let Some(dist) = candidate.compatible() else {
                 continue;
             };
 
@@ -136,6 +137,41 @@ impl BatchPrefetcher {
             if !dist.prefetchable() {
                 continue;
             }
+
+            // Avoid prefetching for distributions that don't satisfy the Python requirement.
+            match dist {
+                CompatibleDist::InstalledDist(_) => {}
+                CompatibleDist::SourceDist { sdist, .. }
+                | CompatibleDist::IncompatibleWheel { sdist, .. } => {
+                    // Source distributions must meet both the _target_ Python version and the
+                    // _installed_ Python version (to build successfully).
+                    if let Some(requires_python) = sdist.file.requires_python.as_ref() {
+                        if let Some(target) = python_requirement.target() {
+                            if !target.is_compatible_with(requires_python) {
+                                continue;
+                            }
+                        }
+                        if !requires_python.contains(python_requirement.installed()) {
+                            continue;
+                        }
+                    }
+                }
+                CompatibleDist::CompatibleWheel { wheel, .. } => {
+                    // Wheels must meet the _target_ Python version.
+                    if let Some(requires_python) = wheel.file.requires_python.as_ref() {
+                        if let Some(target) = python_requirement.target() {
+                            if !target.is_compatible_with(requires_python) {
+                                continue;
+                            }
+                        } else {
+                            if !requires_python.contains(python_requirement.installed()) {
+                                continue;
+                            }
+                        }
+                    }
+                }
+            };
+
             let dist = dist.for_resolution();
 
             // Emit a request to fetch the metadata for this version.

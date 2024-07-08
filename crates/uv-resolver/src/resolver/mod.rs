@@ -364,6 +364,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Self::pre_visit(
                         state.pubgrub.partial_solution.prioritized_packages(),
                         &self.urls,
+                        &state.python_requirement,
                         &request_sink,
                     )?;
                 }
@@ -487,6 +488,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &state.next,
                         &version,
                         term_intersection.unwrap_positive(),
+                        &state.python_requirement,
                         &request_sink,
                         &self.index,
                         &self.selector,
@@ -721,6 +723,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn pre_visit<'data>(
         packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
         urls: &Urls,
+        python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
@@ -740,7 +743,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if urls.any_url(name) {
                 continue;
             }
-            request_sink.blocking_send(Request::Prefetch(name.clone(), range.clone()))?;
+            request_sink.blocking_send(Request::Prefetch(
+                name.clone(),
+                range.clone(),
+                python_requirement.clone(),
+            ))?;
         }
         Ok(())
     }
@@ -1656,7 +1663,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Pre-fetch the package and distribution metadata.
-            Request::Prefetch(package_name, range) => {
+            Request::Prefetch(package_name, range, python_requirement) => {
                 // Wait for the package metadata to become available.
                 let versions_response = self
                     .index
@@ -1719,6 +1726,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                     }
                 }
+
+                match dist {
+                    CompatibleDist::InstalledDist(_) => {}
+                    CompatibleDist::SourceDist { sdist, .. }
+                    | CompatibleDist::IncompatibleWheel { sdist, .. } => {
+                        // Source distributions must meet both the _target_ Python version and the
+                        // _installed_ Python version (to build successfully).
+                        if let Some(requires_python) = sdist.file.requires_python.as_ref() {
+                            if let Some(target) = python_requirement.target() {
+                                if !target.is_compatible_with(requires_python) {
+                                    return Ok(None);
+                                }
+                            }
+                            if !requires_python.contains(python_requirement.installed()) {
+                                return Ok(None);
+                            }
+                        }
+                    }
+                    CompatibleDist::CompatibleWheel { wheel, .. } => {
+                        // Wheels must meet the _target_ Python version.
+                        if let Some(requires_python) = wheel.file.requires_python.as_ref() {
+                            if let Some(target) = python_requirement.target() {
+                                if !target.is_compatible_with(requires_python) {
+                                    return Ok(None);
+                                }
+                            } else {
+                                if !requires_python.contains(python_requirement.installed()) {
+                                    return Ok(None);
+                                }
+                            }
+                        }
+                    }
+                };
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
@@ -2213,7 +2253,7 @@ pub(crate) enum Request {
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
-    Prefetch(PackageName, Range<Version>),
+    Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {
@@ -2265,7 +2305,7 @@ impl Display for Request {
             Self::Installed(dist) => {
                 write!(f, "Installed metadata {dist}")
             }
-            Self::Prefetch(package_name, range) => {
+            Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
         }
