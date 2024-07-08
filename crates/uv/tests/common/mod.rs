@@ -72,10 +72,10 @@ pub struct TestContext {
     /// The Python version used for the virtual environment, if any.
     pub python_version: Option<PythonVersion>,
 
-    // All the Python versions available during this test context.
+    /// All the Python versions available during this test context.
     pub python_versions: Vec<(PythonVersion, PathBuf)>,
 
-    // Standard filters for this test context
+    /// Standard filters for this test context.
     filters: Vec<(String, String)>,
 }
 
@@ -120,7 +120,7 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_exe_suffix(mut self) -> Self {
         self.filters
-            .push((std::env::consts::EXE_SUFFIX.to_string(), String::new()));
+            .push((regex::escape(env::consts::EXE_SUFFIX), String::new()));
         self
     }
 

@@ -31,7 +31,7 @@ fn tool_uninstall() {
 
     ----- stderr -----
     warning: `uv tool uninstall` is experimental and may change without warning.
-    Uninstalled: black, blackd
+    Uninstalled 2 executables: black, blackd
     "###);
 
     // After uninstalling the tool, it shouldn't be listed.
@@ -66,7 +66,7 @@ fn tool_uninstall() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 }
 
@@ -85,7 +85,7 @@ fn tool_uninstall_not_installed() {
 
     ----- stderr -----
     warning: `uv tool uninstall` is experimental and may change without warning.
-    error: Tool `black` is not installed
+    error: `black` is not installed
     "###);
 }
 
@@ -115,6 +115,6 @@ fn tool_uninstall_missing_receipt() {
 
     ----- stderr -----
     warning: `uv tool uninstall` is experimental and may change without warning.
-    Removed dangling environment for tool: `black` (missing receipt)
+    Removed dangling environment for `black`
     "###);
 }

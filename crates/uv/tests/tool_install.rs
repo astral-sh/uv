@@ -42,7 +42,7 @@ fn tool_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -118,7 +118,7 @@ fn tool_install() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    Installed: flask
+    Installed 1 executable: flask
     "###);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
@@ -195,7 +195,7 @@ fn tool_install_version() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -280,7 +280,7 @@ fn tool_install_from() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     // Attempt to install `black` using `--from` with a different package name
@@ -296,7 +296,7 @@ fn tool_install_from() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    error: Package name `flask` provided with `--from` does not match install request `black`
+    error: Package name (`flask`) provided with `--from` does not match install request (`black`)
     "###);
 
     // Attempt to install `black` using `--from` with a different version
@@ -312,7 +312,7 @@ fn tool_install_from() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    error: Package requirement `black==24.3.0` provided with `--from` conflicts with install request `black==24.2.0`
+    error: Package requirement (`black==24.3.0`) provided with `--from` conflicts with install request (`black==24.2.0`)
     "###);
 }
 
@@ -345,7 +345,7 @@ fn tool_install_already_installed() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -401,7 +401,7 @@ fn tool_install_already_installed() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Tool `black` is already installed
+    `black` is already installed
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -451,7 +451,7 @@ fn tool_install_already_installed() {
      + pathspec==0.12.1
      - platformdirs==4.2.0
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     // Install `black` again with `--reinstall-package` for `black`
@@ -473,7 +473,7 @@ fn tool_install_already_installed() {
     Installed [N] packages in [TIME]
      - black==24.3.0
      + black==24.3.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     // Install `black` again with `--reinstall-package` for a dependency
@@ -495,7 +495,7 @@ fn tool_install_already_installed() {
     Installed [N] packages in [TIME]
      - click==8.1.7
      + click==8.1.7
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 }
 
@@ -531,7 +531,7 @@ fn tool_install_entry_point_exists() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    error: Entry point for tool already exists: black (use `--force` to overwrite)
+    error: Executable already exists: black (use `--force` to overwrite)
     "###);
 
     // We should delete the virtual environment
@@ -569,7 +569,7 @@ fn tool_install_entry_point_exists() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    error: Entry point for tool already exists: black (use `--force` to overwrite)
+    error: Executable already exists: black (use `--force` to overwrite)
     "###);
 
     // We should not create a virtual environment
@@ -609,7 +609,7 @@ fn tool_install_entry_point_exists() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    error: Entry points for tool already exist: black, blackd (use `--force` to overwrite)
+    error: Executables already exist: black, blackd (use `--force` to overwrite)
     "###);
 
     // Install `black` with `--force`
@@ -632,7 +632,7 @@ fn tool_install_entry_point_exists() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -649,7 +649,7 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -665,7 +665,7 @@ fn tool_install_entry_point_exists() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Tool `black` is already installed
+    `black` is already installed
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -697,7 +697,7 @@ fn tool_install_entry_point_exists() {
      + pathspec==0.12.1
      - platformdirs==4.2.0
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -793,7 +793,7 @@ fn tool_install_home() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     context
@@ -829,7 +829,7 @@ fn tool_install_xdg_data_home() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     context
@@ -865,7 +865,7 @@ fn tool_install_xdg_bin_home() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     bin_dir
@@ -894,7 +894,7 @@ fn tool_install_no_entrypoints() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    error: No entry points found for tool `iniconfig`
+    error: No executables found for `iniconfig`
     "###);
 }
 
@@ -925,7 +925,7 @@ fn tool_install_unnamed_package() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -1002,7 +1002,7 @@ fn tool_install_unnamed_conflict() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    error: Package name `iniconfig` provided with `--from` does not match install request `black`
+    error: Package name (`iniconfig`) provided with `--from` does not match install request (`black`)
     "###);
 }
 
@@ -1035,7 +1035,7 @@ fn tool_install_unnamed_from() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -1121,7 +1121,7 @@ fn tool_install_unnamed_with() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     tool_dir.child("black").assert(predicate::path::is_dir());
@@ -1209,7 +1209,7 @@ fn tool_install_upgrade() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     insta::with_settings!({
@@ -1238,7 +1238,7 @@ fn tool_install_upgrade() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     insta::with_settings!({
@@ -1272,7 +1272,7 @@ fn tool_install_upgrade() {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     insta::with_settings!({
@@ -1312,7 +1312,7 @@ fn tool_install_upgrade() {
      - black==24.1.1
      + black==24.3.0
      - iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     insta::with_settings!({
@@ -1361,7 +1361,7 @@ fn tool_install_python_request() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     // Install with Python 3.12 (compatible).
@@ -1377,7 +1377,7 @@ fn tool_install_python_request() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Tool `black` is already installed
+    `black` is already installed
     "###);
 
     // Install with Python 3.11 (incompatible).
@@ -1393,7 +1393,7 @@ fn tool_install_python_request() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Existing environment for `black` does not satisfy the requested Python interpreter: `Python 3.11`
+    Existing environment for `black` does not satisfy the requested Python interpreter (`Python 3.11`)
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1403,7 +1403,7 @@ fn tool_install_python_request() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 }
 
@@ -1436,7 +1436,7 @@ fn tool_install_preserve_environment() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    Installed: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     // Install `black`, but with an incompatible requirement.
@@ -1467,6 +1467,6 @@ fn tool_install_preserve_environment() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Tool `black==24.1.1` is already installed
+    `black==24.1.1` is already installed
     "###);
 }

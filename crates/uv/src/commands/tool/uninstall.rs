@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use anyhow::{bail, Result};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_configuration::PreviewMode;
@@ -30,12 +31,12 @@ pub(crate) async fn uninstall(
             Ok(()) => {
                 writeln!(
                     printer.stderr(),
-                    "Removed dangling environment for tool: `{name}` (missing receipt)"
+                    "Removed dangling environment for `{name}`"
                 )?;
                 return Ok(ExitStatus::Success);
             }
             Err(uv_tool::Error::IO(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!("Tool `{name}` is not installed");
+                bail!("`{name}` is not installed");
             }
             Err(err) => {
                 return Err(err.into());
@@ -50,14 +51,14 @@ pub(crate) async fn uninstall(
     let entrypoints = receipt.entrypoints();
     for entrypoint in entrypoints {
         debug!(
-            "Removing entrypoint: {}",
+            "Removing executable: {}",
             entrypoint.install_path.user_display()
         );
         match fs_err::tokio::remove_file(&entrypoint.install_path).await {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 debug!(
-                    "Entrypoint not found: {}",
+                    "Executable not found: {}",
                     entrypoint.install_path.user_display()
                 );
             }
@@ -67,12 +68,14 @@ pub(crate) async fn uninstall(
         }
     }
 
+    let s = if entrypoints.len() == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
-        "Uninstalled: {}",
+        "Uninstalled {} executable{s}: {}",
+        entrypoints.len(),
         entrypoints
             .iter()
-            .map(|entrypoint| &entrypoint.name)
+            .map(|entrypoint| entrypoint.name.bold())
             .join(", ")
     )?;
 

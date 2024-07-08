@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
@@ -40,11 +41,11 @@ pub(crate) async fn list(
             }
         };
 
-        writeln!(printer.stdout(), "{name} v{version}")?;
+        writeln!(printer.stdout(), "{}", format!("{name} v{version}").bold())?;
 
         // Output tool entrypoints
         for entrypoint in tool.entrypoints() {
-            writeln!(printer.stdout(), "    {}", &entrypoint.name)?;
+            writeln!(printer.stdout(), "- {}", &entrypoint.name)?;
         }
     }
 
