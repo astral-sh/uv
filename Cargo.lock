@@ -4507,6 +4507,7 @@ dependencies = [
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
+ "which",
 ]
 
 [[package]]
