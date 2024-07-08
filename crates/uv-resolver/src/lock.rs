@@ -817,10 +817,6 @@ impl Distribution {
 
         self.id.to_toml(None, &mut table);
 
-        if let Some(ref sdist) = self.sdist {
-            table.insert("sdist", value(sdist.to_toml()?));
-        }
-
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(
                 self.dependencies
@@ -852,6 +848,10 @@ impl Distribution {
                 dev_dependencies.insert(extra.as_ref(), value(deps));
             }
             table.insert("dev-dependencies", Item::Table(dev_dependencies));
+        }
+
+        if let Some(ref sdist) = self.sdist {
+            table.insert("sdist", value(sdist.to_toml()?));
         }
 
         if !self.wheels.is_empty() {
