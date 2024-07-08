@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -430,17 +431,40 @@ impl Interpreter {
         }
     }
 
-    /// Return an iterator over the `site-packages` directories inside the environment.
-    pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
-        let purelib = self.purelib();
-        let platlib = self.platlib();
-        std::iter::once(purelib).chain(
-            if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
-                None
-            } else {
-                Some(platlib)
-            },
-        )
+    /// Returns an iterator over the `site-packages` directories inside the environment.
+    ///
+    /// In most cases, `purelib` and `platlib` will be the same, and so the iterator will contain
+    /// a single element; however, in some distributions, they may be different.
+    ///
+    /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
+    /// still deduplicate the entries, returning a single path.
+    pub fn site_packages(&self) -> impl Iterator<Item = Cow<Path>> {
+        let target = self.target().map(Target::site_packages);
+
+        let prefix = self
+            .prefix()
+            .map(|prefix| prefix.site_packages(self.virtualenv()));
+
+        let interpreter = if target.is_none() && prefix.is_none() {
+            let purelib = self.purelib();
+            let platlib = self.platlib();
+            Some(std::iter::once(purelib).chain(
+                if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
+                    None
+                } else {
+                    Some(platlib)
+                },
+            ))
+        } else {
+            None
+        };
+
+        target
+            .into_iter()
+            .flatten()
+            .map(Cow::Borrowed)
+            .chain(prefix.into_iter().flatten().map(Cow::Owned))
+            .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
     }
 
     /// Check if the interpreter matches the given Python version.
