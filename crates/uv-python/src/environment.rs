@@ -127,23 +127,21 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--target` directory.
-    #[must_use]
-    pub fn with_target(self, target: Target) -> Self {
+    pub fn with_target(self, target: Target) -> std::io::Result<Self> {
         let inner = Arc::unwrap_or_clone(self.0);
-        Self(Arc::new(PythonEnvironmentShared {
-            interpreter: inner.interpreter.with_target(target),
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_target(target)?,
             ..inner
-        }))
+        })))
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--prefix` directory.
-    #[must_use]
-    pub fn with_prefix(self, prefix: Prefix) -> Self {
+    pub fn with_prefix(self, prefix: Prefix) -> std::io::Result<Self> {
         let inner = Arc::unwrap_or_clone(self.0);
-        Self(Arc::new(PythonEnvironmentShared {
-            interpreter: inner.interpreter.with_prefix(prefix),
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_prefix(prefix)?,
             ..inner
-        }))
+        })))
     }
 
     /// Returns the root (i.e., `prefix`) of the Python interpreter.

@@ -25,8 +25,10 @@ impl Prefix {
     }
 
     /// Initialize the `--prefix` directory.
-    pub fn init(&self) -> std::io::Result<()> {
-        fs_err::create_dir_all(&self.0)?;
+    pub fn init(&self, virtualenv: &Scheme) -> std::io::Result<()> {
+        for site_packages in self.site_packages(virtualenv) {
+            fs_err::create_dir_all(site_packages)?;
+        }
         Ok(())
     }
 
