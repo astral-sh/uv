@@ -1892,7 +1892,7 @@ impl Dependency {
     ) -> Dependency {
         let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.clone();
-        let marker = marker.cloned().and_then(crate::marker::normalize);
+        let marker = marker.cloned();
         Dependency {
             distribution_id,
             extra,

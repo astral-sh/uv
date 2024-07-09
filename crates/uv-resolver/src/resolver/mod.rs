@@ -578,7 +578,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
 
                                 forked_state.markers.and(fork.markers);
-                                forked_state.markers = normalize(forked_state.markers)
+                                forked_state.markers = normalize(forked_state.markers, None)
                                     .unwrap_or(MarkerTree::And(Vec::new()));
 
                                 // If the fork contains a narrowed Python requirement, apply it.

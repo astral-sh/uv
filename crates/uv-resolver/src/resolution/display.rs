@@ -406,7 +406,7 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
         }
 
         if let DisplayResolutionGraphNode::Dist(node) = &mut graph[index] {
-            node.markers = marker_tree.and_then(marker::normalize);
+            node.markers = marker_tree.and_then(|marker| marker::normalize(marker, None));
         };
     }
 
