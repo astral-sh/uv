@@ -84,7 +84,7 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let (duration_layer, _guard) = if let Ok(location) = env::var("TRACING_DURATIONS_FILE") {
         let location = PathBuf::from(location);
