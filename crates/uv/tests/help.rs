@@ -11,8 +11,6 @@ fn help() {
     success: true
     exit_code: 0
     ----- stdout -----
-
-    ----- stderr -----
     An extremely fast Python package manager.
 
     Usage: uv [OPTIONS] <COMMAND>
@@ -109,6 +107,8 @@ fn help() {
       -V, --version
               Print version
 
+
+    ----- stderr -----
     "###);
 }
 
@@ -230,8 +230,6 @@ fn help_subcommand() {
     success: true
     exit_code: 0
     ----- stdout -----
-
-    ----- stderr -----
     Manage Python installations
 
     Usage: uv python [OPTIONS] <COMMAND>
@@ -326,6 +324,8 @@ fn help_subcommand() {
       -V, --version
               Print version
 
+
+    ----- stderr -----
     "###);
 }
 
@@ -337,8 +337,6 @@ fn help_subsubcommand() {
     success: true
     exit_code: 0
     ----- stdout -----
-
-    ----- stderr -----
     Download and install Python versions
 
     Usage: uv python install [OPTIONS] [TARGETS]...
@@ -437,6 +435,8 @@ fn help_subsubcommand() {
       -V, --version
               Print version
 
+
+    ----- stderr -----
     "###);
 }
 
@@ -606,8 +606,6 @@ fn help_with_global_option() {
     success: true
     exit_code: 0
     ----- stdout -----
-
-    ----- stderr -----
     An extremely fast Python package manager.
 
     Usage: uv [OPTIONS] <COMMAND>
@@ -704,6 +702,8 @@ fn help_with_global_option() {
       -V, --version
               Print version
 
+
+    ----- stderr -----
     "###);
 }
 
