@@ -175,8 +175,8 @@ pub(super) async fn do_lock(
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let lock = read_lockfile(workspace, upgrade).await?;
-    let LockedRequirements { preferences, git } = lock
+    let existing_lock = read_lockfile(workspace, upgrade).await?;
+    let LockedRequirements { preferences, git } = existing_lock
         .as_ref()
         .map(|lock| read_lock_requirements(lock, upgrade))
         .unwrap_or_default();
@@ -239,14 +239,14 @@ pub(super) async fn do_lock(
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Avoid serializing and writing to disk if the lock hasn't changed.
-    let new_lock = Lock::from_resolution_graph(&resolution)?;
-    if lock.is_some_and(|lock| lock == new_lock) {
-        return Ok(new_lock);
+    let lock = Lock::from_resolution_graph(&resolution)?;
+    if existing_lock.is_some_and(|existing_lock| existing_lock == lock) {
+        return Ok(lock);
     }
 
     // Write the lockfile to disk.
-    let encoded = new_lock.to_toml()?;
+    let encoded = lock.to_toml()?;
     fs_err::tokio::write(workspace.install_path().join("uv.lock"), encoded.as_bytes()).await?;
 
-    Ok(new_lock)
+    Ok(lock)
 }
