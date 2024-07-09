@@ -565,16 +565,21 @@ pub(crate) struct RemoveSettings {
     pub(crate) dependency_type: DependencyType,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverInstallerSettings,
 }
 
 impl RemoveSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: RemoveArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: RemoveArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let RemoveArgs {
             dev,
             optional,
             requirements,
+            installer,
+            build,
+            refresh,
             package,
             python,
         } = args;
@@ -592,6 +597,11 @@ impl RemoveSettings {
             dependency_type,
             package,
             python,
+            refresh: Refresh::from(refresh),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
         }
     }
 }

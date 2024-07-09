@@ -1946,6 +1946,15 @@ pub struct RemoveArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
     /// Remove the dependency from a specific package in the workspace.
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,

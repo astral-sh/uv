@@ -23,7 +23,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     requirements: Vec<RequirementsSource>,
     editable: Option<bool>,

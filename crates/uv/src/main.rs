@@ -959,13 +959,14 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?;
+            let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::remove(
                 args.requirements,
                 args.dependency_type,
                 args.package,
                 args.python,
+                args.settings,
                 globals.python_preference,
                 globals.python_fetch,
                 globals.preview,
