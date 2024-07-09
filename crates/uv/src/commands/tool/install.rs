@@ -166,9 +166,8 @@ pub(crate) async fn install(
                     } else {
                         let _ = writeln!(
                             printer.stderr(),
-                            "Existing environment for `{}` does not satisfy the requested Python interpreter (`{}`)",
+                            "Existing environment for `{}` does not satisfy the requested Python interpreter",
                             from.name,
-                            python_request
                         );
                         false
                     }

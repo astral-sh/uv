@@ -23,6 +23,7 @@ use uv_python::{
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_warnings::warn_user;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
@@ -174,6 +175,12 @@ impl FoundInterpreter {
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
+            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
+                warn_user!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                    path.user_display().cyan()
+                );
+            }
             Err(err) => return Err(err.into()),
         };
 

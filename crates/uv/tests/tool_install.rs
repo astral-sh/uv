@@ -1393,7 +1393,7 @@ fn tool_install_python_request() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
-    Existing environment for `black` does not satisfy the requested Python interpreter (`Python 3.11`)
+    Existing environment for `black` does not satisfy the requested Python interpreter
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
