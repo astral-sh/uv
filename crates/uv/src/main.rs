@@ -788,7 +788,7 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.targets, globals.preview, printer).await
+            commands::python_uninstall(args.targets, args.all, globals.preview, printer).await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),

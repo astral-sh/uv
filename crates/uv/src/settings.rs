@@ -376,6 +376,7 @@ impl PythonInstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PythonUninstallSettings {
     pub(crate) targets: Vec<String>,
+    pub(crate) all: bool,
 }
 
 impl PythonUninstallSettings {
@@ -385,9 +386,9 @@ impl PythonUninstallSettings {
         args: PythonUninstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let PythonUninstallArgs { targets } = args;
+        let PythonUninstallArgs { targets, all } = args;
 
-        Self { targets }
+        Self { targets, all }
     }
 }
 

@@ -2198,6 +2198,10 @@ pub struct PythonUninstallArgs {
     /// The Python version(s) to uninstall.
     #[arg(required = true)]
     pub targets: Vec<String>,
+
+    /// Uninstall all managed Python versions.
+    #[arg(long, conflicts_with("targets"))]
+    pub all: bool,
 }
 
 #[derive(Args)]
