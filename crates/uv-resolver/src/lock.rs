@@ -38,7 +38,7 @@ use crate::{RequiresPython, ResolutionGraph};
 /// The current version of the lock file format.
 const VERSION: u32 = 1;
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     version: u32,
@@ -514,7 +514,7 @@ impl TryFrom<LockWire> for Lock {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Distribution {
     pub(crate) id: DistributionId,
     sdist: Option<SourceDist>,
@@ -1321,12 +1321,15 @@ enum SourceWire {
         subdirectory: Option<String>,
     },
     Path {
+        #[serde(deserialize_with = "deserialize_path_with_dot")]
         path: PathBuf,
     },
     Directory {
+        #[serde(deserialize_with = "deserialize_path_with_dot")]
         directory: PathBuf,
     },
     Editable {
+        #[serde(deserialize_with = "deserialize_path_with_dot")]
         editable: PathBuf,
     },
 }
@@ -1430,7 +1433,7 @@ enum GitSourceKind {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 struct SourceDistMetadata {
     /// A hash of the source distribution.
     hash: Hash,
@@ -1444,7 +1447,7 @@ struct SourceDistMetadata {
 /// locked against was found. The location does not need to exist in the
 /// future, so this should be treated as only a hint to where to look
 /// and/or recording where the source dist file originally came from.
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 enum SourceDist {
     Url {
@@ -1695,7 +1698,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "WheelWire")]
 struct Wheel {
     /// A URL or file path (via `file://`) where the wheel that was locked
@@ -2047,7 +2050,7 @@ impl From<Dependency> for DependencyWire {
 ///
 /// A hash is encoded as a single TOML string in the format
 /// `{algorithm}:{digest}`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Hash(HashDigest);
 
 impl From<HashDigest> for Hash {

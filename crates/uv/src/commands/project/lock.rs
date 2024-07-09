@@ -8,7 +8,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::ResolvedRepositoryReference;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
-use uv_requirements::upgrade::{read_lockfile, LockedRequirements};
+use uv_requirements::upgrade::{read_lock_requirements, read_lockfile, LockedRequirements};
 use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -175,7 +175,11 @@ pub(super) async fn do_lock(
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = read_lockfile(workspace, upgrade).await?;
+    let lock = read_lockfile(workspace, upgrade).await?;
+    let LockedRequirements { preferences, git } = lock
+        .as_ref()
+        .map(|lock| read_lock_requirements(lock, upgrade))
+        .unwrap_or_default();
 
     // Populate the Git resolver.
     for ResolvedRepositoryReference { reference, sha } in git {
@@ -234,10 +238,15 @@ pub(super) async fn do_lock(
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
+    // Avoid serializing and writing to disk if the lock hasn't changed.
+    let new_lock = Lock::from_resolution_graph(&resolution)?;
+    if lock.is_some_and(|lock| lock == new_lock) {
+        return Ok(new_lock);
+    }
+
     // Write the lockfile to disk.
-    let lock = Lock::from_resolution_graph(&resolution)?;
-    let encoded = lock.to_toml()?;
+    let encoded = new_lock.to_toml()?;
     fs_err::tokio::write(workspace.install_path().join("uv.lock"), encoded.as_bytes()).await?;
 
-    Ok(lock)
+    Ok(new_lock)
 }
