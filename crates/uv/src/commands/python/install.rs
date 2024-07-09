@@ -43,9 +43,10 @@ pub(crate) async fn install(
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
         // Read from the version file, unless `isolated` was requested
-        if let Some(requests) = match isolated {
-            false => requests_from_version_file().await?,
-            true => None,
+        if let Some(requests) = if isolated {
+            None
+        } else {
+            requests_from_version_file().await?
         } {
             requests
         } else {
@@ -66,21 +67,29 @@ pub(crate) async fn install(
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut unfilled_requests = Vec::new();
     for (request, download_request) in requests.iter().zip(download_requests) {
-        writeln!(
-            printer.stderr(),
-            "Searching for Python versions matching: {}",
-            request.cyan()
-        )?;
+        if matches!(requests.as_slice(), [PythonRequest::Any]) {
+            writeln!(printer.stderr(), "Searching for Python installations")?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Searching for Python versions matching: {}",
+                request.cyan()
+            )?;
+        }
         if let Some(installation) = installed_installations
             .iter()
             .find(|installation| download_request.satisfied_by_key(installation.key()))
         {
-            writeln!(
-                printer.stderr(),
-                "Found existing installation for {}: {}",
-                request.cyan(),
-                installation.key().green(),
-            )?;
+            if matches!(request, PythonRequest::Any) {
+                writeln!(printer.stderr(), "Found: {}", installation.key().green(),)?;
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "Found existing installation for {}: {}",
+                    request.cyan(),
+                    installation.key().green(),
+                )?;
+            }
             if force {
                 writeln!(
                     printer.stderr(),
