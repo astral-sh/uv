@@ -38,11 +38,8 @@ pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
     cache: Cache,
-    client: Option<Client>,
-    markers: Option<&'a MarkerEnvironment>,
-    platform: Option<&'a Platform>,
-    trusted_host: Option<&'a str>,
     base_client_builder: BaseClientBuilder<'a>,
+    trusted_host: Option<&'a str>,
 }
 
 impl RegistryClientBuilder<'_> {
@@ -51,13 +48,11 @@ impl RegistryClientBuilder<'_> {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
             cache,
-            connectivity: Connectivity::Online,
-            retries: 3,
-            markers: None,
-            platform: None,
-            trusted_host: None,
             base_client_builder: BaseClientBuilder::new(),
+            trusted_host: None,
+        }
     }
+}
 
 impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
@@ -136,6 +131,7 @@ impl<'a> RegistryClientBuilder<'a> {
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
+        // TODO: We would probably need a separate cached client for insecure requests?
         let client = CachedClient::new(client);
 
         let trusted_host_owned: Option<String> = self.trusted_host.map(|host| host.to_string());
@@ -171,7 +167,8 @@ pub struct RegistryClient {
     /// The strategy to use when fetching across multiple indexes.
     index_strategy: IndexStrategy,
     /// The underlying HTTP client.
-    client: CachedClient,
+    secure_client: CachedClient,
+    insecure_client: CachedClient,
     /// Used for the remote wheel METADATA cache.
     cache: Cache,
     /// The connectivity mode to use.
@@ -183,16 +180,6 @@ pub struct RegistryClient {
 }
 
 impl RegistryClient {
-    /// Return the [`CachedClient`] used by this client.
-    pub fn cached_client(&self) -> &CachedClient {
-        &self.client
-    }
-
-    /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self) -> BaseClient {
-        self.client.uncached()
-    }
-
     /// Return the [`Connectivity`] mode used by this client.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
@@ -201,6 +188,19 @@ impl RegistryClient {
     /// Return the timeout this client is configured with, in seconds.
     pub fn timeout(&self) -> u64 {
         self.timeout
+    }
+
+    /// Selects the appropriate client based on the host'ts trustworthiness.
+    fn client_for_host(&self, url: &Url) -> &CachedClient {
+        if self
+            .trusted_host
+            .as_ref()
+            .map_or(false, |host| url.host_str() == Some(host.as_str()))
+        {
+            &self.insecure_client
+        } else {
+            &self.secure_client
+        }
     }
 
     /// Fetch a package from the `PyPI` simple API.
@@ -319,8 +319,9 @@ impl RegistryClient {
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
-        let simple_request = self
-            .uncached_client()
+        let client = self.client_for_host(url);
+        let simple_request = client
+            .uncached()
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
@@ -365,7 +366,7 @@ impl RegistryClient {
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
-        self.cached_client()
+        client
             .get_cacheable(
                 simple_request,
                 cache_entry,
@@ -501,6 +502,7 @@ impl RegistryClient {
         file: &File,
         url: &Url,
     ) -> Result<Metadata23, Error> {
+        let client = self.client_for_host(url);
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file.dist_info_metadata {
@@ -534,13 +536,12 @@ impl RegistryClient {
                         ))
                     })
             };
-            let req = self
-                .uncached_client()
+            let req = client
+                .uncached()
                 .get(url.clone())
                 .build()
                 .map_err(ErrorKind::from)?;
-            Ok(self
-                .cached_client()
+            Ok(client
                 .get_serde(req, &cache_entry, cache_control, response_callback)
                 .await?)
         } else {
@@ -559,6 +560,7 @@ impl RegistryClient {
         url: &'data Url,
         cache_shard: WheelCache<'data>,
     ) -> Result<Metadata23, Error> {
+        let client = self.client_for_host(url);
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
@@ -573,8 +575,8 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let req = self
-            .uncached_client()
+        let req = client
+            .uncached()
             .head(url.clone())
             .header(
                 "accept-encoding",
@@ -594,7 +596,7 @@ impl RegistryClient {
         let read_metadata_range_request = |response: Response| {
             async {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
-                    self.uncached_client().client(),
+                    client.uncached().secure_client(),
                     response,
                     url.clone(),
                     headers,
@@ -616,8 +618,7 @@ impl RegistryClient {
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 
-        let result = self
-            .cached_client()
+        let result = client
             .get_serde(
                 req,
                 &cache_entry,
@@ -641,8 +642,8 @@ impl RegistryClient {
         };
 
         // Create a request to stream the file.
-        let req = self
-            .uncached_client()
+        let req = client
+            .uncached()
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.
@@ -667,7 +668,7 @@ impl RegistryClient {
             .instrument(info_span!("read_metadata_stream", wheel = %filename))
         };
 
-        self.cached_client()
+        client
             .get_serde(req, &cache_entry, cache_control, read_metadata_stream)
             .await
             .map_err(crate::Error::from)
