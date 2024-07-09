@@ -19,17 +19,9 @@ Ok(
                 sdist: None,
                 wheels: [
                     Wheel {
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "/foo/bar/anyio-4.3.0-py3-none-any.whl",
-                            query: None,
-                            fragment: None,
-                        },
+                        url: UrlString(
+                            "file:///foo/bar/anyio-4.3.0-py3-none-any.whl",
+                        ),
                         hash: Some(
                             Hash(
                                 HashDigest {
