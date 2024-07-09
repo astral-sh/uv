@@ -162,7 +162,8 @@ pub(crate) fn normalize_all(tree: MarkerTree) -> Option<MarkerTree> {
             for subtree in trees {
                 // Simplify nested expressions as much as possible first.
                 //
-                // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`), omit it.
+                // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`),
+                // omit it.
                 let Some(subtree) = normalize_all(subtree) else {
                     continue;
                 };
@@ -207,13 +208,29 @@ pub(crate) fn normalize_all(tree: MarkerTree) -> Option<MarkerTree> {
             for subtree in trees {
                 // Simplify nested expressions as much as possible first.
                 //
-                // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`), return `true`.
+                // If the expression gets normalized out (e.g., `version < '3.8' and version >= '3.8'`),
+                // return `true`.
                 let subtree = normalize_all(subtree)?;
 
                 match subtree {
                     MarkerTree::And(_) => reduced.push(subtree),
                     // Flatten nested `Or` expressions.
-                    MarkerTree::Or(subtrees) => reduced.extend(subtrees),
+                    MarkerTree::Or(subtrees) => {
+                        for subtree in subtrees {
+                            match subtree {
+                                // Look one level deeper for expressions to simplify, as
+                                // `normalize_all` can return `MarkerTree::Or` for some expressions.
+                                MarkerTree::Expression(ref expr) => {
+                                    if let Some((key, range)) = keyed_range(expr) {
+                                        versions.entry(key.clone()).or_default().push(range);
+                                        continue;
+                                    }
+                                    reduced.push(subtree);
+                                }
+                                _ => reduced.push(subtree),
+                            }
+                        }
+                    }
                     // Extract expressions we may be able to simplify more.
                     MarkerTree::Expression(ref expr) => {
                         if let Some((key, range)) = keyed_range(expr) {
@@ -243,7 +260,35 @@ pub(crate) fn normalize_all(tree: MarkerTree) -> Option<MarkerTree> {
             }
         }
 
-        MarkerTree::Expression(_) => Some(tree),
+        MarkerTree::Expression(ref expr) => {
+            if let Some((key, range)) = keyed_range(expr) {
+                // If multiple terms are required to express the range, flatten them into an `Or`
+                // expression.
+                let mut iter = range.iter().flat_map(VersionSpecifier::from_bounds);
+                let first = iter.next().unwrap();
+                if let Some(second) = iter.next() {
+                    Some(MarkerTree::Or(
+                        std::iter::once(first)
+                            .chain(std::iter::once(second))
+                            .chain(iter)
+                            .map(|specifier| {
+                                MarkerTree::Expression(MarkerExpression::Version {
+                                    key: key.clone(),
+                                    specifier,
+                                })
+                            })
+                            .collect(),
+                    ))
+                } else {
+                    Some(MarkerTree::Expression(MarkerExpression::Version {
+                        key: key.clone(),
+                        specifier: first,
+                    }))
+                }
+            } else {
+                Some(tree)
+            }
+        }
     }
 }
 
@@ -761,6 +806,24 @@ mod tests {
         assert_normalizes_to(
             "extra == 'a' and (python_version < '3.12.0rc1' or python_version >= '3.12.0rc1')",
             "extra == 'a'",
+        );
+
+        // normalize `!=` operators
+        assert_normalizes_out("python_version != '3.10' or python_version < '3.12'");
+
+        assert_normalizes_to(
+            "python_version != '3.10' or python_version > '3.12'",
+            "python_version < '3.10' or python_version > '3.10'",
+        );
+
+        assert_normalizes_to(
+            "python_version != '3.8' and python_version < '3.10'",
+            "python_version < '3.10' and (python_version < '3.8' or python_version > '3.8')",
+        );
+
+        assert_normalizes_to(
+            "python_version != '3.8' and python_version != '3.9'",
+            "(python_version < '3.8' or python_version > '3.8') and (python_version < '3.9' or python_version > '3.9')",
         );
     }
 
