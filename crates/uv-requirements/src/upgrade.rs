@@ -1,12 +1,10 @@
 use std::path::Path;
 
-use anstream::eprint;
 use anyhow::Result;
 
 use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
-use uv_distribution::Workspace;
 use uv_git::ResolvedRepositoryReference;
 use uv_resolver::{Lock, Preference, PreferenceError};
 
@@ -61,34 +59,6 @@ pub async fn read_requirements_txt(
             .filter(|preference| !packages.contains(preference.name()))
             .collect(),
     })
-}
-
-/// Load the lockfile from the workspace.
-///
-/// Returns `Ok(None)` if the lockfile does not exist, is invalid, or is not required for the given upgrade strategy.
-pub async fn read_lockfile(workspace: &Workspace, upgrade: &Upgrade) -> Result<Option<Lock>> {
-    // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
-    if upgrade.is_all() {
-        return Ok(None);
-    }
-
-    // If an existing lockfile exists, build up a set of preferences.
-    let lockfile = workspace.install_path().join("uv.lock");
-    let lock = match fs_err::tokio::read_to_string(&lockfile).await {
-        Ok(encoded) => match toml::from_str::<Lock>(&encoded) {
-            Ok(lock) => lock,
-            Err(err) => {
-                eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");
-                return Ok(None);
-            }
-        },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(None);
-        }
-        Err(err) => return Err(err.into()),
-    };
-
-    Ok(Some(lock))
 }
 
 /// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.

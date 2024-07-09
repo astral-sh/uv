@@ -11,6 +11,7 @@ use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::lock::commit;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -98,10 +99,14 @@ pub(crate) async fn remove(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // Lock and sync the environment.
+    // Read the existing lockfile.
+    let existing = project::lock::read(project.workspace()).await?;
+
+    // Lock and sync the environment, if necessary.
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
+        existing.as_ref(),
         settings.as_ref().into(),
         &state,
         preview,
@@ -112,6 +117,9 @@ pub(crate) async fn remove(
         printer,
     )
     .await?;
+    if !existing.is_some_and(|existing| existing == lock) {
+        commit(&lock, project.workspace()).await?;
+    }
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?

@@ -8,7 +8,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::ResolvedRepositoryReference;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
-use uv_requirements::upgrade::{read_lock_requirements, read_lockfile, LockedRequirements};
+use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -52,10 +52,14 @@ pub(crate) async fn lock(
     .await?
     .into_interpreter();
 
+    // Read the existing lockfile.
+    let existing = read(&workspace).await?;
+
     // Perform the lock operation.
     match do_lock(
         &workspace,
         &interpreter,
+        existing.as_ref(),
         settings.as_ref(),
         &SharedState::default(),
         preview,
@@ -67,7 +71,12 @@ pub(crate) async fn lock(
     )
     .await
     {
-        Ok(_) => Ok(ExitStatus::Success),
+        Ok(lock) => {
+            if !existing.is_some_and(|existing| existing == lock) {
+                commit(&lock, &workspace).await?;
+            }
+            Ok(ExitStatus::Success)
+        }
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -84,6 +93,7 @@ pub(crate) async fn lock(
 pub(super) async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
+    existing: Option<&Lock>,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     preview: PreviewMode,
@@ -175,9 +185,7 @@ pub(super) async fn do_lock(
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let existing_lock = read_lockfile(workspace, upgrade).await?;
-    let LockedRequirements { preferences, git } = existing_lock
-        .as_ref()
+    let LockedRequirements { preferences, git } = existing
         .map(|lock| read_lock_requirements(lock, upgrade))
         .unwrap_or_default();
 
@@ -238,15 +246,29 @@ pub(super) async fn do_lock(
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    // Avoid serializing and writing to disk if the lock hasn't changed.
-    let lock = Lock::from_resolution_graph(&resolution)?;
-    if existing_lock.is_some_and(|existing_lock| existing_lock == lock) {
-        return Ok(lock);
-    }
+    Ok(Lock::from_resolution_graph(&resolution)?)
+}
 
-    // Write the lockfile to disk.
+/// Write the lockfile to disk.
+pub(crate) async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> {
     let encoded = lock.to_toml()?;
-    fs_err::tokio::write(workspace.install_path().join("uv.lock"), encoded.as_bytes()).await?;
+    fs_err::tokio::write(workspace.install_path().join("uv.lock"), encoded).await?;
+    Ok(())
+}
 
-    Ok(lock)
+/// Read the lockfile from the workspace.
+///
+/// Returns `Ok(None)` if the lockfile does not exist.
+pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
+    match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
+        Ok(encoded) => match toml::from_str::<Lock>(&encoded) {
+            Ok(lock) => Ok(Some(lock)),
+            Err(err) => {
+                eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");
+                Ok(None)
+            }
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
 }

@@ -884,6 +884,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::sync(
+                args.locked,
+                args.frozen,
                 args.extras,
                 args.dev,
                 args.modifications,

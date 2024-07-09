@@ -22,6 +22,7 @@ use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
     PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
+
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 
@@ -179,10 +180,14 @@ pub(crate) async fn run(
             )
             .await?;
 
+            // Read the existing lockfile.
+            let existing = project::lock::read(project.workspace()).await?;
+
             // Lock and sync the environment.
             let lock = project::lock::do_lock(
                 project.workspace(),
                 venv.interpreter(),
+                existing.as_ref(),
                 settings.as_ref().into(),
                 &state,
                 preview,
@@ -193,6 +198,11 @@ pub(crate) async fn run(
                 printer,
             )
             .await?;
+
+            if !existing.is_some_and(|existing| existing == lock) {
+                project::lock::commit(&lock, project.workspace()).await?;
+            }
+
             project::sync::do_sync(
                 &project,
                 &venv,
