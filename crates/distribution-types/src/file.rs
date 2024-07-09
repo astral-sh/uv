@@ -1,11 +1,11 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
-use pep508_rs::split_scheme;
 use pypi_types::{CoreMetadata, HashDigest, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
@@ -56,10 +56,9 @@ impl File {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
-            url: if split_scheme(&file.url).is_some() {
-                FileLocation::AbsoluteUrl(file.url)
-            } else {
-                FileLocation::RelativeUrl(base.to_string(), file.url)
+            url: match Url::parse(&file.url) {
+                Ok(url) => FileLocation::AbsoluteUrl(url.into()),
+                Err(_) => FileLocation::RelativeUrl(base.to_string(), file.url),
             },
             yanked: file.yanked,
         })
@@ -76,7 +75,7 @@ pub enum FileLocation {
     /// URL relative to the base URL.
     RelativeUrl(String, String),
     /// Absolute URL.
-    AbsoluteUrl(String),
+    AbsoluteUrl(UrlString),
     /// Absolute path to a file.
     Path(#[with(rkyv::with::AsString)] PathBuf),
 }
@@ -107,13 +106,7 @@ impl FileLocation {
                 })?;
                 Ok(joined)
             }
-            FileLocation::AbsoluteUrl(ref absolute) => {
-                let url = Url::parse(absolute).map_err(|err| ToUrlError::InvalidAbsolute {
-                    absolute: absolute.clone(),
-                    err,
-                })?;
-                Ok(url)
-            }
+            FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.to_url()),
             FileLocation::Path(ref path) => {
                 let path = path
                     .to_str()
@@ -125,15 +118,76 @@ impl FileLocation {
             }
         }
     }
+
+    /// Convert this location to a URL.
+    ///
+    /// This method is identical to [`FileLocation::to_url`] except it avoids parsing absolute URLs
+    /// as they are already guaranteed to be valid.
+    pub fn to_url_string(&self) -> Result<UrlString, ToUrlError> {
+        match *self {
+            FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.clone()),
+            _ => Ok(self.to_url()?.into()),
+        }
+    }
 }
 
 impl Display for FileLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::RelativeUrl(_base, url) => Display::fmt(&url, f),
-            Self::AbsoluteUrl(url) => Display::fmt(&url, f),
+            Self::AbsoluteUrl(url) => Display::fmt(&url.0, f),
             Self::Path(path) => Display::fmt(&path.display(), f),
         }
+    }
+}
+
+/// A [`Url`] represented as a `String`.
+///
+/// This type is guaranteed to be a valid URL but avoids being parsed into the [`Url`] type.
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+    PartialEq,
+    Eq,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
+pub struct UrlString(String);
+
+impl UrlString {
+    /// Converts a [`UrlString`] to a [`Url`].
+    pub fn to_url(&self) -> Url {
+        // This conversion can never fail as the only way to construct a `UrlString` is from a `Url`.
+        Url::from_str(&self.0).unwrap()
+    }
+}
+
+impl AsRef<str> for UrlString {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<Url> for UrlString {
+    fn from(value: Url) -> Self {
+        UrlString(value.to_string())
+    }
+}
+
+impl From<UrlString> for String {
+    fn from(value: UrlString) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for UrlString {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 

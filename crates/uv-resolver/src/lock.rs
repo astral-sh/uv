@@ -17,7 +17,7 @@ use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, FileLocation,
     GitSourceDist, IndexUrl, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
+    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError, UrlString,
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{
@@ -716,7 +716,7 @@ impl Distribution {
                         requires_python: None,
                         size: sdist.size(),
                         upload_time_utc_ms: None,
-                        url: FileLocation::AbsoluteUrl(file_url.to_string()),
+                        url: FileLocation::AbsoluteUrl(file_url.clone().into()),
                         yanked: None,
                     });
                     let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
@@ -1705,7 +1705,7 @@ struct Wheel {
     /// against was found. The location does not need to exist in the future,
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
-    url: Url,
+    url: UrlString,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -1773,7 +1773,7 @@ impl Wheel {
         let url = wheel
             .file
             .url
-            .to_url()
+            .to_url_string()
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
         let hash = wheel.file.hashes.first().cloned().map(Hash::from);
@@ -1788,7 +1788,7 @@ impl Wheel {
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
-            url: direct_dist.url.to_url(),
+            url: direct_dist.url.to_url().into(),
             hash: hashes.first().cloned().map(Hash::from),
             size: None,
             filename: direct_dist.filename.clone(),
@@ -1797,7 +1797,7 @@ impl Wheel {
 
     fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
-            url: path_dist.url.to_url(),
+            url: path_dist.url.to_url().into(),
             hash: hashes.first().cloned().map(Hash::from),
             size: None,
             filename: path_dist.filename.clone(),
@@ -1813,7 +1813,7 @@ impl Wheel {
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: None,
-            url: FileLocation::AbsoluteUrl(self.url.to_string()),
+            url: FileLocation::AbsoluteUrl(self.url.clone()),
             yanked: None,
         });
         let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
@@ -1872,7 +1872,7 @@ impl TryFrom<WheelWire> for Wheel {
             .map_err(|err| format!("failed to parse `{filename}` as wheel filename: {err}"))?;
 
         Ok(Wheel {
-            url: wire.url,
+            url: wire.url.into(),
             hash: wire.hash,
             size: wire.size,
             filename,

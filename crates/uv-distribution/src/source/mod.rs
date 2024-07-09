@@ -102,9 +102,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     FileLocation::RelativeUrl(base, url) => {
                         pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => {
-                        Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
-                    }
+                    FileLocation::AbsoluteUrl(url) => url.to_url(),
                     FileLocation::Path(path) => {
                         let url = Url::from_file_path(path)
                             .map_err(|()| Error::RelativePath(path.clone()))?;
@@ -280,9 +278,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     FileLocation::RelativeUrl(base, url) => {
                         pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => {
-                        Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
-                    }
+                    FileLocation::AbsoluteUrl(url) => url.to_url(),
                     FileLocation::Path(path) => {
                         let url = Url::from_file_path(path)
                             .map_err(|()| Error::RelativePath(path.clone()))?;
