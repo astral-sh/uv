@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 
 use anyhow::Result;
 use fs_err as fs;
@@ -154,17 +154,28 @@ pub(crate) async fn install(
         installed.ensure_externally_managed()?;
     }
 
-    let s = if downloads.len() == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Installed {} {}",
-            format!("{} version{s}", downloads.len()).bold(),
-            format!("in {}", elapsed(start.elapsed())).dimmed()
-        )
-        .dimmed()
-    )?;
+    if downloads.len() == 1 {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Installed Python {}",
+                format!("in {}", elapsed(start.elapsed())).dimmed()
+            )
+            .dimmed()
+        )?;
+    } else {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Installed {} {}",
+                format!("{} versions", downloads.len()).bold(),
+                format!("in {}", elapsed(start.elapsed())).dimmed()
+            )
+            .dimmed()
+        )?;
+    }
 
     Ok(ExitStatus::Success)
 }
