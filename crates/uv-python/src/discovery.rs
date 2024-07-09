@@ -1490,45 +1490,55 @@ impl fmt::Display for PythonSource {
     }
 }
 
-impl fmt::Display for PythonPreference {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Self::OnlyManaged => "managed installations",
+impl PythonPreference {
+    /// Return the sources that are considered when searching for a Python interpreter.
+    fn sources(self) -> &'static [&'static str] {
+        match self {
+            Self::OnlyManaged => &["managed installations"],
             Self::Managed | Self::Installed | Self::System => {
                 if cfg!(windows) {
-                    "managed installations, system path, or `py` launcher"
+                    &["managed installations", "system path", "`py` launcher"]
                 } else {
-                    "managed installations or system path"
+                    &["managed installations", "system path"]
                 }
             }
             Self::OnlySystem => {
                 if cfg!(windows) {
-                    "system path or `py` launcher"
+                    &["system path", "`py` launcher"]
                 } else {
-                    "system path"
+                    &["system path"]
                 }
             }
-        };
-        f.write_str(s)
+        }
+    }
+}
+
+impl fmt::Display for PythonPreference {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", conjunction(self.sources()))
     }
 }
 
 impl fmt::Display for PythonNotFound {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let sources = match self.environment_preference {
-            EnvironmentPreference::Any => {
-                format!("virtual environments or {}", self.python_preference)
-            }
+            EnvironmentPreference::Any => conjunction(
+                &["virtual environments"]
+                    .into_iter()
+                    .chain(self.python_preference.sources().iter().copied())
+                    .collect::<Vec<_>>(),
+            ),
             EnvironmentPreference::ExplicitSystem => {
                 if self.request.is_explicit_system() {
-                    "virtual or system environment".to_string()
+                    conjunction(&["virtual", "system environment"])
                 } else {
-                    "virtual environment".to_string()
+                    conjunction(&["virtual environment"])
                 }
             }
-            EnvironmentPreference::OnlySystem => self.python_preference.to_string(),
-            EnvironmentPreference::OnlyVirtual => "virtual environments".to_string(),
+            EnvironmentPreference::OnlySystem => conjunction(self.python_preference.sources()),
+            EnvironmentPreference::OnlyVirtual => conjunction(&["virtual environments"]),
         };
+
         match self.request {
             PythonRequest::Any => {
                 write!(f, "No interpreter found in {sources}")
@@ -1536,6 +1546,22 @@ impl fmt::Display for PythonNotFound {
             _ => {
                 write!(f, "No interpreter found for {} in {sources}", self.request)
             }
+        }
+    }
+}
+
+/// Join a series of items with `or` separators, making use of commas when necessary.
+fn conjunction(items: &[&str]) -> String {
+    match items.len() {
+        1 => items[0].to_string(),
+        2 => format!("{} or {}", items[0], items[1]),
+        _ => {
+            let last = items.last().unwrap();
+            format!(
+                "{}, or {}",
+                items.iter().take(items.len() - 1).join(", "),
+                last
+            )
         }
     }
 }
