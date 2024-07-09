@@ -2,7 +2,10 @@
 
 use common::{uv_snapshot, TestContext};
 use insta::assert_snapshot;
-use uv_python::platform::{Arch, Os};
+use uv_python::{
+    platform::{Arch, Os},
+    PYTHON_VERSION_FILENAME,
+};
 
 mod common;
 
@@ -30,7 +33,8 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     assert_snapshot!(python_version, @r#"any"#);
 
     // Without arguments, we read the current pin
@@ -44,7 +48,8 @@ fn python_pin() {
     "###);
 
     // We should not mutate the file
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     assert_snapshot!(python_version, @r#"any"#);
 
     // Request Python 3.12
@@ -57,7 +62,8 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     assert_snapshot!(python_version, @r###"
     3.12
     "###);
@@ -72,7 +78,8 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     assert_snapshot!(python_version, @r###"
     3.11
     "###);
@@ -87,7 +94,8 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     assert_snapshot!(python_version, @r###"
     cpython
     "###);
@@ -102,7 +110,8 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     assert_snapshot!(python_version, @r###"
     cpython@3.12
     "###);
@@ -117,7 +126,8 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     assert_snapshot!(python_version, @r###"
     cpython@3.12
     "###);
@@ -132,7 +142,8 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     assert_snapshot!(python_version, @r###"
     cpython-3.12-any-any-any
     "###);
@@ -147,7 +158,8 @@ fn python_pin() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -157,23 +169,31 @@ fn python_pin() {
     });
 
     // Request an implementation that is not installed
-    uv_snapshot!(context.filters(), context.python_pin().arg("pypy"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Replaced existing pin with `pypy`
+    // (skip on Windows because the snapshot is different and the behavior is not platform dependent)
+    #[cfg(unix)]
+    {
+        uv_snapshot!(context.filters(), context.python_pin().arg("pypy"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        Replaced existing pin with `pypy`
 
-    ----- stderr -----
-    warning: No interpreter found for PyPy in system path
-    "###);
+        ----- stderr -----
+        warning: No interpreter found for PyPy in system path
+        "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
-    assert_snapshot!(python_version, @r###"
-    pypy
-    "###);
+        let python_version =
+            fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+        assert_snapshot!(python_version, @r###"
+        pypy
+        "###);
+    }
 
     // Request a version that is not installed
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.7"), @r###"
+    // (skip on Windows because the snapshot is different and the behavior is not platform dependent)
+    #[cfg(unix)]
+    {
+        uv_snapshot!(context.filters(), context.python_pin().arg("3.7"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -183,13 +203,17 @@ fn python_pin() {
     warning: No interpreter found for Python 3.7 in system path
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
-    assert_snapshot!(python_version, @r###"
+        let python_version =
+            fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+        assert_snapshot!(python_version, @r###"
     3.7
     "###);
+    }
 }
 
 /// We do not need a Python interpreter to pin without `--resolved`
+/// (skip on Windows because the snapshot is different and the behavior is not platform dependent)
+#[cfg(unix)]
 #[test]
 fn python_pin_no_python() {
     let context: TestContext = TestContext::new_with_versions(&[]);
@@ -217,7 +241,7 @@ fn python_pin_resolve_no_python() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found in system path or `py` launcher
+        error: No interpreter found for Python 3.12 in system path or `py` launcher
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r###"
@@ -245,7 +269,8 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -259,12 +284,13 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.12]
+    Replaced existing pin with `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -283,7 +309,8 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -302,7 +329,8 @@ fn python_pin_resolve() {
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -316,12 +344,13 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.12]
+    Replaced existing pin with `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -335,12 +364,13 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.12]
+    Replaced existing pin with `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -359,12 +389,13 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.12]
+    Replaced existing pin with `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -374,6 +405,8 @@ fn python_pin_resolve() {
     });
 
     // Request an implementation that is not installed
+    // (skip on Windows because the snapshot is different and the behavior is not platform dependent)
+    #[cfg(unix)]
     uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("pypy"), @r###"
     success: false
     exit_code: 2
@@ -383,7 +416,8 @@ fn python_pin_resolve() {
     error: No interpreter found for PyPy in system path
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -393,6 +427,8 @@ fn python_pin_resolve() {
     });
 
     // Request a version that is not installed
+    // (skip on Windows because the snapshot is different and the behavior is not platform dependent)
+    #[cfg(unix)]
     uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.7"), @r###"
     success: false
     exit_code: 2
@@ -402,7 +438,8 @@ fn python_pin_resolve() {
     error: No interpreter found for Python 3.7 in system path
     "###);
 
-    let python_version = fs_err::read_to_string(context.temp_dir.join(".python-version")).unwrap();
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
     insta::with_settings!({
         filters => context.filters(),
     }, {

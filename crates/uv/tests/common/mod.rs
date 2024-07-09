@@ -235,7 +235,7 @@ impl TestContext {
                     .into_iter()
                     .map(|pattern| {
                         (
-                            format!("{pattern}{}.*", std::path::MAIN_SEPARATOR),
+                            format!("{pattern}[a-zA-Z0-9]*"),
                             format!("[PYTHON-{version}]"),
                         )
                     }),

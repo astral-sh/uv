@@ -9,7 +9,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::{
     requests_from_version_file, EnvironmentPreference, PythonInstallation, PythonPreference,
-    PythonRequest,
+    PythonRequest, PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
 
@@ -69,15 +69,15 @@ pub(crate) async fn pin(
     };
 
     debug!("Using pin `{}`", output);
-    let version_file = PathBuf::from(".python-version");
+    let version_file = PathBuf::from(PYTHON_VERSION_FILENAME);
     let exists = version_file.exists();
 
     debug!("Writing pin to {}", version_file.user_display());
     fs_err::write(&version_file, format!("{output}\n"))?;
     if exists {
-        writeln!(printer.stdout(), "Replaced existing pin with `{output}`",)?;
+        writeln!(printer.stdout(), "Replaced existing pin with `{output}`")?;
     } else {
-        writeln!(printer.stdout(), "Pinned to `{output}`",)?;
+        writeln!(printer.stdout(), "Pinned to `{output}`")?;
     }
 
     Ok(ExitStatus::Success)
