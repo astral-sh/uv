@@ -52,7 +52,12 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
 #[command(name = "uv", author, version = uv_version::version(), long_version = crate::version::version())]
 #[command(about = "An extremely fast Python package manager.")]
 #[command(propagate_version = true)]
-#[command(disable_help_flag = true)]
+#[command(
+    after_help = "Use `uv help` for more details.",
+    after_long_help = "",
+    disable_help_flag = true,
+    disable_help_subcommand = true
+)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
@@ -175,18 +180,39 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Resolve and install Python packages.
+    #[command(
+        after_help = "Use `uv help pip`` for more details.",
+        after_long_help = ""
+    )]
     Pip(PipNamespace),
     /// Run and manage executable Python packages.
+    #[command(
+        after_help = "Use `uv help tool` for more details.",
+        after_long_help = ""
+    )]
     Tool(ToolNamespace),
     /// Manage Python installations.
+    #[command(
+        after_help = "Use `uv help python` for more details.",
+        after_long_help = ""
+    )]
     Python(PythonNamespace),
     /// Manage Python projects.
     #[command(flatten)]
     Project(Box<ProjectCommand>),
     /// Create a virtual environment.
-    #[command(alias = "virtualenv", alias = "v")]
+    #[command(
+        alias = "virtualenv",
+        alias = "v",
+        after_help = "Use `uv help venv` for more details.",
+        after_long_help = ""
+    )]
     Venv(VenvArgs),
     /// Manage the cache.
+    #[command(
+        after_help = "Use `uv help cache` for more details.",
+        after_long_help = ""
+    )]
     Cache(CacheNamespace),
     /// Manage the `uv` executable.
     #[command(name = "self")]
@@ -203,6 +229,17 @@ pub enum Commands {
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion { shell: clap_complete_command::Shell },
+    /// Display documentation for a command.
+    #[command(help_template = "\
+{about-with-newline}
+{usage-heading} {usage}
+")]
+    Help(HelpArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct HelpArgs {
+    pub command: Option<Vec<String>>,
 }
 
 #[derive(Args)]
@@ -253,22 +290,58 @@ pub struct PipNamespace {
 #[derive(Subcommand)]
 pub enum PipCommand {
     /// Compile a `requirements.in` file to a `requirements.txt` file.
+    #[command(
+        after_help = "Use `uv help pip compile` for more details.",
+        after_long_help = ""
+    )]
     Compile(PipCompileArgs),
     /// Sync an environment with a `requirements.txt` file.
+    #[command(
+        after_help = "Use `uv help pip sync` for more details.",
+        after_long_help = ""
+    )]
     Sync(PipSyncArgs),
     /// Install packages into an environment.
+    #[command(
+        after_help = "Use `uv help pip install` for more details.",
+        after_long_help = ""
+    )]
     Install(PipInstallArgs),
     /// Uninstall packages from an environment.
+    #[command(
+        after_help = "Use `uv help pip uninstall` for more details.",
+        after_long_help = ""
+    )]
     Uninstall(PipUninstallArgs),
     /// List, in requirements format, packages installed in an environment.
+    #[command(
+        after_help = "Use `uv help pip freeze` for more details.",
+        after_long_help = ""
+    )]
     Freeze(PipFreezeArgs),
     /// List, in tabular format, packages installed in an environment.
+    #[command(
+        after_help = "Use `uv help pip list` for more details.",
+        after_long_help = ""
+    )]
     List(PipListArgs),
     /// Show information about one or more installed packages.
+    #[command(
+        after_help = "Use `uv help pip show` for more details.",
+        after_long_help = ""
+    )]
     Show(PipShowArgs),
     /// Display the dependency tree for an environment.
+    #[command(
+        after_help = "Use `uv help pip tree` for more details.",
+        after_long_help = ""
+    )]
     Tree(PipTreeArgs),
     /// Verify installed packages have compatible dependencies.
+    #[command(
+        after_help = "Use `uv help pip check` for more details.",
+        after_long_help = ""
+    )]
     Check(PipCheckArgs),
 }
 
@@ -276,18 +349,38 @@ pub enum PipCommand {
 pub enum ProjectCommand {
     /// Run a command in the project environment.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help run` for more details.",
+        after_long_help = ""
+    )]
     Run(RunArgs),
     /// Sync the project's dependencies with the environment.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help sync` for more details.",
+        after_long_help = ""
+    )]
     Sync(SyncArgs),
     /// Resolve the project requirements into a lockfile.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help lock` for more details.",
+        after_long_help = ""
+    )]
     Lock(LockArgs),
     /// Add one or more packages to the project requirements.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help add` for more details.",
+        after_long_help = ""
+    )]
     Add(AddArgs),
     /// Remove one or more packages from the project requirements.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help remove` for more details.",
+        after_long_help = ""
+    )]
     Remove(RemoveArgs),
     /// Display the dependency tree for the project.
     #[clap(hide = true)]
