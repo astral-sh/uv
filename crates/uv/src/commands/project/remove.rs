@@ -13,7 +13,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettings, ResolverSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Remove one or more packages from the project requirements.
 pub(crate) async fn remove(
@@ -21,6 +21,7 @@ pub(crate) async fn remove(
     dependency_type: DependencyType,
     package: Option<PackageName>,
     python: Option<String>,
+    settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
     preview: PreviewMode,
@@ -94,9 +95,6 @@ pub(crate) async fn remove(
     )
     .await?;
 
-    // Use the default settings.
-    let settings = ResolverSettings::default();
-
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -104,7 +102,7 @@ pub(crate) async fn remove(
     let lock = project::lock::do_lock(
         project.workspace(),
         venv.interpreter(),
-        settings.as_ref(),
+        settings.as_ref().into(),
         &state,
         preview,
         connectivity,
@@ -117,7 +115,6 @@ pub(crate) async fn remove(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let settings = InstallerSettings::default();
     let extras = ExtrasSpecification::All;
     let dev = true;
 
@@ -128,7 +125,7 @@ pub(crate) async fn remove(
         extras,
         dev,
         Modifications::Exact,
-        settings.as_ref(),
+        settings.as_ref().into(),
         &state,
         preview,
         connectivity,

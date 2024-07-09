@@ -43,7 +43,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],

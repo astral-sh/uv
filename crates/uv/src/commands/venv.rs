@@ -105,7 +105,7 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[allow(clippy::fn_params_excessive_bools)]
 async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
