@@ -66,7 +66,7 @@ base64 = { version = "0.22.0" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.8" }
 chrono = { version = "0.4.31" }
-clap = { version = "4.5.3" }
+clap = { version = "4.5.9" }
 clap_complete_command = { version = "0.5.1" }
 configparser = { version = "3.0.4" }
 console = { version = "0.15.8", default-features = false }
