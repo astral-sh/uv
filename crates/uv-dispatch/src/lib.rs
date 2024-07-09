@@ -278,16 +278,17 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         }
 
         // Install the resolved distributions.
-        let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+        let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
         if !wheels.is_empty() {
             debug!(
                 "Installing build requirement{}: {}",
                 if wheels.len() == 1 { "" } else { "s" },
                 wheels.iter().map(ToString::to_string).join(", ")
             );
-            Installer::new(venv)
+            wheels = Installer::new(venv)
                 .with_link_mode(self.link_mode)
-                .install(&wheels)
+                .install(wheels)
+                .await
                 .context("Failed to install build dependencies")?;
         }
 

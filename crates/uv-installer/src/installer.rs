@@ -1,5 +1,9 @@
+use std::convert;
+
 use anyhow::{Context, Error, Result};
+use install_wheel_rs::{linker::LinkMode, Layout};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use tokio::sync::oneshot;
 use tracing::instrument;
 
 use distribution_types::CachedDist;
@@ -7,7 +11,7 @@ use uv_python::PythonEnvironment;
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
-    link_mode: install_wheel_rs::linker::LinkMode,
+    link_mode: LinkMode,
     reporter: Option<Box<dyn Reporter>>,
     installer_name: Option<String>,
 }
@@ -17,7 +21,7 @@ impl<'a> Installer<'a> {
     pub fn new(venv: &'a PythonEnvironment) -> Self {
         Self {
             venv,
-            link_mode: install_wheel_rs::linker::LinkMode::default(),
+            link_mode: LinkMode::default(),
             reporter: None,
             installer_name: Some("uv".to_string()),
         }
@@ -25,7 +29,7 @@ impl<'a> Installer<'a> {
 
     /// Set the [`LinkMode`][`install_wheel_rs::linker::LinkMode`] to use for this installer.
     #[must_use]
-    pub fn with_link_mode(self, link_mode: install_wheel_rs::linker::LinkMode) -> Self {
+    pub fn with_link_mode(self, link_mode: LinkMode) -> Self {
         Self { link_mode, ..self }
     }
 
@@ -49,33 +53,73 @@ impl<'a> Installer<'a> {
 
     /// Install a set of wheels into a Python virtual environment.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
-    pub fn install(self, wheels: &[CachedDist]) -> Result<()> {
-        let layout = self.venv.interpreter().layout();
-        tokio::task::block_in_place(|| {
-            wheels.par_iter().try_for_each(|wheel| {
-                install_wheel_rs::linker::install_wheel(
-                    &layout,
-                    wheel.path(),
-                    wheel.filename(),
-                    wheel
-                        .parsed_url()?
-                        .as_ref()
-                        .map(pypi_types::DirectUrl::try_from)
-                        .transpose()?
-                        .as_ref(),
-                    self.installer_name.as_deref(),
-                    self.link_mode,
-                )
-                .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
+    pub async fn install(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
+        let (tx, rx) = oneshot::channel();
 
-                if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_install_progress(wheel);
-                }
+        let Self {
+            venv,
+            link_mode,
+            reporter,
+            installer_name,
+        } = self;
+        let layout = venv.interpreter().layout();
 
-                Ok::<(), Error>(())
-            })
-        })
+        rayon::spawn(move || {
+            let result = install(wheels, layout, installer_name, link_mode, reporter);
+            tx.send(result).unwrap();
+        });
+
+        rx.await
+            .map_err(|_| anyhow::anyhow!("`install_blocking` task panicked"))
+            .and_then(convert::identity)
     }
+
+    /// Install a set of wheels into a Python virtual environment synchronously.
+    #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
+    pub fn install_blocking(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
+        install(
+            wheels,
+            self.venv.interpreter().layout(),
+            self.installer_name,
+            self.link_mode,
+            self.reporter,
+        )
+    }
+}
+
+/// Install a set of wheels into a Python virtual environment synchronously.
+#[instrument(skip_all, fields(num_wheels = %wheels.len()))]
+fn install(
+    wheels: Vec<CachedDist>,
+    layout: Layout,
+    installer_name: Option<String>,
+    link_mode: LinkMode,
+    reporter: Option<Box<dyn Reporter>>,
+) -> Result<Vec<CachedDist>> {
+    wheels.par_iter().try_for_each(|wheel| {
+        install_wheel_rs::linker::install_wheel(
+            &layout,
+            wheel.path(),
+            wheel.filename(),
+            wheel
+                .parsed_url()?
+                .as_ref()
+                .map(pypi_types::DirectUrl::try_from)
+                .transpose()?
+                .as_ref(),
+            installer_name.as_deref(),
+            link_mode,
+        )
+        .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
+
+        if let Some(reporter) = reporter.as_ref() {
+            reporter.on_install_progress(wheel);
+        }
+
+        Ok::<(), Error>(())
+    })?;
+
+    Ok(wheels)
 }
 
 pub trait Reporter: Send + Sync {

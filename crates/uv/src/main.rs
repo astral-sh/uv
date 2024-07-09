@@ -1019,7 +1019,7 @@ fn main() -> ExitCode {
     let result = if let Ok(stack_size) = env::var("UV_STACK_SIZE") {
         let stack_size = stack_size.parse().expect("Invalid stack size");
         let tokio_main = move || {
-            let runtime = tokio::runtime::Builder::new_multi_thread()
+            let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .thread_stack_size(stack_size)
                 .build()
@@ -1041,7 +1041,7 @@ fn main() -> ExitCode {
             .join()
             .expect("Tokio executor failed, was there a panic?")
     } else {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
+        let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("Failed building the Runtime");
