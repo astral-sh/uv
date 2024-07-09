@@ -69,7 +69,7 @@ brew install uv
 To create a virtual environment:
 
 ```shell
-uv venv  # Create a virtual environment at .venv
+uv venv  # Create a virtual environment at `.venv`.
 ```
 
 To activate the virtual environment:
