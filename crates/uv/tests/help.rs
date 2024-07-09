@@ -102,7 +102,7 @@ fn help() {
               [env: UV_CONFIG_FILE=]
 
       -h, --help
-              Print help (see a summary with '-h')
+              Print help
 
       -V, --version
               Print version
@@ -134,83 +134,29 @@ fn help_flag() {
     Options:
       -q, --quiet
               Do not print any output
-
       -v, --verbose...
-              Use verbose output.
-              
-              You can configure fine-grained logging using the `RUST_LOG` environment variable.
-              (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
-
+              Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output
-              
-              [default: auto]
-
-              Possible values:
-              - auto:   Enables colored output only when the output is going to a terminal or TTY with
-                support
-              - always: Enables colored output regardless of the detected environment
-              - never:  Disables colored output
-
+              Control colors in output [default: auto] [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
-              
-              By default, `uv` loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in `uv`
-              improves portability and performance (especially on macOS).
-              
-              However, in some cases, you may want to use the platform's native certificate store,
-              especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
-              that's included in your system's certificate store.
-              
-              [env: UV_NATIVE_TLS=]
-
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
           --offline
               Disable network access, relying only on locally cached data and locally available files
-
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system
-
-              Possible values:
-              - only-managed: Only use managed Python installations; never use system Python
-                installations
-              - installed:    Prefer installed Python installations, only download managed Python
-                installations if no system Python installation is found
-              - managed:      Prefer managed Python installations over system Python installations, even
-                if fetching is required
-              - system:       Prefer system Python installations over managed Python installations
-              - only-system:  Only use system Python installations; never use managed Python
-                installations
-
+              Whether to prefer using Python from uv or on the system [possible values: only-managed,
+              installed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required
-
-              Possible values:
-              - automatic: Automatically fetch managed Python installations when needed
-              - manual:    Do not automatically fetch managed Python installations; require explicit
-                installation
-
+              Whether to automatically download Python when required [possible values: automatic,
+              manual]
       -n, --no-cache
-              Avoid reading from or writing to the cache
-              
-              [env: UV_NO_CACHE=]
-
+              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
-              Path to the cache directory.
-              
-              Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `{FOLDERID_LocalAppData}/uv/cache` on Windows.
-              
-              [env: UV_CACHE_DIR=]
-
+              Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
-              The path to a `uv.toml` file to use for configuration
-              
-              [env: UV_CONFIG_FILE=]
-
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
       -h, --help
-              Print help (see a summary with '-h')
-
+              Print help
       -V, --version
               Print version
 
@@ -263,7 +209,7 @@ fn help_short_flag() {
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
       -h, --help
-              Print help (see more with '--help')
+              Print help
       -V, --version
               Print version
 
@@ -369,7 +315,7 @@ fn help_subcommand() {
               [env: UV_CONFIG_FILE=]
 
       -h, --help
-              Print help (see a summary with '-h')
+              Print help
 
       -V, --version
               Print version
@@ -479,7 +425,7 @@ fn help_subsubcommand() {
               [env: UV_CONFIG_FILE=]
 
       -h, --help
-              Print help (see a summary with '-h')
+              Print help
 
       -V, --version
               Print version
@@ -511,83 +457,29 @@ fn help_flag_subcommand() {
     Options:
       -q, --quiet
               Do not print any output
-
       -v, --verbose...
-              Use verbose output.
-              
-              You can configure fine-grained logging using the `RUST_LOG` environment variable.
-              (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
-
+              Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output
-              
-              [default: auto]
-
-              Possible values:
-              - auto:   Enables colored output only when the output is going to a terminal or TTY with
-                support
-              - always: Enables colored output regardless of the detected environment
-              - never:  Disables colored output
-
+              Control colors in output [default: auto] [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
-              
-              By default, `uv` loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in `uv`
-              improves portability and performance (especially on macOS).
-              
-              However, in some cases, you may want to use the platform's native certificate store,
-              especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
-              that's included in your system's certificate store.
-              
-              [env: UV_NATIVE_TLS=]
-
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
           --offline
               Disable network access, relying only on locally cached data and locally available files
-
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system
-
-              Possible values:
-              - only-managed: Only use managed Python installations; never use system Python
-                installations
-              - installed:    Prefer installed Python installations, only download managed Python
-                installations if no system Python installation is found
-              - managed:      Prefer managed Python installations over system Python installations, even
-                if fetching is required
-              - system:       Prefer system Python installations over managed Python installations
-              - only-system:  Only use system Python installations; never use managed Python
-                installations
-
+              Whether to prefer using Python from uv or on the system [possible values: only-managed,
+              installed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required
-
-              Possible values:
-              - automatic: Automatically fetch managed Python installations when needed
-              - manual:    Do not automatically fetch managed Python installations; require explicit
-                installation
-
+              Whether to automatically download Python when required [possible values: automatic,
+              manual]
       -n, --no-cache
-              Avoid reading from or writing to the cache
-              
-              [env: UV_NO_CACHE=]
-
+              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
-              Path to the cache directory.
-              
-              Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `{FOLDERID_LocalAppData}/uv/cache` on Windows.
-              
-              [env: UV_CACHE_DIR=]
-
+              Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
-              The path to a `uv.toml` file to use for configuration
-              
-              [env: UV_CONFIG_FILE=]
-
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
       -h, --help
-              Print help (see a summary with '-h')
-
+              Print help
       -V, --version
               Print version
 
@@ -608,96 +500,36 @@ fn help_flag_subsubcommand() {
     Usage: uv python install [OPTIONS] [TARGETS]...
 
     Arguments:
-      [TARGETS]...
-              The Python version(s) to install.
-              
-              If not provided, the requested Python version(s) will be read from the `.python-versions`
-              or `.python-version` files. If neither file is present, uv will check if it has installed
-              any Python versions. If not, it will install the latest stable version of Python.
+      [TARGETS]...  The Python version(s) to install
 
     Options:
       -f, --force
               Force the installation of the requested Python, even if it is already installed
-
       -q, --quiet
               Do not print any output
-
       -v, --verbose...
-              Use verbose output.
-              
-              You can configure fine-grained logging using the `RUST_LOG` environment variable.
-              (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
-
+              Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output
-              
-              [default: auto]
-
-              Possible values:
-              - auto:   Enables colored output only when the output is going to a terminal or TTY with
-                support
-              - always: Enables colored output regardless of the detected environment
-              - never:  Disables colored output
-
+              Control colors in output [default: auto] [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
-              
-              By default, `uv` loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in `uv`
-              improves portability and performance (especially on macOS).
-              
-              However, in some cases, you may want to use the platform's native certificate store,
-              especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
-              that's included in your system's certificate store.
-              
-              [env: UV_NATIVE_TLS=]
-
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
           --offline
               Disable network access, relying only on locally cached data and locally available files
-
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system
-
-              Possible values:
-              - only-managed: Only use managed Python installations; never use system Python
-                installations
-              - installed:    Prefer installed Python installations, only download managed Python
-                installations if no system Python installation is found
-              - managed:      Prefer managed Python installations over system Python installations, even
-                if fetching is required
-              - system:       Prefer system Python installations over managed Python installations
-              - only-system:  Only use system Python installations; never use managed Python
-                installations
-
+              Whether to prefer using Python from uv or on the system [possible values: only-managed,
+              installed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required
-
-              Possible values:
-              - automatic: Automatically fetch managed Python installations when needed
-              - manual:    Do not automatically fetch managed Python installations; require explicit
-                installation
-
+              Whether to automatically download Python when required [possible values: automatic,
+              manual]
       -n, --no-cache
-              Avoid reading from or writing to the cache
-              
-              [env: UV_NO_CACHE=]
-
+              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
-              Path to the cache directory.
-              
-              Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `{FOLDERID_LocalAppData}/uv/cache` on Windows.
-              
-              [env: UV_CACHE_DIR=]
-
+              Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
-              The path to a `uv.toml` file to use for configuration
-              
-              [env: UV_CONFIG_FILE=]
-
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
       -h, --help
-              Print help (see a summary with '-h')
-
+              Print help
       -V, --version
               Print version
 

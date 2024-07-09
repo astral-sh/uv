@@ -52,6 +52,7 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
 #[command(name = "uv", author, version = uv_version::version(), long_version = crate::version::version())]
 #[command(about = "An extremely fast Python package manager.")]
 #[command(propagate_version = true)]
+#[command(disable_help_flag = true)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
@@ -66,6 +67,10 @@ pub struct Cli {
     /// The path to a `uv.toml` file to use for configuration.
     #[arg(global = true, long, env = "UV_CONFIG_FILE")]
     pub config_file: Option<PathBuf>,
+
+    /// Print help.
+    #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]
+    help: Option<bool>,
 }
 
 #[derive(Parser, Debug, Clone)]
