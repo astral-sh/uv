@@ -14,7 +14,9 @@ use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequ
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
-use crate::{Error, Interpreter, PythonFetch, PythonPreference, PythonSource, PythonVersion};
+use crate::{
+    downloads, Error, Interpreter, PythonFetch, PythonPreference, PythonSource, PythonVersion,
+};
 
 /// A Python interpreter and accompanying tools.
 #[derive(Clone, Debug)]
@@ -97,16 +99,22 @@ impl PythonInstallation {
         match Self::find(&request, environments, preference, cache) {
             Ok(venv) => Ok(venv),
             // If missing and allowed, perform a fetch
-            err @ Err(Error::MissingPython(_))
+            Err(Error::MissingPython(err))
                 if preference.allows_managed()
                     && python_fetch.is_automatic()
                     && client_builder.connectivity.is_online() =>
             {
                 if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
                     debug!("Requested Python not found, checking for available download...");
-                    Self::fetch(request.fill(), client_builder, cache, reporter).await
+                    match Self::fetch(request.fill(), client_builder, cache, reporter).await {
+                        Ok(installation) => Ok(installation),
+                        Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
+                            Err(Error::MissingPython(err))
+                        }
+                        Err(err) => Err(err),
+                    }
                 } else {
-                    err
+                    Err(Error::MissingPython(err))
                 }
             }
             Err(err) => Err(err),
