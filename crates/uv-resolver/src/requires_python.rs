@@ -155,6 +155,7 @@ impl RequiresPython {
         self.bound.as_ref() == Bound::Unbounded
     }
 
+    /// Returns the [`RequiresPythonBound`] for the `Requires-Python` specifier.
     pub fn bound(&self) -> &RequiresPythonBound {
         &self.bound
     }

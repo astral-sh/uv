@@ -1405,9 +1405,9 @@ fn update() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "requests", marker = "python_version > '3.7'" },
-            { name = "requests", extra = "socks", marker = "python_version > '3.7'" },
-            { name = "requests", extra = "use-chardet-on-py3", marker = "python_version > '3.7'" },
+            { name = "requests" },
+            { name = "requests", extra = "socks" },
+            { name = "requests", extra = "use-chardet-on-py3" },
         ]
 
         [[distribution]]

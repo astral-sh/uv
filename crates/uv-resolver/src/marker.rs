@@ -860,14 +860,10 @@ mod tests {
             "python_version >= '3.8' and sys_platform == 'win32'",
             "sys_platform == 'win32'",
         );
-        assert_normalizes_to("python_version == '3.8'", "python_version == '3.8'");
-        assert_normalizes_to("python_version <= '3.10'", "python_version <= '3.10'");
 
-        // TODO(charlie): This looks wrong.
-        assert_normalizes_to(
-            "python_version != '3.8' and python_version < '3.10'",
-            "python_version < '3.8' and python_version < '3.10' and python_version > '3.8'",
-        );
+        assert_normalizes_to("python_version == '3.8'", "python_version == '3.8'");
+
+        assert_normalizes_to("python_version <= '3.10'", "python_version <= '3.10'");
     }
 
     #[test]

@@ -77,11 +77,7 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().as_ref();
-                    locked_dist.add_dependency(
-                        dependency_dist,
-                        marker,
-                        graph.requires_python.as_ref(),
-                    );
+                    locked_dist.add_dependency(dependency_dist, marker);
                 }
                 let id = locked_dist.id.clone();
                 if let Some(locked_dist) = locked_dists.insert(id, locked_dist) {
@@ -113,12 +109,7 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().as_ref();
-                    locked_dist.add_optional_dependency(
-                        extra.clone(),
-                        dependency_dist,
-                        marker,
-                        graph.requires_python.as_ref(),
-                    );
+                    locked_dist.add_optional_dependency(extra.clone(), dependency_dist, marker);
                 }
             }
             if let Some(group) = dist.dev.as_ref() {
@@ -136,12 +127,7 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().as_ref();
-                    locked_dist.add_dev_dependency(
-                        group.clone(),
-                        dependency_dist,
-                        marker,
-                        graph.requires_python.as_ref(),
-                    );
+                    locked_dist.add_dev_dependency(group.clone(), dependency_dist, marker);
                 }
             }
         }
@@ -554,17 +540,9 @@ impl Distribution {
     }
 
     /// Add the [`AnnotatedDist`] as a dependency of the [`Distribution`].
-    fn add_dependency(
-        &mut self,
-        annotated_dist: &AnnotatedDist,
-        marker: Option<&MarkerTree>,
-        requires_python: Option<&RequiresPython>,
-    ) {
-        self.dependencies.push(Dependency::from_annotated_dist(
-            annotated_dist,
-            marker,
-            requires_python,
-        ));
+    fn add_dependency(&mut self, annotated_dist: &AnnotatedDist, marker: Option<&MarkerTree>) {
+        self.dependencies
+            .push(Dependency::from_annotated_dist(annotated_dist, marker));
     }
 
     /// Add the [`AnnotatedDist`] as an optional dependency of the [`Distribution`].
@@ -573,16 +551,11 @@ impl Distribution {
         extra: ExtraName,
         annotated_dist: &AnnotatedDist,
         marker: Option<&MarkerTree>,
-        requires_python: Option<&RequiresPython>,
     ) {
         self.optional_dependencies
             .entry(extra)
             .or_default()
-            .push(Dependency::from_annotated_dist(
-                annotated_dist,
-                marker,
-                requires_python,
-            ));
+            .push(Dependency::from_annotated_dist(annotated_dist, marker));
     }
 
     /// Add the [`AnnotatedDist`] as a development dependency of the [`Distribution`].
@@ -591,16 +564,11 @@ impl Distribution {
         dev: GroupName,
         annotated_dist: &AnnotatedDist,
         marker: Option<&MarkerTree>,
-        requires_python: Option<&RequiresPython>,
     ) {
         self.dev_dependencies
             .entry(dev)
             .or_default()
-            .push(Dependency::from_annotated_dist(
-                annotated_dist,
-                marker,
-                requires_python,
-            ));
+            .push(Dependency::from_annotated_dist(annotated_dist, marker));
     }
 
     /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
@@ -1921,13 +1889,10 @@ impl Dependency {
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         marker: Option<&MarkerTree>,
-        requires_python: Option<&RequiresPython>,
     ) -> Dependency {
         let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.clone();
-        let marker = marker.cloned().and_then(|marker| {
-            crate::marker::normalize(marker, requires_python.map(RequiresPython::bound))
-        });
+        let marker = marker.cloned();
         Dependency {
             distribution_id,
             extra,
