@@ -300,16 +300,18 @@ impl ToolListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUninstallSettings {
-    pub(crate) name: PackageName,
+    pub(crate) name: Option<PackageName>,
 }
 
 impl ToolUninstallSettings {
     /// Resolve the [`ToolUninstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolUninstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let ToolUninstallArgs { name } = args;
+        let ToolUninstallArgs { name, all } = args;
 
-        Self { name }
+        Self {
+            name: name.filter(|_| !all),
+        }
     }
 }
 

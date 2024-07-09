@@ -2133,7 +2133,12 @@ pub struct ToolListArgs;
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
-    pub name: PackageName,
+    #[arg(required = true)]
+    pub name: Option<PackageName>,
+
+    /// Uninstall all tools.
+    #[arg(long, conflicts_with("name"))]
+    pub all: bool,
 }
 
 #[derive(Args)]
