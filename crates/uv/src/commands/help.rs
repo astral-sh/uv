@@ -4,6 +4,7 @@ use anstream::{stream::IsTerminal, ColorChoice};
 use anyhow::{anyhow, Result};
 use clap::CommandFactory;
 use itertools::{Either, Itertools};
+use owo_colors::OwoColorize;
 use which::which;
 
 use super::ExitStatus;
@@ -35,8 +36,28 @@ pub(crate) fn help(query: &[String], printer: Printer) -> Result<ExitStatus> {
         )
     })?;
 
+    let name = command.get_name();
+    let is_root = name == uv.get_name();
     let mut command = command.clone();
-    let help = command.render_long_help();
+
+    let help = if is_root {
+        command
+            .after_help(format!(
+                "Use `{}` for more information on a specific command.",
+                "uv help <command>".bold()
+            ))
+            .render_help()
+    } else {
+        if command.has_subcommands() {
+            command.after_long_help(format!(
+                "Use `{}` for more information on a specific command.",
+                format!("uv help {name} <command>").bold()
+            ))
+        } else {
+            command
+        }
+        .render_long_help()
+    };
 
     let help_ansi = match anstream::Stdout::choice(&std::io::stdout()) {
         ColorChoice::Always | ColorChoice::AlwaysAnsi => Either::Left(help.ansi()),
@@ -46,11 +67,11 @@ pub(crate) fn help(query: &[String], printer: Printer) -> Result<ExitStatus> {
     };
 
     let is_terminal = std::io::stdout().is_terminal();
-    if is_terminal && which("less").is_ok() {
+    if !is_root && is_terminal && which("less").is_ok() {
         // When using less, we use the command name as the file name and can support colors
         let prompt = format!("help: uv {}", query.join(" "));
         spawn_pager("less", &["-R", "-P", &prompt], &help_ansi)?;
-    } else if is_terminal && which("more").is_ok() {
+    } else if !is_root && is_terminal && which("more").is_ok() {
         // When using more, we skip the ANSI color codes
         spawn_pager("more", &[], &help)?;
     } else {
