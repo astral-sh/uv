@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use fs_err::File;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use install_wheel_rs::read_record_file;
 
@@ -178,6 +178,9 @@ impl InstalledTools {
     }
 
     /// Return the [`PythonEnvironment`] for a given tool, if it exists.
+    ///
+    /// Returns `Ok(None)` if the environment does not exist or is linked to a non-existent
+    /// interpreter.
     pub fn get_environment(
         &self,
         name: &PackageName,
@@ -186,14 +189,25 @@ impl InstalledTools {
         let _lock = self.acquire_lock();
         let environment_path = self.root.join(name.to_string());
 
-        if environment_path.is_dir() {
-            debug!(
-                "Using existing environment for tool `{name}` at `{}`.",
-                environment_path.user_display()
-            );
-            Ok(Some(PythonEnvironment::from_root(environment_path, cache)?))
-        } else {
-            Ok(None)
+        match PythonEnvironment::from_root(&environment_path, cache) {
+            Ok(venv) => {
+                debug!(
+                    "Using existing environment for tool `{name}`: {}",
+                    environment_path.user_display()
+                );
+                Ok(Some(venv))
+            }
+            Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
+            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
+                interpreter_path,
+            ))) => {
+                warn!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                    interpreter_path.user_display()
+                );
+                Ok(None)
+            }
+            Err(err) => Err(err.into()),
         }
     }
 
@@ -210,7 +224,7 @@ impl InstalledTools {
         match fs_err::remove_dir_all(&environment_path) {
             Ok(()) => {
                 debug!(
-                    "Removed existing environment for tool `{name}` at `{}`.",
+                    "Removed existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
             }
@@ -219,7 +233,7 @@ impl InstalledTools {
         }
 
         debug!(
-            "Creating environment for tool `{name}` at `{}`.",
+            "Creating environment for tool `{name}`: {}",
             environment_path.user_display()
         );
 
