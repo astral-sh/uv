@@ -26,7 +26,7 @@ To install a specific Python version:
 $ uv python install 3.12
 ```
 
-See the [Python toolchain](../preview/toolchains.md) documentation for more details.
+See the [Python versions](../python-versions.md) documentation for more details.
 
 ## Viewing Python installations
 

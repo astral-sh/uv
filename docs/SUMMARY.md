@@ -18,7 +18,7 @@
 
 - [Projects](preview/projects.md)
 - [Command-line tools](preview/tools.md)
-- [Python toolchains](preview/toolchains.md)
+- [Python versions](python-versions.md)
 - [Workspaces](preview/workspaces.md)
 - [Dependency sources](preview/dependencies.md)
 - [Resolution](resolution.md)
