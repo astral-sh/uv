@@ -776,6 +776,7 @@ async fn run() -> Result<ExitStatus> {
                 globals.native_tls,
                 globals.connectivity,
                 globals.preview,
+                globals.isolated,
                 &cache,
                 printer,
             )

@@ -26,6 +26,7 @@ pub(crate) async fn install(
     native_tls: bool,
     connectivity: Connectivity,
     preview: PreviewMode,
+    isolated: bool,
     _cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -41,7 +42,11 @@ pub(crate) async fn install(
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
-        if let Some(requests) = requests_from_version_file().await? {
+        // Read from the version file, unless `isolated` was requested
+        if let Some(requests) = match isolated {
+            false => requests_from_version_file().await?,
+            true => None,
+        } {
             requests
         } else {
             vec![PythonRequest::Any]
