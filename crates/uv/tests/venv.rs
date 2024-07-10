@@ -3,6 +3,7 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use uv_python::{PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME};
 
 use crate::common::{uv_snapshot, TestContext};
 
@@ -109,7 +110,7 @@ fn create_venv_reads_request_from_python_version_file() {
     // With a version file, we should prefer that version
     context
         .temp_dir
-        .child(".python-version")
+        .child(PYTHON_VERSION_FILENAME)
         .write_str("3.12")
         .unwrap();
 
@@ -150,7 +151,7 @@ fn create_venv_reads_request_from_python_versions_file() {
     // With a versions file, we should prefer the first listed version
     context
         .temp_dir
-        .child(".python-versions")
+        .child(PYTHON_VERSIONS_FILENAME)
         .write_str("3.12\n3.11")
         .unwrap();
 
@@ -176,7 +177,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
 
     context
         .temp_dir
-        .child(".python-version")
+        .child(PYTHON_VERSION_FILENAME)
         .write_str("3.12")
         .unwrap();
 
