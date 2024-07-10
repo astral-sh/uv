@@ -22,6 +22,14 @@ pub(crate) async fn list(
     }
 
     let installed_tools = InstalledTools::from_settings()?;
+    let _lock = match installed_tools.acquire_lock() {
+        Ok(lock) => lock,
+        Err(uv_tool::Error::IO(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            writeln!(printer.stderr(), "No tools installed")?;
+            return Ok(ExitStatus::Success);
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     let mut tools = installed_tools.tools()?.into_iter().collect::<Vec<_>>();
     tools.sort_by_key(|(name, _)| name.clone());
