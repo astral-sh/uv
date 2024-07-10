@@ -11,7 +11,7 @@
 
 - [Installing Python](guides/install-python.md)
 - [Running scripts](guides/scripts.md)
-- [Installing tools](guides/tools.md)
+- [Using tools](guides/tools.md)
 - [Creating a project](guides/projects.md)
 
 # Concepts
