@@ -4475,6 +4475,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rustc-hash 2.0.0",
+ "same-file",
  "serde",
  "serde_json",
  "textwrap",
