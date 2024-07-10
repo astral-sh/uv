@@ -1665,7 +1665,7 @@ pub struct VenvArgs {
     /// By default, `uv` will stop at the first index on which a given package is available, and
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary
+    /// same name to a secondary.
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
     pub index_strategy: Option<IndexStrategy>,
 
@@ -2339,9 +2339,9 @@ pub struct InstallerArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary
+    /// same name to a secondary.
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
     pub index_strategy: Option<IndexStrategy>,
 
@@ -2415,9 +2415,9 @@ pub struct ResolverArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary
+    /// same name to a secondary.
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
     pub index_strategy: Option<IndexStrategy>,
 
@@ -2502,9 +2502,9 @@ pub struct ResolverInstallerArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary
+    /// same name to a secondary.
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
     pub index_strategy: Option<IndexStrategy>,
 
