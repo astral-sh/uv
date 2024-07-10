@@ -33,6 +33,7 @@ pub(crate) use python::uninstall::uninstall as python_uninstall;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::dir::dir as tool_dir;
+pub(crate) use tool::ensurepath::ensurepath as tool_ensurepath;
 pub(crate) use tool::install::install as tool_install;
 pub(crate) use tool::list::list as tool_list;
 pub(crate) use tool::run::run as tool_run;

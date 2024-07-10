@@ -4456,6 +4456,7 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
+ "home",
  "ignore",
  "indexmap",
  "indicatif",

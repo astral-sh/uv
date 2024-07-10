@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use uv_fs::Simplified;
 
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -70,8 +71,100 @@ impl Shell {
     pub(crate) fn from_shell_path(path: impl AsRef<Path>) -> Option<Shell> {
         parse_shell_from_path(path.as_ref())
     }
+
+    /// Return the configuration files that should be modified to append to a shell's `PATH`.
+    pub(crate) fn configuration_files(self) -> Vec<PathBuf> {
+        let Some(home_dir) = home::home_dir() else {
+            return vec![];
+        };
+        match self {
+            Shell::Bash => {
+                // On Bash, we need to update both `.bashrc` and `.bash_profile`. The former is
+                // sourced for non-login shells, and the latter is sourced for login shells. If
+                // `.profile` is present, we prefer it over `.bash_profile`, to match the behavior
+                // of the system shell.
+                vec![
+                    home_dir.join(".bashrc"),
+                    if home_dir.join(".profile").is_file() {
+                        home_dir.join(".profile")
+                    } else {
+                        home_dir.join(".bash_profile")
+                    },
+                ]
+            }
+            Shell::Zsh => {
+                // On Zsh, we only need to update `.zshrc`. This file is sourced for both login and
+                // non-login shells.
+                vec![home_dir.join(".zshrc")]
+            }
+            Shell::Fish => {
+                // On Fish, we only need to update `config.fish`. This file is sourced for both
+                // login and non-login shells.
+                vec![home_dir.join(".config/fish/config.fish")]
+            }
+            Shell::Csh => {
+                // On Csh, we need to update both `.cshrc` and `.login`, like Bash.
+                vec![home_dir.join(".cshrc"), home_dir.join(".login")]
+            }
+            // TODO(charlie): Add support for Nushell, PowerShell, and Cmd.
+            Shell::Nushell => vec![],
+            Shell::Powershell => vec![],
+            Shell::Cmd => vec![],
+        }
+    }
+
+    /// Returns `true` if the given path is on the `PATH` in this shell.
+    pub(crate) fn contains_path(path: &Path) -> bool {
+        std::env::var_os("PATH")
+            .as_ref()
+            .iter()
+            .flat_map(std::env::split_paths)
+            .any(|p| same_file::is_same_file(path, p).unwrap_or(false))
+    }
+
+    /// Returns the command necessary to prepend a directory to the `PATH` in this shell.
+    pub(crate) fn prepend_path(self, path: &Path) -> Option<String> {
+        match self {
+            Shell::Nushell => None,
+            Shell::Bash | Shell::Zsh => Some(format!(
+                "export PATH=\"{}:$PATH\"",
+                backslash_escape(&path.simplified_display().to_string()),
+            )),
+            Shell::Fish => Some(format!(
+                "fish_add_path \"{}\"",
+                backslash_escape(&path.simplified_display().to_string()),
+            )),
+            Shell::Csh => Some(format!(
+                "setenv PATH \"{}:$PATH\"",
+                backslash_escape(&path.simplified_display().to_string()),
+            )),
+            Shell::Powershell => Some(format!(
+                "$env:PATH = \"{};$env:PATH\"",
+                backtick_escape(&path.simplified_display().to_string()),
+            )),
+            Shell::Cmd => Some(format!(
+                "set PATH=\"{};%PATH%\"",
+                backslash_escape(&path.simplified_display().to_string()),
+            )),
+        }
+    }
 }
 
+impl std::fmt::Display for Shell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Shell::Bash => write!(f, "Bash"),
+            Shell::Fish => write!(f, "Fish"),
+            Shell::Powershell => write!(f, "PowerShell"),
+            Shell::Cmd => write!(f, "Command Prompt"),
+            Shell::Zsh => write!(f, "Zsh"),
+            Shell::Nushell => write!(f, "Nushell"),
+            Shell::Csh => write!(f, "Csh"),
+        }
+    }
+}
+
+/// Parse the shell from the name of the shell executable.
 fn parse_shell_from_path(path: &Path) -> Option<Shell> {
     let name = path.file_stem()?.to_str()?;
     match name {
@@ -82,4 +175,30 @@ fn parse_shell_from_path(path: &Path) -> Option<Shell> {
         "powershell" | "powershell_ise" => Some(Shell::Powershell),
         _ => None,
     }
+}
+
+/// Escape a string for use in a shell command by inserting backslashes.
+fn backslash_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' | '"' => escaped.push('\\'),
+            _ => {}
+        }
+        escaped.push(c);
+    }
+    escaped
+}
+
+/// Escape a string for use in a `PowerShell` command by inserting backticks.
+fn backtick_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' | '"' | '$' => escaped.push('`'),
+            _ => {}
+        }
+        escaped.push(c);
+    }
+    escaped
 }
