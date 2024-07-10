@@ -974,6 +974,11 @@ impl PythonRequest {
     ///
     /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or [`PythonRequest::ExecutableName`].
     pub fn parse(value: &str) -> Self {
+        // e.g. `any`
+        if value.eq_ignore_ascii_case("any") {
+            return Self::Any;
+        }
+
         // e.g. `3.12.1`, `312`, or `>=3.12`
         if let Ok(version) = VersionRequest::from_str(value) {
             return Self::Version(version);
@@ -1581,6 +1586,7 @@ mod tests {
 
     #[test]
     fn interpreter_request_from_str() {
+        assert_eq!(PythonRequest::parse("any"), PythonRequest::Any);
         assert_eq!(
             PythonRequest::parse("3.12"),
             PythonRequest::Version(VersionRequest::from_str("3.12").unwrap())
