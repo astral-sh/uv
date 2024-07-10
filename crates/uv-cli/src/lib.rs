@@ -2169,6 +2169,9 @@ pub enum PythonCommand {
     /// Search for a Python installation.
     Find(PythonFindArgs),
 
+    /// Pin to a specific Python version.
+    Pin(PythonPinArgs),
+
     /// Show the uv Python installation directory.
     Dir,
 
@@ -2224,6 +2227,22 @@ pub struct PythonUninstallArgs {
 pub struct PythonFindArgs {
     /// The Python request.
     pub request: Option<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PythonPinArgs {
+    /// The Python version.
+    pub request: Option<String>,
+
+    /// Write the resolved Python interpreter path instead of the request.
+    ///
+    /// Ensures that the exact same interpreter is used.
+    #[arg(long, overrides_with("resolved"))]
+    pub resolved: bool,
+
+    #[arg(long, overrides_with("no_resolved"), hide = true)]
+    pub no_resolved: bool,
 }
 
 #[derive(Args)]

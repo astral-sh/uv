@@ -810,6 +810,25 @@ async fn run() -> Result<ExitStatus> {
             .await
         }
         Commands::Python(PythonNamespace {
+            command: PythonCommand::Pin(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonPinSettings::resolve(args, filesystem);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::python_pin(
+                args.request,
+                args.resolved,
+                globals.python_preference,
+                globals.preview,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        Commands::Python(PythonNamespace {
             command: PythonCommand::Dir,
         }) => {
             commands::python_dir(globals.preview)?;

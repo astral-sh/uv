@@ -14,8 +14,8 @@ use uv_cli::{
     AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, VenvArgs,
+    PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs,
+    ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -410,6 +410,30 @@ impl PythonFindSettings {
     }
 }
 
+/// The resolved settings to use for a `python pin` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PythonPinSettings {
+    pub(crate) request: Option<String>,
+    pub(crate) resolved: bool,
+}
+
+impl PythonPinSettings {
+    /// Resolve the [`PythonPinSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: PythonPinArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let PythonPinArgs {
+            request,
+            no_resolved,
+            resolved,
+        } = args;
+
+        Self {
+            request,
+            resolved: flag(resolved, no_resolved).unwrap_or(false),
+        }
+    }
+}
 /// The resolved settings to use for a `sync` invocation.
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
