@@ -1,18 +1,22 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use fs_err as fs;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
-use uv_python::{requests_from_version_file, PythonRequest};
+use uv_python::{
+    requests_from_version_file, PythonRequest, PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
+};
 use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PythonDownloadReporter;
@@ -43,15 +47,17 @@ pub(crate) async fn install(
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
         // Read from the version file, unless `isolated` was requested
-        if let Some(requests) = if isolated {
+        let version_file_requests = if isolated {
+            if PathBuf::from(PYTHON_VERSION_FILENAME).exists() {
+                debug!("Ignoring `.python-version` file due to isolated mode");
+            } else if PathBuf::from(PYTHON_VERSIONS_FILENAME).exists() {
+                debug!("Ignoring `.python-versions` file due to isolated mode");
+            }
             None
         } else {
             requests_from_version_file().await?
-        } {
-            requests
-        } else {
-            vec![PythonRequest::Any]
-        }
+        };
+        version_file_requests.unwrap_or_else(|| vec![PythonRequest::Any])
     } else {
         targets
             .iter()
