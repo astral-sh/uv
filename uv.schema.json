@@ -267,7 +267,7 @@
         "null"
       ],
       "items": {
-        "$ref": "#/definitions/PackageName"
+        "$ref": "#/definitions/Requirement"
       }
     },
     "workspace": {
@@ -826,7 +826,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/definitions/PackageName"
+            "$ref": "#/definitions/Requirement"
           }
         }
       },
@@ -932,6 +932,10 @@
       "description": "A Python version specifier, e.g. `3.7` or `3.8.0`.",
       "type": "string",
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
+    },
+    "Requirement": {
+      "description": "A PEP 508 dependency specifier",
+      "type": "string"
     },
     "ResolutionMode": {
       "oneOf": [

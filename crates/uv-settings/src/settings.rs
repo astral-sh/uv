@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
@@ -105,7 +106,7 @@ pub struct ResolverOptions {
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
     pub upgrade: Option<bool>,
-    pub upgrade_package: Option<Vec<PackageName>>,
+    pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
@@ -132,7 +133,7 @@ pub struct ResolverInstallerOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub upgrade: Option<bool>,
-    pub upgrade_package: Option<Vec<PackageName>>,
+    pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     pub reinstall: Option<bool>,
     pub reinstall_package: Option<Vec<PackageName>>,
     pub no_build: Option<bool>,
@@ -193,7 +194,7 @@ pub struct PipOptions {
     pub compile_bytecode: Option<bool>,
     pub require_hashes: Option<bool>,
     pub upgrade: Option<bool>,
-    pub upgrade_package: Option<Vec<PackageName>>,
+    pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     pub reinstall: Option<bool>,
     pub reinstall_package: Option<Vec<PackageName>>,
     pub concurrent_downloads: Option<NonZeroUsize>,

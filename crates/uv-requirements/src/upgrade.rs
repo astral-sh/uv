@@ -56,7 +56,7 @@ pub async fn read_requirements_txt(
         // Ignore pinned versions for the specified packages.
         Upgrade::Packages(packages) => preferences
             .into_iter()
-            .filter(|preference| !packages.contains(preference.name()))
+            .filter(|preference| !packages.contains_key(preference.name()))
             .collect(),
     })
 }
@@ -68,11 +68,7 @@ pub fn read_lock_requirements(lock: &Lock, upgrade: &Upgrade) -> LockedRequireme
 
     for dist in lock.distributions() {
         // Skip the distribution if it's not included in the upgrade strategy.
-        if match upgrade {
-            Upgrade::None => false,
-            Upgrade::All => true,
-            Upgrade::Packages(packages) => packages.contains(dist.name()),
-        } {
+        if upgrade.contains(dist.name()) {
             continue;
         }
 
