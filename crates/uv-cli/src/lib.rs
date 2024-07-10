@@ -52,6 +52,12 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
 #[command(name = "uv", author, version = uv_version::version(), long_version = crate::version::version())]
 #[command(about = "An extremely fast Python package manager.")]
 #[command(propagate_version = true)]
+#[command(
+    after_help = "Use `uv help` for more details.",
+    after_long_help = "",
+    disable_help_flag = true,
+    disable_help_subcommand = true
+)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
@@ -66,6 +72,10 @@ pub struct Cli {
     /// The path to a `uv.toml` file to use for configuration.
     #[arg(global = true, long, env = "UV_CONFIG_FILE")]
     pub config_file: Option<PathBuf>,
+
+    /// Print help.
+    #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]
+    help: Option<bool>,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -170,18 +180,39 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Resolve and install Python packages.
+    #[command(
+        after_help = "Use `uv help pip`` for more details.",
+        after_long_help = ""
+    )]
     Pip(PipNamespace),
     /// Run and manage executable Python packages.
+    #[command(
+        after_help = "Use `uv help tool` for more details.",
+        after_long_help = ""
+    )]
     Tool(ToolNamespace),
     /// Manage Python installations.
+    #[command(
+        after_help = "Use `uv help python` for more details.",
+        after_long_help = ""
+    )]
     Python(PythonNamespace),
     /// Manage Python projects.
     #[command(flatten)]
-    Project(ProjectCommand),
+    Project(Box<ProjectCommand>),
     /// Create a virtual environment.
-    #[command(alias = "virtualenv", alias = "v")]
+    #[command(
+        alias = "virtualenv",
+        alias = "v",
+        after_help = "Use `uv help venv` for more details.",
+        after_long_help = ""
+    )]
     Venv(VenvArgs),
     /// Manage the cache.
+    #[command(
+        after_help = "Use `uv help cache` for more details.",
+        after_long_help = ""
+    )]
     Cache(CacheNamespace),
     /// Manage the `uv` executable.
     #[command(name = "self")]
@@ -198,6 +229,17 @@ pub enum Commands {
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion { shell: clap_complete_command::Shell },
+    /// Display documentation for a command.
+    #[command(help_template = "\
+{about-with-newline}
+{usage-heading} {usage}
+")]
+    Help(HelpArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct HelpArgs {
+    pub command: Option<Vec<String>>,
 }
 
 #[derive(Args)]
@@ -248,22 +290,58 @@ pub struct PipNamespace {
 #[derive(Subcommand)]
 pub enum PipCommand {
     /// Compile a `requirements.in` file to a `requirements.txt` file.
+    #[command(
+        after_help = "Use `uv help pip compile` for more details.",
+        after_long_help = ""
+    )]
     Compile(PipCompileArgs),
     /// Sync an environment with a `requirements.txt` file.
+    #[command(
+        after_help = "Use `uv help pip sync` for more details.",
+        after_long_help = ""
+    )]
     Sync(PipSyncArgs),
     /// Install packages into an environment.
+    #[command(
+        after_help = "Use `uv help pip install` for more details.",
+        after_long_help = ""
+    )]
     Install(PipInstallArgs),
     /// Uninstall packages from an environment.
+    #[command(
+        after_help = "Use `uv help pip uninstall` for more details.",
+        after_long_help = ""
+    )]
     Uninstall(PipUninstallArgs),
     /// List, in requirements format, packages installed in an environment.
+    #[command(
+        after_help = "Use `uv help pip freeze` for more details.",
+        after_long_help = ""
+    )]
     Freeze(PipFreezeArgs),
     /// List, in tabular format, packages installed in an environment.
+    #[command(
+        after_help = "Use `uv help pip list` for more details.",
+        after_long_help = ""
+    )]
     List(PipListArgs),
     /// Show information about one or more installed packages.
+    #[command(
+        after_help = "Use `uv help pip show` for more details.",
+        after_long_help = ""
+    )]
     Show(PipShowArgs),
     /// Display the dependency tree for an environment.
+    #[command(
+        after_help = "Use `uv help pip tree` for more details.",
+        after_long_help = ""
+    )]
     Tree(PipTreeArgs),
     /// Verify installed packages have compatible dependencies.
+    #[command(
+        after_help = "Use `uv help pip check` for more details.",
+        after_long_help = ""
+    )]
     Check(PipCheckArgs),
 }
 
@@ -271,19 +349,42 @@ pub enum PipCommand {
 pub enum ProjectCommand {
     /// Run a command in the project environment.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help run` for more details.",
+        after_long_help = ""
+    )]
     Run(RunArgs),
     /// Sync the project's dependencies with the environment.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help sync` for more details.",
+        after_long_help = ""
+    )]
     Sync(SyncArgs),
     /// Resolve the project requirements into a lockfile.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help lock` for more details.",
+        after_long_help = ""
+    )]
     Lock(LockArgs),
     /// Add one or more packages to the project requirements.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help add` for more details.",
+        after_long_help = ""
+    )]
     Add(AddArgs),
     /// Remove one or more packages from the project requirements.
     #[clap(hide = true)]
+    #[command(
+        after_help = "Use `uv help remove` for more details.",
+        after_long_help = ""
+    )]
     Remove(RemoveArgs),
+    /// Display the dependency tree for the project.
+    #[clap(hide = true)]
+    Tree(TreeArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -373,8 +474,8 @@ pub struct PipCompileArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, value_parser = parse_file_path)]
-    pub r#override: Vec<PathBuf>,
+    #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub r#override: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the extra group name; may be provided more than once.
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -906,8 +1007,8 @@ pub struct PipInstallArgs {
     /// While constraints are _additive_, in that they're combined with the requirements of the
     /// constituent packages, overrides are _absolute_, in that they completely replace the
     /// requirements of the constituent packages.
-    #[arg(long, value_parser = parse_file_path)]
-    pub r#override: Vec<PathBuf>,
+    #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub r#override: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the extra group name; may be provided more than once.
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -1426,29 +1527,8 @@ pub struct PipShowArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipTreeArgs {
-    /// Maximum display depth of the dependency tree
-    #[arg(long, short, default_value_t = 255)]
-    pub depth: u8,
-
-    /// Prune the given package from the display of the dependency tree.
-    #[arg(long)]
-    pub prune: Vec<PackageName>,
-
-    /// Display only the specified packages.
-    #[arg(long)]
-    pub package: Vec<PackageName>,
-
-    /// Do not de-duplicate repeated dependencies.
-    /// Usually, when a package has already displayed its dependencies,
-    /// further occurrences will not re-display its dependencies,
-    /// and will include a (*) to indicate it has already been shown.
-    /// This flag will cause those duplicates to be repeated.
-    #[arg(long)]
-    pub no_dedupe: bool,
-
-    #[arg(long, alias = "reverse")]
-    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
-    pub invert: bool,
+    #[command(flatten)]
+    pub tree: DisplayTreeArgs,
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
@@ -1704,6 +1784,14 @@ pub struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Install without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
     /// Include optional dependencies from the extra group name; may be provided more than once.
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -1731,7 +1819,7 @@ pub struct SyncArgs {
     pub no_clean: bool,
 
     #[command(flatten)]
-    pub installer: InstallerArgs,
+    pub installer: ResolverInstallerArgs,
 
     #[command(flatten)]
     pub build: BuildArgs,
@@ -1866,11 +1954,48 @@ pub struct RemoveArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
     /// Remove the dependency from a specific package in the workspace.
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
     /// The Python interpreter into which packages should be installed.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    pub python: Option<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct TreeArgs {
+    #[command(flatten)]
+    pub tree: DisplayTreeArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    /// The Python interpreter for which packages should be listed.
     ///
     /// By default, `uv` installs into the virtual environment in the current working directory or
     /// any parent directory. The `--python` option allows you to specify a different interpreter,
@@ -2016,7 +2141,12 @@ pub struct ToolListArgs;
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
-    pub name: PackageName,
+    #[arg(required = true)]
+    pub name: Option<PackageName>,
+
+    /// Uninstall all tools.
+    #[arg(long, conflicts_with("name"))]
+    pub all: bool,
 }
 
 #[derive(Args)]
@@ -2063,10 +2193,10 @@ pub struct PythonListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonInstallArgs {
-    /// The Python versions to install.
+    /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the `.python-versions`
-    ///  or `.python-version` files. If neither file is present, uv will check if it has
+    /// or `.python-version` files. If neither file is present, uv will check if it has
     /// installed any Python versions. If not, it will install the latest stable version of Python.
     pub targets: Vec<String>,
 
@@ -2078,8 +2208,13 @@ pub struct PythonInstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
-    /// The Python versions to uninstall.
+    /// The Python version(s) to uninstall.
+    #[arg(required = true)]
     pub targets: Vec<String>,
+
+    /// Uninstall all managed Python versions.
+    #[arg(long, conflicts_with("targets"))]
+    pub all: bool,
 }
 
 #[derive(Args)]
@@ -2435,4 +2570,31 @@ pub struct ResolverInstallerArgs {
         hide = true
     )]
     pub no_compile_bytecode: bool,
+}
+
+#[derive(Args)]
+pub struct DisplayTreeArgs {
+    /// Maximum display depth of the dependency tree
+    #[arg(long, short, default_value_t = 255)]
+    pub depth: u8,
+
+    /// Prune the given package from the display of the dependency tree.
+    #[arg(long)]
+    pub prune: Vec<PackageName>,
+
+    /// Display only the specified packages.
+    #[arg(long)]
+    pub package: Vec<PackageName>,
+
+    /// Do not de-duplicate repeated dependencies.
+    /// Usually, when a package has already displayed its dependencies,
+    /// further occurrences will not re-display its dependencies,
+    /// and will include a (*) to indicate it has already been shown.
+    /// This flag will cause those duplicates to be repeated.
+    #[arg(long)]
+    pub no_dedupe: bool,
+
+    /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
+    #[arg(long, alias = "reverse")]
+    pub invert: bool,
 }

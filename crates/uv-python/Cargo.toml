@@ -31,8 +31,8 @@ anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
-itertools = { workspace = true }
 futures = { workspace = true }
+itertools = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
@@ -45,6 +45,7 @@ serde_json = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }

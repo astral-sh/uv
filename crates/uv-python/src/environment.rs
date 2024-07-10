@@ -127,23 +127,21 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--target` directory.
-    #[must_use]
-    pub fn with_target(self, target: Target) -> Self {
+    pub fn with_target(self, target: Target) -> std::io::Result<Self> {
         let inner = Arc::unwrap_or_clone(self.0);
-        Self(Arc::new(PythonEnvironmentShared {
-            interpreter: inner.interpreter.with_target(target),
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_target(target)?,
             ..inner
-        }))
+        })))
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--prefix` directory.
-    #[must_use]
-    pub fn with_prefix(self, prefix: Prefix) -> Self {
+    pub fn with_prefix(self, prefix: Prefix) -> std::io::Result<Self> {
         let inner = Arc::unwrap_or_clone(self.0);
-        Self(Arc::new(PythonEnvironmentShared {
-            interpreter: inner.interpreter.with_prefix(prefix),
+        Ok(Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_prefix(prefix)?,
             ..inner
-        }))
+        })))
     }
 
     /// Returns the root (i.e., `prefix`) of the Python interpreter.
@@ -177,26 +175,7 @@ impl PythonEnvironment {
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
     pub fn site_packages(&self) -> impl Iterator<Item = Cow<Path>> {
-        let target = self.0.interpreter.target().map(Target::site_packages);
-
-        let prefix = self
-            .0
-            .interpreter
-            .prefix()
-            .map(|prefix| prefix.site_packages(self.0.interpreter.virtualenv()));
-
-        let interpreter = if target.is_none() && prefix.is_none() {
-            Some(self.0.interpreter.site_packages())
-        } else {
-            None
-        };
-
-        target
-            .into_iter()
-            .flatten()
-            .map(Cow::Borrowed)
-            .chain(prefix.into_iter().flatten().map(Cow::Owned))
-            .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
+        self.0.interpreter.site_packages()
     }
 
     /// Returns the path to the `bin` directory inside this environment.

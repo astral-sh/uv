@@ -28,6 +28,7 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{pip, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::shell::Shell;
@@ -104,7 +105,7 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[allow(clippy::fn_params_excessive_bools)]
 async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
@@ -131,6 +132,8 @@ async fn venv_impl(
 
     let client_builder_clone = client_builder.clone();
 
+    let reporter = PythonDownloadReporter::single(printer);
+
     let mut interpreter_request = python_request.map(PythonRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {
         interpreter_request = request_from_version_file().await.into_diagnostic()?;
@@ -144,6 +147,7 @@ async fn venv_impl(
         python_fetch,
         &client_builder,
         cache,
+        Some(&reporter),
     )
     .await
     .into_diagnostic()?

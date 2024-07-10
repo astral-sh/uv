@@ -109,7 +109,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .constraints
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-            .cloned()
+            .map(|requirement| (*requirement).clone())
             .collect();
 
         while !queue.is_empty() || !futures.is_empty() {
@@ -128,7 +128,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         .apply(self.overrides.apply(lookahead.requirements()))
                     {
                         if requirement.evaluate_markers(markers, lookahead.extras()) {
-                            queue.push_back(requirement.clone());
+                            queue.push_back((*requirement).clone());
                         }
                     }
                     results.push(lookahead);

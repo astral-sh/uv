@@ -291,6 +291,16 @@ impl ResolutionGraph {
             .and_then(PythonTarget::as_requires_python)
             .cloned();
 
+        // Normalize any markers.
+        for edge in petgraph.edge_indices() {
+            if let Some(marker) = petgraph[edge].take() {
+                petgraph[edge] = crate::marker::normalize(
+                    marker,
+                    requires_python.as_ref().map(RequiresPython::bound),
+                );
+            }
+        }
+
         Ok(Self {
             petgraph,
             requires_python,
@@ -318,7 +328,7 @@ impl ResolutionGraph {
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        self.dists().any(super::AnnotatedDist::is_base)
+        self.dists().any(AnnotatedDist::is_base)
     }
 
     /// Returns `true` if the graph contains the given package.

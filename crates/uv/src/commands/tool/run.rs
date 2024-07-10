@@ -24,6 +24,7 @@ use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
 use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -134,7 +135,7 @@ pub(crate) async fn run(
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
-/// [`PythonEnvironment`]. Otherwise, creates an ephemeral environment.
+/// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
 async fn get_or_create_environment(
     from: &str,
     with: &[String],
@@ -154,6 +155,8 @@ async fn get_or_create_environment(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
+    let reporter = PythonDownloadReporter::single(printer);
+
     let python_request = python.map(PythonRequest::parse);
 
     // Discover an interpreter.
@@ -164,6 +167,7 @@ async fn get_or_create_environment(
         python_fetch,
         &client_builder,
         cache,
+        Some(&reporter),
     )
     .await?
     .into_interpreter();
@@ -284,7 +288,7 @@ fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
 
     // e.g. ignore `git+https://github.com/uv/uv.git@main`
     if PackageName::from_str(name).is_err() {
-        debug!("Ignoring non-package name `{}` in command", name);
+        debug!("Ignoring non-package name `{name}` in command");
         return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
     }
 
@@ -297,6 +301,6 @@ fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
     }
 
     // e.g. `uv@invalid`, warn and treat the whole thing as the command
-    debug!("Ignoring invalid version request `{}` in command", version);
+    debug!("Ignoring invalid version request `{version}` in command");
     Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)))
 }

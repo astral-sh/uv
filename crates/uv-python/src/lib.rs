@@ -7,7 +7,7 @@ pub use crate::discovery::{
 };
 pub use crate::environment::PythonEnvironment;
 pub use crate::implementation::ImplementationName;
-pub use crate::installation::PythonInstallation;
+pub use crate::installation::{PythonInstallation, PythonInstallationKey};
 pub use crate::interpreter::{Error as InterpreterError, Interpreter};
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;

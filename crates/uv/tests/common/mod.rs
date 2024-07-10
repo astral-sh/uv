@@ -76,10 +76,10 @@ pub struct TestContext {
     /// The Python version used for the virtual environment, if any.
     pub python_version: Option<PythonVersion>,
 
-    // All the Python versions available during this test context.
+    /// All the Python versions available during this test context.
     pub python_versions: Vec<(PythonVersion, PathBuf)>,
 
-    // Standard filters for this test context
+    /// Standard filters for this test context.
     filters: Vec<(String, String)>,
 }
 
@@ -112,6 +112,10 @@ impl TestContext {
                 format!("{verb} [N] packages"),
             ));
         }
+        self.filters.push((
+            "Removed \\d+ files?".to_string(),
+            "Removed [N] files".to_string(),
+        ));
         self
     }
 
@@ -120,7 +124,7 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_exe_suffix(mut self) -> Self {
         self.filters
-            .push((std::env::consts::EXE_SUFFIX.to_string(), String::new()));
+            .push((regex::escape(env::consts::EXE_SUFFIX), String::new()));
         self
     }
 
@@ -281,6 +285,13 @@ impl TestContext {
         }
     }
 
+    /// Create a `uv` command for testing.
+    pub fn command(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Shared behaviour for almost all test commands.
     ///
     /// * Use a temporary cache directory
@@ -306,7 +317,7 @@ impl TestContext {
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+            command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
         }
     }
 
@@ -356,6 +367,14 @@ impl TestContext {
         let mut command = Command::new(get_bin());
         command.arg("pip").arg("tree");
         self.add_shared_args(&mut command);
+        command
+    }
+
+    /// Create a `uv help` command with options shared across scenarios.
+    #[allow(clippy::unused_self)]
+    pub fn help(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("help");
         command
     }
 
@@ -468,6 +487,14 @@ impl TestContext {
     pub fn remove(&self, reqs: &[&str]) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("remove").args(reqs);
+        self.add_shared_args(&mut command);
+        command
+    }
+
+    /// Create a `uv tree` command with options shared across scenarios.
+    pub fn tree(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("tree");
         self.add_shared_args(&mut command);
         command
     }

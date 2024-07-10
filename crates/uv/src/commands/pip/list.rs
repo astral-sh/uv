@@ -22,7 +22,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_list(
     editable: bool,
     exclude_editable: bool,

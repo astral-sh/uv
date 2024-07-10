@@ -38,7 +38,7 @@ use crate::{RequiresPython, ResolutionGraph};
 /// The current version of the lock file format.
 const VERSION: u32 = 1;
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     version: u32,
@@ -190,6 +190,16 @@ impl Lock {
                     }
                 }
             }
+
+            // Remove wheels that don't match `requires-python` and can't be selected for
+            // installation.
+            if let Some(requires_python) = &requires_python {
+                dist.wheels.retain(|wheel| {
+                    wheel
+                        .filename
+                        .matches_requires_python(requires_python.specifiers())
+                });
+            }
         }
         distributions.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
 
@@ -314,6 +324,11 @@ impl Lock {
         &self.distributions
     }
 
+    /// Returns the owned [`Distribution`] entries in this lock.
+    pub fn into_distributions(self) -> Vec<Distribution> {
+        self.distributions
+    }
+
     /// Returns the supported Python version range for the lockfile, if present.
     pub fn requires_python(&self) -> Option<&RequiresPython> {
         self.requires_python.as_ref()
@@ -384,7 +399,7 @@ impl Lock {
             }
             let name = dist.id.name.clone();
             let resolved_dist =
-                ResolvedDist::Installable(dist.to_dist(project.workspace().root(), tags)?);
+                ResolvedDist::Installable(dist.to_dist(project.workspace().install_path(), tags)?);
             map.insert(name, resolved_dist);
         }
         let diagnostics = vec![];
@@ -499,7 +514,7 @@ impl TryFrom<LockWire> for Lock {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Distribution {
     pub(crate) id: DistributionId,
     sdist: Option<SourceDist>,
@@ -807,10 +822,6 @@ impl Distribution {
 
         self.id.to_toml(None, &mut table);
 
-        if let Some(ref sdist) = self.sdist {
-            table.insert("sdist", value(sdist.to_toml()?));
-        }
-
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(
                 self.dependencies
@@ -842,6 +853,10 @@ impl Distribution {
                 dev_dependencies.insert(extra.as_ref(), value(deps));
             }
             table.insert("dev-dependencies", Item::Table(dev_dependencies));
+        }
+
+        if let Some(ref sdist) = self.sdist {
+            table.insert("sdist", value(sdist.to_toml()?));
         }
 
         if !self.wheels.is_empty() {
@@ -1306,12 +1321,15 @@ enum SourceWire {
         subdirectory: Option<String>,
     },
     Path {
+        #[serde(deserialize_with = "deserialize_path_with_dot")]
         path: PathBuf,
     },
     Directory {
+        #[serde(deserialize_with = "deserialize_path_with_dot")]
         directory: PathBuf,
     },
     Editable {
+        #[serde(deserialize_with = "deserialize_path_with_dot")]
         editable: PathBuf,
     },
 }
@@ -1415,7 +1433,7 @@ enum GitSourceKind {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 struct SourceDistMetadata {
     /// A hash of the source distribution.
     hash: Hash,
@@ -1429,7 +1447,7 @@ struct SourceDistMetadata {
 /// locked against was found. The location does not need to exist in the
 /// future, so this should be treated as only a hint to where to look
 /// and/or recording where the source dist file originally came from.
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 enum SourceDist {
     Url {
@@ -1680,7 +1698,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
 }
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "WheelWire")]
 struct Wheel {
     /// A URL or file path (via `file://`) where the wheel that was locked
@@ -1877,7 +1895,7 @@ impl Dependency {
     ) -> Dependency {
         let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.clone();
-        let marker = marker.cloned().and_then(crate::marker::normalize);
+        let marker = marker.cloned();
         Dependency {
             distribution_id,
             extra,
@@ -2032,7 +2050,7 @@ impl From<Dependency> for DependencyWire {
 ///
 /// A hash is encoded as a single TOML string in the format
 /// `{algorithm}:{digest}`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Hash(HashDigest);
 
 impl From<HashDigest> for Hash {

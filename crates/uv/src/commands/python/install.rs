@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
 use fs_err as fs;
 use futures::StreamExt;
-
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
@@ -13,7 +15,8 @@ use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{requests_from_version_file, PythonRequest};
 use uv_warnings::warn_user_once;
 
-use crate::commands::ExitStatus;
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Download and install Python versions.
@@ -36,6 +39,7 @@ pub(crate) async fn install(
     let installations_dir = installations.root();
     let _lock = installations.acquire_lock()?;
 
+    let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
         if let Some(requests) = requests_from_version_file().await? {
             requests
@@ -59,7 +63,8 @@ pub(crate) async fn install(
     for (request, download_request) in requests.iter().zip(download_requests) {
         writeln!(
             printer.stderr(),
-            "Looking for installation {request} ({download_request})"
+            "Searching for Python versions matching: {}",
+            request.cyan()
         )?;
         if let Some(installation) = installed_installations
             .iter()
@@ -67,14 +72,15 @@ pub(crate) async fn install(
         {
             writeln!(
                 printer.stderr(),
-                "Found installed installation `{}` that satisfies {request}",
-                installation.key()
+                "Found existing installation for {}: {}",
+                request.cyan(),
+                installation.key().green(),
             )?;
             if force {
                 writeln!(
                     printer.stderr(),
-                    "Removing installed installation `{}`",
-                    installation.key()
+                    "Uninstalling {}",
+                    installation.key().green()
                 )?;
                 fs::remove_dir_all(installation.path())?;
                 unfilled_requests.push(download_request);
@@ -88,29 +94,12 @@ pub(crate) async fn install(
         if matches!(requests.as_slice(), [PythonRequest::Any]) {
             writeln!(
                 printer.stderr(),
-                "A installation is already installed. Use `uv installation install <request>` to install a specific installation.",
+                "Python is already available. Use `uv python install <request>` to install a specific version.",
             )?;
         } else if requests.len() > 1 {
-            writeln!(
-                printer.stderr(),
-                "All requested installations already installed."
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "Requested installation already installed."
-            )?;
+            writeln!(printer.stderr(), "All requested versions already installed")?;
         }
         return Ok(ExitStatus::Success);
-    }
-
-    if unfilled_requests.len() > 1 {
-        writeln!(
-            printer.stderr(),
-            "Found {}/{} installations requiring installation",
-            unfilled_requests.len(),
-            requests.len()
-        )?;
     }
 
     let downloads = unfilled_requests
@@ -120,47 +109,61 @@ pub(crate) async fn install(
         .map(|request| ManagedPythonDownload::from_request(&request))
         .collect::<Result<Vec<_>, uv_python::downloads::Error>>()?;
 
+    // Ensure we only download each version once
+    let downloads = downloads
+        .into_iter()
+        .unique_by(|download| download.key())
+        .collect::<Vec<_>>();
+
     // Construct a client
     let client = uv_client::BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
         .build();
 
-    let mut tasks = futures::stream::iter(downloads.iter())
+    let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
+
+    let results = futures::stream::iter(downloads.iter())
         .map(|download| async {
-            let _ = writeln!(printer.stderr(), "Downloading {}", download.key());
-            let result = download.fetch(&client, installations_dir).await;
+            let result = download
+                .fetch(&client, installations_dir, Some(&reporter))
+                .await;
             (download.python_version(), result)
         })
-        .buffered(4);
+        .buffered(4)
+        .collect::<Vec<_>>()
+        .await;
 
-    let mut results = Vec::new();
-    while let Some(task) = tasks.next().await {
-        let (version, result) = task;
+    for (version, result) in results {
         let path = match result? {
             // We should only encounter already-available during concurrent installs
             DownloadResult::AlreadyAvailable(path) => path,
             DownloadResult::Fetched(path) => {
                 writeln!(
                     printer.stderr(),
-                    "Installed Python {version} to {}",
-                    path.user_display()
+                    "Installed {} to: {}",
+                    format!("Python {version}").cyan(),
+                    path.user_display().cyan()
                 )?;
                 path
             }
         };
+
         // Ensure the installations have externally managed markers
         let installed = ManagedPythonInstallation::new(path.clone())?;
         installed.ensure_externally_managed()?;
-        results.push((version, path));
     }
 
     let s = if downloads.len() == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
-        "Installed {} installation{s} in {}s",
-        downloads.len(),
-        start.elapsed().as_secs()
+        "{}",
+        format!(
+            "Installed {} {}",
+            format!("{} version{s}", downloads.len()).bold(),
+            format!("in {}", elapsed(start.elapsed())).dimmed()
+        )
+        .dimmed()
     )?;
 
     Ok(ExitStatus::Success)

@@ -31,9 +31,9 @@ fn tool_list() {
     exit_code: 0
     ----- stdout -----
     black v24.2.0
-        black
-        blackd
-    
+    - black
+    - blackd
+
     ----- stderr -----
     warning: `uv tool list` is experimental and may change without warning.
     "###);
@@ -131,7 +131,7 @@ fn tool_list_bad_environment() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     ruff v0.3.4
-        ruff
+    - ruff
 
     ----- stderr -----
     warning: `uv tool list` is experimental and may change without warning.

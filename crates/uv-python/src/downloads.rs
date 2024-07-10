@@ -1,7 +1,21 @@
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::{Context, Poll};
+
+use futures::TryStreamExt;
+use thiserror::Error;
+use tokio::io::{AsyncRead, ReadBuf};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::{debug, instrument};
+use url::Url;
+
+use pypi_types::{HashAlgorithm, HashDigest};
+use uv_client::WrappedReqwestError;
+use uv_extract::hash::Hasher;
+use uv_fs::{rename_with_retry, Simplified};
 
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
@@ -9,15 +23,6 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::platform::{self, Arch, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
-use thiserror::Error;
-use uv_client::WrappedReqwestError;
-
-use futures::TryStreamExt;
-
-use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, instrument};
-use url::Url;
-use uv_fs::{rename_with_retry, Simplified};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -35,6 +40,14 @@ pub enum Error {
     NetworkMiddlewareError(#[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
     ExtractError(String, #[source] uv_extract::Error),
+    #[error("Failed to hash installation")]
+    HashExhaustion(#[source] io::Error),
+    #[error("Hash mismatch for `{installation}`\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]
+    HashMismatch {
+        installation: String,
+        expected: String,
+        actual: String,
+    },
     #[error("Invalid download url")]
     InvalidUrl(#[from] url::ParseError),
     #[error("Failed to create download directory")]
@@ -390,14 +403,15 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract
-    #[instrument(skip(client, parent_path), fields(download = %self.key()))]
+    #[instrument(skip(client, parent_path, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
         parent_path: &Path,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
-        let path = parent_path.join(self.key().to_string()).clone();
+        let path = parent_path.join(self.key().to_string());
 
         // If it already exists, return it
         if path.is_dir() {
@@ -410,6 +424,11 @@ impl ManagedPythonDownload {
         // Ensure the request was successful.
         response.error_for_status_ref()?;
 
+        let size = response.content_length();
+        let progress = reporter
+            .as_ref()
+            .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
+
         // Download and extract into a temporary directory.
         let temp_dir = tempfile::tempdir_in(parent_path).map_err(Error::DownloadDirError)?;
 
@@ -417,22 +436,64 @@ impl ManagedPythonDownload {
             "Downloading {url} to temporary location {}",
             temp_dir.path().display()
         );
-        let reader = response
+
+        let stream = response
             .bytes_stream()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
             .into_async_read();
 
+        let mut hashers = self
+            .sha256
+            .into_iter()
+            .map(|_| Hasher::from(HashAlgorithm::Sha256))
+            .collect::<Vec<_>>();
+        let mut hasher = uv_extract::hash::HashReader::new(stream.compat(), &mut hashers);
+
         debug!("Extracting {filename}");
-        uv_extract::stream::archive(reader.compat(), filename, temp_dir.path())
-            .await
-            .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+
+        match progress {
+            Some((&reporter, progress)) => {
+                let mut reader = ProgressReader::new(&mut hasher, progress, reporter);
+                uv_extract::stream::archive(&mut reader, filename, temp_dir.path())
+                    .await
+                    .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+            }
+            None => {
+                uv_extract::stream::archive(&mut hasher, filename, temp_dir.path())
+                    .await
+                    .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+            }
+        };
+
+        hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+        if let Some((&reporter, progress)) = progress {
+            reporter.on_progress(&self.key, progress);
+        }
+
+        // Check the hash
+        if let Some(expected) = self.sha256 {
+            let actual = HashDigest::from(hashers.pop().unwrap()).digest;
+            if !actual.eq_ignore_ascii_case(expected) {
+                return Err(Error::HashMismatch {
+                    installation: self.key.to_string(),
+                    expected: expected.to_string(),
+                    actual: actual.to_string(),
+                });
+            }
+        }
 
         // Extract the top-level directory.
-        let extracted = match uv_extract::strip_component(temp_dir.path()) {
+        let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
             Err(err) => return Err(Error::ExtractError(filename.to_string(), err)),
         };
+
+        // If the distribution is a `full` archive, the Python installation is in the `install` directory.
+        if extracted.join("install").is_dir() {
+            extracted = extracted.join("install");
+        }
 
         // Persist it to the target
         debug!("Moving {} to {}", extracted.display(), path.user_display());
@@ -471,5 +532,48 @@ impl From<reqwest_middleware::Error> for Error {
 impl Display for ManagedPythonDownload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.key)
+    }
+}
+
+pub trait Reporter: Send + Sync {
+    fn on_progress(&self, name: &PythonInstallationKey, id: usize);
+    fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize;
+    fn on_download_progress(&self, id: usize, inc: u64);
+    fn on_download_complete(&self);
+}
+
+/// An asynchronous reader that reports progress as bytes are read.
+struct ProgressReader<'a, R> {
+    reader: R,
+    index: usize,
+    reporter: &'a dyn Reporter,
+}
+
+impl<'a, R> ProgressReader<'a, R> {
+    /// Create a new [`ProgressReader`] that wraps another reader.
+    fn new(reader: R, index: usize, reporter: &'a dyn Reporter) -> Self {
+        Self {
+            reader,
+            index,
+            reporter,
+        }
+    }
+}
+
+impl<R> AsyncRead for ProgressReader<'_, R>
+where
+    R: AsyncRead + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.as_mut().reader)
+            .poll_read(cx, buf)
+            .map_ok(|()| {
+                self.reporter
+                    .on_download_progress(self.index, buf.filled().len() as u64);
+            })
     }
 }

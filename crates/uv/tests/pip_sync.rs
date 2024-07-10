@@ -10,14 +10,13 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err as fs;
 use indoc::indoc;
-use insta::assert_snapshot;
 use predicates::Predicate;
 use url::Url;
 
 use common::{uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
-use crate::common::{copy_dir_all, run_and_format, site_packages_path, TestContext};
+use crate::common::{copy_dir_all, site_packages_path, TestContext};
 
 mod common;
 
@@ -3166,63 +3165,6 @@ fn compile() -> Result<()> {
     Ok(())
 }
 
-/// Test that the `PYC_INVALIDATION_MODE` option is recognized and that the error handling works.
-#[test]
-#[cfg_attr(target_os = "macos", ignore = "Fails spuriously on macOS")]
-fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
-
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([
-            // The first file can vary so we capture it here
-            (
-                r#"\[SITE_PACKAGES\].*\.py", received: "#,
-                r#"[SITE_PACKAGES]/[FILE].py", received: "#,
-            ),
-        ])
-        .collect();
-
-    // Retry test if we run into a broken pipe (https://github.com/astral-sh/uv/issues/2672).
-    // TODO(konsti): Why is this happening in the first place?
-    let run_test = || {
-        let mut command = context.pip_sync();
-        command
-            .arg("requirements.txt")
-            .arg("--compile")
-            .arg("--strict")
-            .env("PYC_INVALIDATION_MODE", "bogus");
-        let (snapshot, _output) = run_and_format(command, filters.clone(), function_name!(), None);
-        snapshot
-    };
-    let mut snapshot = run_test();
-    if snapshot.contains("Failed to write to Python stdin") {
-        snapshot = run_test();
-    }
-
-    assert_snapshot!(snapshot, @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-    error: Failed to bytecode-compile Python file in: [SITE_PACKAGES]/
-      Caused by: Python process stderr:
-    Invalid value for PYC_INVALIDATION_MODE "bogus", valid are "TIMESTAMP", "CHECKED_HASH", "UNCHECKED_HASH":
-      Caused by: Bytecode compilation failed, expected "[SITE_PACKAGES]/[FILE].py", received: ""
-    "###
-    );
-
-    Ok(())
-}
-
 /// Raise an error when an editable's `Requires-Python` constraint is not met.
 #[test]
 fn requires_python_editable() -> Result<()> {
@@ -5169,10 +5111,12 @@ fn prefix() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
+    let prefix = context.temp_dir.child("prefix");
+
     uv_snapshot!(context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
-        .arg("prefix"), @r###"
+        .arg(prefix.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5207,7 +5151,7 @@ fn prefix() -> Result<()> {
     uv_snapshot!(context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
-        .arg("prefix"), @r###"
+        .arg(prefix.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

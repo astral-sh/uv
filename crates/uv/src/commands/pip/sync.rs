@@ -34,7 +34,7 @@ use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_sync(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -134,15 +134,13 @@ pub(crate) async fn pip_sync(
             "Using `--target` directory at {}",
             target.root().user_display()
         );
-        target.init()?;
-        environment.with_target(target)
+        environment.with_target(target)?
     } else if let Some(prefix) = prefix {
         debug!(
             "Using `--prefix` directory at {}",
             prefix.root().user_display()
         );
-        prefix.init()?;
-        environment.with_prefix(prefix)
+        environment.with_prefix(prefix)?
     } else {
         environment
     };

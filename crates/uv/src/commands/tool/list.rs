@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
@@ -11,7 +12,11 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List installed tools.
-pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn list(
+    preview: PreviewMode,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`uv tool list` is experimental and may change without warning.");
     }
@@ -28,20 +33,19 @@ pub(crate) async fn list(preview: PreviewMode, printer: Printer) -> Result<ExitS
 
     for (name, tool) in tools {
         // Output tool name and version
-        let version =
-            match installed_tools.version(&name, &Cache::from_path(installed_tools.root())) {
-                Ok(version) => version,
-                Err(e) => {
-                    writeln!(printer.stderr(), "{e}")?;
-                    continue;
-                }
-            };
+        let version = match installed_tools.version(&name, cache) {
+            Ok(version) => version,
+            Err(e) => {
+                writeln!(printer.stderr(), "{e}")?;
+                continue;
+            }
+        };
 
-        writeln!(printer.stdout(), "{name} v{version}")?;
+        writeln!(printer.stdout(), "{}", format!("{name} v{version}").bold())?;
 
         // Output tool entrypoints
         for entrypoint in tool.entrypoints() {
-            writeln!(printer.stdout(), "    {}", &entrypoint.name)?;
+            writeln!(printer.stdout(), "- {}", &entrypoint.name)?;
         }
     }
 

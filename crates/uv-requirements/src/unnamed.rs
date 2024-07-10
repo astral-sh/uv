@@ -7,6 +7,7 @@ use configparser::ini::Ini;
 use futures::{stream::FuturesOrdered, TryStreamExt};
 use serde::Deserialize;
 use tracing::debug;
+use url::Host;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
@@ -128,13 +129,32 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             .ok()
             .and_then(|filename| SourceDistFilename::parsed_normalized_filename(&filename).ok())
         {
-            return Ok(pep508_rs::Requirement {
-                name: filename.name,
-                extras: requirement.extras,
-                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
-                marker: requirement.marker,
-                origin: requirement.origin,
-            });
+            // But ignore GitHub archives, like:
+            //   https://github.com/python/mypy/archive/refs/heads/release-1.11.zip
+            //
+            // These have auto-generated filenames that will almost never match the package name.
+            if requirement.url.verbatim.host() == Some(Host::Domain("github.com"))
+                && requirement
+                    .url
+                    .verbatim
+                    .path_segments()
+                    .is_some_and(|mut path_segments| {
+                        path_segments.any(|segment| segment == "archive")
+                    })
+            {
+                debug!(
+                    "Rejecting inferred name from GitHub archive: {}",
+                    requirement.url.verbatim
+                );
+            } else {
+                return Ok(pep508_rs::Requirement {
+                    name: filename.name,
+                    extras: requirement.extras,
+                    version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                    marker: requirement.marker,
+                    origin: requirement.origin,
+                });
+            }
         }
 
         let source = match &requirement.url.parsed_url {

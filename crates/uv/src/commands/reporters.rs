@@ -11,6 +11,7 @@ use distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
+use uv_python::PythonInstallationKey;
 
 use crate::printer::Printer;
 
@@ -23,9 +24,9 @@ struct ProgressReporter {
 
 #[derive(Debug)]
 enum ProgressMode {
-    // Reports top-level progress.
+    /// Reports top-level progress.
     Single,
-    // Reports progress of all concurrent download/build/checkout processes.
+    /// Reports progress of all concurrent download, build, and checkout processes.
     Multi {
         multi_progress: MultiProgress,
         state: Arc<Mutex<BarState>>,
@@ -34,18 +35,18 @@ enum ProgressMode {
 
 #[derive(Default, Debug)]
 struct BarState {
-    // The number of bars that precede any download bars (i.e. build/checkout status).
+    /// The number of bars that precede any download bars (i.e. build/checkout status).
     headers: usize,
-    // A list of donwnload bar sizes, in descending order.
+    /// A list of download bar sizes, in descending order.
     sizes: Vec<u64>,
-    // A map of progress bars, by ID.
+    /// A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
-    // A monotonic counter for bar IDs.
+    /// A monotonic counter for bar IDs.
     id: usize,
 }
 
 impl BarState {
-    // Returns a unique ID for a new bar.
+    /// Returns a unique ID for a new progress bar.
     fn id(&mut self) -> usize {
         self.id += 1;
         self.id
@@ -72,6 +73,7 @@ impl ProgressReporter {
             mode,
         }
     }
+
     fn on_build_start(&self, source: &BuildableSource) -> usize {
         let ProgressMode::Multi {
             multi_progress,
@@ -119,7 +121,7 @@ impl ProgressReporter {
         ));
     }
 
-    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+    fn on_download_start(&self, name: String, size: Option<u64>) -> usize {
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -148,10 +150,10 @@ impl ProgressReporter {
                 .unwrap()
                 .progress_chars("--"),
             );
-            progress.set_message(name.to_string());
+            progress.set_message(name);
         } else {
             progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} ....").unwrap());
-            progress.set_message(name.to_string());
+            progress.set_message(name);
             progress.finish();
         }
 
@@ -279,7 +281,7 @@ impl uv_installer::PrepareReporter for PrepareReporter {
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name, size)
+        self.reporter.on_download_start(name.to_string(), size)
     }
 
     fn on_download_progress(&self, id: usize, bytes: u64) {
@@ -363,7 +365,7 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name, size)
+        self.reporter.on_download_start(name.to_string(), size)
     }
 
     fn on_download_progress(&self, id: usize, bytes: u64) {
@@ -385,7 +387,7 @@ impl uv_distribution::Reporter for ResolverReporter {
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name, size)
+        self.reporter.on_download_start(name.to_string(), size)
     }
 
     fn on_download_progress(&self, id: usize, bytes: u64) {
@@ -438,6 +440,72 @@ impl uv_installer::InstallReporter for InstallReporter {
     fn on_install_complete(&self) {
         self.progress.set_message("");
         self.progress.finish_and_clear();
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct PythonDownloadReporter {
+    reporter: ProgressReporter,
+    multiple: bool,
+}
+
+impl PythonDownloadReporter {
+    /// Initialize a [`PythonDownloadReporter`] for a single Python download.
+    pub(crate) fn single(printer: Printer) -> Self {
+        Self::new(printer, 1)
+    }
+
+    /// Initialize a [`PythonDownloadReporter`] for multiple Python downloads.
+    pub(crate) fn new(printer: Printer, length: u64) -> Self {
+        let multi_progress = MultiProgress::with_draw_target(printer.target());
+        let root = multi_progress.add(ProgressBar::with_draw_target(
+            Some(length),
+            printer.target(),
+        ));
+        root.set_style(
+            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
+        );
+
+        let reporter = ProgressReporter::new(root, multi_progress, printer);
+
+        Self {
+            reporter,
+            multiple: length > 1,
+        }
+    }
+}
+
+impl uv_python::downloads::Reporter for PythonDownloadReporter {
+    fn on_progress(&self, _name: &PythonInstallationKey, id: usize) {
+        self.reporter.on_download_complete(id);
+
+        if self.multiple {
+            self.reporter.root.inc(1);
+            if self
+                .reporter
+                .root
+                .length()
+                .is_some_and(|len| self.reporter.root.position() == len)
+            {
+                self.reporter.root.finish_and_clear();
+            }
+        }
+    }
+
+    fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize {
+        if self.multiple {
+            self.reporter.root.set_message("Downloading Python...");
+        }
+        self.reporter.on_download_start(name.to_string(), size)
+    }
+
+    fn on_download_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_download_progress(id, inc);
+    }
+
+    fn on_download_complete(&self) {
+        self.reporter.root.set_message("");
+        self.reporter.root.finish_and_clear();
     }
 }
 

@@ -7,25 +7,30 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_installer::SitePackages;
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
+
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::lock::do_lock;
 use crate::commands::project::{ProjectError, SharedState};
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettings, InstallerSettingsRef};
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
 /// Sync the project environment.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
+    locked: bool,
+    frozen: bool,
     extras: ExtrasSpecification,
     dev: bool,
     modifications: Modifications,
     python: Option<String>,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
-    settings: InstallerSettings,
+    settings: ResolverInstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -53,11 +58,88 @@ pub(crate) async fn sync(
     )
     .await?;
 
-    // Read the lockfile.
-    let lock: Lock = {
-        let encoded =
-            fs_err::tokio::read_to_string(project.workspace().root().join("uv.lock")).await?;
-        toml::from_str(&encoded)?
+    // Initialize any shared state.
+    let state = SharedState::default();
+
+    let lock = if frozen {
+        // Read the existing lockfile.
+        project::lock::read(project.workspace())
+            .await?
+            .ok_or_else(|| ProjectError::MissingLockfile)?
+    } else if locked {
+        // Read the existing lockfile.
+        let existing = project::lock::read(project.workspace())
+            .await?
+            .ok_or_else(|| ProjectError::MissingLockfile)?;
+
+        // Perform the lock operation, but don't write the lockfile to disk.
+        let lock = match do_lock(
+            project.workspace(),
+            venv.interpreter(),
+            Some(&existing),
+            settings.as_ref().into(),
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await
+        {
+            Ok(lock) => lock,
+            Err(ProjectError::Operation(pip::operations::Error::Resolve(
+                uv_resolver::ResolveError::NoSolution(err),
+            ))) => {
+                let report = miette::Report::msg(format!("{err}"))
+                    .context("No solution found when resolving dependencies:");
+                anstream::eprint!("{report:?}");
+                return Ok(ExitStatus::Failure);
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        // If the locks disagree, return an error.
+        if lock != existing {
+            return Err(ProjectError::LockMismatch.into());
+        }
+
+        lock
+    } else {
+        // Read the existing lockfile.
+        let existing = project::lock::read(project.workspace()).await?;
+
+        // Perform the lock operation.
+        match do_lock(
+            project.workspace(),
+            venv.interpreter(),
+            existing.as_ref(),
+            settings.as_ref().into(),
+            &state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await
+        {
+            Ok(lock) => {
+                project::lock::commit(&lock, project.workspace()).await?;
+                lock
+            }
+            Err(ProjectError::Operation(pip::operations::Error::Resolve(
+                uv_resolver::ResolveError::NoSolution(err),
+            ))) => {
+                let report = miette::Report::msg(format!("{err}"))
+                    .context("No solution found when resolving dependencies:");
+                anstream::eprint!("{report:?}");
+                return Ok(ExitStatus::Failure);
+            }
+            Err(err) => return Err(err.into()),
+        }
     };
 
     // Perform the sync operation.
@@ -68,8 +150,8 @@ pub(crate) async fn sync(
         extras,
         dev,
         modifications,
-        settings.as_ref(),
-        &SharedState::default(),
+        settings.as_ref().into(),
+        &state,
         preview,
         connectivity,
         concurrency,

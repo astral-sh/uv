@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::Name;
@@ -25,6 +26,7 @@ use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool,
 use uv_warnings::warn_user_once;
 
 use crate::commands::project::{resolve_environment, sync_environment, update_environment};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -55,6 +57,8 @@ pub(crate) async fn install(
         .connectivity(connectivity)
         .native_tls(native_tls);
 
+    let reporter = PythonDownloadReporter::single(printer);
+
     let python_request = python.as_deref().map(PythonRequest::parse);
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
@@ -66,6 +70,7 @@ pub(crate) async fn install(
         python_fetch,
         &client_builder,
         cache,
+        Some(&reporter),
     )
     .await?
     .into_interpreter();
@@ -78,7 +83,7 @@ pub(crate) async fn install(
         // Parse the positional name. If the user provided more than a package name, it's an error
         // (e.g., `uv install foo==1.0 --from foo`).
         let Ok(package) = PackageName::from_str(&package) else {
-            bail!("Package requirement `{from}` provided with `--from` conflicts with install request `{package}`")
+            bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)")
         };
 
         let from_requirement = resolve_requirements(
@@ -101,7 +106,7 @@ pub(crate) async fn install(
         if from_requirement.name != package {
             // Determine if it's an entirely different package (e.g., `uv install foo --from bar`).
             bail!(
-                "Package name `{}` provided with `--from` does not match install request `{}`",
+                "Package name (`{}`) provided with `--from` does not match install request (`{}`)",
                 from_requirement.name,
                 package
             );
@@ -156,14 +161,13 @@ pub(crate) async fn install(
             .filter(|environment| {
                 python_request.as_ref().map_or(true, |python_request| {
                     if python_request.satisfied(environment.interpreter(), cache) {
-                        debug!("Found existing environment for tool `{}`", from.name);
+                        debug!("Found existing environment for `{}`", from.name);
                         true
                     } else {
                         let _ = writeln!(
                             printer.stderr(),
-                            "Existing environment for `{}` does not satisfy the requested Python interpreter: `{}`",
+                            "Existing environment for `{}` does not satisfy the requested Python interpreter",
                             from.name,
-                            python_request
                         );
                         false
                     }
@@ -183,7 +187,7 @@ pub(crate) async fn install(
                 // And the user didn't request a reinstall or upgrade...
                 if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
                     // We're done.
-                    writeln!(printer.stderr(), "Tool `{from}` is already installed")?;
+                    writeln!(printer.stderr(), "`{from}` is already installed")?;
                     return Ok(ExitStatus::Failure);
                 }
             }
@@ -265,7 +269,7 @@ pub(crate) async fn install(
         .context("Failed to create executable directory")?;
 
     debug!(
-        "Installing tool entry points into {}",
+        "Installing tool executables into: {}",
         executable_directory.user_display()
     );
 
@@ -294,7 +298,7 @@ pub(crate) async fn install(
         // Clean up the environment we just created
         installed_tools.remove_environment(&from.name)?;
 
-        bail!("No entry points found for tool `{}`", from.name);
+        bail!("No executables found for `{}`", from.name);
     }
 
     // Check if they exist, before installing
@@ -307,7 +311,7 @@ pub(crate) async fn install(
     // will _not_ remove existing entry points when they are not managed by uv.
     if force || reinstall_entry_points {
         for (name, _, target) in existing_entry_points {
-            debug!("Removing existing entry point `{name}`");
+            debug!("Removing existing executable: `{name}`");
             fs_err::remove_file(target)?;
         }
     } else if existing_entry_points.peek().is_some() {
@@ -324,25 +328,34 @@ pub(crate) async fn install(
             ("s", "exist")
         };
         bail!(
-            "Entry point{s} for tool already {exists}: {} (use `--force` to overwrite)",
-            existing_entry_points.iter().join(", ")
+            "Executable{s} already {exists}: {} (use `--force` to overwrite)",
+            existing_entry_points
+                .iter()
+                .map(|name| name.bold())
+                .join(", ")
         )
     }
 
     for (name, source_path, target_path) in &target_entry_points {
-        debug!("Installing `{name}`");
+        debug!("Installing executable: `{name}`");
         #[cfg(unix)]
-        replace_symlink(source_path, target_path).context("Failed to install entrypoint")?;
+        replace_symlink(source_path, target_path).context("Failed to install executable")?;
         #[cfg(windows)]
         fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
     }
 
+    let s = if target_entry_points.len() == 1 {
+        ""
+    } else {
+        "s"
+    };
     writeln!(
         printer.stderr(),
-        "Installed: {}",
+        "Installed {} executable{s}: {}",
+        target_entry_points.len(),
         target_entry_points
             .iter()
-            .map(|(name, _, _)| name)
+            .map(|(name, _, _)| name.bold())
             .join(", ")
     )?;
 

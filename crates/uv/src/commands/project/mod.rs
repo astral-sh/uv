@@ -23,9 +23,10 @@ use uv_python::{
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_warnings::warn_user;
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::reporters::ResolverReporter;
+use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, SharedState};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
@@ -36,9 +37,18 @@ pub(crate) mod lock;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
+pub(crate) mod tree;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
+    #[error("The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.")]
+    LockMismatch,
+
+    #[error(
+        "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
+    )]
+    MissingLockfile,
+
     #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
     LockedPythonIncompatibility(Version, RequiresPython),
 
@@ -173,12 +183,20 @@ impl FoundInterpreter {
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
+            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
+                warn_user!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                    path.user_display().cyan()
+                );
+            }
             Err(err) => return Err(err.into()),
         };
 
         let client_builder = BaseClientBuilder::default()
             .connectivity(connectivity)
             .native_tls(native_tls);
+
+        let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment
         let interpreter = PythonInstallation::find_or_fetch(
@@ -188,6 +206,7 @@ impl FoundInterpreter {
             python_fetch,
             &client_builder,
             cache,
+            Some(&reporter),
         )
         .await?
         .into_interpreter();

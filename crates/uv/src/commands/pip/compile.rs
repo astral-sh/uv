@@ -43,7 +43,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -216,9 +216,9 @@ pub(crate) async fn pip_compile(
     let python_requirement = if universal {
         let requires_python = RequiresPython::greater_than_equal_version(
             if let Some(python_version) = python_version.as_ref() {
-                python_version.version.clone()
+                &python_version.version
             } else {
-                interpreter.python_version().clone()
+                interpreter.python_version()
             },
         );
         PythonRequirement::from_requires_python(&interpreter, &requires_python)
@@ -411,7 +411,7 @@ pub(crate) async fn pip_compile(
     // If necessary, include the `--find-links` locations.
     if include_find_links {
         for flat_index in index_locations.flat_index() {
-            writeln!(writer, "--find-links {flat_index}")?;
+            writeln!(writer, "--find-links {}", flat_index.verbatim())?;
             wrote_preamble = true;
         }
     }

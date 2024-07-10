@@ -10,11 +10,13 @@ use uv_cache::Cache;
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
 };
-use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
+use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest, Reporter};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
-use crate::{Error, Interpreter, PythonFetch, PythonPreference, PythonSource, PythonVersion};
+use crate::{
+    downloads, Error, Interpreter, PythonFetch, PythonPreference, PythonSource, PythonVersion,
+};
 
 /// A Python interpreter and accompanying tools.
 #[derive(Clone, Debug)]
@@ -82,13 +84,14 @@ impl PythonInstallation {
         python_fetch: PythonFetch,
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or_default();
 
         // Perform a fetch aggressively if managed Python is preferred
         if matches!(preference, PythonPreference::Managed) && python_fetch.is_automatic() {
             if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
-                return Self::fetch(request, client_builder, cache).await;
+                return Self::fetch(request.fill(), client_builder, cache, reporter).await;
             }
         }
 
@@ -96,16 +99,22 @@ impl PythonInstallation {
         match Self::find(&request, environments, preference, cache) {
             Ok(venv) => Ok(venv),
             // If missing and allowed, perform a fetch
-            err @ Err(Error::MissingPython(_))
+            Err(Error::MissingPython(err))
                 if preference.allows_managed()
                     && python_fetch.is_automatic()
                     && client_builder.connectivity.is_online() =>
             {
                 if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
                     debug!("Requested Python not found, checking for available download...");
-                    Self::fetch(request, client_builder, cache).await
+                    match Self::fetch(request.fill(), client_builder, cache, reporter).await {
+                        Ok(installation) => Ok(installation),
+                        Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
+                            Err(Error::MissingPython(err))
+                        }
+                        Err(err) => Err(err),
+                    }
                 } else {
-                    err
+                    Err(Error::MissingPython(err))
                 }
             }
             Err(err) => Err(err),
@@ -117,6 +126,7 @@ impl PythonInstallation {
         request: PythonDownloadRequest,
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
@@ -126,7 +136,7 @@ impl PythonInstallation {
         let client = client_builder.build();
 
         info!("Fetching requested Python...");
-        let result = download.fetch(&client, installations_dir).await?;
+        let result = download.fetch(&client, installations_dir, reporter).await?;
 
         let path = match result {
             DownloadResult::AlreadyAvailable(path) => path,
@@ -208,7 +218,7 @@ pub enum PythonInstallationKeyError {
     ParseError(String, String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PythonInstallationKey {
     pub(crate) implementation: LenientImplementationName,
     pub(crate) major: u8,

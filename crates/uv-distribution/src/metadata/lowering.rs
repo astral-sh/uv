@@ -170,7 +170,7 @@ pub(crate) fn lower_requirement(
             path_source(
                 path,
                 project_dir,
-                workspace.root(),
+                workspace.install_path(),
                 editable.unwrap_or(false),
             )?
         }
@@ -207,8 +207,8 @@ pub(crate) fn lower_requirement(
                 .ok_or(LoweringError::UndeclaredWorkspacePackage)?
                 .clone();
             // The lockfile is relative to the workspace root.
-            let relative_to_workspace =
-                relative_to(path.root(), workspace.root()).map_err(LoweringError::RelativeTo)?;
+            let relative_to_workspace = relative_to(path.root(), workspace.install_path())
+                .map_err(LoweringError::RelativeTo)?;
             let url = VerbatimUrl::parse_absolute_path(path.root())?
                 .with_given(relative_to_workspace.to_string_lossy());
             RequirementSource::Directory {

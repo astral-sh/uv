@@ -13,13 +13,13 @@ pub enum Error {
     UnknownLibc(String),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Arch(pub(crate) target_lexicon::Architecture);
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Os(pub(crate) target_lexicon::OperatingSystem);
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub enum Libc {
     Some(target_lexicon::Environment),
     None,

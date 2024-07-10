@@ -340,7 +340,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         'FORK: while let Some(mut state) = forked_states.pop() {
             if !state.markers.is_universal() {
                 if let Some(requires_python) = state.requires_python.as_ref() {
-                    debug!("Solving split {} ({})", state.markers, requires_python);
+                    debug!(
+                        "Solving split {} (requires-python: {})",
+                        state.markers, requires_python
+                    );
                 } else {
                     debug!("Solving split {}", state.markers);
                 }
@@ -361,6 +364,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Self::pre_visit(
                         state.pubgrub.partial_solution.prioritized_packages(),
                         &self.urls,
+                        &state.python_requirement,
                         &request_sink,
                     )?;
                 }
@@ -484,6 +488,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &state.next,
                         &version,
                         term_intersection.unwrap_positive(),
+                        &state.python_requirement,
                         &request_sink,
                         &self.index,
                         &self.selector,
@@ -548,8 +553,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             diverging_packages,
                         } => {
                             debug!(
-                                "Splitting resolution on {} over {}",
+                                "Splitting resolution on {}=={} over {}",
                                 state.next,
+                                version,
                                 diverging_packages
                                     .iter()
                                     .map(ToString::to_string)
@@ -572,7 +578,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
 
                                 forked_state.markers.and(fork.markers);
-                                forked_state.markers = normalize(forked_state.markers)
+                                forked_state.markers = normalize(forked_state.markers, None)
                                     .unwrap_or(MarkerTree::And(Vec::new()));
 
                                 // If the fork contains a narrowed Python requirement, apply it.
@@ -717,6 +723,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn pre_visit<'data>(
         packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
         urls: &Urls,
+        python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
@@ -736,7 +743,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if urls.any_url(name) {
                 continue;
             }
-            request_sink.blocking_send(Request::Prefetch(name.clone(), range.clone()))?;
+            request_sink.blocking_send(Request::Prefetch(
+                name.clone(),
+                range.clone(),
+                python_requirement.clone(),
+            ))?;
         }
         Ok(())
     }
@@ -856,7 +867,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         // The version is incompatible due to its Python requirement.
-        // STOPSHIP(charlie): Merge markers into `python_requirement`.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
             if let Some(target) = python_requirement.target() {
                 if !target.is_compatible_with(requires_python) {
@@ -1467,7 +1477,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 true
             })
             .flat_map(move |requirement| {
-                iter::once(Cow::Borrowed(requirement)).chain(
+                iter::once(requirement.clone()).chain(
                     self.constraints
                         .get(&requirement.name)
                         .into_iter()
@@ -1653,7 +1663,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Pre-fetch the package and distribution metadata.
-            Request::Prefetch(package_name, range) => {
+            Request::Prefetch(package_name, range, python_requirement) => {
                 // Wait for the package metadata to become available.
                 let versions_response = self
                     .index
@@ -1716,6 +1726,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                     }
                 }
+
+                match dist {
+                    CompatibleDist::InstalledDist(_) => {}
+                    CompatibleDist::SourceDist { sdist, .. }
+                    | CompatibleDist::IncompatibleWheel { sdist, .. } => {
+                        // Source distributions must meet both the _target_ Python version and the
+                        // _installed_ Python version (to build successfully).
+                        if let Some(requires_python) = sdist.file.requires_python.as_ref() {
+                            if let Some(target) = python_requirement.target() {
+                                if !target.is_compatible_with(requires_python) {
+                                    return Ok(None);
+                                }
+                            }
+                            if !requires_python.contains(python_requirement.installed()) {
+                                return Ok(None);
+                            }
+                        }
+                    }
+                    CompatibleDist::CompatibleWheel { wheel, .. } => {
+                        // Wheels must meet the _target_ Python version.
+                        if let Some(requires_python) = wheel.file.requires_python.as_ref() {
+                            if let Some(target) = python_requirement.target() {
+                                if !target.is_compatible_with(requires_python) {
+                                    return Ok(None);
+                                }
+                            } else {
+                                if !requires_python.contains(python_requirement.installed()) {
+                                    return Ok(None);
+                                }
+                            }
+                        }
+                    }
+                };
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
@@ -1934,14 +1977,14 @@ impl ForkState {
     ) -> Result<(), ResolveError> {
         // Incompatible requires-python versions are special in that we track
         // them as incompatible dependencies instead of marking the package version
-        // as unavailable directly
+        // as unavailable directly.
         if let UnavailableVersion::IncompatibleDist(
             IncompatibleDist::Source(IncompatibleSource::RequiresPython(requires_python, kind))
             | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python, kind)),
         ) = reason
         {
             let python_version: Range<Version> =
-                PubGrubSpecifier::try_from(&requires_python)?.into();
+                PubGrubSpecifier::from_release_specifiers(&requires_python)?.into();
 
             let package = &self.next;
             self.pubgrub
@@ -2210,7 +2253,7 @@ pub(crate) enum Request {
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
-    Prefetch(PackageName, Range<Version>),
+    Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {
@@ -2262,7 +2305,7 @@ impl Display for Request {
             Self::Installed(dist) => {
                 write!(f, "Installed metadata {dist}")
             }
-            Self::Prefetch(package_name, range) => {
+            Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
         }

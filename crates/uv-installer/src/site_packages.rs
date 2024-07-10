@@ -13,7 +13,7 @@ use distribution_types::{
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_normalize::PackageName;
-use uv_python::PythonEnvironment;
+use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::InstalledPackagesProvider;
 
 use crate::satisfies::RequirementSatisfaction;
@@ -23,7 +23,7 @@ use crate::satisfies::RequirementSatisfaction;
 /// Packages are indexed by both name and (for editable installs) URL.
 #[derive(Debug, Clone)]
 pub struct SitePackages {
-    venv: PythonEnvironment,
+    interpreter: Interpreter,
     /// The vector of all installed distributions. The `by_name` and `by_url` indices index into
     /// this vector. The vector may contain `None` values, which represent distributions that were
     /// removed from the virtual environment.
@@ -37,13 +37,18 @@ pub struct SitePackages {
 }
 
 impl SitePackages {
+    /// Build an index of installed packages from the given Python environment.
+    pub fn from_environment(environment: &PythonEnvironment) -> Result<Self> {
+        Self::from_interpreter(environment.interpreter())
+    }
+
     /// Build an index of installed packages from the given Python executable.
-    pub fn from_environment(venv: &PythonEnvironment) -> Result<SitePackages> {
+    pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
 
-        for site_packages in venv.site_packages() {
+        for site_packages in interpreter.site_packages() {
             // Read the site-packages directory.
             let site_packages = match fs::read_dir(site_packages) {
                 Ok(site_packages) => {
@@ -66,7 +71,7 @@ impl SitePackages {
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     return Ok(Self {
-                        venv: venv.clone(),
+                        interpreter: interpreter.clone(),
                         distributions,
                         by_name,
                         by_url,
@@ -102,7 +107,7 @@ impl SitePackages {
         }
 
         Ok(Self {
-            venv: venv.clone(),
+            interpreter: interpreter.clone(),
             distributions,
             by_name,
             by_url,
@@ -199,10 +204,10 @@ impl SitePackages {
 
                 // Verify that the package is compatible with the current Python version.
                 if let Some(requires_python) = metadata.requires_python.as_ref() {
-                    if !requires_python.contains(self.venv.interpreter().python_version()) {
+                    if !requires_python.contains(self.interpreter.python_version()) {
                         diagnostics.push(SitePackagesDiagnostic::IncompatiblePythonVersion {
                             package: package.clone(),
-                            version: self.venv.interpreter().python_version().clone(),
+                            version: self.interpreter.python_version().clone(),
                             requires_python: requires_python.clone(),
                         });
                     }
@@ -210,7 +215,7 @@ impl SitePackages {
 
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+                    if !dependency.evaluate_markers(self.interpreter.markers(), &[]) {
                         continue;
                     }
 
@@ -268,7 +273,7 @@ impl SitePackages {
         for entry in requirements {
             if entry
                 .requirement
-                .evaluate_markers(Some(self.venv.interpreter().markers()), &[])
+                .evaluate_markers(Some(self.interpreter.markers()), &[])
             {
                 if seen.insert(entry.clone()) {
                     stack.push(entry.clone());
@@ -323,7 +328,7 @@ impl SitePackages {
                     // Add the dependencies to the queue.
                     for dependency in metadata.requires_dist {
                         if dependency.evaluate_markers(
-                            self.venv.interpreter().markers(),
+                            self.interpreter.markers(),
                             entry.requirement.extras(),
                         ) {
                             let dependency = UnresolvedRequirementSpecification {

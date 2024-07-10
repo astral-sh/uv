@@ -15,13 +15,13 @@ use crate::commands::SharedState;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
-/// An ephemeral [`PythonEnvironment`] stored in the cache.
+/// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
 pub(crate) struct CachedEnvironment(PythonEnvironment);
 
 impl From<CachedEnvironment> for PythonEnvironment {
-    fn from(ephemeral: CachedEnvironment) -> Self {
-        ephemeral.0
+    fn from(environment: CachedEnvironment) -> Self {
+        environment.0
     }
 }
 
@@ -42,6 +42,22 @@ impl CachedEnvironment {
     ) -> anyhow::Result<Self> {
         let spec = RequirementsSpecification::from_requirements(requirements);
 
+        // When caching, always use the base interpreter, rather than that of the virtual
+        // environment.
+        let interpreter = if let Some(interpreter) = interpreter.to_base_interpreter(cache)? {
+            debug!(
+                "Caching via base interpreter: `{}`",
+                interpreter.sys_executable().display()
+            );
+            interpreter
+        } else {
+            debug!(
+                "Caching via interpreter: `{}`",
+                interpreter.sys_executable().display()
+            );
+            interpreter
+        };
+
         // Resolve the requirements with the interpreter.
         let resolution = resolve_environment(
             &interpreter,
@@ -60,11 +76,13 @@ impl CachedEnvironment {
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.
-        let lock = Lock::from_resolution_graph(&resolution)?;
-        let toml = lock.to_toml()?;
-        let resolution_hash = digest(&toml);
+        let resolution_hash = digest(
+            &Lock::from_resolution_graph(&resolution)?
+                .to_toml()?
+                .as_bytes(),
+        );
 
-        // Hash the interpreter by hashing the sysconfig data.
+        // Hash the interpreter based on its path.
         // TODO(charlie): Come up with a robust hash for the interpreter.
         let interpreter_hash = digest(&interpreter.sys_executable());
 
@@ -82,7 +100,7 @@ impl CachedEnvironment {
         let ok = cache_entry.path().join(".ok");
         if ok.is_file() {
             debug!(
-                "Found existing ephemeral environment at: `{}`",
+                "Found existing cached environment at: `{}`",
                 cache_entry.path().display()
             );
             return Ok(Self(PythonEnvironment::from_root(
@@ -92,7 +110,7 @@ impl CachedEnvironment {
         }
 
         debug!(
-            "Creating ephemeral environment at: `{}`",
+            "Creating cached environment at: `{}`",
             cache_entry.path().display()
         );
 
@@ -104,7 +122,6 @@ impl CachedEnvironment {
             false,
         )?;
 
-        // Install the ephemeral requirements.
         // TODO(charlie): Rather than passing all the arguments to `sync_environment`, return a
         // struct that lets us "continue" from `resolve_environment`.
         let venv = sync_environment(
@@ -125,5 +142,10 @@ impl CachedEnvironment {
         fs_err::tokio::File::create(ok).await?;
 
         Ok(Self(venv))
+    }
+
+    /// Convert the [`CachedEnvironment`] into an [`Interpreter`].
+    pub(crate) fn into_interpreter(self) -> Interpreter {
+        self.0.into_interpreter()
     }
 }

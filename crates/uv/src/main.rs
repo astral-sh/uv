@@ -23,9 +23,10 @@ use uv_cli::{SelfCommand, SelfNamespace};
 use uv_configuration::Concurrency;
 use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
-use uv_settings::Combine;
+use uv_settings::{Combine, FilesystemOptions};
 
 use crate::commands::ExitStatus;
+use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
@@ -135,7 +136,7 @@ async fn run() -> Result<ExitStatus> {
     } else if cli.global_args.isolated {
         None
     } else if let Ok(project) = Workspace::discover(&env::current_dir()?, None).await {
-        let project = uv_settings::FilesystemOptions::from_directory(project.root())?;
+        let project = uv_settings::FilesystemOptions::from_directory(project.install_path())?;
         let user = uv_settings::FilesystemOptions::user()?;
         project.combine(user)
     } else {
@@ -166,11 +167,11 @@ async fn run() -> Result<ExitStatus> {
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if globals.quiet {
-        printer::Printer::Quiet
+        Printer::Quiet
     } else if globals.verbose > 0 {
-        printer::Printer::Verbose
+        Printer::Verbose
     } else {
-        printer::Printer::Default
+        Printer::Default
     };
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
@@ -216,6 +217,9 @@ async fn run() -> Result<ExitStatus> {
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
     match *cli.command {
+        Commands::Help(args) => {
+            commands::help(args.command.unwrap_or_default().as_slice(), printer)
+        }
         Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
         }) => {
@@ -636,141 +640,8 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Project(ProjectCommand::Run(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-
-            let requirements = args
-                .with
-                .into_iter()
-                .map(RequirementsSource::from_package)
-                .collect::<Vec<_>>();
-
-            commands::run(
-                args.command,
-                requirements,
-                args.package,
-                args.extras,
-                args.dev,
-                args.python,
-                args.settings,
-                globals.isolated,
-                globals.preview,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Project(ProjectCommand::Sync(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::SyncSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-
-            commands::sync(
-                args.extras,
-                args.dev,
-                args.modifications,
-                args.python,
-                globals.python_preference,
-                globals.python_fetch,
-                args.settings,
-                globals.preview,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Project(ProjectCommand::Lock(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::LockSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-
-            commands::lock(
-                args.python,
-                args.settings,
-                globals.preview,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Project(ProjectCommand::Add(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AddSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-
-            commands::add(
-                args.requirements,
-                args.editable,
-                args.dependency_type,
-                args.raw_sources,
-                args.rev,
-                args.tag,
-                args.branch,
-                args.extras,
-                args.package,
-                args.python,
-                args.settings,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.preview,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Project(ProjectCommand::Remove(args)) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RemoveSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?;
-
-            commands::remove(
-                args.requirements,
-                args.dependency_type,
-                args.package,
-                args.python,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.preview,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
+        Commands::Project(project) => {
+            run_project(project, globals, filesystem, cache, printer).await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
@@ -847,7 +718,10 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::ToolListSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::tool_list(globals.preview, printer).await
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::tool_list(globals.preview, &cache, printer).await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Uninstall(args),
@@ -914,7 +788,7 @@ async fn run() -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.targets, globals.preview, printer).await
+            commands::python_uninstall(args.targets, args.all, globals.preview, printer).await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -943,20 +817,215 @@ async fn run() -> Result<ExitStatus> {
     }
 }
 
+/// Run a [`ProjectCommand`].
+async fn run_project(
+    project_command: Box<ProjectCommand>,
+    globals: GlobalSettings,
+    filesystem: Option<FilesystemOptions>,
+    cache: Cache,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    // Write out any resolved settings.
+    macro_rules! show_settings {
+        ($arg:expr) => {
+            if globals.show_settings {
+                writeln!(printer.stdout(), "{:#?}", $arg)?;
+                return Ok(ExitStatus::Success);
+            }
+        };
+        ($arg:expr, false) => {
+            if globals.show_settings {#
+                writeln!(printer.stdout(), "{:#?}", $arg)?;
+            }
+        };
+    }
+
+    match *project_command {
+        ProjectCommand::Run(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::RunSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            let requirements = args
+                .with
+                .into_iter()
+                .map(RequirementsSource::from_package)
+                .collect::<Vec<_>>();
+
+            commands::run(
+                args.command,
+                requirements,
+                args.package,
+                args.extras,
+                args.dev,
+                args.python,
+                args.settings,
+                globals.isolated,
+                globals.preview,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Sync(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::SyncSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::sync(
+                args.locked,
+                args.frozen,
+                args.extras,
+                args.dev,
+                args.modifications,
+                args.python,
+                globals.python_preference,
+                globals.python_fetch,
+                args.settings,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Lock(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::LockSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::lock(
+                args.python,
+                args.settings,
+                globals.preview,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Add(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::AddSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::add(
+                args.requirements,
+                args.editable,
+                args.dependency_type,
+                args.raw_sources,
+                args.rev,
+                args.tag,
+                args.branch,
+                args.extras,
+                args.package,
+                args.python,
+                args.settings,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Remove(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::RemoveSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::remove(
+                args.requirements,
+                args.dependency_type,
+                args.package,
+                args.python,
+                args.settings,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        ProjectCommand::Tree(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::TreeSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::tree(
+                args.depth,
+                args.prune,
+                args.package,
+                args.no_dedupe,
+                args.invert,
+                args.python,
+                args.resolver,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.preview,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+    }
+}
+
 fn main() -> ExitCode {
+    // Windows has a default stack size of 1MB, which is lower than the linux and mac default.
+    // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
+    // We support increasing the stack size to avoid stack overflows in debug mode on Windows. In
+    // addition, we box types and futures in various places. This includes the `Box::pin(run())`
+    // here, which prevents the large (non-send) main future alone from overflowing the stack.
     let result = if let Ok(stack_size) = env::var("UV_STACK_SIZE") {
-        // Artificially limit or increase the stack size to test without stack overflows in debug
-        // mode. Windows has a default stack size of 1MB, which is lower than the linux and mac
-        // default.
-        // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
         let stack_size = stack_size.parse().expect("Invalid stack size");
         let tokio_main = move || {
-            let runtime = tokio::runtime::Builder::new_multi_thread()
+            let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .thread_stack_size(stack_size)
                 .build()
                 .expect("Failed building the Runtime");
-            let result = runtime.block_on(run());
+            // Box the large main future to avoid stack overflows.
+            let result = runtime.block_on(Box::pin(run()));
             // Avoid waiting for pending tasks to complete.
             //
             // The resolver may have kicked off HTTP requests during resolution that
@@ -972,11 +1041,12 @@ fn main() -> ExitCode {
             .join()
             .expect("Tokio executor failed, was there a panic?")
     } else {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
+        let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("Failed building the Runtime");
-        let result = runtime.block_on(run());
+        // Box the large main future to avoid stack overflows.
+        let result = runtime.block_on(Box::pin(run()));
         runtime.shutdown_background();
         result
     };

@@ -38,7 +38,8 @@ pub struct RequiresPython {
 
 impl RequiresPython {
     /// Returns a [`RequiresPython`] to express `>=` equality with the given version.
-    pub fn greater_than_equal_version(version: Version) -> Self {
+    pub fn greater_than_equal_version(version: &Version) -> Self {
+        let version = version.only_release();
         Self {
             specifiers: VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(
                 version.clone(),
@@ -56,7 +57,7 @@ impl RequiresPython {
         // Convert to PubGrub range and perform a union.
         let range = specifiers
             .into_iter()
-            .map(crate::pubgrub::PubGrubSpecifier::try_from)
+            .map(crate::pubgrub::PubGrubSpecifier::from_release_specifiers)
             .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
                 if let Some(range) = range {
                     Some(range.union(&requires_python.into()))
@@ -99,7 +100,8 @@ impl RequiresPython {
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version.
     pub fn contains(&self, version: &Version) -> bool {
-        self.specifiers.contains(version)
+        let version = version.only_release();
+        self.specifiers.contains(&version)
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version specifiers.
@@ -109,7 +111,7 @@ impl RequiresPython {
     /// provided range. However, `>=3.9` would not be considered compatible, as the
     /// `Requires-Python` includes Python 3.8, but `>=3.9` does not.
     pub fn is_contained_by(&self, target: &VersionSpecifiers) -> bool {
-        let Ok(target) = crate::pubgrub::PubGrubSpecifier::try_from(target) else {
+        let Ok(target) = crate::pubgrub::PubGrubSpecifier::from_release_specifiers(target) else {
             return false;
         };
         let target = target
@@ -122,57 +124,18 @@ impl RequiresPython {
         // `>=3.7`.
         //
         // That is: `version_lower` should be less than or equal to `requires_python_lower`.
-        //
-        // When comparing, we also limit the comparison to the release segment, ignoring
-        // pre-releases and such. This may or may not be correct.
-        //
-        // Imagine `target_lower` is `3.13.0b1`, and `requires_python_lower` is `3.13`.
-        // That would be fine, since we're saying we support `3.13.0` and later, and `target_lower`
-        // supports more than that.
-        //
-        // Next, imagine `requires_python_lower` is `3.13.0b1`, and `target_lower` is `3.13`.
-        // Technically, that would _not_ be fine, since we're saying we support `3.13.0b1` and
-        // later, but `target_lower` does not support that. For example, `target_lower` does not
-        // support `3.13.0b1`, `3.13.0rc1`, etc.
-        //
-        // In practice, this is most relevant for cases like: `requires_python = "==3.8.*"`, with
-        // `target = ">=3.8"`. In this case, `requires_python_lower` is actually `3.8.0.dev0`,
-        // because `==3.8.*` allows development and pre-release versions. So there are versions we
-        // want to support that aren't explicitly supported by `target`, which does _not_ include
-        // pre-releases.
-        //
-        // Since this is a fairly common `Requires-Python` specifier, we handle it pragmatically
-        // by only enforcing Python compatibility at the patch-release level.
-        //
-        // There are some potentially-bad outcomes here. For example, maybe the user _did_ request
-        // `>=3.13.0b1`. In that case, maybe we _shouldn't_ allow resolution that only support
-        // `3.13.0` and later, because we're saying we support the beta releases, but the dependency
-        // does not. But, it's debatable.
-        //
-        // If this scheme proves problematic, we could explore using different semantics when
-        // converting to PubGrub. For example, we could parse `==3.8.*` as `>=3.8,<3.9`. But this
-        // too could be problematic. Imagine that the user requests `>=3.8.0b0`, and the target
-        // declares `==3.8.*`. In this case, we _do_ want to allow resolution, because the target
-        // is saying it supports all versions of `3.8`, including pre-releases. But under those
-        // modified parsing semantics, we would fail. (You could argue, though, that users declaring
-        // `==3.8.*` are not intending to support pre-releases, and so failing there is fine, but
-        // it's also incorrect in its own way.)
-        //
-        // Alternatively, we could vary the semantics depending on whether or not the user included
-        // a pre-release in their specifier, enforcing pre-release compatibility only if the user
-        // explicitly requested it.
         match (target, self.bound.as_ref()) {
             (Bound::Included(target_lower), Bound::Included(requires_python_lower)) => {
-                target_lower.release() <= requires_python_lower.release()
+                target_lower <= requires_python_lower
             }
             (Bound::Excluded(target_lower), Bound::Included(requires_python_lower)) => {
-                target_lower.release() < requires_python_lower.release()
+                target_lower < requires_python_lower
             }
             (Bound::Included(target_lower), Bound::Excluded(requires_python_lower)) => {
-                target_lower.release() <= requires_python_lower.release()
+                target_lower <= requires_python_lower
             }
             (Bound::Excluded(target_lower), Bound::Excluded(requires_python_lower)) => {
-                target_lower.release() < requires_python_lower.release()
+                target_lower < requires_python_lower
             }
             // If the dependency has no lower bound, then it supports all versions.
             (Bound::Unbounded, _) => true,
@@ -190,6 +153,11 @@ impl RequiresPython {
     /// Returns `true` if the `Requires-Python` specifier is unbounded.
     pub fn is_unbounded(&self) -> bool {
         self.bound.as_ref() == Bound::Unbounded
+    }
+
+    /// Returns the [`RequiresPythonBound`] for the `Requires-Python` specifier.
+    pub fn bound(&self) -> &RequiresPythonBound {
+        &self.bound
     }
 
     /// Returns this `Requires-Python` specifier as an equivalent marker
@@ -267,7 +235,7 @@ impl<'de> serde::Deserialize<'de> for RequiresPython {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let specifiers = VersionSpecifiers::deserialize(deserializer)?;
         let bound = RequiresPythonBound(
-            crate::pubgrub::PubGrubSpecifier::try_from(&specifiers)
+            crate::pubgrub::PubGrubSpecifier::from_release_specifiers(&specifiers)
                 .map_err(serde::de::Error::custom)?
                 .iter()
                 .next()
@@ -283,7 +251,21 @@ pub struct RequiresPythonBound(Bound<Version>);
 
 impl RequiresPythonBound {
     pub fn new(bound: Bound<Version>) -> Self {
-        Self(bound)
+        Self(match bound {
+            Bound::Included(version) => Bound::Included(version.only_release()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Unbounded => Bound::Unbounded,
+        })
+    }
+}
+
+impl From<RequiresPythonBound> for Range<Version> {
+    fn from(value: RequiresPythonBound) -> Self {
+        match value.0 {
+            Bound::Included(version) => Range::higher_than(version),
+            Bound::Excluded(version) => Range::strictly_higher_than(version),
+            Bound::Unbounded => Range::full(),
+        }
     }
 }
 

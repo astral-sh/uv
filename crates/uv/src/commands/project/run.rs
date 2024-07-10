@@ -1,8 +1,11 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
+use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::debug;
 
@@ -12,15 +15,20 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_distribution::{VirtualProject, Workspace, WorkspaceError};
+use uv_fs::Simplified;
+use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
     PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
+
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -54,19 +62,16 @@ pub(crate) async fn run(
     // Initialize any shared state.
     let state = SharedState::default();
 
+    let reporter = PythonDownloadReporter::single(printer);
+
     // Determine whether the command to execute is a PEP 723 script.
-    let temp_dir;
     let script_interpreter = if let RunCommand::Python(target, _) = &command {
         if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
-            debug!("Found PEP 723 script at: {}", target.display());
-
-            let spec = RequirementsSpecification::from_requirements(
-                metadata
-                    .dependencies
-                    .into_iter()
-                    .map(Requirement::from)
-                    .collect(),
-            );
+            writeln!(
+                printer.stderr(),
+                "Reading inline script metadata from: {}",
+                target.user_display().cyan()
+            )?;
 
             // (1) Explicit request from user
             let python_request = if let Some(request) = python.as_deref() {
@@ -92,24 +97,20 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
+                Some(&reporter),
             )
             .await?
             .into_interpreter();
 
-            // Create a virtual environment
-            temp_dir = cache.environment()?;
-            let venv = uv_virtualenv::create_venv(
-                temp_dir.path(),
-                interpreter,
-                uv_virtualenv::Prompt::None,
-                false,
-                false,
-            )?;
-
             // Install the script requirements.
-            let environment = project::update_environment(
-                venv,
-                spec,
+            let requirements = metadata
+                .dependencies
+                .into_iter()
+                .map(Requirement::from)
+                .collect();
+            let environment = CachedEnvironment::get_or_create(
+                requirements,
+                interpreter,
                 &settings,
                 &state,
                 preview,
@@ -158,12 +159,12 @@ pub(crate) async fn run(
             if let Some(project_name) = project.project_name() {
                 debug!(
                     "Discovered project `{project_name}` at: {}",
-                    project.workspace().root().display()
+                    project.workspace().install_path().display()
                 );
             } else {
                 debug!(
                     "Discovered virtual workspace at: {}",
-                    project.workspace().root().display()
+                    project.workspace().install_path().display()
                 );
             }
 
@@ -179,10 +180,14 @@ pub(crate) async fn run(
             )
             .await?;
 
+            // Read the existing lockfile.
+            let existing = project::lock::read(project.workspace()).await?;
+
             // Lock and sync the environment.
             let lock = project::lock::do_lock(
                 project.workspace(),
                 venv.interpreter(),
+                existing.as_ref(),
                 settings.as_ref().into(),
                 &state,
                 preview,
@@ -193,6 +198,11 @@ pub(crate) async fn run(
                 printer,
             )
             .await?;
+
+            if !existing.is_some_and(|existing| existing == lock) {
+                project::lock::commit(&lock, project.workspace()).await?;
+            }
+
             project::sync::do_sync(
                 &project,
                 &venv,
@@ -227,6 +237,7 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
+                Some(&reporter),
             )
             .await?;
 
@@ -244,12 +255,68 @@ pub(crate) async fn run(
         );
     }
 
-    // If necessary, create an environment for the ephemeral requirements.
-    let temp_dir;
-    let ephemeral_env = if requirements.is_empty() {
+    // Read the `--with` requirements.
+    let spec = if requirements.is_empty() {
         None
     } else {
-        debug!("Syncing ephemeral environment.");
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+
+        let spec =
+            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+
+        Some(spec)
+    };
+
+    // Determine whether the base environment satisfies the ephemeral requirements. If we don't have
+    // any `--with` requirements, and we already have a base environment, then there's no need to
+    // create an additional environment.
+    let skip_ephemeral = base_interpreter.as_ref().is_some_and(|base_interpreter| {
+        let Some(spec) = spec.as_ref() else {
+            return true;
+        };
+
+        let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
+            return false;
+        };
+
+        if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
+            return false;
+        }
+
+        match site_packages.satisfies(&spec.requirements, &spec.constraints) {
+            // If the requirements are already satisfied, we're done.
+            Ok(SatisfiesResult::Fresh {
+                recursive_requirements,
+            }) => {
+                debug!(
+                    "Base environment satisfies requirements: {}",
+                    recursive_requirements
+                        .iter()
+                        .map(|entry| entry.requirement.to_string())
+                        .sorted()
+                        .join(" | ")
+                );
+                true
+            }
+            Ok(SatisfiesResult::Unsatisfied(requirement)) => {
+                debug!("At least one requirement is not satisfied in the base environment: {requirement}");
+                false
+            }
+            Err(err) => {
+                debug!("Failed to check requirements against base environment: {err}");
+                false
+            }
+        }
+    });
+
+    // If necessary, create an environment for the ephemeral requirements or command.
+    let temp_dir;
+    let ephemeral_env = if skip_ephemeral {
+        None
+    } else {
+        debug!("Creating ephemeral environment");
 
         // Discover an interpreter.
         let interpreter = if let Some(base_interpreter) = &base_interpreter {
@@ -267,6 +334,7 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
+                Some(&reporter),
             )
             .await?
             .into_interpreter()
@@ -287,29 +355,36 @@ pub(crate) async fn run(
             false,
         )?;
 
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
+        if requirements.is_empty() {
+            Some(venv)
+        } else {
+            debug!("Syncing ephemeral requirements");
 
-        let spec =
-            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+            let client_builder = BaseClientBuilder::new()
+                .connectivity(connectivity)
+                .native_tls(native_tls);
 
-        // Install the ephemeral requirements.
-        Some(
-            project::update_environment(
-                venv,
-                spec,
-                &settings,
-                &state,
-                preview,
-                connectivity,
-                concurrency,
-                native_tls,
-                cache,
-                printer,
+            let spec =
+                RequirementsSpecification::from_simple_sources(&requirements, &client_builder)
+                    .await?;
+
+            // Install the ephemeral requirements.
+            Some(
+                project::update_environment(
+                    venv,
+                    spec,
+                    &settings,
+                    &state,
+                    preview,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    cache,
+                    printer,
+                )
+                .await?,
             )
-            .await?,
-        )
+        }
     };
 
     debug!("Running `{command}`");
@@ -349,8 +424,7 @@ pub(crate) async fn run(
                     .as_ref()
                     .map(Interpreter::site_packages)
                     .into_iter()
-                    .flatten()
-                    .map(Cow::Borrowed),
+                    .flatten(),
             )
             .map(PathBuf::from)
             .chain(

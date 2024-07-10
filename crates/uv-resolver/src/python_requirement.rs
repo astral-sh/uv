@@ -1,5 +1,5 @@
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::{MarkerTree, StringVersion};
+use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::MarkerTree;
 use uv_python::{Interpreter, PythonVersion};
 
 use crate::{RequiresPython, RequiresPythonBound};
@@ -7,7 +7,7 @@ use crate::{RequiresPython, RequiresPythonBound};
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {
     /// The installed version of Python.
-    installed: StringVersion,
+    installed: Version,
     /// The target version of Python; that is, the version of Python for which we are resolving
     /// dependencies. This is typically the same as the installed version, but may be different
     /// when specifying an alternate Python version for the resolution.
@@ -21,11 +21,10 @@ impl PythonRequirement {
     /// [`PythonVersion`].
     pub fn from_python_version(interpreter: &Interpreter, python_version: &PythonVersion) -> Self {
         Self {
-            installed: interpreter.python_full_version().clone(),
-            target: Some(PythonTarget::Version(StringVersion {
-                string: python_version.to_string(),
-                version: python_version.python_full_version(),
-            })),
+            installed: interpreter.python_full_version().version.only_release(),
+            target: Some(PythonTarget::Version(
+                python_version.python_full_version().only_release(),
+            )),
         }
     }
 
@@ -36,7 +35,7 @@ impl PythonRequirement {
         requires_python: &RequiresPython,
     ) -> Self {
         Self {
-            installed: interpreter.python_full_version().clone(),
+            installed: interpreter.python_full_version().version.only_release(),
             target: Some(PythonTarget::RequiresPython(requires_python.clone())),
         }
     }
@@ -44,14 +43,26 @@ impl PythonRequirement {
     /// Create a [`PythonRequirement`] to resolve against an [`Interpreter`].
     pub fn from_interpreter(interpreter: &Interpreter) -> Self {
         Self {
-            installed: interpreter.python_full_version().clone(),
+            installed: interpreter.python_full_version().version.only_release(),
             target: None,
         }
     }
 
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
     /// than the current `Requires-Python` minimum.
-    pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
+    pub fn narrow(&self, _target: &RequiresPythonBound) -> Option<Self> {
+        // This represents a "small revert" of the PR that added
+        // Requires-Python version narrowing[1]. But narrowing has
+        // led to at least one bug[2] whose fix is not clear. We
+        // decided to revert narrowing under the idea that it is better
+        // to be strict (i.e., fail to resolve in some cases, like
+        // universal_requires_python in uv/tests/pip_compile) than it
+        // is to output an incorrect lock, as in [2].
+        //
+        // [1]: https://github.com/astral-sh/uv/pull/4707
+        // [2]: https://github.com/astral-sh/uv/issues/4885
+        None
+        /*
         let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() else {
             return None;
         };
@@ -60,10 +71,11 @@ impl PythonRequirement {
             installed: self.installed.clone(),
             target: Some(PythonTarget::RequiresPython(requires_python)),
         })
+        */
     }
 
     /// Return the installed version of Python.
-    pub fn installed(&self) -> &StringVersion {
+    pub fn installed(&self) -> &Version {
         &self.installed
     }
 
@@ -91,7 +103,7 @@ pub enum PythonTarget {
     ///
     /// The use of a separate enum variant allows us to use a verbatim representation when reporting
     /// back to the user.
-    Version(StringVersion),
+    Version(Version),
     /// The [`PythonTarget`] specifier is a set of version specifiers, as extracted from the
     /// `Requires-Python` field in a `pyproject.toml` or `METADATA` file.
     RequiresPython(RequiresPython),

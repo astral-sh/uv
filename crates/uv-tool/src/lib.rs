@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use fs_err::File;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use install_wheel_rs::read_record_file;
 
@@ -86,7 +86,7 @@ impl InstalledTools {
     }
 
     /// Return the metadata for all installed tools.
-    pub fn tools(&self) -> Result<Vec<(String, Tool)>, Error> {
+    pub fn tools(&self) -> Result<Vec<(PackageName, Tool)>, Error> {
         let _lock = self.acquire_lock();
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root()) {
@@ -102,6 +102,7 @@ impl InstalledTools {
             };
             let tool_receipt = ToolReceipt::from_string(contents)
                 .map_err(|err| Error::ReceiptRead(path, Box::new(err)))?;
+            let name = PackageName::from_str(&name)?;
             tools.push((name, tool_receipt.tool));
         }
         Ok(tools)
@@ -178,6 +179,9 @@ impl InstalledTools {
     }
 
     /// Return the [`PythonEnvironment`] for a given tool, if it exists.
+    ///
+    /// Returns `Ok(None)` if the environment does not exist or is linked to a non-existent
+    /// interpreter.
     pub fn get_environment(
         &self,
         name: &PackageName,
@@ -186,14 +190,25 @@ impl InstalledTools {
         let _lock = self.acquire_lock();
         let environment_path = self.root.join(name.to_string());
 
-        if environment_path.is_dir() {
-            debug!(
-                "Using existing environment for tool `{name}` at `{}`.",
-                environment_path.user_display()
-            );
-            Ok(Some(PythonEnvironment::from_root(environment_path, cache)?))
-        } else {
-            Ok(None)
+        match PythonEnvironment::from_root(&environment_path, cache) {
+            Ok(venv) => {
+                debug!(
+                    "Using existing environment for tool `{name}`: {}",
+                    environment_path.user_display()
+                );
+                Ok(Some(venv))
+            }
+            Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
+            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
+                interpreter_path,
+            ))) => {
+                warn!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                    interpreter_path.user_display()
+                );
+                Ok(None)
+            }
+            Err(err) => Err(err.into()),
         }
     }
 
@@ -210,7 +225,7 @@ impl InstalledTools {
         match fs_err::remove_dir_all(&environment_path) {
             Ok(()) => {
                 debug!(
-                    "Removed existing environment for tool `{name}` at `{}`.",
+                    "Removed existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
             }
@@ -219,7 +234,7 @@ impl InstalledTools {
         }
 
         debug!(
-            "Creating environment for tool `{name}` at `{}`.",
+            "Creating environment for tool `{name}`: {}",
             environment_path.user_display()
         );
 
@@ -242,16 +257,15 @@ impl InstalledTools {
         ))
     }
 
-    pub fn version(&self, name: &str, cache: &Cache) -> Result<Version, Error> {
-        let environment_path = self.root.join(name);
-        let package_name = PackageName::from_str(name)?;
+    pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
+        let environment_path = self.root.join(name.to_string());
         let environment = PythonEnvironment::from_root(&environment_path, cache)?;
         let site_packages = SitePackages::from_environment(&environment)
             .map_err(|err| Error::EnvironmentRead(environment_path.clone(), err.to_string()))?;
-        let packages = site_packages.get_packages(&package_name);
+        let packages = site_packages.get_packages(name);
         let package = packages
             .first()
-            .ok_or_else(|| Error::MissingToolPackage(package_name, environment_path))?;
+            .ok_or_else(|| Error::MissingToolPackage(name.clone(), environment_path))?;
         Ok(package.version().clone())
     }
 

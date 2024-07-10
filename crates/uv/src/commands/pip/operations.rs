@@ -251,9 +251,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         printer.stderr(),
         "{}",
         format!(
-            "Resolved {} in {}",
+            "Resolved {} {}",
             format!("{} package{}", resolution.len(), s).bold(),
-            elapsed(start.elapsed())
+            format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
     )?;
@@ -342,9 +342,9 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Audited {} in {}",
+                "Audited {} {}",
                 format!("{} package{}", resolution.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;
@@ -386,9 +386,9 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Prepared {} in {}",
+                "Prepared {} {}",
                 format!("{} package{}", wheels.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;
@@ -433,22 +433,25 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Uninstalled {} in {}",
+                "Uninstalled {} {}",
                 format!("{} package{}", extraneous.len() + reinstalls.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;
     }
 
     // Install the resolved distributions.
-    let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+    let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
-        uv_installer::Installer::new(venv)
+        wheels = uv_installer::Installer::new(venv)
             .with_link_mode(link_mode)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
-            .install(&wheels)?;
+            // This technically can block the runtime, but we are on the main thread and
+            // have no other running tasks at this point, so this lets us avoid spawning a blocking
+            // task.
+            .install_blocking(wheels)?;
 
         let s = if wheels.len() == 1 { "" } else { "s" };
 
@@ -471,9 +474,9 @@ pub(crate) async fn install(
             printer.stderr(),
             "{}",
             format!(
-                "Installed {} in {}",
+                "Installed {} {}",
                 format!("{} package{}", wheels.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;
@@ -517,9 +520,9 @@ fn report_dry_run(
             printer.stderr(),
             "{}",
             format!(
-                "Audited {} in {}",
+                "Audited {} {}",
                 format!("{} package{}", resolution.len(), s).bold(),
-                elapsed(start.elapsed())
+                format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )?;

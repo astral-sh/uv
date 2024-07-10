@@ -8,6 +8,7 @@ pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 pub(crate) use cache_prune::cache_prune;
 use distribution_types::InstalledMetadata;
+pub(crate) use help::help;
 pub(crate) use pip::check::pip_check;
 pub(crate) use pip::compile::pip_compile;
 pub(crate) use pip::freeze::pip_freeze;
@@ -22,6 +23,7 @@ pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
 pub(crate) use project::run::run;
 pub(crate) use project::sync::sync;
+pub(crate) use project::tree::tree;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
 pub(crate) use python::install::install as python_install;
@@ -50,6 +52,7 @@ use crate::printer::Printer;
 mod cache_clean;
 mod cache_dir;
 mod cache_prune;
+mod help;
 pub(crate) mod pip;
 mod project;
 mod python;
@@ -146,9 +149,9 @@ pub(super) async fn compile_bytecode(
         printer.stderr(),
         "{}",
         format!(
-            "Bytecode compiled {} in {}",
+            "Bytecode compiled {} {}",
             format!("{files} file{s}").bold(),
-            elapsed(start.elapsed())
+            format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
     )?;

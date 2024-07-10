@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.23
+
+### Preview features
+
+- Avoid creating cache directories in tool directory ([#4868](https://github.com/astral-sh/uv/pull/4868))
+- Add progress bar when downloading python ([#4840](https://github.com/astral-sh/uv/pull/4840))
+- Add some decoration to tool CLI ([#4865](https://github.com/astral-sh/uv/pull/4865))
+- Add some text decoration to toolchain CLI ([#4882](https://github.com/astral-sh/uv/pull/4882))
+- Add user-facing output to indicate PEP 723 script ([#4881](https://github.com/astral-sh/uv/pull/4881))
+- Ensure Pythons are aligned in `uv python list` ([#4884](https://github.com/astral-sh/uv/pull/4884))
+- Fix always-plural message in uv python install ([#4866](https://github.com/astral-sh/uv/pull/4866))
+- Skip installing `--with` requirements if present in base environment ([#4879](https://github.com/astral-sh/uv/pull/4879))
+- Sort dependencies before wheels and source distributions ([#4897](https://github.com/astral-sh/uv/pull/4897))
+- Improve logging during resolver forking ([#4894](https://github.com/astral-sh/uv/pull/4894))
+
+## 0.2.22
+
+### Preview features
+
+- Always use base interpreter for cached environments ([#4805](https://github.com/astral-sh/uv/pull/4805))
+- Cache tool environments in `uv tool run` ([#4784](https://github.com/astral-sh/uv/pull/4784))
+- Check hash of downloaded python toolchain ([#4806](https://github.com/astral-sh/uv/pull/4806))
+- Remove incompatible wheels from `uv.lock` ([#4799](https://github.com/astral-sh/uv/pull/4799))
+- `uv cache prune` removes all cached environments ([#4845](https://github.com/astral-sh/uv/pull/4845))
+- Add dedicated help menu for `uvx` ([#4770](https://github.com/astral-sh/uv/pull/4770))
+- Change "toolchain" to "python" ([#4735](https://github.com/astral-sh/uv/pull/4735))
+- Create empty environment for `uv run --isolated` ([#4849](https://github.com/astral-sh/uv/pull/4849))
+- Deduplicate when install or uninstall python ([#4841](https://github.com/astral-sh/uv/pull/4841))
+- Require at least one target for toolchain uninstalls ([#4820](https://github.com/astral-sh/uv/pull/4820))
+- Resolve requirements prior to nuking tool environments ([#4788](https://github.com/astral-sh/uv/pull/4788))
+- Tweak installation language in toolchain install ([#4811](https://github.com/astral-sh/uv/pull/4811))
+- Use already-installed tools in `uv tool run` ([#4750](https://github.com/astral-sh/uv/pull/4750))
+- Use cached environments in PEP 723 execution ([#4789](https://github.com/astral-sh/uv/pull/4789))
+- Use optimized versions of managed Python on Linux ([#4775](https://github.com/astral-sh/uv/pull/4775))
+- Fill Python requests with platform information during automatic fetches ([#4810](https://github.com/astral-sh/uv/pull/4810))
+- Remove installed python for force installation ([#4807](https://github.com/astral-sh/uv/pull/4807))
+- Add tool version to list command ([#4674](https://github.com/astral-sh/uv/pull/4674))
+- Add entrypoints to tool list ([#4661](https://github.com/astral-sh/uv/pull/4661))
+
 ## 0.2.21
 
 ### Preview features
