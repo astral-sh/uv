@@ -1155,6 +1155,24 @@ impl PythonRequest {
     pub(crate) fn is_explicit_system(&self) -> bool {
         matches!(self, Self::File(_) | Self::Directory(_))
     }
+
+    /// Serialize the request to a canonical representation.
+    ///
+    /// [`Self::parse`] should always return the same request when given the output of this method.
+    pub fn to_canonical_string(&self) -> String {
+        match self {
+            Self::Any => "any".to_string(),
+            Self::Version(version) => version.to_string(),
+            Self::Directory(path) => path.display().to_string(),
+            Self::File(path) => path.display().to_string(),
+            Self::ExecutableName(name) => name.clone(),
+            Self::Implementation(implementation) => implementation.to_string(),
+            Self::ImplementationVersion(implementation, version) => {
+                format!("{implementation}@{version}")
+            }
+            Self::Key(request) => request.to_string(),
+        }
+    }
 }
 
 impl PythonPreference {
@@ -1682,6 +1700,76 @@ mod tests {
         assert_eq!(
             PythonRequest::parse("./foo"),
             PythonRequest::File(PathBuf::from_str("./foo").unwrap()),
+            "A string with a file system separator is treated as a file"
+        );
+    }
+
+    #[test]
+    fn interpreter_request_to_canonical_string() {
+        assert_eq!(PythonRequest::Any.to_canonical_string(), "any");
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str("3.12").unwrap()).to_canonical_string(),
+            "3.12"
+        );
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str(">=3.12").unwrap())
+                .to_canonical_string(),
+            ">=3.12"
+        );
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
+                .to_canonical_string(),
+            ">=3.12, <3.13"
+        );
+        assert_eq!(
+            PythonRequest::ExecutableName("foo".to_string()).to_canonical_string(),
+            "foo"
+        );
+        assert_eq!(
+            PythonRequest::Implementation(ImplementationName::CPython).to_canonical_string(),
+            "cpython"
+        );
+        assert_eq!(
+            PythonRequest::ImplementationVersion(
+                ImplementationName::CPython,
+                VersionRequest::from_str("3.12.2").unwrap()
+            )
+            .to_canonical_string(),
+            "cpython@3.12.2"
+        );
+        assert_eq!(
+            PythonRequest::Implementation(ImplementationName::PyPy).to_canonical_string(),
+            "pypy"
+        );
+        assert_eq!(
+            PythonRequest::ImplementationVersion(
+                ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+            .to_canonical_string(),
+            "pypy@3.10"
+        );
+
+        let tempdir = TempDir::new().unwrap();
+        assert_eq!(
+            PythonRequest::Directory(tempdir.path().to_path_buf()).to_canonical_string(),
+            tempdir.path().to_str().unwrap(),
+            "An existing directory is treated as a directory"
+        );
+        assert_eq!(
+            PythonRequest::File(tempdir.child("foo").path().to_path_buf()).to_canonical_string(),
+            tempdir.child("foo").path().to_str().unwrap(),
+            "A path that does not exist is treated as a file"
+        );
+        tempdir.child("bar").touch().unwrap();
+        assert_eq!(
+            PythonRequest::File(tempdir.child("bar").path().to_path_buf()).to_canonical_string(),
+            tempdir.child("bar").path().to_str().unwrap(),
+            "An existing file is treated as a file"
+        );
+        assert_eq!(
+            PythonRequest::File(PathBuf::from_str("./foo").unwrap()).to_canonical_string(),
+            "./foo",
             "A string with a file system separator is treated as a file"
         );
     }
