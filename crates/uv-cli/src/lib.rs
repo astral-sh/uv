@@ -132,11 +132,11 @@ pub struct GlobalArgs {
     pub no_offline: bool,
 
     /// Whether to prefer using Python from uv or on the system.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, value_enum, default_value = "installed")]
     pub python_preference: Option<PythonPreference>,
 
     /// Whether to automatically download Python when required.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, value_enum, default_value = "automatic")]
     pub python_fetch: Option<PythonFetch>,
 
     /// Whether to enable experimental, preview features.
