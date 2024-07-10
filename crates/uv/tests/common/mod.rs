@@ -124,6 +124,32 @@ impl TestContext {
         self
     }
 
+    /// Add extra standard filtering for Python executable names.
+    #[must_use]
+    pub fn with_filtered_python_names(mut self) -> Self {
+        if cfg!(windows) {
+            self.filters
+                .push(("python.exe".to_string(), "python".to_string()));
+        } else {
+            self.filters
+                .push((r"python\d".to_string(), "python".to_string()));
+            self.filters
+                .push((r"python\d.\d\d".to_string(), "python".to_string()));
+        }
+        self
+    }
+
+    /// Add extra standard filtering for venv executable directories on the current platform e.g.
+    /// `Scripts` on Windows and `bin` on Unix.
+    #[must_use]
+    pub fn with_filtered_virtualenv_bin(mut self) -> Self {
+        self.filters.push((
+            format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
+            "/[BIN]".to_string(),
+        ));
+        self
+    }
+
     /// Create a new test context with multiple Python versions.
     ///
     /// Does not create a virtual environment by default, but the first Python version
