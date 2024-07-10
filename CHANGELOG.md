@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.24
+
+### Enhancements
+
+- Add support for 'any' Python requests ([#4948](https://github.com/astral-sh/uv/pull/4948))
+- Allow constraints to be provided in `--upgrade-package` ([#4952](https://github.com/astral-sh/uv/pull/4952))
+- Add `manylinux_2_31` to supported `--python-platform` ([#4965](https://github.com/astral-sh/uv/pull/4965))
+- Improve marker simplification ([#4639](https://github.com/astral-sh/uv/pull/4639))
+
+### CLI
+
+- Display short help menu when `--help` is used ([#4772](https://github.com/astral-sh/uv/pull/4772))
+- Allow `uv help` global options during `uv help` ([#4906](https://github.com/astral-sh/uv/pull/4906))
+- Use paging for `uv help` display when available ([#4909](https://github.com/astral-sh/uv/pull/4909))
+
+### Performance
+
+- Switch to single threaded async runtime ([#4934](https://github.com/astral-sh/uv/pull/4934))
+
+### Bug fixes
+
+- Avoid AND-ing multi-term specifiers in marker normalization ([#4911](https://github.com/astral-sh/uv/pull/4911))
+- Avoid inferring package name for GitHub Archives ([#4928](https://github.com/astral-sh/uv/pull/4928))
+- Retry on connection reset network errors ([#4960](https://github.com/astral-sh/uv/pull/4960))
+- Apply extra to overrides and constraints ([#4829](https://github.com/astral-sh/uv/pull/4829))
+
+### Rust API
+
+- Allow `uv` crate to be used as a library ([#4642](https://github.com/astral-sh/uv/pull/4642))
+
 ## 0.2.23
 
 ### Enhancements

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.24
+
+### Preview features
+
+- Add Python installation guide ([#4942](https://github.com/astral-sh/uv/pull/4942))
+- Add `uv python pin` ([#4950](https://github.com/astral-sh/uv/pull/4950))
+- Add command-separation for Python discovery display ([#4916](https://github.com/astral-sh/uv/pull/4916))
+- Avoid debug error for `uv run` with unknown Python version ([#4913](https://github.com/astral-sh/uv/pull/4913))
+- Enable `--all` to uninstall all managed Pythons ([#4932](https://github.com/astral-sh/uv/pull/4932))
+- Enable `--all` to uninstall all managed tools ([#4937](https://github.com/astral-sh/uv/pull/4937))
+- Filter out markers based on Python requirement ([#4912](https://github.com/astral-sh/uv/pull/4912))
+- Implement `uv tree` ([#4708](https://github.com/astral-sh/uv/pull/4708))
+- Improve 'any' search message during `uv python install` ([#4940](https://github.com/astral-sh/uv/pull/4940))
+- Lock for the duration of tool commands ([#4720](https://github.com/astral-sh/uv/pull/4720))
+- Perform lock in `uv sync` by default ([#4839](https://github.com/astral-sh/uv/pull/4839))
+- Reinstall and recreate environments when interpreter is removed ([#4935](https://github.com/astral-sh/uv/pull/4935))
+- Respect `--isolated` in `uv python install` ([#4938](https://github.com/astral-sh/uv/pull/4938))
+- Respect resolver settings in `uv remove` ([#4930](https://github.com/astral-sh/uv/pull/4930))
+- Update "Python versions" documentation ([#4943](https://github.com/astral-sh/uv/pull/4943))
+- Warn if tool binary directory is not on path ([#4951](https://github.com/astral-sh/uv/pull/4951))
+- Avoid reparsing wheel URLs ([#4947](https://github.com/astral-sh/uv/pull/4947))
+- Avoid serializing if lockfile does not change ([#4945](https://github.com/astral-sh/uv/pull/4945))
+
 ## 0.2.23
 
 ### Preview features
