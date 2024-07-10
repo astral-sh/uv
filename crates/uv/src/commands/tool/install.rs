@@ -154,7 +154,8 @@ pub(crate) async fn install(
         requirements
     };
 
-    let installed_tools = InstalledTools::from_settings()?;
+    let installed_tools = InstalledTools::from_settings()?.init()?;
+    let _lock = installed_tools.acquire_lock()?;
     let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
     let existing_environment =
         installed_tools
@@ -361,7 +362,6 @@ pub(crate) async fn install(
     )?;
 
     debug!("Adding receipt for tool `{}`", from.name);
-    let installed_tools = installed_tools.init()?;
     let tool = Tool::new(
         requirements
             .into_iter()
