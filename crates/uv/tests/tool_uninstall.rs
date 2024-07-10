@@ -51,7 +51,8 @@ fn tool_uninstall() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.2.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -50,14 +50,15 @@ clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-indicatif = { workspace = true }
 indexmap = { workspace = true }
+indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
 owo-colors = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 textwrap = { workspace = true }

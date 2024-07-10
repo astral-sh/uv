@@ -26,7 +26,8 @@ fn tool_install() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -101,7 +102,8 @@ fn tool_install() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -179,7 +181,8 @@ fn tool_install_version() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.2.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -264,7 +267,8 @@ fn tool_install_from() {
         .arg("--from")
         .arg("black==24.2.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -289,7 +293,8 @@ fn tool_install_from() {
         .arg("--from")
         .arg("flask==24.2.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -305,7 +310,8 @@ fn tool_install_from() {
         .arg("--from")
         .arg("black==24.3.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -329,7 +335,8 @@ fn tool_install_already_installed() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -394,7 +401,8 @@ fn tool_install_already_installed() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -429,7 +437,8 @@ fn tool_install_already_installed() {
         .arg("black")
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -461,7 +470,8 @@ fn tool_install_already_installed() {
         .arg("--reinstall-package")
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -483,7 +493,8 @@ fn tool_install_already_installed() {
         .arg("--reinstall-package")
         .arg("click")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -515,7 +526,8 @@ fn tool_install_entry_point_exists() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -554,7 +566,8 @@ fn tool_install_entry_point_exists() {
         .arg("black")
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -594,7 +607,8 @@ fn tool_install_entry_point_exists() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -617,7 +631,8 @@ fn tool_install_entry_point_exists() {
         .arg("black")
         .arg("--force")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -642,7 +657,8 @@ fn tool_install_entry_point_exists() {
         .arg("black")
         .arg("--force")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -658,7 +674,8 @@ fn tool_install_entry_point_exists() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -675,7 +692,8 @@ fn tool_install_entry_point_exists() {
         .arg("black")
         .arg("--reinstall")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -776,6 +794,10 @@ fn tool_install_home() {
         .env(
             "XDG_DATA_HOME",
             context.home_dir.child(".local").child("share").as_os_str(),
+        )
+        .env(
+            "PATH",
+            context.home_dir.child(".local").child("bin").as_os_str(),
         );
     uv_snapshot!(context.filters(), cmd, @r###"
     success: true
@@ -808,12 +830,14 @@ fn tool_install_xdg_data_home() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let data_home = context.temp_dir.child("data/home");
+    let bin_dir = context.temp_dir.child("data/bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_DATA_HOME", data_home.as_os_str()), @r###"
+        .env("XDG_DATA_HOME", data_home.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -849,7 +873,8 @@ fn tool_install_xdg_bin_home() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -883,7 +908,8 @@ fn tool_install_no_entrypoints() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("iniconfig")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -909,7 +935,8 @@ fn tool_install_unnamed_package() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -995,7 +1022,8 @@ fn tool_install_unnamed_conflict() {
         .arg("--from")
         .arg("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1019,7 +1047,8 @@ fn tool_install_unnamed_from() {
         .arg("--from")
         .arg("https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1104,7 +1133,8 @@ fn tool_install_unnamed_with() {
         .arg("--with")
         .arg("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1193,7 +1223,8 @@ fn tool_install_upgrade() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.1.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1231,7 +1262,8 @@ fn tool_install_upgrade() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1261,7 +1293,8 @@ fn tool_install_upgrade() {
         .arg("--with")
         .arg("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1298,7 +1331,8 @@ fn tool_install_upgrade() {
         .arg("black")
         .arg("--upgrade")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1345,7 +1379,8 @@ fn tool_install_python_request() {
         .arg("3.12")
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1370,7 +1405,8 @@ fn tool_install_python_request() {
         .arg("3.12")
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1386,7 +1422,8 @@ fn tool_install_python_request() {
         .arg("3.11")
         .arg("black")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1420,7 +1457,8 @@ fn tool_install_preserve_environment() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.1.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1445,7 +1483,8 @@ fn tool_install_preserve_environment() {
         .arg("--with")
         .arg("packaging==0.0.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1460,7 +1499,8 @@ fn tool_install_preserve_environment() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.1.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1468,5 +1508,42 @@ fn tool_install_preserve_environment() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
     `black==24.1.1` is already installed
+    "###);
+}
+
+/// Test warning when the binary directory is not on the user's PATH.
+#[test]
+#[cfg(unix)]
+fn tool_install_warn_path() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black==24.1.1")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env_remove("PATH"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.1.1
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run:
+      export PATH="[TEMP_DIR]/bin:$PATH"
     "###);
 }
