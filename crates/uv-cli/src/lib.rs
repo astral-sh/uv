@@ -7,6 +7,8 @@ use anyhow::{anyhow, Result};
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
+use pep508_rs::Requirement;
+use pypi_types::VerbatimParsedUrl;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
@@ -300,7 +302,7 @@ pub enum PipCommand {
         after_help = "Use `uv help pip sync` for more details.",
         after_long_help = ""
     )]
-    Sync(PipSyncArgs),
+    Sync(Box<PipSyncArgs>),
     /// Install packages into an environment.
     #[command(
         after_help = "Use `uv help pip install` for more details.",
@@ -2408,7 +2410,7 @@ pub struct ResolverArgs {
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file.
     #[arg(long, short = 'P')]
-    pub upgrade_package: Vec<PackageName>,
+    pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
@@ -2484,7 +2486,7 @@ pub struct ResolverInstallerArgs {
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file.
     #[arg(long, short = 'P')]
-    pub upgrade_package: Vec<PackageName>,
+    pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]

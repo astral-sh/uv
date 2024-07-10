@@ -13,7 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-pep508_rs = { workspace = true }
+pep508_rs = { workspace = true, features = ["schemars"] }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-auth = { workspace = true }

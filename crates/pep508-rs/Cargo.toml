@@ -26,6 +26,7 @@ pep440_rs = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }
 regex = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -44,6 +45,7 @@ testing_logger = { version = "0.1.1" }
 [features]
 pyo3 = ["dep:pyo3", "pep440_rs/pyo3", "pyo3-log", "tracing", "tracing/log"]
 tracing = ["dep:tracing", "pep440_rs/tracing"]
+schemars = ["dep:schemars"]
 # PEP 508 allows only URLs such as `foo @ https://example.org/foo` or `foo @ file:///home/ferris/foo`, and
 # arguably does not allow relative paths in file URLs (`foo @ file://./foo`,
 # `foo @ file:foo-3.0.0-py3-none-any.whl`, `foo @ file://foo-3.0.0-py3-none-any.whl`), as they are not part of the
