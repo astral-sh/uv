@@ -233,7 +233,7 @@ fn run_script() -> Result<()> {
     Reading inline script metadata from: main.py
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
-    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -367,6 +367,7 @@ fn run_with() -> Result<()> {
      + sniffio==1.3.1
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
@@ -395,6 +396,7 @@ fn run_with() -> Result<()> {
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
+    Installing to environment at [CACHE_DIR]/builds-v0/[TMP]/python
     Installed 1 package in [TIME]
      + sniffio==1.3.0
     "###);

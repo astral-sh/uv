@@ -104,6 +104,7 @@ fn prune_cached_env() {
     warning: `uv tool run` is experimental and may change without warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Installing to environment at [CACHE_DIR]/environments-v1/[RANDOM]/[RANDOM]/bin/python
     Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + packaging==24.0
