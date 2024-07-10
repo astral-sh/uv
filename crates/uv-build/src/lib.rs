@@ -151,7 +151,9 @@ impl Display for MissingHeaderCause {
             MissingLibrary::PythonPackage(package) => {
                 write!(
                     f,
-                    "This error likely indicates that you need to `uv pip install {package}` into the build environment for {version_id}",
+                    "This error likely indicates that {version_id} depends on {package}, but doesn't declare it as a build dependency. \
+                        If {version_id} is a first-party package, consider adding {package} to its `build-system.requires`. \
+                        Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`.",
                     package = package, version_id = self.version_id
                 )
             }
@@ -1239,7 +1241,7 @@ mod test {
         "###);
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
-            @"This error likely indicates that you need to `uv pip install wheel` into the build environment for pygraphviz-1.11"
+            @"This error likely indicates that pygraphviz-1.11 depends on wheel, but doesn't declare it as a build dependency. If pygraphviz-1.11 is a first-party package, consider adding wheel to its `build-system.requires`. Otherwise, `uv pip install wheel` into the environment and re-run with `--no-build-isolation`."
         );
     }
 }
