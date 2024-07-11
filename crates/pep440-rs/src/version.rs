@@ -59,6 +59,34 @@ pub enum Operator {
 }
 
 impl Operator {
+    /// Negates this operator, if a negation exists, so that it has the
+    /// opposite meaning.
+    ///
+    /// This returns a negated operator in every case except for the `~=`
+    /// operator. In that case, `None` is returned and callers may need to
+    /// handle its negation at a higher level. (For example, if it's negated
+    /// in the context of a marker expression, then the "compatible" version
+    /// constraint can be split into its component parts and turned into a
+    /// disjunction of the negation of each of those parts.)
+    ///
+    /// Note that this routine is not reversible in all cases. For example
+    /// `Operator::ExactEqual` negates to `Operator::NotEqual`, and
+    /// `Operator::NotEqual` in turn negates to `Operator::Equal`.
+    pub fn negate(self) -> Option<Operator> {
+        Some(match self {
+            Operator::Equal => Operator::NotEqual,
+            Operator::EqualStar => Operator::NotEqualStar,
+            Operator::ExactEqual => Operator::NotEqual,
+            Operator::NotEqual => Operator::Equal,
+            Operator::NotEqualStar => Operator::EqualStar,
+            Operator::TildeEqual => return None,
+            Operator::LessThan => Operator::GreaterThanEqual,
+            Operator::LessThanEqual => Operator::GreaterThan,
+            Operator::GreaterThan => Operator::LessThanEqual,
+            Operator::GreaterThanEqual => Operator::LessThan,
+        })
+    }
+
     /// Returns true if and only if this operator can be used in a version
     /// specifier with a version containing a non-empty local segment.
     ///
