@@ -1,26 +1,29 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::debug;
 
-use distribution_types::UnresolvedRequirementSpecification;
+use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
+use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
     PythonRequest,
 };
-use uv_tool::InstalledTools;
+use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user_once;
 
 use crate::commands::project::environment::CachedEnvironment;
@@ -79,7 +82,6 @@ pub(crate) async fn run(
         printer,
     )
     .await?;
-
     // TODO(zanieb): Determine the command via the package entry points
     let command = target;
 
@@ -118,9 +120,54 @@ pub(crate) async fn run(
         command.to_string_lossy(),
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
-    let mut handle = process
-        .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
+    let mut handle = match process.spawn() {
+        Ok(handle) => Ok(handle),
+        Err(e) => {
+            let site_packages = SitePackages::from_environment(&environment)
+                .context("Failed to read site packages")?;
+            let package = PackageName::from_str(&from).context("Invalid package name {from}")?;
+
+            let installed = site_packages.get_packages(&package);
+            let Some(installed_dist) = installed.first().copied() else {
+                bail!("Expected at least one requirement")
+            };
+
+            let entry_points = entrypoint_paths(
+                &environment,
+                installed_dist.name(),
+                installed_dist.version(),
+            )
+            .context("Failed to read entrypoints")?;
+
+            if !entry_points
+                .iter()
+                .map(|e| e.0.as_str())
+                .any(|e| *e == *command)
+            {
+                writeln!(
+                    printer.stdout(),
+                    "The executable {} was not found.",
+                    command.user_display().red()
+                )?;
+                if !entry_points.is_empty() {
+                    writeln!(
+                        printer.stdout(),
+                        "However, the following executables are available:",
+                    )?;
+                }
+                for entry_point in entry_points {
+                    writeln!(
+                        printer.stdout(),
+                        "- {}",
+                        entry_point.0.user_display().cyan()
+                    )?;
+                }
+            };
+            Err(e)
+        }
+    }
+    .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
+
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
