@@ -2207,7 +2207,7 @@ pub struct PythonInstallArgs {
 
     /// Force the installation of the requested Python, even if it is already installed.
     #[arg(long, short)]
-    pub force: bool,
+    pub reinstall: bool,
 }
 
 #[derive(Args)]
