@@ -232,32 +232,32 @@ fn python_pin_no_python() {
 
 #[test]
 fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.11"
         dependencies = ["iniconfig"]
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.10"), @r###"
         success: false
         exit_code: 2
         ----- stdout -----
 
         ----- stderr -----
-        error: The pinned Python version is incompatible with the project's `Requires-Python` of >=3.12.
+        error: The pinned Python version is incompatible with the project's `Requires-Python` of >=3.11.
         "###);
 
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
-        Pinned to `3.12`
+        Pinned to `3.11`
 
         ----- stderr -----
         "###);
@@ -268,9 +268,48 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(python_version, @r###"
-        3.12
+        3.11
         "###);
     });
+
+    // Updating `requires-python` should affect `uv python pin` compatibilities.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: The pinned Python version is incompatible with the project's `Requires-Python` of >=3.12.
+        "###);
+
+    Ok(())
+}
+
+#[test]
+fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
+    let python_version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version_file.write_str(r"3.12")?;
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        3.12
+
+        ----- stderr -----
+        warning: No interpreter found for Python 3.12 in system path
+        "###);
+
     Ok(())
 }
 

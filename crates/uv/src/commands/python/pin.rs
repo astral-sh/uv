@@ -35,6 +35,25 @@ pub(crate) async fn pin(
         // Display the current pinned Python version
         if let Some(pins) = requests_from_version_file().await? {
             for pin in pins {
+                let python = match PythonInstallation::find(
+                    &pin,
+                    EnvironmentPreference::OnlySystem,
+                    python_preference,
+                    cache,
+                ) {
+                    Ok(python) => Some(python),
+                    // If no matching Python version is found, don't fail unless `resolved` was requested
+                    Err(uv_python::Error::MissingPython(err)) if !resolved => {
+                        warn_user_once!("{}", err);
+                        None
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+                if !isolated {
+                    if let Some(ref python) = python {
+                        assert_python_compatibility(python).await?;
+                    }
+                }
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
             }
             return Ok(ExitStatus::Success);
@@ -59,35 +78,8 @@ pub(crate) async fn pin(
     };
 
     if !isolated {
-        if let Ok(project) = VirtualProject::discover(&std::env::current_dir()?, None).await {
-            let (requires_python, project_type) = match project {
-                VirtualProject::Project(project_workspace) => {
-                    debug!(
-                        "Discovered project `{}` at: {}",
-                        project_workspace.project_name(),
-                        project_workspace.workspace().install_path().display()
-                    );
-                    let requires_python = find_requires_python(project_workspace.workspace())?;
-                    (requires_python, "project")
-                }
-                VirtualProject::Virtual(workspace) => {
-                    debug!(
-                        "Discovered virtual workspace at: {}",
-                        workspace.install_path().display()
-                    );
-                    let requires_python = find_requires_python(&workspace)?;
-                    (requires_python, "virtual")
-                }
-            };
-            let python_version = python
-                .as_ref()
-                .map(uv_python::PythonInstallation::python_version);
-            if let (Some(requires_python), Some(python_version)) = (requires_python, python_version)
-            {
-                if !requires_python.contains(python_version) {
-                    anyhow::bail!("The pinned Python version is incompatible with the {project_type}'s `Requires-Python` of {requires_python}.");
-                }
-            }
+        if let Some(ref python) = python {
+            assert_python_compatibility(python).await?;
         }
     }
 
@@ -116,4 +108,40 @@ pub(crate) async fn pin(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Checks if the pinned Python version is compatible with the workspace/project's `Requires-Python`.
+async fn assert_python_compatibility(python: &uv_python::PythonInstallation) -> Result<()> {
+    if let Ok(project) = VirtualProject::discover(&std::env::current_dir()?, None).await {
+        let (requires_python, project_type) = match project {
+            VirtualProject::Project(project_workspace) => {
+                debug!(
+                    "Discovered project `{}` at: {}",
+                    project_workspace.project_name(),
+                    project_workspace.workspace().install_path().display()
+                );
+                let requires_python = find_requires_python(project_workspace.workspace())?;
+                (requires_python, "project")
+            }
+            VirtualProject::Virtual(workspace) => {
+                debug!(
+                    "Discovered virtual workspace at: {}",
+                    workspace.install_path().display()
+                );
+                let requires_python = find_requires_python(&workspace)?;
+                (requires_python, "virtual")
+            }
+        };
+
+        if let Some(requires_python) = requires_python {
+            if !requires_python.contains(python.python_version()) {
+                anyhow::bail!(
+                    "The pinned Python version is incompatible with the {}'s `Requires-Python` of {}.",
+                    project_type,
+                    requires_python
+                );
+            }
+        }
+    }
+    Ok(())
 }
