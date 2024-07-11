@@ -176,7 +176,7 @@ pub(crate) async fn pip_install(
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints)? {
+        match site_packages.satisfies(&requirements, &constraints, &overrides)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,

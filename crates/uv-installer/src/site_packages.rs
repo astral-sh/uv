@@ -265,6 +265,7 @@ impl SitePackages {
         &self,
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[Requirement],
+        overrides: &[UnresolvedRequirementSpecification],
     ) -> Result<SatisfiesResult> {
         let mut stack = Vec::with_capacity(requirements.len());
         let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
@@ -309,6 +310,22 @@ impl SitePackages {
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints {
                         match RequirementSatisfaction::check(distribution, &constraint.source)? {
+                            RequirementSatisfaction::Mismatch
+                            | RequirementSatisfaction::OutOfDate
+                            | RequirementSatisfaction::Dynamic => {
+                                return Ok(SatisfiesResult::Unsatisfied(
+                                    entry.requirement.to_string(),
+                                ))
+                            }
+                            RequirementSatisfaction::Satisfied => {}
+                        }
+                    }
+                    // Validate that the installed version satisfies the overrides.
+                    for r#override in overrides {
+                        match RequirementSatisfaction::check(
+                            distribution,
+                            &r#override.requirement.source(),
+                        )? {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
                             | RequirementSatisfaction::Dynamic => {

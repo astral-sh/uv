@@ -241,7 +241,7 @@ async fn get_or_create_environment(
             let constraints = [];
 
             if matches!(
-                site_packages.satisfies(&requirements, &constraints),
+                site_packages.satisfies(&requirements, &constraints, &[]),
                 Ok(SatisfiesResult::Fresh { .. })
             ) {
                 debug!("Using existing tool `{}`", from.name);

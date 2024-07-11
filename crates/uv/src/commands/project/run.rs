@@ -285,7 +285,7 @@ pub(crate) async fn run(
             return false;
         }
 
-        match site_packages.satisfies(&spec.requirements, &spec.constraints) {
+        match site_packages.satisfies(&spec.requirements, &spec.constraints, &spec.overrides) {
             // If the requirements are already satisfied, we're done.
             Ok(SatisfiesResult::Fresh {
                 recursive_requirements,
