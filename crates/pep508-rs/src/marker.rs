@@ -1489,19 +1489,23 @@ impl Display for MarkerExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MarkerExpression::Version { key, specifier } => {
-                write!(
-                    f,
-                    "{key} {} '{}'",
-                    specifier.operator(),
-                    specifier.version()
-                )
+                let (op, version) = (specifier.operator(), specifier.version());
+                if op == &pep440_rs::Operator::EqualStar || op == &pep440_rs::Operator::NotEqualStar
+                {
+                    return write!(f, "{key} {op} '{version}.*'");
+                }
+                write!(f, "{key} {op} '{version}'",)
             }
             MarkerExpression::VersionInverted {
                 version,
-                operator,
+                operator: op,
                 key,
             } => {
-                write!(f, "'{version}' {operator} {key}")
+                if op == &pep440_rs::Operator::EqualStar || op == &pep440_rs::Operator::NotEqualStar
+                {
+                    return write!(f, "'{version}.*' {op} {key}");
+                }
+                write!(f, "'{version}' {op} {key}")
             }
             MarkerExpression::String {
                 key,
