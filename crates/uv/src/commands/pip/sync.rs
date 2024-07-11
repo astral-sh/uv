@@ -291,6 +291,7 @@ pub(crate) async fn pip_sync(
         options,
         printer,
         preview,
+        false,
     )
     .await
     {

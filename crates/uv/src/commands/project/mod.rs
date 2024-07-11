@@ -495,6 +495,7 @@ pub(crate) async fn resolve_environment<'a>(
         options,
         printer,
         preview,
+        false,
     )
     .await?)
 }
@@ -746,6 +747,7 @@ pub(crate) async fn update_environment(
         options,
         printer,
         preview,
+        false,
     )
     .await
     {
