@@ -23,6 +23,7 @@ pub(crate) async fn pin(
     resolved: bool,
     python_preference: PythonPreference,
     preview: PreviewMode,
+    isolated: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -57,16 +58,19 @@ pub(crate) async fn pin(
         Err(err) => return Err(err.into()),
     };
 
-    if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
-        let requires_python = find_requires_python(&workspace)?;
-        let python_version = python
-            .as_ref()
-            .map(uv_python::PythonInstallation::python_version);
-        if let (Some(requires_python), Some(python_version)) = (requires_python, python_version) {
-            if !requires_python.contains(python_version) {
-                anyhow::bail!(
+    if !isolated {
+        if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
+            let requires_python = find_requires_python(&workspace)?;
+            let python_version = python
+                .as_ref()
+                .map(uv_python::PythonInstallation::python_version);
+            if let (Some(requires_python), Some(python_version)) = (requires_python, python_version)
+            {
+                if !requires_python.contains(python_version) {
+                    anyhow::bail!(
                     "Pinned python version is incompatible with Requires-Python: {requires_python}"
                 );
+                }
             }
         }
     }
