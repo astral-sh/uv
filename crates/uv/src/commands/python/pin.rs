@@ -60,24 +60,25 @@ pub(crate) async fn pin(
 
     if !isolated {
         if let Ok(project) = VirtualProject::discover(&std::env::current_dir()?, None).await {
-            let (workspace, project_type) = match project {
+            let (requires_python, project_type) = match project {
                 VirtualProject::Project(project_workspace) => {
                     debug!(
                         "Discovered project `{}` at: {}",
                         project_workspace.project_name(),
                         project_workspace.workspace().install_path().display()
                     );
-                    (project_workspace.workspace().clone(), "project")
+                    let requires_python = find_requires_python(project_workspace.workspace())?;
+                    (requires_python, "project")
                 }
                 VirtualProject::Virtual(workspace) => {
                     debug!(
                         "Discovered virtual workspace at: {}",
                         workspace.install_path().display()
                     );
-                    (workspace, "virtual")
+                    let requires_python = find_requires_python(&workspace)?;
+                    (requires_python, "virtual")
                 }
             };
-            let requires_python = find_requires_python(&workspace)?;
             let python_version = python
                 .as_ref()
                 .map(uv_python::PythonInstallation::python_version);
