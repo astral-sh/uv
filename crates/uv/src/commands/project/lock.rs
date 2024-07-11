@@ -1,6 +1,8 @@
+#![allow(clippy::single_match_else)]
+
 use anstream::eprint;
 
-use distribution_types::UnresolvedRequirementSpecification;
+use distribution_types::{ResolutionDiagnostic, UnresolvedRequirementSpecification};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
@@ -93,7 +95,7 @@ pub(crate) async fn lock(
 pub(super) async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
-    existing: Option<&Lock>,
+    existing_lock: Option<&Lock>,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     preview: PreviewMode,
@@ -122,12 +124,12 @@ pub(super) async fn do_lock(
         .members_as_requirements()
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
-        .collect();
+        .collect::<Vec<_>>();
     let overrides = workspace
         .overrides()
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
-        .collect();
+        .collect::<Vec<_>>();
     let constraints = vec![];
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
@@ -185,7 +187,8 @@ pub(super) async fn do_lock(
     };
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = existing
+    let LockedRequirements { preferences, git } = existing_lock
+        .as_ref()
         .map(|lock| read_lock_requirements(lock, upgrade))
         .unwrap_or_default();
 
@@ -194,54 +197,146 @@ pub(super) async fn do_lock(
         state.git.insert(reference, sha);
     }
 
-    // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        interpreter,
-        index_locations,
-        &flat_index,
-        &state.index,
-        &state.git,
-        &state.in_flight,
-        index_strategy,
-        setup_py,
-        config_setting,
-        build_isolation,
-        link_mode,
-        build_options,
-        exclude_newer,
-        concurrency,
-        preview,
-    );
+    let start = std::time::Instant::now();
+    let resolution = match existing_lock {
+        None => None,
 
-    // Resolve the requirements.
-    let resolution = pip::operations::resolve(
-        requirements,
-        constraints,
-        overrides,
-        dev,
-        source_trees,
-        None,
-        &extras,
-        preferences,
-        EmptyInstalledPackages,
-        &hasher,
-        &Reinstall::default(),
-        upgrade,
-        None,
-        None,
-        python_requirement,
-        &client,
-        &flat_index,
-        &state.index,
-        &build_dispatch,
-        concurrency,
-        options,
-        printer,
-        preview,
-    )
-    .await?;
+        // If we are ignoring pinned versions in the lockfile, we need to do a full resolution.
+        Some(_) if upgrade.is_all() => None,
+
+        // Otherwise, we can try to resolve using metadata in the lockfile.
+        //
+        // When resolving from the lockfile we can still download and install new distributions,
+        // but we rely on the lockfile for the metadata of any existing distributions. If we have
+        // any outdated metadata we fall back to a clean resolve.
+        Some(lock) => {
+            // Prefill the index with the lockfile metadata.
+            let index = lock.to_index(workspace.install_path(), upgrade)?;
+
+            // Create a build dispatch.
+            let build_dispatch = BuildDispatch::new(
+                &client,
+                cache,
+                interpreter,
+                index_locations,
+                &flat_index,
+                &index,
+                &state.git,
+                &state.in_flight,
+                index_strategy,
+                setup_py,
+                config_setting,
+                build_isolation,
+                link_mode,
+                build_options,
+                exclude_newer,
+                concurrency,
+                preview,
+            );
+
+            // Resolve the requirements.
+            pip::operations::resolve(
+                requirements.clone(),
+                constraints.clone(),
+                overrides.clone(),
+                dev.clone(),
+                source_trees.clone(),
+                None,
+                &extras,
+                preferences.clone(),
+                EmptyInstalledPackages,
+                &hasher,
+                &Reinstall::default(),
+                upgrade,
+                None,
+                None,
+                python_requirement.clone(),
+                &client,
+                &flat_index,
+                &index,
+                &build_dispatch,
+                concurrency,
+                options,
+                printer,
+                preview,
+                true,
+            )
+            .await
+            .ok()
+            .filter(|resolution| {
+                // Ensure no diagnostics were emitted that may be caused by stale metadata in the lockfile.
+                !resolution.diagnostics().iter().any(|diagnostic| {
+                    matches!(
+                        diagnostic,
+                        ResolutionDiagnostic::MissingDev { .. }
+                            | ResolutionDiagnostic::MissingExtra { .. }
+                    )
+                })
+            })
+        }
+    };
+
+    let resolution = match resolution {
+        // Resolution from the lockfile succeeded.
+        Some(resolution) => resolution,
+
+        // The lockfile did not contain enough information to obtain a resolution, fallback
+        // to a fresh resolve.
+        None => {
+            // Create a build dispatch.
+            let build_dispatch = BuildDispatch::new(
+                &client,
+                cache,
+                interpreter,
+                index_locations,
+                &flat_index,
+                &state.index,
+                &state.git,
+                &state.in_flight,
+                index_strategy,
+                setup_py,
+                config_setting,
+                build_isolation,
+                link_mode,
+                build_options,
+                exclude_newer,
+                concurrency,
+                preview,
+            );
+
+            // Resolve the requirements.
+            pip::operations::resolve(
+                requirements,
+                constraints,
+                overrides,
+                dev,
+                source_trees,
+                None,
+                &extras,
+                preferences,
+                EmptyInstalledPackages,
+                &hasher,
+                &Reinstall::default(),
+                upgrade,
+                None,
+                None,
+                python_requirement,
+                &client,
+                &flat_index,
+                &state.index,
+                &build_dispatch,
+                concurrency,
+                options,
+                printer,
+                preview,
+                true,
+            )
+            .await?
+        }
+    };
+
+    // Print the success message after completing resolution.
+    pip::operations::resolution_success(&resolution, start, printer)?;
 
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;

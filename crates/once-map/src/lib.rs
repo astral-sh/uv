@@ -20,6 +20,13 @@ pub struct OnceMap<K, V, H = RandomState> {
 }
 
 impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
+    // Create a [`OnceMap`] with the specified capacity and hasher.
+    pub fn with_capacity_and_hasher(capacity: usize, hasher: H) -> OnceMap<K, V, H> {
+        OnceMap {
+            items: DashMap::with_capacity_and_hasher(capacity, hasher),
+        }
+    }
+
     /// Register that you want to start a job.
     ///
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
@@ -97,6 +104,21 @@ impl<K: Eq + Hash + Clone, V, H: Default + BuildHasher + Clone> Default for Once
     fn default() -> Self {
         Self {
             items: DashMap::with_hasher(H::default()),
+        }
+    }
+}
+
+impl<K, V, H> FromIterator<(K, V)> for OnceMap<K, V, H>
+where
+    K: Eq + Hash,
+    H: Default + Clone + BuildHasher,
+{
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        OnceMap {
+            items: iter
+                .into_iter()
+                .map(|(k, v)| (k, Value::Filled(v)))
+                .collect(),
         }
     }
 }
