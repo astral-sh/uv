@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use assert_fs::fixture::{FileWriteStr as _, PathChild as _};
 use common::{uv_snapshot, TestContext};
 use insta::assert_snapshot;
 use uv_python::{
@@ -227,6 +228,50 @@ fn python_pin_no_python() {
     ----- stderr -----
     warning: No interpreter found for Python 3.12 in system path
     "###);
+}
+
+#[test]
+fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: Pinned python version is incompatible with Requires-Python: >=3.12
+        "###);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        Pinned to `3.12`
+
+        ----- stderr -----
+        "###);
+
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(python_version, @r###"
+        3.12
+        "###);
+    });
+    Ok(())
 }
 
 /// We do need a Python interpreter for `--resolved` pins

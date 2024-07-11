@@ -6,6 +6,7 @@ use anyhow::{bail, Result};
 use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
+use uv_distribution::Workspace;
 use uv_fs::Simplified;
 use uv_python::{
     requests_from_version_file, EnvironmentPreference, PythonInstallation, PythonPreference,
@@ -13,7 +14,7 @@ use uv_python::{
 };
 use uv_warnings::warn_user_once;
 
-use crate::commands::ExitStatus;
+use crate::commands::{project::find_requires_python, ExitStatus};
 use crate::printer::Printer;
 
 /// Pin to a specific Python version.
@@ -55,6 +56,20 @@ pub(crate) async fn pin(
         }
         Err(err) => return Err(err.into()),
     };
+
+    if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
+        let requires_python = find_requires_python(&workspace)?;
+        let python_version = python
+            .as_ref()
+            .map(uv_python::PythonInstallation::python_version);
+        if let (Some(requires_python), Some(python_version)) = (requires_python, python_version) {
+            if !requires_python.contains(python_version) {
+                anyhow::bail!(
+                    "Pinned python version is incompatible with Requires-Python: {requires_python}"
+                );
+            }
+        }
+    }
 
     let output = if resolved {
         // SAFETY: We exit early if Python is not found and resolved is `true`
