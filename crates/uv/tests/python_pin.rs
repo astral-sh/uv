@@ -300,7 +300,18 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
     let python_version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
     python_version_file.write_str(r"3.12")?;
-    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.python_pin(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        3.12
+
+        ----- stderr -----
+        warning: No interpreter found for Python 3.12 in system path or `py` launcher
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), context.python_pin(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -309,6 +320,7 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
         ----- stderr -----
         warning: No interpreter found for Python 3.12 in system path
         "###);
+    }
 
     Ok(())
 }
