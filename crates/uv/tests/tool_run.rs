@@ -138,7 +138,36 @@ fn tool_run_at_version() {
         .collect::<Vec<_>>();
 
     // When `--from` is used, `@` is not treated as a version request
-    uv_snapshot!(filters, context.tool_run()
+    if cfg!(windows) {
+        uv_snapshot!(filters, context.tool_run()
+        .arg("--from")
+        .arg("pytest")
+        .arg("pytest@8.0.0")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    The executable pytest@8.0.0 was not found.
+    However, the following executables are available:
+    - py.test.exe
+    - pytest.exe
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning.
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    error: Failed to spawn: `pytest@8.0.0`
+      Caused by: No such file or directory (os error 2)
+    "###);
+    } else {
+        uv_snapshot!(filters, context.tool_run()
         .arg("--from")
         .arg("pytest")
         .arg("pytest@8.0.0")
@@ -165,6 +194,7 @@ fn tool_run_at_version() {
     error: Failed to spawn: `pytest@8.0.0`
       Caused by: No such file or directory (os error 2)
     "###);
+    }
 }
 
 #[test]
@@ -203,7 +233,37 @@ fn tool_run_suggest_valid_commands() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    uv_snapshot!(context.filters(), context.tool_run()
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("black")
+        .arg("orange")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    The executable orange was not found.
+    However, the following executables are available:
+    - black.exe
+    - blackd.exe
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning.
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    error: Failed to spawn: `orange`
+      Caused by: program not found
+    "###);
+    } else {
+        uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
         .arg("black")
         .arg("orange")
@@ -231,6 +291,7 @@ fn tool_run_suggest_valid_commands() {
     error: Failed to spawn: `orange`
       Caused by: No such file or directory (os error 2)
     "###);
+    }
 }
 
 #[test]
