@@ -7,8 +7,8 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Output};
-use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::{env, iter};
 
 use fs_err as fs;
@@ -353,9 +353,9 @@ impl Pep517Backend {
 #[derive(Debug, Default, Clone)]
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
-    default_resolution: Rc<Mutex<Option<Resolution>>>,
+    default_resolution: Arc<Mutex<Option<Resolution>>>,
     /// An in-memory resolution of the build requirements for `--legacy-setup-py` builds.
-    setup_py_resolution: Rc<Mutex<Option<Resolution>>>,
+    setup_py_resolution: Arc<Mutex<Option<Resolution>>>,
 }
 
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py

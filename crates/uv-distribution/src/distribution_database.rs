@@ -2,7 +2,6 @@ use std::future::Future;
 use std::io;
 use std::path::Path;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
@@ -51,7 +50,7 @@ use crate::{Error, LocalWheel, Reporter, RequiresDist};
 pub struct DistributionDatabase<'a, Context: BuildContext> {
     build_context: &'a Context,
     builder: SourceDistributionBuilder<'a, Context>,
-    locks: Rc<Locks>,
+    locks: Arc<Locks>,
     client: ManagedClient<'a>,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -66,7 +65,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context, preview_mode),
-            locks: Rc::new(Locks::default()),
+            locks: Arc::new(Locks::default()),
             client: ManagedClient::new(client, concurrent_downloads),
             reporter: None,
         }
@@ -321,7 +320,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
-            .boxed_local()
+            .boxed()
             .await?;
 
         // If the wheel was unzipped previously, respect it. Source distributions are
@@ -379,7 +378,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let result = self
             .client
-            .managed(|client| client.wheel_metadata(dist).boxed_local())
+            .managed(|client| client.wheel_metadata(dist).boxed())
             .await;
 
         match result {
@@ -429,7 +428,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let metadata = self
             .builder
             .download_and_build_metadata(source, hashes, &self.client)
-            .boxed_local()
+            .boxed()
             .await?;
 
         Ok(metadata)

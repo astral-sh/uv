@@ -191,8 +191,8 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: FnOnce(Response) -> CallbackReturn + Send,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
     {
         let payload = self
             .get_cacheable(req, cache_entry, cache_control, move |resp| async {
@@ -225,13 +225,11 @@ impl CachedClient {
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
     {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
-            self.send_cached(req, cache_control, cached)
-                .boxed_local()
-                .await?
+            self.send_cached(req, cache_control, cached).boxed().await?
         } else {
             debug!("No cache entry for: {}", req.url());
             let (response, cache_policy) = self.fresh_request(req).await?;
@@ -313,8 +311,8 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>>
     where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        Callback: FnOnce(Response) -> CallbackReturn + Send,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
     {
         let (response, cache_policy) = self.fresh_request(req).await?;
 
@@ -336,7 +334,7 @@ impl CachedClient {
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
     {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
         let (response, cache_policy) = self.fresh_request(req).await?;
@@ -353,11 +351,11 @@ impl CachedClient {
     ) -> Result<Payload::Target, CachedClientError<CallBackError>>
     where
         Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
     {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
         let data = response_callback(response)
-            .boxed_local()
+            .boxed()
             .await
             .map_err(|err| CachedClientError::Callback(err))?;
         let Some(cache_policy) = cache_policy else {

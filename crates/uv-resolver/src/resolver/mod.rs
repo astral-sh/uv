@@ -1546,7 +1546,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         request_stream: Receiver<Request>,
     ) -> Result<(), ResolveError> {
         let mut response_stream = ReceiverStream::new(request_stream)
-            .map(|request| self.process_request(request, &*provider).boxed_local())
+            .map(|request| self.process_request(request, &*provider).boxed())
             // Allow as many futures as possible to start in the background.
             // Backpressure is provided by at a more granular level by `DistributionDatabase`
             // and `SourceDispatch`, as well as the bounded request channel.
@@ -1623,7 +1623,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Request::Package(package_name) => {
                 let package_versions = provider
                     .get_package_versions(&package_name)
-                    .boxed_local()
+                    .boxed()
                     .await
                     .map_err(ResolveError::Client)?;
 
@@ -1634,7 +1634,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Request::Dist(dist) => {
                 let metadata = provider
                     .get_or_build_wheel_metadata(&dist)
-                    .boxed_local()
+                    .boxed()
                     .await
                     .map_err(|err| match dist.clone() {
                         Dist::Built(built_dist @ BuiltDist::Path(_)) => {
@@ -1768,7 +1768,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ResolvedDist::Installable(dist) => {
                             let metadata = provider
                                 .get_or_build_wheel_metadata(&dist)
-                                .boxed_local()
+                                .boxed()
                                 .await
                                 .map_err(|err| match dist.clone() {
                                     Dist::Built(built_dist @ BuiltDist::Path(_)) => {

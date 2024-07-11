@@ -44,12 +44,12 @@ pub enum MetadataResponse {
     Offline,
 }
 
-pub trait ResolverProvider {
+pub trait ResolverProvider: Sync {
     /// Get the version map for a package.
     fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
-    ) -> impl Future<Output = PackageVersionsResult> + 'io;
+    ) -> impl Future<Output = PackageVersionsResult> + Send + 'io;
 
     /// Get the metadata for a distribution.
     ///
@@ -59,7 +59,7 @@ pub trait ResolverProvider {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
-    ) -> impl Future<Output = WheelMetadataResult> + 'io;
+    ) -> impl Future<Output = WheelMetadataResult> + Send + 'io;
 
     fn index_locations(&self) -> &IndexLocations;
 

@@ -28,6 +28,8 @@ uv-python = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
 
+tokio = { workspace = true }
+
 anyhow = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }

@@ -48,7 +48,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 /// Put in a different way, the types here allow `uv-resolver` to depend on `uv-build` and
 /// `uv-build` to depend on `uv-resolver` without having actual crate dependencies between
 /// them.
-pub trait BuildContext {
+pub trait BuildContext: Send + Sync {
     type SourceDistBuilder: SourceBuildTrait;
 
     /// Return a reference to the cache.
@@ -74,7 +74,7 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> impl Future<Output = Result<Resolution>> + 'a;
+    ) -> impl Future<Output = Result<Resolution>> + Send + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base Python as [`BuildContext::interpreter`]
@@ -82,7 +82,7 @@ pub trait BuildContext {
         &'a self,
         resolution: &'a Resolution,
         venv: &'a PythonEnvironment,
-    ) -> impl Future<Output = Result<Vec<CachedDist>>> + 'a;
+    ) -> impl Future<Output = Result<Vec<CachedDist>>> + Send + 'a;
 
     /// Set up a source distribution build by installing the required dependencies. A wrapper for
     /// `uv_build::SourceBuild::setup`.
@@ -98,28 +98,29 @@ pub trait BuildContext {
         version_id: &'a str,
         dist: Option<&'a SourceDist>,
         build_kind: BuildKind,
-    ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
+    ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
 ///
 /// You can either call only `wheel()` to build the wheel directly, call only `metadata()` to get
 /// the metadata without performing the actual or first call `metadata()` and then `wheel()`.
-pub trait SourceBuildTrait {
+pub trait SourceBuildTrait: Send {
     /// A wrapper for `uv_build::SourceBuild::get_metadata_without_build`.
     ///
     /// For PEP 517 builds, this calls `prepare_metadata_for_build_wheel`
     ///
     /// Returns the metadata directory if we're having a PEP 517 build and the
     /// `prepare_metadata_for_build_wheel` hook exists
-    fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>>>;
+    fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>>> + Send;
 
     /// A wrapper for `uv_build::SourceBuild::build`.
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
-    fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> impl Future<Output = Result<String>> + 'a;
+    fn wheel<'a>(&'a self, wheel_dir: &'a Path)
+        -> impl Future<Output = Result<String>> + Send + 'a;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]

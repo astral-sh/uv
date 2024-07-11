@@ -4737,6 +4737,7 @@ dependencies = [
  "itertools 0.13.0",
  "pypi-types",
  "rustc-hash 2.0.0",
+ "tokio",
  "tracing",
  "uv-build",
  "uv-cache",

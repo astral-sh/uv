@@ -344,7 +344,7 @@ impl RegistryClient {
                 };
                 OwnedArchive::from_unarchived(&unarchived)
             }
-            .boxed_local()
+            .boxed()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         self.cached_client()
@@ -594,7 +594,7 @@ impl RegistryClient {
                 })?;
                 Ok::<Metadata23, CachedClientError<Error>>(metadata)
             }
-            .boxed_local()
+            .boxed()
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 

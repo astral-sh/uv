@@ -185,7 +185,7 @@ impl<'a> FlatIndexClient<'a> {
                     .collect();
                 Ok::<Vec<File>, CachedClientError<Error>>(files)
             }
-            .boxed_local()
+            .boxed()
             .instrument(info_span!("parse_flat_index_html", url = % url))
         };
         let response = self
