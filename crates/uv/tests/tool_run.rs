@@ -150,7 +150,7 @@ fn tool_run_at_version() {
     exit_code: 2
     ----- stdout -----
     The executable pytest@8.0.0 was not found.
-    However, the following executables are available:
+    However, the following executables are available: via `uv tool run --from pytest <EXECUTABLE>`
     - py.test.exe
     - pytest.exe
 
@@ -178,7 +178,7 @@ fn tool_run_at_version() {
     exit_code: 2
     ----- stdout -----
     The executable pytest@8.0.0 was not found.
-    However, the following executables are available:
+    However, the following executables are available: via `uv tool run --from pytest <EXECUTABLE>`
     - py.test
     - pytest
 
@@ -244,7 +244,7 @@ fn tool_run_suggest_valid_commands() {
     exit_code: 2
     ----- stdout -----
     The executable orange was not found.
-    However, the following executables are available:
+    However, the following executables are available: via `uv tool run --from black <EXECUTABLE>`
     - black.exe
     - blackd.exe
 
@@ -273,7 +273,7 @@ fn tool_run_suggest_valid_commands() {
     exit_code: 2
     ----- stdout -----
     The executable orange was not found.
-    However, the following executables are available:
+    However, the following executables are available: via `uv tool run --from black <EXECUTABLE>`
     - black
     - blackd
 

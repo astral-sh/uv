@@ -152,7 +152,7 @@ pub(crate) async fn run(
                 if !entry_points.is_empty() {
                     writeln!(
                         printer.stdout(),
-                        "However, the following executables are available:",
+                        "However, the following executables are available: via `uv tool run --from {from} <EXECUTABLE>`",
                     )?;
                 }
                 for entry_point in entry_points {
