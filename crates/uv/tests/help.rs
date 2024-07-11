@@ -301,8 +301,8 @@ fn help_subsubcommand() {
               any Python versions. If not, it will install the latest stable version of Python.
 
     Options:
-      -f, --force
-              Force the installation of the requested Python, even if it is already installed
+      -r, --reinstall
+              Reinstall the requested Python version
 
       -q, --quiet
               Do not print any output
@@ -462,8 +462,8 @@ fn help_flag_subsubcommand() {
       [TARGETS]...  The Python version(s) to install
 
     Options:
-      -f, --force
-              Force the installation of the requested Python, even if it is already installed
+      -r, --reinstall
+              Reinstall the requested Python version
       -q, --quiet
               Do not print any output
       -v, --verbose...
