@@ -250,7 +250,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Pinned python version is incompatible with Requires-Python: >=3.12
+        error: The pinned Python version is incompatible with the project's `Requires-Python` of >=3.12.
         "###);
 
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"

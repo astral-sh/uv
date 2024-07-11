@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
-use uv_distribution::Workspace;
+use uv_distribution::VirtualProject;
 use uv_fs::Simplified;
 use uv_python::{
     requests_from_version_file, EnvironmentPreference, PythonInstallation, PythonPreference,
@@ -59,7 +59,24 @@ pub(crate) async fn pin(
     };
 
     if !isolated {
-        if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
+        if let Ok(project) = VirtualProject::discover(&std::env::current_dir()?, None).await {
+            let (workspace, project_type) = match project {
+                VirtualProject::Project(project_workspace) => {
+                    debug!(
+                        "Discovered project `{}` at: {}",
+                        project_workspace.project_name(),
+                        project_workspace.workspace().install_path().display()
+                    );
+                    (project_workspace.workspace().clone(), "project")
+                }
+                VirtualProject::Virtual(workspace) => {
+                    debug!(
+                        "Discovered virtual workspace at: {}",
+                        workspace.install_path().display()
+                    );
+                    (workspace, "virtual")
+                }
+            };
             let requires_python = find_requires_python(&workspace)?;
             let python_version = python
                 .as_ref()
@@ -67,9 +84,7 @@ pub(crate) async fn pin(
             if let (Some(requires_python), Some(python_version)) = (requires_python, python_version)
             {
                 if !requires_python.contains(python_version) {
-                    anyhow::bail!(
-                    "Pinned python version is incompatible with Requires-Python: {requires_python}"
-                );
+                    anyhow::bail!("The pinned Python version is incompatible with the {project_type}'s `Requires-Python` of {requires_python}.");
                 }
             }
         }
