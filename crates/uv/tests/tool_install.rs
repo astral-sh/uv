@@ -403,8 +403,8 @@ fn tool_install_already_installed() {
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
@@ -676,8 +676,8 @@ fn tool_install_entry_point_exists() {
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
@@ -1407,8 +1407,8 @@ fn tool_install_python_request() {
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
@@ -1501,8 +1501,8 @@ fn tool_install_preserve_environment() {
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
