@@ -2457,6 +2457,7 @@ dependencies = [
  "pyo3",
  "pyo3-log",
  "regex",
+ "schemars",
  "serde",
  "serde_json",
  "testing_logger",
@@ -4438,7 +4439,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4474,6 +4475,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rustc-hash 2.0.0",
+ "same-file",
  "serde",
  "serde_json",
  "textwrap",
@@ -4598,6 +4600,8 @@ dependencies = [
  "fs-err",
  "insta",
  "install-wheel-rs",
+ "pep508_rs",
+ "pypi-types",
  "serde",
  "url",
  "uv-cache",
@@ -5138,7 +5142,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.23"
+version = "0.2.24"
 
 [[package]]
 name = "uv-virtualenv"

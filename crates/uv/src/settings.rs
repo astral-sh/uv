@@ -14,8 +14,8 @@ use uv_cli::{
     AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, VenvArgs,
+    PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs,
+    ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -410,6 +410,30 @@ impl PythonFindSettings {
     }
 }
 
+/// The resolved settings to use for a `python pin` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PythonPinSettings {
+    pub(crate) request: Option<String>,
+    pub(crate) resolved: bool,
+}
+
+impl PythonPinSettings {
+    /// Resolve the [`PythonPinSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: PythonPinArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let PythonPinArgs {
+            request,
+            no_resolved,
+            resolved,
+        } = args;
+
+        Self {
+            request,
+            resolved: flag(resolved, no_resolved).unwrap_or(false),
+        }
+    }
+}
 /// The resolved settings to use for a `sync` invocation.
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
@@ -798,7 +822,7 @@ pub(crate) struct PipSyncSettings {
 
 impl PipSyncSettings {
     /// Resolve the [`PipSyncSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: PipSyncArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: Box<PipSyncArgs>, filesystem: Option<FilesystemOptions>) -> Self {
         let PipSyncArgs {
             src_file,
             constraint,
@@ -829,7 +853,7 @@ impl PipSyncSettings {
             no_strict,
             dry_run,
             compat_args: _,
-        } = args;
+        } = *args;
 
         Self {
             src_file,
@@ -1384,7 +1408,10 @@ impl ResolverSettings {
                 args.upgrade.combine(upgrade),
                 args.upgrade_package
                     .combine(upgrade_package)
-                    .unwrap_or_default(),
+                    .into_iter()
+                    .flatten()
+                    .map(Requirement::from)
+                    .collect(),
             ),
             build_options: BuildOptions::new(
                 NoBinary::from_args(
@@ -1522,7 +1549,10 @@ impl ResolverInstallerSettings {
                 args.upgrade.combine(upgrade),
                 args.upgrade_package
                     .combine(upgrade_package)
-                    .unwrap_or_default(),
+                    .into_iter()
+                    .flatten()
+                    .map(Requirement::from)
+                    .collect(),
             ),
             reinstall: Reinstall::from_args(
                 args.reinstall.combine(reinstall),
@@ -1841,7 +1871,10 @@ impl PipSettings {
                 args.upgrade.combine(upgrade),
                 args.upgrade_package
                     .combine(upgrade_package)
-                    .unwrap_or_default(),
+                    .into_iter()
+                    .flatten()
+                    .map(Requirement::from)
+                    .collect(),
             ),
             reinstall: Reinstall::from_args(
                 args.reinstall.combine(reinstall),

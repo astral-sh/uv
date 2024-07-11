@@ -7,6 +7,8 @@ use anyhow::{anyhow, Result};
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
+use pep508_rs::Requirement;
+use pypi_types::VerbatimParsedUrl;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
@@ -300,7 +302,7 @@ pub enum PipCommand {
         after_help = "Use `uv help pip sync` for more details.",
         after_long_help = ""
     )]
-    Sync(PipSyncArgs),
+    Sync(Box<PipSyncArgs>),
     /// Install packages into an environment.
     #[command(
         after_help = "Use `uv help pip install` for more details.",
@@ -1663,7 +1665,7 @@ pub struct VenvArgs {
     /// By default, `uv` will stop at the first index on which a given package is available, and
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary
+    /// same name to a secondary.
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
     pub index_strategy: Option<IndexStrategy>,
 
@@ -2167,6 +2169,9 @@ pub enum PythonCommand {
     /// Search for a Python installation.
     Find(PythonFindArgs),
 
+    /// Pin to a specific Python version.
+    Pin(PythonPinArgs),
+
     /// Show the uv Python installation directory.
     Dir,
 
@@ -2222,6 +2227,22 @@ pub struct PythonUninstallArgs {
 pub struct PythonFindArgs {
     /// The Python request.
     pub request: Option<String>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PythonPinArgs {
+    /// The Python version.
+    pub request: Option<String>,
+
+    /// Write the resolved Python interpreter path instead of the request.
+    ///
+    /// Ensures that the exact same interpreter is used.
+    #[arg(long, overrides_with("resolved"))]
+    pub resolved: bool,
+
+    #[arg(long, overrides_with("no_resolved"), hide = true)]
+    pub no_resolved: bool,
 }
 
 #[derive(Args)]
@@ -2337,9 +2358,9 @@ pub struct InstallerArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary
+    /// same name to a secondary.
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
     pub index_strategy: Option<IndexStrategy>,
 
@@ -2408,14 +2429,14 @@ pub struct ResolverArgs {
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file.
     #[arg(long, short = 'P')]
-    pub upgrade_package: Vec<PackageName>,
+    pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary
+    /// same name to a secondary.
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
     pub index_strategy: Option<IndexStrategy>,
 
@@ -2484,7 +2505,7 @@ pub struct ResolverInstallerArgs {
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file.
     #[arg(long, short = 'P')]
-    pub upgrade_package: Vec<PackageName>,
+    pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
@@ -2500,9 +2521,9 @@ pub struct ResolverInstallerArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
-    /// same name to a secondary
+    /// same name to a secondary.
     #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
     pub index_strategy: Option<IndexStrategy>,
 

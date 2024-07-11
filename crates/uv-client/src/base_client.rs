@@ -188,7 +188,7 @@ impl<'a> BaseClientBuilder<'a> {
                     ExponentialBackoff::builder().build_with_max_retries(self.retries);
                 let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
                     retry_policy,
-                    LoggingRetryableStrategy,
+                    UvRetryableStrategy,
                 );
                 let client = client.with(retry_strategy);
 
@@ -249,13 +249,20 @@ impl Deref for BaseClient {
     }
 }
 
-/// The same as [`DefaultRetryableStrategy`], but retry attempts on transient request failures are
-/// logged, so we can tell whether a request was retried before failing or not.
-struct LoggingRetryableStrategy;
+/// Extends [`DefaultRetryableStrategy`], to log transient request failures and additional retry cases.
+struct UvRetryableStrategy;
 
-impl RetryableStrategy for LoggingRetryableStrategy {
+impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
-        let retryable = DefaultRetryableStrategy.handle(res);
+        // Use the default strategy and check for additional transient error cases.
+        let retryable = match DefaultRetryableStrategy.handle(res) {
+            None | Some(Retryable::Fatal) if is_extended_transient_error(res) => {
+                Some(Retryable::Transient)
+            }
+            default => default,
+        };
+
+        // Log on transient errors
         if retryable == Some(Retryable::Transient) {
             match res {
                 Ok(response) => {
@@ -274,4 +281,36 @@ impl RetryableStrategy for LoggingRetryableStrategy {
         }
         retryable
     }
+}
+
+/// Check for additional transient error kinds not supported by the default retry strategy in `reqwest_retry`.
+///
+/// These cases should be safe to retry with [`Retryable::Transient`].
+fn is_extended_transient_error(res: &Result<Response, reqwest_middleware::Error>) -> bool {
+    // Check for connection reset errors, these are usually `Body` errors which are not retried by default.
+    if let Err(reqwest_middleware::Error::Reqwest(err)) = res {
+        if let Some(io) = find_source::<std::io::Error>(&err) {
+            if io.kind() == std::io::ErrorKind::ConnectionReset {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Find the first source error of a specific type.
+///
+/// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
+fn find_source<E: std::error::Error + 'static>(orig: &dyn std::error::Error) -> Option<&E> {
+    let mut cause = orig.source();
+    while let Some(err) = cause {
+        if let Some(typed) = err.downcast_ref() {
+            return Some(typed);
+        }
+        cause = err.source();
+    }
+
+    // else
+    None
 }

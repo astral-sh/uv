@@ -218,7 +218,8 @@ async fn get_or_create_environment(
 
     // Check if the tool is already installed in a compatible environment.
     if !isolated {
-        let installed_tools = InstalledTools::from_settings()?;
+        let installed_tools = InstalledTools::from_settings()?.init()?;
+        let _lock = installed_tools.acquire_lock()?;
 
         let existing_environment =
             installed_tools

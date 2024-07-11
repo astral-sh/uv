@@ -186,6 +186,7 @@ fn help_subcommand() {
       list       List the available Python installations
       install    Download and install Python versions
       find       Search for a Python installation
+      pin        Pin to a specific Python version
       dir        Show the uv Python installation directory
       uninstall  Uninstall Python versions
 
@@ -406,6 +407,7 @@ fn help_flag_subcommand() {
       list       List the available Python installations
       install    Download and install Python versions
       find       Search for a Python installation
+      pin        Pin to a specific Python version
       dir        Show the uv Python installation directory
       uninstall  Uninstall Python versions
 
@@ -543,6 +545,7 @@ fn help_unknown_subsubcommand() {
         list
         install
         find
+        pin
         dir
         uninstall
     "###);

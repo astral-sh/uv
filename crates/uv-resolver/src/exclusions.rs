@@ -26,7 +26,7 @@ impl Exclusions {
                 };
 
             if let Upgrade::Packages(packages) = upgrade {
-                exclusions.extend(packages);
+                exclusions.extend(packages.into_keys());
             };
 
             if exclusions.is_empty() {

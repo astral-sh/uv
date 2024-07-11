@@ -128,6 +128,32 @@ impl TestContext {
         self
     }
 
+    /// Add extra standard filtering for Python executable names.
+    #[must_use]
+    pub fn with_filtered_python_names(mut self) -> Self {
+        if cfg!(windows) {
+            self.filters
+                .push(("python.exe".to_string(), "python".to_string()));
+        } else {
+            self.filters
+                .push((r"python\d".to_string(), "python".to_string()));
+            self.filters
+                .push((r"python\d.\d\d".to_string(), "python".to_string()));
+        }
+        self
+    }
+
+    /// Add extra standard filtering for venv executable directories on the current platform e.g.
+    /// `Scripts` on Windows and `bin` on Unix.
+    #[must_use]
+    pub fn with_filtered_virtualenv_bin(mut self) -> Self {
+        self.filters.push((
+            format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
+            "/[BIN]".to_string(),
+        ));
+        self
+    }
+
     /// Create a new test context with multiple Python versions.
     ///
     /// Does not create a virtual environment by default, but the first Python version
@@ -211,7 +237,12 @@ impl TestContext {
             filters.extend(
                 Self::path_patterns(&python_dir.join(version.to_string()))
                     .into_iter()
-                    .map(|pattern| (format!("{pattern}.*"), format!("[PYTHON-{version}]"))),
+                    .map(|pattern| {
+                        (
+                            format!("{pattern}[a-zA-Z0-9]*"),
+                            format!("[PYTHON-{version}]"),
+                        )
+                    }),
             );
 
             // Add Python patch version filtering unless explicitly requested to ensure
@@ -400,6 +431,19 @@ impl TestContext {
         command
             .arg("python")
             .arg("find")
+            .env("UV_PREVIEW", "1")
+            .env("UV_PYTHON_INSTALL_DIR", "")
+            .current_dir(&self.temp_dir);
+        self.add_shared_args(&mut command);
+        command
+    }
+
+    /// Create a `uv python pin` command with options shared across scenarios.
+    pub fn python_pin(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command
+            .arg("python")
+            .arg("pin")
             .env("UV_PREVIEW", "1")
             .env("UV_PYTHON_INSTALL_DIR", "")
             .current_dir(&self.temp_dir);

@@ -1,8 +1,10 @@
-use either::Either;
-use pep508_rs::MarkerTree;
-use pypi_types::Requirement;
-use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::borrow::Cow;
+
+use either::Either;
+use rustc_hash::FxHashMap;
+
+use pep508_rs::MarkerTree;
+use pypi_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 
 /// A set of constraints for a set of requirements.
@@ -11,10 +13,16 @@ pub struct Constraints(FxHashMap<PackageName, Vec<Requirement>>);
 
 impl Constraints {
     /// Create a new set of constraints from a set of requirements.
-    pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
-        let mut constraints: FxHashMap<PackageName, Vec<Requirement>> =
-            FxHashMap::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
+    pub fn from_requirements(requirements: impl Iterator<Item = Requirement>) -> Self {
+        let mut constraints: FxHashMap<PackageName, Vec<Requirement>> = FxHashMap::default();
         for requirement in requirements {
+            // Skip empty constraints.
+            if let RequirementSource::Registry { specifier, .. } = &requirement.source {
+                if specifier.is_empty() {
+                    continue;
+                }
+            }
+
             constraints
                 .entry(requirement.name.clone())
                 .or_default()

@@ -26,7 +26,7 @@ To install a specific Python version:
 $ uv python install 3.12
 ```
 
-See the [Python toolchain](../preview/toolchains.md) documentation for more details.
+See the [Python versions](../python-versions.md) documentation for more details.
 
 ## Viewing Python installations
 
@@ -35,6 +35,10 @@ To view available and installed Python versions:
 ```console
 $ uv python list
 ```
+
+See the [`python list`](../python-versions.html#viewing-available-python-versions) documentation for more details.
+
+<!--TODO(zanieb): The above should probably link to a CLI reference and that content should be moved out of that file -->
 
 ## Automatic Python downloads
 
@@ -57,3 +61,5 @@ Note that when an automatic Python installation occurs, the `python` command wil
 uv will also use an existing Python installation if already present on the system. There's no configuration necessary for this behavior, uv will use the system Python if it satisfies the requirements of the command invocation.
 
 To force uv to use the system Python, provide the `--python-preference only-system` option.
+
+See the [Python version preference](../python-versions.html#adjusting-python-version-preferences) documentation for more details.

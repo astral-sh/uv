@@ -1,6 +1,8 @@
+use either::Either;
 use pep508_rs::PackageName;
 
-use rustc_hash::FxHashSet;
+use pypi_types::Requirement;
+use rustc_hash::FxHashMap;
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone)]
@@ -54,12 +56,12 @@ pub enum Upgrade {
     All,
 
     /// Allow package upgrades, but only for the specified packages.
-    Packages(FxHashSet<PackageName>),
+    Packages(FxHashMap<PackageName, Vec<Requirement>>),
 }
 
 impl Upgrade {
     /// Determine the upgrade strategy from the command-line arguments.
-    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<PackageName>) -> Self {
+    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Self {
         match upgrade {
             Some(true) => Self::All,
             Some(false) => Self::None,
@@ -67,7 +69,15 @@ impl Upgrade {
                 if upgrade_package.is_empty() {
                     Self::None
                 } else {
-                    Self::Packages(upgrade_package.into_iter().collect())
+                    Self::Packages(upgrade_package.into_iter().fold(
+                        FxHashMap::default(),
+                        |mut map, requirement| {
+                            map.entry(requirement.name.clone())
+                                .or_default()
+                                .push(requirement);
+                            map
+                        },
+                    ))
                 }
             }
         }
@@ -81,5 +91,29 @@ impl Upgrade {
     /// Returns `true` if all packages should be upgraded.
     pub fn is_all(&self) -> bool {
         matches!(self, Self::All)
+    }
+
+    /// Returns `true` if the specified package should be upgraded.
+    pub fn contains(&self, package_name: &PackageName) -> bool {
+        match &self {
+            Self::None => false,
+            Self::All => true,
+            Self::Packages(packages) => packages.contains_key(package_name),
+        }
+    }
+
+    /// Returns an iterator over the constraints.
+    ///
+    /// When upgrading, users can provide bounds on the upgrade (e.g., `--upgrade-package flask<3`).
+    pub fn constraints(&self) -> impl Iterator<Item = &Requirement> {
+        if let Self::Packages(packages) = self {
+            Either::Right(
+                packages
+                    .values()
+                    .flat_map(|requirements| requirements.iter()),
+            )
+        } else {
+            Either::Left(std::iter::empty())
+        }
     }
 }

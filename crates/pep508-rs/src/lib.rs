@@ -33,6 +33,8 @@ use pyo3::{
     create_exception, exceptions::PyNotImplementedError, pyclass, pyclass::CompareOp, pymethods,
     pymodule, types::PyModule, IntoPy, PyObject, PyResult, Python,
 };
+use schemars::gen::SchemaGenerator;
+use schemars::schema::Schema;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
@@ -486,6 +488,25 @@ impl Reporter for TracingReporter {
         {
             tracing::warn!("{message}");
         }
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
+    fn schema_name() -> String {
+        "Requirement".to_string()
+    }
+
+    fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some("A PEP 508 dependency specifier".to_string()),
+                ..schemars::schema::Metadata::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
     }
 }
 

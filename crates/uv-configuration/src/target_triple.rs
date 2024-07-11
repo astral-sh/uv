@@ -72,6 +72,11 @@ pub enum TargetTriple {
     #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_28"))]
     X8664Manylinux228,
 
+    /// An `x86_64` target for the `manylinux_2_31` platform.
+    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_31"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_31"))]
+    X8664Manylinux231,
+
     /// An ARM64 target for the `manylinux_2_17` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_17"))]
     #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_17"))]
@@ -81,6 +86,11 @@ pub enum TargetTriple {
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_28"))]
     #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_28"))]
     Aarch64Manylinux228,
+
+    /// An ARM64 target for the `manylinux_2_31` platform.
+    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_31"))]
+    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_31"))]
+    Aarch64Manylinux231,
 }
 
 impl TargetTriple {
@@ -136,6 +146,13 @@ impl TargetTriple {
                 },
                 Arch::X86_64,
             ),
+            Self::X8664Manylinux231 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 31,
+                },
+                Arch::X86_64,
+            ),
             Self::Aarch64Manylinux217 => Platform::new(
                 Os::Manylinux {
                     major: 2,
@@ -147,6 +164,13 @@ impl TargetTriple {
                 Os::Manylinux {
                     major: 2,
                     minor: 28,
+                },
+                Arch::Aarch64,
+            ),
+            Self::Aarch64Manylinux231 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 31,
                 },
                 Arch::Aarch64,
             ),
@@ -165,8 +189,10 @@ impl TargetTriple {
             Self::X8664UnknownLinuxMusl => "x86_64",
             Self::X8664Manylinux217 => "x86_64",
             Self::X8664Manylinux228 => "x86_64",
+            Self::X8664Manylinux231 => "x86_64",
             Self::Aarch64Manylinux217 => "aarch64",
             Self::Aarch64Manylinux228 => "aarch64",
+            Self::Aarch64Manylinux231 => "aarch64",
         }
     }
 
@@ -182,8 +208,10 @@ impl TargetTriple {
             Self::X8664UnknownLinuxMusl => "Linux",
             Self::X8664Manylinux217 => "Linux",
             Self::X8664Manylinux228 => "Linux",
+            Self::X8664Manylinux231 => "Linux",
             Self::Aarch64Manylinux217 => "Linux",
             Self::Aarch64Manylinux228 => "Linux",
+            Self::Aarch64Manylinux231 => "Linux",
         }
     }
 
@@ -199,8 +227,10 @@ impl TargetTriple {
             Self::X8664UnknownLinuxMusl => "",
             Self::X8664Manylinux217 => "",
             Self::X8664Manylinux228 => "",
+            Self::X8664Manylinux231 => "",
             Self::Aarch64Manylinux217 => "",
             Self::Aarch64Manylinux228 => "",
+            Self::Aarch64Manylinux231 => "",
         }
     }
 
@@ -216,8 +246,10 @@ impl TargetTriple {
             Self::X8664UnknownLinuxMusl => "",
             Self::X8664Manylinux217 => "",
             Self::X8664Manylinux228 => "",
+            Self::X8664Manylinux231 => "",
             Self::Aarch64Manylinux217 => "",
             Self::Aarch64Manylinux228 => "",
+            Self::Aarch64Manylinux231 => "",
         }
     }
 
@@ -233,8 +265,10 @@ impl TargetTriple {
             Self::X8664UnknownLinuxMusl => "posix",
             Self::X8664Manylinux217 => "posix",
             Self::X8664Manylinux228 => "posix",
+            Self::X8664Manylinux231 => "posix",
             Self::Aarch64Manylinux217 => "posix",
             Self::Aarch64Manylinux228 => "posix",
+            Self::Aarch64Manylinux231 => "posix",
         }
     }
 
@@ -250,8 +284,10 @@ impl TargetTriple {
             Self::X8664UnknownLinuxMusl => "linux",
             Self::X8664Manylinux217 => "linux",
             Self::X8664Manylinux228 => "linux",
+            Self::X8664Manylinux231 => "linux",
             Self::Aarch64Manylinux217 => "linux",
             Self::Aarch64Manylinux228 => "linux",
+            Self::Aarch64Manylinux231 => "linux",
         }
     }
 

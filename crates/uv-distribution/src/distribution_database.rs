@@ -160,9 +160,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     FileLocation::RelativeUrl(base, url) => {
                         pypi_types::base_url_join_relative(base, url)?
                     }
-                    FileLocation::AbsoluteUrl(url) => {
-                        Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
-                    }
+                    FileLocation::AbsoluteUrl(url) => url.to_url(),
                     FileLocation::Path(path) => {
                         let cache_entry = self.build_context.cache().entry(
                             CacheBucket::Wheels,

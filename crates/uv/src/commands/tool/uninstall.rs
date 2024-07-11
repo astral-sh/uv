@@ -24,7 +24,18 @@ pub(crate) async fn uninstall(
         warn_user_once!("`uv tool uninstall` is experimental and may change without warning.");
     }
 
-    let installed_tools = InstalledTools::from_settings()?;
+    let installed_tools = InstalledTools::from_settings()?.init()?;
+    let _lock = match installed_tools.acquire_lock() {
+        Ok(lock) => lock,
+        Err(uv_tool::Error::IO(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(name) = name {
+                bail!("`{name}` is not installed");
+            }
+            writeln!(printer.stderr(), "Nothing to uninstall")?;
+            return Ok(ExitStatus::Success);
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     let mut entrypoints = if let Some(name) = name {
         let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {

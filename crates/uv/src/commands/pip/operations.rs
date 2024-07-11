@@ -180,7 +180,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     .await?;
 
     // Collect constraints and overrides.
-    let constraints = Constraints::from_requirements(constraints);
+    let constraints = Constraints::from_requirements(
+        constraints
+            .into_iter()
+            .chain(upgrade.constraints().cloned()),
+    );
     let overrides = Overrides::from_requirements(overrides);
     let preferences = Preferences::from_iter(preferences, markers);
 

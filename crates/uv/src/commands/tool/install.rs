@@ -23,7 +23,7 @@ use uv_python::{
 };
 use uv_requirements::RequirementsSpecification;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::project::{resolve_environment, sync_environment, update_environment};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -31,6 +31,7 @@ use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
+use crate::shell::Shell;
 
 /// Install a tool.
 pub(crate) async fn install(
@@ -153,7 +154,8 @@ pub(crate) async fn install(
         requirements
     };
 
-    let installed_tools = InstalledTools::from_settings()?;
+    let installed_tools = InstalledTools::from_settings()?.init()?;
+    let _lock = installed_tools.acquire_lock()?;
     let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
     let existing_environment =
         installed_tools
@@ -360,7 +362,6 @@ pub(crate) async fn install(
     )?;
 
     debug!("Adding receipt for tool `{}`", from.name);
-    let installed_tools = installed_tools.init()?;
     let tool = Tool::new(
         requirements
             .into_iter()
@@ -373,5 +374,75 @@ pub(crate) async fn install(
     );
     installed_tools.add_tool_receipt(&from.name, tool)?;
 
+    // If the executable directory isn't on the user's PATH, warn.
+    if !std::env::var_os("PATH")
+        .as_ref()
+        .iter()
+        .flat_map(std::env::split_paths)
+        .any(|path| same_file::is_same_file(&executable_directory, path).unwrap_or(false))
+    {
+        let dir = executable_directory.simplified_display();
+        let export = match Shell::from_env() {
+            None => None,
+            Some(Shell::Nushell) => None,
+            Some(Shell::Bash | Shell::Zsh) => Some(format!(
+                "export PATH=\"{}:$PATH\"",
+                backslash_escape(&dir.to_string()),
+            )),
+            Some(Shell::Fish) => Some(format!(
+                "fish_add_path \"{}\"",
+                backslash_escape(&dir.to_string()),
+            )),
+            Some(Shell::Csh) => Some(format!(
+                "setenv PATH \"{}:$PATH\"",
+                backslash_escape(&dir.to_string()),
+            )),
+            Some(Shell::Powershell) => Some(format!(
+                "$env:PATH = \"{};$env:PATH\"",
+                backtick_escape(&dir.to_string()),
+            )),
+            Some(Shell::Cmd) => Some(format!(
+                "set PATH=\"{};%PATH%\"",
+                backslash_escape(&dir.to_string()),
+            )),
+        };
+        if let Some(export) = export {
+            warn_user!(
+                "`{dir}` is not on your PATH. To use installed tools, run:\n  {}",
+                export.green()
+            );
+        } else {
+            warn_user!(
+                "`{dir}` is not on your PATH. To use installed tools, add the directory to your PATH",
+            );
+        }
+    }
+
     Ok(ExitStatus::Success)
+}
+
+/// Escape a string for use in a shell command by inserting backslashes.
+fn backslash_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' | '"' => escaped.push('\\'),
+            _ => {}
+        }
+        escaped.push(c);
+    }
+    escaped
+}
+
+/// Escape a string for use in a `PowerShell` command by inserting backticks.
+fn backtick_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' | '"' | '$' => escaped.push('`'),
+            _ => {}
+        }
+        escaped.push(c);
+    }
+    escaped
 }
