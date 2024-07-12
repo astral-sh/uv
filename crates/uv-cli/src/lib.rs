@@ -2087,6 +2087,10 @@ pub struct ToolRunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
+
+    /// Internal flag indicating execution via the `uvx` binary.
+    #[arg(long, hide = true)]
+    pub invoked_via_uvx: bool,
 }
 
 #[derive(Args)]

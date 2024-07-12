@@ -39,6 +39,7 @@ pub(crate) async fn run(
     with: Vec<String>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
+    invoked_via_uvx: bool,
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
@@ -49,8 +50,13 @@ pub(crate) async fn run(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let uv_command_to_run = if invoked_via_uvx {
+        "uvx"
+    } else {
+        "uv tool run"
+    };
     if preview.is_disabled() {
-        warn_user_once!("`uv tool run` is experimental and may change without warning.");
+        warn_user_once!("`{uv_command_to_run}` is experimental and may change without warning.");
     }
 
     let has_from = from.is_some();
@@ -144,7 +150,7 @@ pub(crate) async fn run(
                                 "However, the following executables are available:",
                             )?;
                         } else {
-                            let command = format!("uv tool run --from {from} <EXECUTABLE>");
+                            let command = format!("{uv_command_to_run} --from {from} <EXECUTABLE>");
                             writeln!(
                                 printer.stdout(),
                                 "However, the following executables are available via {}:",

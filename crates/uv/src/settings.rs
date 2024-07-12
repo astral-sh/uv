@@ -207,6 +207,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) invoked_via_uvx: bool,
 }
 
 impl ToolRunSettings {
@@ -221,6 +222,7 @@ impl ToolRunSettings {
             build,
             refresh,
             python,
+            invoked_via_uvx,
         } = args;
 
         Self {
@@ -233,6 +235,7 @@ impl ToolRunSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            invoked_via_uvx,
         }
     }
 }

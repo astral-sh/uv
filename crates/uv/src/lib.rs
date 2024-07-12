@@ -611,6 +611,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.with,
                 args.python,
                 args.settings,
+                args.invoked_via_uvx,
                 globals.isolated,
                 globals.preview,
                 globals.python_preference,
