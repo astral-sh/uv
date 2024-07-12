@@ -174,26 +174,24 @@ fn tool_run_at_version() {
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-    The executable pytest@8.0.0 was not found.
-    However, the following executables are available: via `uv tool run --from pytest <EXECUTABLE>`
-    - py.test
-    - pytest
+        success: false
+        exit_code: 1
+        ----- stdout -----
+        The executable pytest@8.0.0 was not found.
+        However, the following executables are available:
+        - py.test
+        - pytest
 
-    ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
-    Resolved 4 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 4 packages in [TIME]
-     + iniconfig==2.0.0
-     + packaging==24.0
-     + pluggy==1.4.0
-     + pytest==8.1.1
-    error: Failed to spawn: `pytest@8.0.0`
-      Caused by: No such file or directory (os error 2)
-    "###);
+        ----- stderr -----
+        warning: `uv tool run` is experimental and may change without warning.
+        Resolved 4 packages in [TIME]
+        Prepared 1 package in [TIME]
+        Installed 4 packages in [TIME]
+         + iniconfig==2.0.0
+         + packaging==24.0
+         + pluggy==1.4.0
+         + pytest==8.1.1
+        "###);
     }
 }
 
@@ -229,51 +227,21 @@ fn tool_run_from_version() {
 
 #[test]
 fn tool_run_suggest_valid_commands() {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--from")
-        .arg("black")
-        .arg("orange")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.tool_run()
+    .arg("--from")
+    .arg("black")
+    .arg("orange")
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
     The executable orange was not found.
-    However, the following executables are available: via `uv tool run --from black <EXECUTABLE>`
-    - black.exe
-    - blackd.exe
-
-    ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
-    Resolved 6 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    error: Failed to spawn: `orange`
-      Caused by: program not found
-    "###);
-    } else {
-        uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--from")
-        .arg("black")
-        .arg("orange")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-    The executable orange was not found.
-    However, the following executables are available: via `uv tool run --from black <EXECUTABLE>`
+    However, the following executables are available:
     - black
     - blackd
 
@@ -288,10 +256,26 @@ fn tool_run_suggest_valid_commands() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    error: Failed to spawn: `orange`
-      Caused by: No such file or directory (os error 2)
     "###);
-    }
+
+    uv_snapshot!(context.filters(), context.tool_run()
+    .arg("fastapi-cli")
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    The executable fastapi-cli was not found.
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning.
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + fastapi-cli==0.0.1
+     + importlib-metadata==1.7.0
+     + zipp==3.18.1
+    "###);
 }
 
 #[test]

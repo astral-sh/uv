@@ -16,7 +16,6 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
-use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -53,6 +52,8 @@ pub(crate) async fn run(
     if preview.is_disabled() {
         warn_user_once!("`uv tool run` is experimental and may change without warning.");
     }
+
+    let has_from = from.is_some();
 
     let (target, args) = command.split();
     let Some(target) = target else {
@@ -122,49 +123,42 @@ pub(crate) async fn run(
     );
     let mut handle = match process.spawn() {
         Ok(handle) => Ok(handle),
-        Err(e) => {
-            let site_packages = SitePackages::from_environment(&environment)
-                .context("Failed to read site packages")?;
-            let package = PackageName::from_str(&from).context("Invalid package name {from}")?;
-
-            let installed = site_packages.get_packages(&package);
-            let Some(installed_dist) = installed.first().copied() else {
-                bail!("Expected at least one requirement")
-            };
-
-            let entry_points = entrypoint_paths(
-                &environment,
-                installed_dist.name(),
-                installed_dist.version(),
-            )
-            .context("Failed to read entrypoints")?;
-
-            if !entry_points
-                .iter()
-                .map(|e| e.0.as_str())
-                .any(|e| *e == *command)
-            {
-                writeln!(
-                    printer.stdout(),
-                    "The executable {} was not found.",
-                    command.user_display().red()
-                )?;
-                if !entry_points.is_empty() {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            if let Ok(entrypoints) = get_entrypoints(&from, &environment) {
+                if entrypoints.is_empty() {
                     writeln!(
                         printer.stdout(),
-                        "However, the following executables are available: via `uv tool run --from {from} <EXECUTABLE>`",
+                        "The executable {} was not found.",
+                        command.to_string_lossy().red(),
                     )?;
-                }
-                for entry_point in entry_points {
+                } else {
                     writeln!(
                         printer.stdout(),
-                        "- {}",
-                        entry_point.0.user_display().cyan()
+                        "The executable {} was not found.",
+                        command.to_string_lossy().red()
                     )?;
+                    if has_from {
+                        writeln!(
+                            printer.stdout(),
+                            "However, the following executables are available:",
+                        )?;
+                    } else {
+                        let command = format!("uv tool run --from {from} <EXECUTABLE>");
+                        writeln!(
+                            printer.stdout(),
+                            "However, the following executables are available via {}:",
+                            command.green(),
+                        )?;
+                    }
+                    for (name, _) in entrypoints {
+                        writeln!(printer.stdout(), "- {}", name.cyan())?;
+                    }
                 }
+                return Ok(ExitStatus::Failure);
             };
-            Err(e)
+            Err(err)
         }
+        Err(err) => Err(err),
     }
     .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
 
@@ -177,6 +171,23 @@ pub(crate) async fn run(
     } else {
         Ok(ExitStatus::Failure)
     }
+}
+
+/// Return the entry points for the specified package.
+fn get_entrypoints(from: &str, environment: &PythonEnvironment) -> Result<Vec<(String, PathBuf)>> {
+    let site_packages = SitePackages::from_environment(environment)?;
+    let package = PackageName::from_str(from)?;
+
+    let installed = site_packages.get_packages(&package);
+    let Some(installed_dist) = installed.first().copied() else {
+        bail!("Expected at least one requirement")
+    };
+
+    Ok(entrypoint_paths(
+        environment,
+        installed_dist.name(),
+        installed_dist.version(),
+    )?)
 }
 
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
