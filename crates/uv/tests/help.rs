@@ -705,6 +705,9 @@ fn test_with_no_pager() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
