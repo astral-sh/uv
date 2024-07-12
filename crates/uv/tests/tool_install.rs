@@ -170,6 +170,66 @@ fn tool_install() {
     });
 }
 
+#[test]
+fn tool_install_suggest_other_packages_with_executable() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install_without_exclude_newer()
+    .arg("fastapi==0.111.0")
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    The executable fastapi was not found.
+    However, the executable fastapi is available via uv tool install <PACKAGE>:
+    - fastapi-cli
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning.
+    Resolved 35 packages in [TIME]
+    Prepared 35 packages in [TIME]
+    Installed 35 packages in [TIME]
+     + annotated-types==0.7.0
+     + anyio==4.4.0
+     + certifi==2024.7.4
+     + click==8.1.7
+     + dnspython==2.6.1
+     + email-validator==2.2.0
+     + fastapi==0.111.0
+     + fastapi-cli==0.0.4
+     + h11==0.14.0
+     + httpcore==1.0.5
+     + httptools==0.6.1
+     + httpx==0.27.0
+     + idna==3.7
+     + jinja2==3.1.4
+     + markdown-it-py==3.0.0
+     + markupsafe==2.1.5
+     + mdurl==0.1.2
+     + orjson==3.10.6
+     + pydantic==2.8.2
+     + pydantic-core==2.20.1
+     + pygments==2.18.0
+     + python-dotenv==1.0.1
+     + python-multipart==0.0.9
+     + pyyaml==6.0.1
+     + rich==13.7.1
+     + shellingham==1.5.4
+     + sniffio==1.3.1
+     + starlette==0.37.2
+     + typer==0.12.3
+     + typing-extensions==4.12.2
+     + ujson==5.10.0
+     + uvicorn==0.30.1
+     + uvloop==0.19.0
+     + watchfiles==0.22.0
+     + websockets==12.0
+    "###);
+}
+
 /// Test installing a tool at a version
 #[test]
 fn tool_install_version() {
@@ -911,8 +971,9 @@ fn tool_install_no_entrypoints() {
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
+    The executable iniconfig was not found.
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.
@@ -920,7 +981,6 @@ fn tool_install_no_entrypoints() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    error: No executables found for `iniconfig`
     "###);
 }
 

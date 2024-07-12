@@ -6,9 +6,9 @@ use std::str::FromStr;
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
-use distribution_types::Name;
+use distribution_types::{InstalledDist, Name};
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -19,7 +19,8 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_shell::Shell;
@@ -296,10 +297,41 @@ pub(crate) async fn install(
         .collect::<BTreeSet<_>>();
 
     if target_entry_points.is_empty() {
+        match matching_packages(&from.name, &environment) {
+            Ok(packages) => {
+                if packages.is_empty() {
+                    writeln!(
+                        printer.stdout(),
+                        "The executable {} was not found.",
+                        from.name.red()
+                    )?;
+                } else {
+                    writeln!(
+                        printer.stdout(),
+                        "The executable {} was not found.",
+                        from.name.red()
+                    )?;
+
+                    let command = "uv tool install <PACKAGE>";
+                    writeln!(
+                        printer.stdout(),
+                        "However, the executable {} is available via {}:",
+                        from.name.green(),
+                        command.green(),
+                    )?;
+
+                    for package in packages {
+                        writeln!(printer.stdout(), "- {}", package.name().cyan())?;
+                    }
+                }
+            }
+            Err(err) => {
+                warn!("Failed to get entrypoints for packages in this environment: {err}");
+            }
+        }
         // Clean up the environment we just created
         installed_tools.remove_environment(&from.name)?;
-
-        bail!("No executables found for `{}`", from.name);
+        return Ok(ExitStatus::Failure);
     }
 
     // Check if they exist, before installing
@@ -406,4 +438,29 @@ pub(crate) async fn install(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Return all packages which contain an executable for the given package name.
+fn matching_packages(
+    name: &PackageName,
+    environment: &PythonEnvironment,
+) -> Result<Vec<InstalledDist>> {
+    let site_packages = SitePackages::from_environment(environment)?;
+    let entrypoints = site_packages
+        .iter()
+        .filter_map(|package| {
+            match entrypoint_paths(environment, package.name(), package.version()).ok() {
+                Some(entrypoints) => {
+                    if entrypoints.iter().any(|e| e.0 == name.as_ref()) {
+                        Some(package.clone())
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            }
+        })
+        .collect();
+
+    Ok(entrypoints)
 }
