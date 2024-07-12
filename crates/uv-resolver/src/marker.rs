@@ -49,7 +49,8 @@ pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
 fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool {
     use MarkerOperator::*;
 
-    // The `in` and `not in` operators are not reversible, so we have to ensure the expressions match exactly.
+    // The `in` and `not in` operators are not reversible, so we have to ensure the expressions
+    // match exactly. Notably, `'a' in env` and `env not in 'a'` are not disjoint given `env == 'ab'`.
     match (this, other) {
         (
             MarkerExpression::String {
