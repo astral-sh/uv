@@ -1,6 +1,8 @@
+use itertools::Itertools;
 use tracing::debug;
 
 use cache_key::digest;
+use distribution_types::Resolution;
 use pypi_types::Requirement;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::Connectivity;
@@ -8,7 +10,6 @@ use uv_configuration::{Concurrency, PreviewMode};
 use uv_fs::{LockedFile, Simplified};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::RequirementsSpecification;
-use uv_resolver::Lock;
 
 use crate::commands::project::{resolve_environment, sync_environment};
 use crate::commands::SharedState;
@@ -59,7 +60,7 @@ impl CachedEnvironment {
         };
 
         // Resolve the requirements with the interpreter.
-        let resolution = resolve_environment(
+        let graph = resolve_environment(
             &interpreter,
             spec,
             settings.as_ref().into(),
@@ -72,13 +73,17 @@ impl CachedEnvironment {
             printer,
         )
         .await?;
+        let resolution = Resolution::from(graph);
 
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.
+        // TODO(charlie): Consider implementing `CacheKey` for `Resolution`.
         let resolution_hash = digest(
-            &Lock::from_resolution_graph(&resolution)?
-                .to_toml()?
+            &resolution
+                .distributions()
+                .map(std::string::ToString::to_string)
+                .join("\n")
                 .as_bytes(),
         );
 
@@ -126,7 +131,7 @@ impl CachedEnvironment {
         // struct that lets us "continue" from `resolve_environment`.
         let venv = sync_environment(
             venv,
-            &resolution.into(),
+            &resolution,
             settings.as_ref().into(),
             state,
             preview,
