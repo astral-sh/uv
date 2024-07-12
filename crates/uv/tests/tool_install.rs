@@ -184,8 +184,7 @@ fn tool_install_suggest_other_packages_with_executable() {
     exit_code: 1
     ----- stdout -----
     The executable fastapi was not found.
-    However, the executable fastapi is available via uv tool install <PACKAGE>:
-    - fastapi-cli
+    However, the executable fastapi is available via dependency fastapi-cli. Did you mean uv tool install fastapi-cli?
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning.

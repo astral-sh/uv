@@ -299,34 +299,41 @@ pub(crate) async fn install(
     if target_entry_points.is_empty() {
         match matching_packages(&from.name, &environment) {
             Ok(packages) => {
-                if packages.is_empty() {
-                    writeln!(
-                        printer.stdout(),
-                        "The executable {} was not found.",
-                        from.name.red()
-                    )?;
-                } else {
-                    writeln!(
-                        printer.stdout(),
-                        "The executable {} was not found.",
-                        from.name.red()
-                    )?;
+                writeln!(
+                    printer.stdout(),
+                    "The executable {} was not found.",
+                    from.name.red()
+                )?;
 
-                    let command = "uv tool install <PACKAGE>";
-                    writeln!(
-                        printer.stdout(),
-                        "However, the executable {} is available via {}:",
-                        from.name.green(),
-                        command.green(),
-                    )?;
+                match packages.as_slice() {
+                    [] => {}
+                    [package] => {
+                        let command = format!("uv tool install {}", package.name());
+                        writeln!(
+                            printer.stdout(),
+                            "However, the executable {} is available via dependency {}. Did you mean {}?",
+                            from.name.green(),
+                            package.name().green(),
+                            command.green(),
+                        )?;
+                    }
+                    packages => {
+                        let command = "uv tool install <PACKAGE>";
+                        writeln!(
+                            printer.stdout(),
+                            "However, the executable {} is available via {}:",
+                            from.name.green(),
+                            command.green(),
+                        )?;
 
-                    for package in packages {
-                        writeln!(printer.stdout(), "- {}", package.name().cyan())?;
+                        for package in packages {
+                            writeln!(printer.stdout(), "- {}", package.name().cyan())?;
+                        }
                     }
                 }
             }
             Err(err) => {
-                warn!("Failed to get entrypoints for packages in this environment: {err}");
+                warn!("Failed to determine executables for packages: {err}");
             }
         }
         // Clean up the environment we just created
