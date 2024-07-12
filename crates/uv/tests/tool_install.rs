@@ -1543,7 +1543,6 @@ fn tool_install_warn_path() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run:
-      export PATH="[TEMP_DIR]/bin:$PATH"
+    warning: [TEMP_DIR]/bin is not on your PATH. To use installed tools, run export PATH="[TEMP_DIR]/bin:$PATH" or uv tool update-shell.
     "###);
 }

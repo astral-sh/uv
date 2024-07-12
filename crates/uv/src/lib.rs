@@ -682,6 +682,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::tool_uninstall(args.name, globals.preview, printer).await
         }
         Commands::Tool(ToolNamespace {
+            command: ToolCommand::UpdateShell,
+        }) => {
+            commands::tool_update_shell(globals.preview, printer).await?;
+            Ok(ExitStatus::Success)
+        }
+        Commands::Tool(ToolNamespace {
             command: ToolCommand::Dir,
         }) => {
             commands::tool_dir(globals.preview)?;

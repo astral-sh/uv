@@ -2041,6 +2041,9 @@ pub enum ToolCommand {
     List(ToolListArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
+    /// Ensure that the tool executable directory is on `PATH`.
+    #[command(alias = "ensurepath")]
+    UpdateShell,
     /// Show the tools directory.
     Dir,
 }

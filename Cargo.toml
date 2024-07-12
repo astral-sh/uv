@@ -86,6 +86,7 @@ fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
 hex = { version = "0.4.3" }
+home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "1.1.0" }
 indexmap = { version = "2.2.5" }

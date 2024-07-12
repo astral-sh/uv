@@ -265,7 +265,6 @@ pub(crate) async fn install(
     };
 
     // Find a suitable path to install into
-    // TODO(zanieb): Warn if this directory is not on the PATH
     let executable_directory = find_executable_directory()?;
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
@@ -375,74 +374,36 @@ pub(crate) async fn install(
     installed_tools.add_tool_receipt(&from.name, tool)?;
 
     // If the executable directory isn't on the user's PATH, warn.
-    if !std::env::var_os("PATH")
-        .as_ref()
-        .iter()
-        .flat_map(std::env::split_paths)
-        .any(|path| same_file::is_same_file(&executable_directory, path).unwrap_or(false))
-    {
-        let dir = executable_directory.simplified_display();
-        let export = match Shell::from_env() {
-            None => None,
-            Some(Shell::Nushell) => None,
-            Some(Shell::Bash | Shell::Zsh) => Some(format!(
-                "export PATH=\"{}:$PATH\"",
-                backslash_escape(&dir.to_string()),
-            )),
-            Some(Shell::Fish) => Some(format!(
-                "fish_add_path \"{}\"",
-                backslash_escape(&dir.to_string()),
-            )),
-            Some(Shell::Csh) => Some(format!(
-                "setenv PATH \"{}:$PATH\"",
-                backslash_escape(&dir.to_string()),
-            )),
-            Some(Shell::Powershell) => Some(format!(
-                "$env:PATH = \"{};$env:PATH\"",
-                backtick_escape(&dir.to_string()),
-            )),
-            Some(Shell::Cmd) => Some(format!(
-                "set PATH=\"{};%PATH%\"",
-                backslash_escape(&dir.to_string()),
-            )),
-        };
-        if let Some(export) = export {
-            warn_user!(
-                "`{dir}` is not on your PATH. To use installed tools, run:\n  {}",
-                export.green()
-            );
+    if !Shell::contains_path(&executable_directory) {
+        if let Some(shell) = Shell::from_env() {
+            if let Some(command) = shell.prepend_path(&executable_directory) {
+                if shell.configuration_files().is_empty() {
+                    warn_user!(
+                        "{} is not on your PATH. To use installed tools, run {}.",
+                        executable_directory.simplified_display().cyan(),
+                        command.green()
+                    );
+                } else {
+                    warn_user!(
+                        "{} is not on your PATH. To use installed tools, run {} or {}.",
+                        executable_directory.simplified_display().cyan(),
+                        command.green(),
+                        "uv tool update-shell".green()
+                    );
+                }
+            } else {
+                warn_user!(
+                    "{} is not on your PATH. To use installed tools, add the directory to your PATH.",
+                    executable_directory.simplified_display().cyan(),
+                );
+            }
         } else {
             warn_user!(
-                "`{dir}` is not on your PATH. To use installed tools, add the directory to your PATH",
+                "{} is not on your PATH. To use installed tools, add the directory to your PATH.",
+                executable_directory.simplified_display().cyan(),
             );
         }
     }
 
     Ok(ExitStatus::Success)
-}
-
-/// Escape a string for use in a shell command by inserting backslashes.
-fn backslash_escape(s: &str) -> String {
-    let mut escaped = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' | '"' => escaped.push('\\'),
-            _ => {}
-        }
-        escaped.push(c);
-    }
-    escaped
-}
-
-/// Escape a string for use in a `PowerShell` command by inserting backticks.
-fn backtick_escape(s: &str) -> String {
-    let mut escaped = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' | '"' | '$' => escaped.push('`'),
-            _ => {}
-        }
-        escaped.push(c);
-    }
-    escaped
 }
