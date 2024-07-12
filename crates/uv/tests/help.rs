@@ -668,6 +668,8 @@ fn help_with_version() {
 fn test_with_no_pager() {
     let context = TestContext::new_with_versions(&[]);
 
+    // We can't really test wether the --no-pager option works with a snapshot test.
+    // It's still nice to have a test for the option to confirm the option exists.
     uv_snapshot!(context.filters(), context.help().arg("--no-pager"), @r###"
     success: true
     exit_code: 0
