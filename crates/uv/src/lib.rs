@@ -26,7 +26,7 @@ use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
 
-use crate::commands::ExitStatus;
+use crate::commands::{ExitStatus, ToolRunInvocationSource};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -598,9 +598,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Tool(ToolNamespace {
             command: run_variant @ (ToolCommand::Uvx(_) | ToolCommand::Run(_)),
         }) => {
-            let (args, uvx) = match run_variant {
-                ToolCommand::Uvx(args) => (args, true),
-                ToolCommand::Run(args) => (args, false),
+            let (args, invocation_source) = match run_variant {
+                ToolCommand::Uvx(args) => (args, ToolRunInvocationSource::Uvx),
+                ToolCommand::Run(args) => (args, ToolRunInvocationSource::ToolRun),
                 // OK guarded by the outer match statement
                 _ => unreachable!(),
             };
@@ -617,7 +617,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.with,
                 args.python,
                 args.settings,
-                uvx,
+                invocation_source,
                 globals.isolated,
                 globals.preview,
                 globals.python_preference,

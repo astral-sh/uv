@@ -1,8 +1,8 @@
-use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{borrow::Cow, fmt::Display};
 
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
@@ -32,6 +32,21 @@ use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
+/// Represents the source from which a tool was invoked.
+pub(crate) enum ToolRunInvocationSource {
+    Uvx,
+    ToolRun,
+}
+
+impl Display for ToolRunInvocationSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToolRunInvocationSource::Uvx => write!(f, "uvx"),
+            ToolRunInvocationSource::ToolRun => write!(f, "uv tool run"),
+        }
+    }
+}
+
 /// Run a command.
 pub(crate) async fn run(
     command: ExternalCommand,
@@ -39,7 +54,7 @@ pub(crate) async fn run(
     with: Vec<String>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-    invoked_via_uvx: bool,
+    invocation_source: ToolRunInvocationSource,
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
@@ -50,13 +65,8 @@ pub(crate) async fn run(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let uv_command_to_run = if invoked_via_uvx {
-        "uvx"
-    } else {
-        "uv tool run"
-    };
     if preview.is_disabled() {
-        warn_user_once!("`{uv_command_to_run}` is experimental and may change without warning.");
+        warn_user_once!("`{invocation_source}` is experimental and may change without warning.");
     }
 
     let has_from = from.is_some();
@@ -150,7 +160,7 @@ pub(crate) async fn run(
                                 "However, the following executables are available:",
                             )?;
                         } else {
-                            let command = format!("{uv_command_to_run} --from {from} <EXECUTABLE>");
+                            let command = format!("{invocation_source} --from {from} <EXECUTABLE>");
                             writeln!(
                                 printer.stdout(),
                                 "However, the following executables are available via {}:",
