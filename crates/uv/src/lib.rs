@@ -157,9 +157,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
     match *cli.command {
-        Commands::Help(args) => {
-            commands::help(args.command.unwrap_or_default().as_slice(), printer)
-        }
+        Commands::Help(args) => commands::help(
+            args.command.unwrap_or_default().as_slice(),
+            printer,
+            args.no_pager,
+        ),
         Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
         }) => {
