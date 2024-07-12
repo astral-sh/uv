@@ -38,9 +38,9 @@ pub struct BuildDispatch<'a> {
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
     flat_index: &'a FlatIndex,
-    index: &'a InMemoryIndex,
-    git: &'a GitResolver,
-    in_flight: &'a InFlight,
+    index: InMemoryIndex,
+    git: GitResolver,
+    in_flight: InFlight,
     setup_py: SetupPyStrategy,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
@@ -60,9 +60,9 @@ impl<'a> BuildDispatch<'a> {
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
-        index: &'a InMemoryIndex,
-        git: &'a GitResolver,
-        in_flight: &'a InFlight,
+        index: InMemoryIndex,
+        git: GitResolver,
+        in_flight: InFlight,
         index_strategy: IndexStrategy,
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
@@ -120,7 +120,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     }
 
     fn git(&self) -> &GitResolver {
-        self.git
+        &self.git
     }
 
     fn interpreter(&self) -> &Interpreter {
@@ -149,7 +149,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             Some(markers),
             Some(tags),
             self.flat_index,
-            self.index,
+            &self.index,
             &HashStrategy::None,
             self,
             EmptyInstalledPackages,
@@ -255,7 +255,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             );
 
             preparer
-                .prepare(remote, self.in_flight)
+                .prepare(remote, &self.in_flight)
                 .await
                 .context("Failed to prepare distributions")?
         };
