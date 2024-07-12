@@ -2,7 +2,6 @@ use std::fmt::Write;
 
 use anstream::eprint;
 use anyhow::Result;
-use futures::FutureExt;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -293,7 +292,6 @@ pub(crate) async fn pip_sync(
         printer,
         preview,
     )
-    .boxed()
     .await
     {
         Ok(resolution) => Resolution::from(resolution),

@@ -44,7 +44,7 @@ pub enum MetadataResponse {
     Offline,
 }
 
-pub trait ResolverProvider: Send + Sync {
+pub trait ResolverProvider: Sync {
     /// Get the version map for a package.
     fn get_package_versions<'io>(
         &'io self,

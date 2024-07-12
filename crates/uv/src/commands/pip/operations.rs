@@ -79,7 +79,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     overrides: Vec<UnresolvedRequirementSpecification>,
     dev: Vec<GroupName>,
     source_trees: Vec<PathBuf>,
-    project: Option<PackageName>,
+    mut project: Option<PackageName>,
     extras: &ExtrasSpecification,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
@@ -101,20 +101,72 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let start = std::time::Instant::now();
 
     // Resolve the requirements from the provided sources.
-    let (project, requirements) = collect_requirements(
-        requirements,
-        source_trees,
-        project,
-        extras,
-        hasher,
-        client,
-        index,
-        build_dispatch,
-        concurrency,
-        printer,
-        preview,
-    )
-    .await?;
+    let requirements = {
+        // Convert from unnamed to named requirements.
+        let mut requirements = NamedRequirementsResolver::new(
+            requirements,
+            hasher,
+            index,
+            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
+
+        // Resolve any source trees into requirements.
+        if !source_trees.is_empty() {
+            let resolutions = SourceTreeResolver::new(
+                source_trees,
+                extras,
+                hasher,
+                index,
+                DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve()
+            .await?;
+
+            // If we resolved a single project, use it for the project name.
+            project = project.or_else(|| {
+                if let [resolution] = &resolutions[..] {
+                    Some(resolution.project.clone())
+                } else {
+                    None
+                }
+            });
+
+            // If any of the extras were unused, surface a warning.
+            if let ExtrasSpecification::Some(extras) = extras {
+                let mut unused_extras = extras
+                    .iter()
+                    .filter(|extra| {
+                        !resolutions
+                            .iter()
+                            .any(|resolution| resolution.extras.contains(extra))
+                    })
+                    .collect::<Vec<_>>();
+                if !unused_extras.is_empty() {
+                    unused_extras.sort_unstable();
+                    unused_extras.dedup();
+                    let s = if unused_extras.len() == 1 { "" } else { "s" };
+                    return Err(anyhow!(
+                        "Requested extra{s} not found: {}",
+                        unused_extras.iter().join(", ")
+                    )
+                    .into());
+                }
+            }
+
+            // Extend the requirements with the resolved source trees.
+            requirements.extend(
+                resolutions
+                    .into_iter()
+                    .flat_map(|resolution| resolution.requirements),
+            );
+        }
+
+        requirements
+    };
 
     // Resolve the overrides from the provided sources.
     let overrides = NamedRequirementsResolver::new(
@@ -211,85 +263,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     )?;
 
     Ok(resolution)
-}
-
-async fn collect_requirements(
-    requirements: Vec<UnresolvedRequirementSpecification>,
-    source_trees: Vec<PathBuf>,
-    mut project: Option<PackageName>,
-    extras: &ExtrasSpecification,
-    hasher: &HashStrategy,
-    client: &RegistryClient,
-    index: &InMemoryIndex,
-    build_dispatch: &BuildDispatch,
-    concurrency: Concurrency,
-    printer: Printer,
-    preview: PreviewMode,
-) -> Result<(Option<PackageName>, Vec<Requirement>), Error> {
-    // Convert from unnamed to named requirements.
-    let mut requirements = NamedRequirementsResolver::new(
-        requirements,
-        hasher,
-        index,
-        DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve()
-    .await?;
-
-    // Resolve any source trees into requirements.
-    if !source_trees.is_empty() {
-        let resolutions = SourceTreeResolver::new(
-            source_trees,
-            extras,
-            hasher,
-            index,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
-
-        // If we resolved a single project, use it for the project name.
-        project = project.or_else(|| {
-            if let [resolution] = &resolutions[..] {
-                Some(resolution.project.clone())
-            } else {
-                None
-            }
-        });
-
-        // If any of the extras were unused, surface a warning.
-        if let ExtrasSpecification::Some(extras) = extras {
-            let mut unused_extras = extras
-                .iter()
-                .filter(|extra| {
-                    !resolutions
-                        .iter()
-                        .any(|resolution| resolution.extras.contains(extra))
-                })
-                .collect::<Vec<_>>();
-            if !unused_extras.is_empty() {
-                unused_extras.sort_unstable();
-                unused_extras.dedup();
-                let s = if unused_extras.len() == 1 { "" } else { "s" };
-                return Err(anyhow!(
-                    "Requested extra{s} not found: {}",
-                    unused_extras.iter().join(", ")
-                )
-                .into());
-            }
-        }
-
-        // Extend the requirements with the resolved source trees.
-        requirements.extend(
-            resolutions
-                .into_iter()
-                .flat_map(|resolution| resolution.requirements),
-        );
-    }
-
-    Ok((project, requirements))
 }
 
 #[derive(Debug, Clone, Copy)]
