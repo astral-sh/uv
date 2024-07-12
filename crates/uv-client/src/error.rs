@@ -61,6 +61,14 @@ impl Error {
                 return true;
             }
 
+            // The server doesn't support rage requests (it doesn't return the necessary headers).
+            ErrorKind::AsyncHttpRangeReader(
+                AsyncHttpRangeReaderError::ContentLengthMissing
+                | AsyncHttpRangeReaderError::ContentRangeMissing,
+            ) => {
+                return true;
+            }
+
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
             ErrorKind::WrappedReqwestError(err) => {
