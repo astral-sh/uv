@@ -25,6 +25,17 @@ struct SharedInMemoryIndex {
 pub(crate) type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
+    /// Create an `InMemoryIndex` with pre-filled packages and distributions.
+    pub fn with(
+        packages: FxOnceMap<PackageName, Arc<VersionsResponse>>,
+        distributions: FxOnceMap<VersionId, Arc<MetadataResponse>>,
+    ) -> InMemoryIndex {
+        InMemoryIndex(Arc::new(SharedInMemoryIndex {
+            packages,
+            distributions,
+        }))
+    }
+
     /// Returns a reference to the package metadata map.
     pub fn packages(&self) -> &FxOnceMap<PackageName, Arc<VersionsResponse>> {
         &self.0.packages

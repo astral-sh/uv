@@ -336,6 +336,7 @@ pub(crate) async fn pip_install(
         options,
         printer,
         preview,
+        false,
     )
     .await
     {

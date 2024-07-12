@@ -214,7 +214,7 @@ impl PrioritizedDist {
     pub fn insert_built(
         &mut self,
         dist: RegistryBuiltWheel,
-        hashes: Vec<HashDigest>,
+        hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
     ) {
         // Track the highest-priority wheel.
@@ -233,7 +233,7 @@ impl PrioritizedDist {
     pub fn insert_source(
         &mut self,
         dist: RegistrySourceDist,
-        hashes: Vec<HashDigest>,
+        hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
         // Track the highest-priority source.

@@ -1,7 +1,8 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
@@ -97,8 +98,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     options: Options,
     printer: Printer,
     preview: PreviewMode,
+    quiet: bool,
 ) -> Result<ResolutionGraph, Error> {
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     // Resolve the requirements from the provided sources.
     let requirements = {
@@ -250,7 +252,21 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         resolver.resolve().await?
     };
 
+    if !quiet {
+        resolution_success(&resolution, start, printer)?;
+    }
+
+    Ok(resolution)
+}
+
+// Prints a success message after completing resolution.
+pub(crate) fn resolution_success(
+    resolution: &ResolutionGraph,
+    start: Instant,
+    printer: Printer,
+) -> fmt::Result {
     let s = if resolution.len() == 1 { "" } else { "s" };
+
     writeln!(
         printer.stderr(),
         "{}",
@@ -260,9 +276,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
-    )?;
-
-    Ok(resolution)
+    )
 }
 
 #[derive(Debug, Clone, Copy)]

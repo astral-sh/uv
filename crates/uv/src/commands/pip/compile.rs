@@ -345,6 +345,7 @@ pub(crate) async fn pip_compile(
         options,
         printer,
         preview,
+        false,
     )
     .await
     {
