@@ -73,6 +73,10 @@ impl Shell {
     }
 
     /// Return the configuration files that should be modified to append to a shell's `PATH`.
+    ///
+    /// Some of the logic here is based on rustup's rc file detection.
+    ///
+    /// See: <https://github.com/rust-lang/rustup/blob/fede22fea7b160868cece632bd213e6d72f8912f/src/cli/self_update/shell.rs#L197>
     pub(crate) fn configuration_files(self) -> Vec<PathBuf> {
         let Some(home_dir) = home::home_dir() else {
             return vec![];
@@ -80,27 +84,67 @@ impl Shell {
         match self {
             Shell::Bash => {
                 // On Bash, we need to update both `.bashrc` and `.bash_profile`. The former is
-                // sourced for non-login shells, and the latter is sourced for login shells. If
-                // `.profile` is present, we prefer it over `.bash_profile`, to match the behavior
-                // of the system shell.
+                // sourced for non-login shells, and the latter is sourced for login shells.
+                //
+                // In lieu of `.bash_profile`, shells will also respect `.bash_login` and
+                // `.profile`, if they exist. So we respect those too.
                 vec![
+                    [".bash_profile", ".bash_login", ".profile"]
+                        .iter()
+                        .map(|rc| home_dir.join(rc))
+                        .find(|rc| rc.is_file())
+                        .unwrap_or_else(|| home_dir.join(".bash_profile")),
                     home_dir.join(".bashrc"),
-                    if home_dir.join(".profile").is_file() {
-                        home_dir.join(".profile")
-                    } else {
-                        home_dir.join(".bash_profile")
-                    },
                 ]
             }
             Shell::Zsh => {
-                // On Zsh, we only need to update `.zshrc`. This file is sourced for both login and
-                // non-login shells.
-                vec![home_dir.join(".zshrc")]
+                // On Zsh, we only need to update `.zshenv`. This file is sourced for both login and
+                // non-login shells. However, we match rustup's logic for determining _which_
+                // `.zshenv` to use.
+                //
+                // See: https://github.com/rust-lang/rustup/blob/fede22fea7b160868cece632bd213e6d72f8912f/src/cli/self_update/shell.rs#L197
+                let zsh_dot_dir = std::env::var("ZDOTDIR")
+                    .ok()
+                    .filter(|dir| !dir.is_empty())
+                    .map(PathBuf::from);
+
+                // Attempt to update an existing `.zshenv` file.
+                if let Some(zsh_dot_dir) = zsh_dot_dir.as_ref() {
+                    // If `ZDOTDIR` is set, and `ZDOTDIR/.zshenv` exists, then we update that file.
+                    let zshenv = zsh_dot_dir.join(".zshenv");
+                    if zshenv.is_file() {
+                        return vec![zshenv];
+                    }
+                } else {
+                    // If `ZDOTDIR` is _not_ set, and `~/.zshenv` exists, then we update that file.
+                    let zshenv = home_dir.join(".zshenv");
+                    if zshenv.is_file() {
+                        return vec![zshenv];
+                    }
+                }
+
+                if let Some(zsh_dot_dir) = zsh_dot_dir.as_ref() {
+                    // If `ZDOTDIR` is set, then we create `ZDOTDIR/.zshenv`.
+                    vec![zsh_dot_dir.join(".zshenv")]
+                } else {
+                    // If `ZDOTDIR` is _not_ set, then we create `~/.zshenv`.
+                    vec![home_dir.join(".zshenv")]
+                }
             }
             Shell::Fish => {
                 // On Fish, we only need to update `config.fish`. This file is sourced for both
-                // login and non-login shells.
-                vec![home_dir.join(".config/fish/config.fish")]
+                // login and non-login shells. However, we must respect Fish's logic, which reads
+                // from `$XDG_CONFIG_HOME/fish/config.fish` if set, and `~/.config/fish/config.fish`
+                // otherwise.
+                if let Some(xdg_home_dir) = std::env::var("XDG_CONFIG_HOME")
+                    .ok()
+                    .filter(|dir| !dir.is_empty())
+                    .map(PathBuf::from)
+                {
+                    vec![xdg_home_dir.join("fish/config.fish")]
+                } else {
+                    vec![home_dir.join(".config/fish/config.fish")]
+                }
             }
             Shell::Csh => {
                 // On Csh, we need to update both `.cshrc` and `.login`, like Bash.
