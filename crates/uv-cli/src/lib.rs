@@ -241,6 +241,10 @@ pub enum Commands {
 
 #[derive(Args, Debug)]
 pub struct HelpArgs {
+    /// Disable pager when printing help
+    #[arg(long)]
+    pub no_pager: bool,
+
     pub command: Option<Vec<String>>,
 }
 

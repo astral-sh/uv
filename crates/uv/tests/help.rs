@@ -663,3 +663,65 @@ fn help_with_version() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn test_with_no_pager() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // We can't really test whether the --no-pager option works with a snapshot test.
+    // It's still nice to have a test for the option to confirm the option exists.
+    uv_snapshot!(context.filters(), context.help().arg("--no-pager"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    An extremely fast Python package manager.
+
+    Usage: uv [OPTIONS] <COMMAND>
+
+    Commands:
+      pip      Resolve and install Python packages
+      tool     Run and manage executable Python packages
+      python   Manage Python installations
+      venv     Create a virtual environment
+      cache    Manage the cache
+      version  Display uv's version
+      help     Display documentation for a command
+
+    Options:
+      -q, --quiet
+              Do not print any output
+      -v, --verbose...
+              Use verbose output
+          --color <COLOR_CHOICE>
+              Control colors in output [default: auto] [possible values: auto, always, never]
+          --native-tls
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
+          --offline
+              Disable network access, relying only on locally cached data and locally available files
+          --python-preference <PYTHON_PREFERENCE>
+              Whether to prefer using Python from uv or on the system [possible values: only-managed,
+              installed, managed, system, only-system]
+          --python-fetch <PYTHON_FETCH>
+              Whether to automatically download Python when required [possible values: automatic,
+              manual]
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
+      -n, --no-cache
+              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
+          --cache-dir [CACHE_DIR]
+              Path to the cache directory [env: UV_CACHE_DIR=]
+          --config-file <CONFIG_FILE>
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+      -h, --help
+              Print help
+      -V, --version
+              Print version
+
+    Use `uv help <command>` for more information on a specific command.
+
+
+    ----- stderr -----
+    "###);
+}
