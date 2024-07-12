@@ -26,7 +26,7 @@ use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
 
-use crate::commands::ExitStatus;
+use crate::commands::{ExitStatus, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -598,21 +598,28 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::Run(args) | ToolCommand::Uvx(args),
+            command: run_variant @ (ToolCommand::Uvx(_) | ToolCommand::Run(_)),
         }) => {
+            let (args, invocation_source) = match run_variant {
+                ToolCommand::Uvx(args) => (args, ToolRunCommand::Uvx),
+                ToolCommand::Run(args) => (args, ToolRunCommand::ToolRun),
+                // OK guarded by the outer match statement
+                _ => unreachable!(),
+            };
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::ToolRunSettings::resolve(args, filesystem);
             show_settings!(args);
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
-
             commands::tool_run(
                 args.command,
                 args.from,
                 args.with,
                 args.python,
                 args.settings,
+                invocation_source,
                 globals.isolated,
                 globals.preview,
                 globals.python_preference,

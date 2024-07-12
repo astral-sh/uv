@@ -1,8 +1,8 @@
-use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{borrow::Cow, fmt::Display};
 
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
@@ -32,6 +32,23 @@ use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
+/// The user-facing command used to invoke a tool run.
+pub(crate) enum ToolRunCommand {
+    /// via the `uvx` alias
+    Uvx,
+    /// via `uv tool run`
+    ToolRun,
+}
+
+impl Display for ToolRunCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToolRunCommand::Uvx => write!(f, "uvx"),
+            ToolRunCommand::ToolRun => write!(f, "uv tool run"),
+        }
+    }
+}
+
 /// Run a command.
 pub(crate) async fn run(
     command: ExternalCommand,
@@ -39,6 +56,7 @@ pub(crate) async fn run(
     with: Vec<String>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
+    invocation_source: ToolRunCommand,
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
@@ -50,7 +68,7 @@ pub(crate) async fn run(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tool run` is experimental and may change without warning.");
+        warn_user_once!("`{invocation_source}` is experimental and may change without warning.");
     }
 
     let has_from = from.is_some();
@@ -144,7 +162,7 @@ pub(crate) async fn run(
                                 "However, the following executables are available:",
                             )?;
                         } else {
-                            let command = format!("uv tool run --from {from} <EXECUTABLE>");
+                            let command = format!("{invocation_source} --from {from} <EXECUTABLE>");
                             writeln!(
                                 printer.stdout(),
                                 "However, the following executables are available via {}:",
