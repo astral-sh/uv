@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use anstream::eprint;
+use futures::FutureExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
@@ -274,7 +275,7 @@ pub(crate) async fn pip_install(
 
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
-        BuildIsolation::Shared(&environment)
+        BuildIsolation::Shared(environment.clone())
     } else {
         BuildIsolation::Isolated
     };
@@ -284,20 +285,20 @@ pub(crate) async fn pip_install(
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
-        &client,
-        &cache,
-        interpreter,
-        &index_locations,
-        &flat_index,
-        &state.index,
-        &state.git,
-        &state.in_flight,
+        client.clone(),
+        cache.clone(),
+        interpreter.clone(),
+        index_locations.clone(),
+        flat_index.clone(),
+        state.index.clone(),
+        state.git.clone(),
+        state.in_flight.clone(),
         index_strategy,
         setup_py,
-        config_settings,
+        config_settings.clone(),
         build_isolation,
         link_mode,
-        &build_options,
+        build_options.clone(),
         exclude_newer,
         concurrency,
         preview,
@@ -337,6 +338,7 @@ pub(crate) async fn pip_install(
         printer,
         preview,
     )
+    .boxed()
     .await
     {
         Ok(resolution) => Resolution::from(resolution),

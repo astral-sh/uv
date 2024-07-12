@@ -9,6 +9,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
+use futures::FutureExt;
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 
@@ -242,6 +243,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Pip(PipNamespace {
@@ -304,6 +306,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Pip(PipNamespace {
@@ -382,6 +385,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Pip(PipNamespace {
@@ -418,6 +422,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.keyring_provider,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Pip(PipNamespace {
@@ -580,10 +585,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Project(project) => {
-            run_project(project, globals, filesystem, cache, printer).await
+            run_project(project, globals, filesystem, cache, printer)
+                .boxed_local()
+                .await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
@@ -630,6 +638,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Tool(ToolNamespace {
@@ -658,6 +667,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Tool(ToolNamespace {
@@ -670,7 +680,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::tool_list(globals.preview, &cache, printer).await
+            commands::tool_list(globals.preview, &cache, printer)
+                .boxed_local()
+                .await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Uninstall(args),
@@ -679,7 +691,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::ToolUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::tool_uninstall(args.name, globals.preview, printer).await
+            commands::tool_uninstall(args.name, globals.preview, printer)
+                .boxed_local()
+                .await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::UpdateShell,
@@ -713,6 +727,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Python(PythonNamespace {
@@ -735,6 +750,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Python(PythonNamespace {
@@ -744,7 +760,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.targets, args.all, globals.preview, printer).await
+            commands::python_uninstall(args.targets, args.all, globals.preview, printer)
+                .boxed_local()
+                .await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -762,6 +780,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Python(PythonNamespace {
@@ -781,6 +800,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         Commands::Python(PythonNamespace {
@@ -848,6 +868,7 @@ async fn run_project(
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         ProjectCommand::Sync(args) => {
@@ -875,6 +896,7 @@ async fn run_project(
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         ProjectCommand::Lock(args) => {
@@ -897,6 +919,7 @@ async fn run_project(
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         ProjectCommand::Add(args) => {
@@ -928,6 +951,7 @@ async fn run_project(
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         ProjectCommand::Remove(args) => {
@@ -953,6 +977,7 @@ async fn run_project(
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
         ProjectCommand::Tree(args) => {
@@ -980,6 +1005,7 @@ async fn run_project(
                 &cache,
                 printer,
             )
+            .boxed_local()
             .await
         }
     }

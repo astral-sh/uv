@@ -117,7 +117,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 tags,
                                 hashes,
                             )
-                            .boxed_local()
+                            .boxed()
                             .await;
                     }
                 };
@@ -138,7 +138,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             tags,
                             hashes,
                         )
-                        .boxed_local()
+                        .boxed()
                         .await;
                 }
 
@@ -152,7 +152,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     hashes,
                     client,
                 )
-                .boxed_local()
+                .boxed()
                 .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
@@ -176,17 +176,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     hashes,
                     client,
                 )
-                .boxed_local()
+                .boxed()
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
                 self.git(source, &GitSourceUrl::from(dist), tags, hashes, client)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
                 self.source_tree(source, &DirectorySourceUrl::from(dist), tags, hashes)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
@@ -201,7 +201,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     tags,
                     hashes,
                 )
-                .boxed_local()
+                .boxed()
                 .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
@@ -228,17 +228,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     hashes,
                     client,
                 )
-                .boxed_local()
+                .boxed()
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
                 self.git(source, resource, tags, hashes, client)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
                 self.source_tree(source, resource, tags, hashes)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
@@ -247,7 +247,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     WheelCache::Path(resource.url).root(),
                 );
                 self.archive(source, resource, &cache_shard, tags, hashes)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
         };
@@ -292,7 +292,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 &cache_shard,
                                 hashes,
                             )
-                            .boxed_local()
+                            .boxed()
                             .await;
                     }
                 };
@@ -312,7 +312,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             &cache_shard,
                             hashes,
                         )
-                        .boxed_local()
+                        .boxed()
                         .await;
                 }
 
@@ -325,7 +325,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     hashes,
                     client,
                 )
-                .boxed_local()
+                .boxed()
                 .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
@@ -348,17 +348,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     hashes,
                     client,
                 )
-                .boxed_local()
+                .boxed()
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
                 self.git_metadata(source, &GitSourceUrl::from(dist), hashes, client)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
                 self.source_tree_metadata(source, &DirectorySourceUrl::from(dist), hashes)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
@@ -367,7 +367,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .cache()
                     .shard(CacheBucket::BuiltWheels, WheelCache::Path(&dist.url).root());
                 self.archive_metadata(source, &PathSourceUrl::from(dist), &cache_shard, hashes)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
@@ -393,17 +393,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     hashes,
                     client,
                 )
-                .boxed_local()
+                .boxed()
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
                 self.git_metadata(source, resource, hashes, client)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
                 self.source_tree_metadata(source, resource, hashes)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
@@ -412,7 +412,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     WheelCache::Path(resource.url).root(),
                 );
                 self.archive_metadata(source, resource, &cache_shard, hashes)
-                    .boxed_local()
+                    .boxed()
                     .await?
             }
         };
@@ -546,7 +546,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, source_dist_entry.path(), subdirectory)
-            .boxed_local()
+            .boxed()
             .await?
         {
             // Store the metadata.
@@ -626,7 +626,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 Ok(revision.with_hashes(hashes))
             }
-            .boxed_local()
+            .boxed()
             .instrument(info_span!("download", source_dist = %source))
         };
         let req = Self::request(url.clone(), client.unmanaged)?;
@@ -773,7 +773,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, source_entry.path(), None)
-            .boxed_local()
+            .boxed()
             .await?
         {
             // Store the metadata.
@@ -986,7 +986,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, &resource.path, None)
-            .boxed_local()
+            .boxed()
             .await?
         {
             // Store the metadata.
@@ -1233,7 +1233,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
             .build_metadata(source, fetch.path(), resource.subdirectory)
-            .boxed_local()
+            .boxed()
             .await?
         {
             // Store the metadata.

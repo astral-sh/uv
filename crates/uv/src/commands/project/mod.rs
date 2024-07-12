@@ -1,7 +1,7 @@
-use std::fmt::Write;
-
+use futures::FutureExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::fmt::Write;
 use tracing::debug;
 
 use distribution_types::{Resolution, UnresolvedRequirementSpecification};
@@ -208,6 +208,7 @@ impl FoundInterpreter {
             cache,
             Some(&reporter),
         )
+        .boxed()
         .await?
         .into_interpreter();
 
@@ -348,20 +349,20 @@ pub(crate) async fn resolve_names(
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        interpreter,
-        index_locations,
-        &flat_index,
-        &state.index,
-        &state.git,
-        &state.in_flight,
+        client.clone(),
+        cache.clone(),
+        interpreter.clone(),
+        index_locations.clone(),
+        flat_index.clone(),
+        state.index.clone(),
+        state.git.clone(),
+        state.in_flight.clone(),
         *index_strategy,
         setup_py,
-        config_setting,
+        config_setting.clone(),
         build_isolation,
         *link_mode,
-        build_options,
+        build_options.clone(),
         *exclude_newer,
         concurrency,
         preview,
@@ -451,20 +452,20 @@ pub(crate) async fn resolve_environment<'a>(
 
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        interpreter,
-        index_locations,
-        &flat_index,
-        &state.index,
-        &state.git,
-        &state.in_flight,
+        client.clone(),
+        cache.clone(),
+        interpreter.clone(),
+        index_locations.clone(),
+        flat_index.clone(),
+        state.index.clone(),
+        state.git.clone(),
+        state.in_flight.clone(),
         index_strategy,
         setup_py,
-        config_setting,
+        config_setting.clone(),
         build_isolation,
         link_mode,
-        build_options,
+        build_options.clone(),
         exclude_newer,
         concurrency,
         preview,
@@ -496,6 +497,7 @@ pub(crate) async fn resolve_environment<'a>(
         printer,
         preview,
     )
+    .boxed()
     .await?)
 }
 
@@ -558,20 +560,20 @@ pub(crate) async fn sync_environment(
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        interpreter,
-        index_locations,
-        &flat_index,
-        &state.index,
-        &state.git,
-        &state.in_flight,
+        client.clone(),
+        cache.clone(),
+        interpreter.clone(),
+        index_locations.clone(),
+        flat_index.clone(),
+        state.index.clone(),
+        state.git.clone(),
+        state.in_flight.clone(),
         index_strategy,
         setup_py,
-        config_setting,
+        config_setting.clone(),
         build_isolation,
         link_mode,
-        build_options,
+        build_options.clone(),
         exclude_newer,
         concurrency,
         preview,
@@ -702,20 +704,20 @@ pub(crate) async fn update_environment(
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        interpreter,
-        index_locations,
-        &flat_index,
-        &state.index,
-        &state.git,
-        &state.in_flight,
+        client.clone(),
+        cache.clone(),
+        interpreter.clone(),
+        index_locations.clone(),
+        flat_index.clone(),
+        state.index.clone(),
+        state.git.clone(),
+        state.in_flight.clone(),
         *index_strategy,
         setup_py,
-        config_setting,
+        config_setting.clone(),
         build_isolation,
         *link_mode,
-        build_options,
+        build_options.clone(),
         *exclude_newer,
         concurrency,
         preview,
@@ -747,6 +749,7 @@ pub(crate) async fn update_environment(
         printer,
         preview,
     )
+    .boxed()
     .await
     {
         Ok(resolution) => Resolution::from(resolution),

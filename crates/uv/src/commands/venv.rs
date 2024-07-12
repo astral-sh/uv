@@ -5,6 +5,7 @@ use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
+use futures::FutureExt;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -149,6 +150,7 @@ async fn venv_impl(
         cache,
         Some(&reporter),
     )
+    .boxed()
     .await
     .into_diagnostic()?
     .into_interpreter();
@@ -227,20 +229,20 @@ async fn venv_impl(
 
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
-            &client,
-            cache,
-            interpreter,
-            index_locations,
-            &flat_index,
-            &state.index,
-            &state.git,
-            &state.in_flight,
+            client.clone(),
+            cache.clone(),
+            interpreter.clone(),
+            index_locations.clone(),
+            flat_index.clone(),
+            state.index.clone(),
+            state.git.clone(),
+            state.in_flight.clone(),
             index_strategy,
             SetupPyStrategy::default(),
-            &config_settings,
+            config_settings.clone(),
             BuildIsolation::Isolated,
             link_mode,
-            &build_options,
+            build_options.clone(),
             exclude_newer,
             concurrency,
             preview,

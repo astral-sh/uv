@@ -77,7 +77,7 @@ mod reporter;
 mod urls;
 
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
-    state: ResolverState<InstalledPackages>,
+    state: Box<ResolverState<InstalledPackages>>,
     provider: Provider,
 }
 
@@ -217,7 +217,10 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             reporter: None,
             installed_packages,
         };
-        Ok(Self { state, provider })
+        Ok(Self {
+            state: Box::new(state),
+            provider,
+        })
     }
 
     /// Set the [`Reporter`] to use for this installer.
@@ -226,17 +229,17 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let reporter = Arc::new(reporter);
 
         Self {
-            state: ResolverState {
+            state: Box::new(ResolverState {
                 reporter: Some(reporter.clone()),
-                ..self.state
-            },
+                ..*self.state
+            }),
             provider: self.provider.with_reporter(Facade { reporter }),
         }
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
     pub async fn resolve(self) -> Result<ResolutionGraph, ResolveError> {
-        let state = Arc::new(self.state);
+        let state = Arc::new(*self.state);
         let provider = Arc::new(self.provider);
 
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
@@ -1546,7 +1549,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         request_stream: Receiver<Request>,
     ) -> Result<(), ResolveError> {
         let mut response_stream = ReceiverStream::new(request_stream)
-            .map(|request| self.process_request(request, &*provider).boxed_local())
+            .map(|request| self.process_request(request, &*provider).boxed())
             // Allow as many futures as possible to start in the background.
             // Backpressure is provided by at a more granular level by `DistributionDatabase`
             // and `SourceDispatch`, as well as the bounded request channel.
@@ -1623,7 +1626,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Request::Package(package_name) => {
                 let package_versions = provider
                     .get_package_versions(&package_name)
-                    .boxed_local()
+                    .boxed()
                     .await
                     .map_err(ResolveError::Client)?;
 
@@ -1634,7 +1637,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Request::Dist(dist) => {
                 let metadata = provider
                     .get_or_build_wheel_metadata(&dist)
-                    .boxed_local()
+                    .boxed()
                     .await
                     .map_err(|err| match dist.clone() {
                         Dist::Built(built_dist @ BuiltDist::Path(_)) => {
@@ -1768,7 +1771,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ResolvedDist::Installable(dist) => {
                             let metadata = provider
                                 .get_or_build_wheel_metadata(&dist)
-                                .boxed_local()
+                                .boxed()
                                 .await
                                 .map_err(|err| match dist.clone() {
                                     Dist::Built(built_dist @ BuiltDist::Path(_)) => {

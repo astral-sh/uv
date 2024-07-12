@@ -7,8 +7,8 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Output};
-use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::{env, iter};
 
 use fs_err as fs;
@@ -353,9 +353,9 @@ impl Pep517Backend {
 #[derive(Debug, Default, Clone)]
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
-    default_resolution: Rc<Mutex<Option<Resolution>>>,
+    default_resolution: Arc<Mutex<Option<Resolution>>>,
     /// An in-memory resolution of the build requirements for `--legacy-setup-py` builds.
-    setup_py_resolution: Rc<Mutex<Option<Resolution>>>,
+    setup_py_resolution: Arc<Mutex<Option<Resolution>>>,
 }
 
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py
@@ -409,7 +409,7 @@ impl SourceBuild {
         version_id: String,
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
-        build_isolation: BuildIsolation<'_>,
+        build_isolation: BuildIsolation,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
         concurrent_builds: usize,
@@ -430,7 +430,7 @@ impl SourceBuild {
                 .map_err(|err| *err)?;
 
         // Create a virtual environment, or install into the shared environment if requested.
-        let venv = match build_isolation {
+        let venv = match &build_isolation {
             BuildIsolation::Isolated => uv_virtualenv::create_venv(
                 temp_dir.path(),
                 interpreter.clone(),
@@ -444,20 +444,30 @@ impl SourceBuild {
         // Setup the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         if build_isolation.is_isolated() {
-            let resolved_requirements = Self::get_resolved_requirements(
-                build_context,
-                source_build_context,
-                &default_backend,
-                pep517_backend.as_ref(),
-            )
-            .await?;
-
-            build_context
-                .install(&resolved_requirements, &venv)
+            let build_context_ = build_context.clone();
+            let source_build_context = source_build_context.clone();
+            let default_backend = default_backend.clone();
+            let pep517_backend = pep517_backend.clone();
+            let resolved_requirements = tokio::task::spawn(async move {
+                Self::get_resolved_requirements(
+                    &build_context_,
+                    source_build_context,
+                    &default_backend,
+                    pep517_backend.as_ref(),
+                )
                 .await
-                .map_err(|err| {
-                    Error::RequirementsInstall("build-system.requires (install)", err)
-                })?;
+            })
+            .await
+            .expect("Tokio executor failed, was there a panic?")?;
+
+            let build_context_ = build_context.clone();
+            let venv = venv.clone();
+            tokio::task::spawn(async move {
+                build_context_.install(&resolved_requirements, &venv).await
+            })
+            .await
+            .expect("Tokio executor failed, was there a panic?")
+            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
         }
 
         // Figure out what the modified path should be

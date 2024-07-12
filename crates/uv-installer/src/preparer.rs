@@ -79,7 +79,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         distributions
             .into_iter()
             .map(|dist| async {
-                let wheel = self.get_wheel(dist, in_flight).boxed_local().await?;
+                let wheel = self.get_wheel(dist, in_flight).boxed().await?;
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
@@ -121,7 +121,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             let result = self
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
-                .boxed_local()
+                .boxed()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
                 .await
                 .and_then(|wheel: LocalWheel| {

@@ -1,6 +1,6 @@
 use anstream::eprint;
-
 use distribution_types::UnresolvedRequirementSpecification;
+use futures::FutureExt;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
@@ -196,20 +196,20 @@ pub(super) async fn do_lock(
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        interpreter,
-        index_locations,
-        &flat_index,
-        &state.index,
-        &state.git,
-        &state.in_flight,
+        client.clone(),
+        cache.clone(),
+        interpreter.clone(),
+        index_locations.clone(),
+        flat_index.clone(),
+        state.index.clone(),
+        state.git.clone(),
+        state.in_flight.clone(),
         index_strategy,
         setup_py,
-        config_setting,
+        config_setting.clone(),
         build_isolation,
         link_mode,
-        build_options,
+        build_options.clone(),
         exclude_newer,
         concurrency,
         preview,
@@ -241,6 +241,7 @@ pub(super) async fn do_lock(
         printer,
         preview,
     )
+    .boxed()
     .await?;
 
     // Notify the user of any resolution diagnostics.

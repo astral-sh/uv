@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, sync::Arc};
 
 use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tracing::trace;
@@ -175,6 +175,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 let archive = self
                     .database
                     .get_or_build_wheel_metadata(&dist, self.hasher.get(&dist))
+                    .boxed()
                     .await
                     .map_err(|err| match &dist {
                         Dist::Built(built) => LookaheadError::Download(built.clone(), err),

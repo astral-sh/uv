@@ -4,6 +4,7 @@ use std::fmt::Write;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
+use futures::FutureExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -73,6 +74,7 @@ pub(crate) async fn install(
         cache,
         Some(&reporter),
     )
+    .boxed()
     .await?
     .into_interpreter();
 
@@ -222,6 +224,7 @@ pub(crate) async fn install(
             cache,
             printer,
         )
+        .boxed_local()
         .await?
     } else {
         // If we're creating a new environment, ensure that we can resolve the requirements prior
@@ -238,6 +241,7 @@ pub(crate) async fn install(
             cache,
             printer,
         )
+        .boxed_local()
         .await?;
 
         let environment = installed_tools.create_environment(&from.name, interpreter)?;
