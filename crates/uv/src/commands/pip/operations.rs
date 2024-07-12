@@ -232,22 +232,33 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             }
         };
 
-        let resolver = Resolver::new(
-            manifest,
-            options,
-            &python_requirement,
-            markers,
-            tags,
-            flat_index,
-            index,
-            hasher,
-            build_dispatch,
-            installed_packages,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
-        )?
-        .with_reporter(reporter);
+        let hasher = hasher.clone();
+        let tags = tags.cloned();
+        let client = client.clone();
+        let flat_index = flat_index.clone();
+        let markers = markers.cloned();
+        let index = index.clone();
+        let build_dispatch = build_dispatch.clone();
 
-        resolver.resolve().await?
+        tokio::task::spawn(async move {
+            let resolver = Resolver::new(
+                manifest,
+                options,
+                &python_requirement,
+                markers.as_ref(),
+                tags.as_ref(),
+                &flat_index,
+                &index,
+                &hasher,
+                &build_dispatch,
+                installed_packages,
+                DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+            )?
+            .with_reporter(reporter);
+            resolver.resolve().await
+        })
+        .await
+        .unwrap()?
     };
 
     let s = if resolution.len() == 1 { "" } else { "s" };
@@ -372,18 +383,26 @@ pub(crate) async fn install(
     } else {
         let start = std::time::Instant::now();
 
-        let preparer = Preparer::new(
-            cache,
-            tags,
-            hasher,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
-        )
-        .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
+        let cache = cache.clone();
+        let tags = tags.clone();
+        let hasher = hasher.clone();
+        let client = client.clone();
+        let in_flight = in_flight.clone();
+        let build_dispatch = build_dispatch.clone();
+        let wheels = tokio::task::spawn(async move {
+            let preparer = Preparer::new(
+                &cache,
+                &tags,
+                &hasher,
+                DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+            )
+            .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
 
-        let wheels = preparer
-            .prepare(remote.clone(), in_flight)
-            .await
-            .context("Failed to prepare distributions")?;
+            preparer.prepare(remote.clone(), &in_flight).await
+        })
+        .await
+        .unwrap()
+        .context("Failed to prepare distributions")?;
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(

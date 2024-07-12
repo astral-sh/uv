@@ -341,11 +341,8 @@ impl TestContext {
             .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
             .current_dir(self.temp_dir.path());
 
-        if cfg!(all(windows, debug_assertions)) {
-            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-            // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-        }
+        // Set the same stack size as the windows default (1MB) across all platforms,
+        command.env("UV_STACK_SIZE", (1024 * 1024).to_string());
     }
 
     /// Create a `pip compile` command for testing.
