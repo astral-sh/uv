@@ -1,6 +1,6 @@
 use anstream::eprint;
-
 use distribution_types::UnresolvedRequirementSpecification;
+use futures::FutureExt;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
@@ -241,6 +241,7 @@ pub(super) async fn do_lock(
         printer,
         preview,
     )
+    .boxed()
     .await?;
 
     // Notify the user of any resolution diagnostics.

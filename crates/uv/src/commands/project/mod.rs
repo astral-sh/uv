@@ -1,7 +1,7 @@
-use std::fmt::Write;
-
+use futures::FutureExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::fmt::Write;
 use tracing::debug;
 
 use distribution_types::{Resolution, UnresolvedRequirementSpecification};
@@ -208,6 +208,7 @@ impl FoundInterpreter {
             cache,
             Some(&reporter),
         )
+        .boxed()
         .await?
         .into_interpreter();
 
@@ -496,6 +497,7 @@ pub(crate) async fn resolve_environment<'a>(
         printer,
         preview,
     )
+    .boxed()
     .await?)
 }
 
@@ -747,6 +749,7 @@ pub(crate) async fn update_environment(
         printer,
         preview,
     )
+    .boxed()
     .await
     {
         Ok(resolution) => Resolution::from(resolution),

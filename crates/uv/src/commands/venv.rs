@@ -5,6 +5,7 @@ use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
+use futures::FutureExt;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -149,6 +150,7 @@ async fn venv_impl(
         cache,
         Some(&reporter),
     )
+    .boxed()
     .await
     .into_diagnostic()?
     .into_interpreter();

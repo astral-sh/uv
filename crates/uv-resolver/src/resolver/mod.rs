@@ -77,7 +77,7 @@ mod reporter;
 mod urls;
 
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
-    state: ResolverState<InstalledPackages>,
+    state: Box<ResolverState<InstalledPackages>>,
     provider: Provider,
 }
 
@@ -217,7 +217,10 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             reporter: None,
             installed_packages,
         };
-        Ok(Self { state, provider })
+        Ok(Self {
+            state: Box::new(state),
+            provider,
+        })
     }
 
     /// Set the [`Reporter`] to use for this installer.
@@ -226,17 +229,17 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let reporter = Arc::new(reporter);
 
         Self {
-            state: ResolverState {
+            state: Box::new(ResolverState {
                 reporter: Some(reporter.clone()),
-                ..self.state
-            },
+                ..*self.state
+            }),
             provider: self.provider.with_reporter(Facade { reporter }),
         }
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
     pub async fn resolve(self) -> Result<ResolutionGraph, ResolveError> {
-        let state = Arc::new(self.state);
+        let state = Arc::new(*self.state);
         let provider = Arc::new(self.provider);
 
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version

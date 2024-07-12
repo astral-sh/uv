@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
+use futures::FutureExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
@@ -82,6 +83,7 @@ pub(crate) async fn run(
         cache,
         printer,
     )
+    .boxed_local()
     .await?;
     // TODO(zanieb): Determine the command via the package entry points
     let command = target;
@@ -232,6 +234,7 @@ async fn get_or_create_environment(
         cache,
         Some(&reporter),
     )
+    .boxed()
     .await?
     .into_interpreter();
 
@@ -328,6 +331,7 @@ async fn get_or_create_environment(
         cache,
         printer,
     )
+    .boxed_local()
     .await?;
 
     Ok(environment.into())

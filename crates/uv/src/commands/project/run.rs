@@ -4,6 +4,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use futures::FutureExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
@@ -99,6 +100,7 @@ pub(crate) async fn run(
                 cache,
                 Some(&reporter),
             )
+            .boxed()
             .await?
             .into_interpreter();
 
@@ -120,6 +122,7 @@ pub(crate) async fn run(
                 cache,
                 printer,
             )
+            .boxed_local()
             .await?;
 
             Some(environment.into_interpreter())
@@ -178,6 +181,7 @@ pub(crate) async fn run(
                 cache,
                 printer,
             )
+            .boxed_local()
             .await?;
 
             // Read the existing lockfile.
@@ -197,6 +201,7 @@ pub(crate) async fn run(
                 cache,
                 printer,
             )
+            .boxed_local()
             .await?;
 
             if !existing.is_some_and(|existing| existing == lock) {
@@ -239,6 +244,7 @@ pub(crate) async fn run(
                 cache,
                 Some(&reporter),
             )
+            .boxed()
             .await?;
 
             python.into_interpreter()
@@ -263,8 +269,9 @@ pub(crate) async fn run(
             .connectivity(connectivity)
             .native_tls(native_tls);
 
-        let spec =
-            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+        let spec = RequirementsSpecification::from_simple_sources(&requirements, &client_builder)
+            .boxed()
+            .await?;
 
         Some(spec)
     };
@@ -336,6 +343,7 @@ pub(crate) async fn run(
                 cache,
                 Some(&reporter),
             )
+            .boxed()
             .await?
             .into_interpreter()
         };
@@ -366,6 +374,7 @@ pub(crate) async fn run(
 
             let spec =
                 RequirementsSpecification::from_simple_sources(&requirements, &client_builder)
+                    .boxed()
                     .await?;
 
             // Install the ephemeral requirements.
@@ -382,6 +391,7 @@ pub(crate) async fn run(
                     cache,
                     printer,
                 )
+                .boxed_local()
                 .await?,
             )
         }

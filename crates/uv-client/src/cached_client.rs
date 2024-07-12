@@ -253,9 +253,9 @@ impl CachedClient {
             CachedResponse::NotModified { cached, new_policy } => {
                 let refresh_cache =
                     info_span!("refresh_cache", file = %cache_entry.path().display());
+                let data_with_cache_policy_bytes =
+                    DataWithCachePolicy::serialize(&new_policy, &cached.data)?;
                 async {
-                    let data_with_cache_policy_bytes =
-                        DataWithCachePolicy::serialize(&new_policy, &cached.data)?;
                     write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
                         .await
                         .map_err(ErrorKind::CacheWrite)?;
@@ -498,6 +498,7 @@ impl CachedClient {
         let response = self
             .0
             .execute(req)
+            .boxed()
             .await
             .map_err(ErrorKind::from)?
             .error_for_status()

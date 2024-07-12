@@ -4,6 +4,7 @@ use std::path::Path;
 
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Result};
+use futures::FutureExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -346,6 +347,7 @@ pub(crate) async fn pip_compile(
         printer,
         preview,
     )
+    .boxed()
     .await
     {
         Ok(resolution) => resolution,

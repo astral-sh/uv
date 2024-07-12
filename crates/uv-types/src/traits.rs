@@ -48,7 +48,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 /// Put in a different way, the types here allow `uv-resolver` to depend on `uv-build` and
 /// `uv-build` to depend on `uv-resolver` without having actual crate dependencies between
 /// them.
-pub trait BuildContext: Send + Sync {
+pub trait BuildContext: Clone + Send + Sync + 'static {
     type SourceDistBuilder: SourceBuildTrait;
 
     /// Return a reference to the cache.

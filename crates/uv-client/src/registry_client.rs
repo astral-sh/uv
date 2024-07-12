@@ -441,10 +441,12 @@ impl RegistryClient {
                             .map_err(ErrorKind::Io)?;
                         let reader = tokio::io::BufReader::new(file);
                         read_metadata_async_seek(&wheel.filename, built_dist.to_string(), reader)
+                            .boxed()
                             .await?
                     }
                     WheelLocation::Url(url) => {
                         self.wheel_metadata_registry(&wheel.index, &wheel.file, &url)
+                            .boxed()
                             .await?
                     }
                 }
@@ -455,6 +457,7 @@ impl RegistryClient {
                     &wheel.url,
                     WheelCache::Url(&wheel.url),
                 )
+                .boxed()
                 .await?
             }
             BuiltDist::Path(wheel) => {
@@ -462,7 +465,9 @@ impl RegistryClient {
                     .await
                     .map_err(ErrorKind::Io)?;
                 let reader = tokio::io::BufReader::new(file);
-                read_metadata_async_seek(&wheel.filename, built_dist.to_string(), reader).await?
+                read_metadata_async_seek(&wheel.filename, built_dist.to_string(), reader)
+                    .boxed()
+                    .await?
             }
         };
 
@@ -503,18 +508,21 @@ impl RegistryClient {
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
-            let response_callback = |response: Response| async {
-                let bytes = response.bytes().await.map_err(ErrorKind::from)?;
+            let response_callback = |response: Response| {
+                async {
+                    let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
-                info_span!("parse_metadata21")
-                    .in_scope(|| Metadata23::parse_metadata(bytes.as_ref()))
-                    .map_err(|err| {
-                        Error::from(ErrorKind::MetadataParseError(
-                            filename,
-                            url.to_string(),
-                            Box::new(err),
-                        ))
-                    })
+                    info_span!("parse_metadata21")
+                        .in_scope(|| Metadata23::parse_metadata(bytes.as_ref()))
+                        .map_err(|err| {
+                            Error::from(ErrorKind::MetadataParseError(
+                                filename,
+                                url.to_string(),
+                                Box::new(err),
+                            ))
+                        })
+                }
+                .boxed()
             };
             let req = self
                 .uncached_client()
@@ -524,12 +532,14 @@ impl RegistryClient {
             Ok(self
                 .cached_client()
                 .get_serde(req, &cache_entry, cache_control, response_callback)
+                .boxed()
                 .await?)
         } else {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
             // into the cache and read from there
             self.wheel_metadata_no_pep658(&filename, url, WheelCache::Index(index))
+                .boxed()
                 .await
         }
     }
