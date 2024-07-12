@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
@@ -124,38 +124,43 @@ pub(crate) async fn run(
     let mut handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            if let Ok(entrypoints) = get_entrypoints(&from, &environment) {
-                if entrypoints.is_empty() {
-                    writeln!(
-                        printer.stdout(),
-                        "The executable {} was not found.",
-                        command.to_string_lossy().red(),
-                    )?;
-                } else {
-                    writeln!(
-                        printer.stdout(),
-                        "The executable {} was not found.",
-                        command.to_string_lossy().red()
-                    )?;
-                    if has_from {
+            match get_entrypoints(&from, &environment) {
+                Ok(entrypoints) => {
+                    if entrypoints.is_empty() {
                         writeln!(
                             printer.stdout(),
-                            "However, the following executables are available:",
+                            "The executable {} was not found.",
+                            command.to_string_lossy().red(),
                         )?;
                     } else {
-                        let command = format!("uv tool run --from {from} <EXECUTABLE>");
                         writeln!(
                             printer.stdout(),
-                            "However, the following executables are available via {}:",
-                            command.green(),
+                            "The executable {} was not found.",
+                            command.to_string_lossy().red()
                         )?;
+                        if has_from {
+                            writeln!(
+                                printer.stdout(),
+                                "However, the following executables are available:",
+                            )?;
+                        } else {
+                            let command = format!("uv tool run --from {from} <EXECUTABLE>");
+                            writeln!(
+                                printer.stdout(),
+                                "However, the following executables are available via {}:",
+                                command.green(),
+                            )?;
+                        }
+                        for (name, _) in entrypoints {
+                            writeln!(printer.stdout(), "- {}", name.cyan())?;
+                        }
                     }
-                    for (name, _) in entrypoints {
-                        writeln!(printer.stdout(), "- {}", name.cyan())?;
-                    }
+                    return Ok(ExitStatus::Failure);
                 }
-                return Ok(ExitStatus::Failure);
-            };
+                Err(err) => {
+                    warn!("Failed to get entrypoints for `{from}`: {err}");
+                }
+            }
             Err(err)
         }
         Err(err) => Err(err),
