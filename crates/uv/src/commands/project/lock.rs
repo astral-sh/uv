@@ -2,7 +2,8 @@
 
 use anstream::eprint;
 
-use distribution_types::{ResolutionDiagnostic, UnresolvedRequirementSpecification};
+use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
+use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
@@ -210,6 +211,8 @@ pub(super) async fn do_lock(
         // but we rely on the lockfile for the metadata of any existing distributions. If we have
         // any outdated metadata we fall back to a clean resolve.
         Some(lock) => {
+            debug!("Resolving with existing `uv.lock`");
+
             // Prefill the index with the lockfile metadata.
             let index = lock.to_index(workspace.install_path(), upgrade)?;
 
@@ -262,16 +265,20 @@ pub(super) async fn do_lock(
                 true,
             )
             .await
+            .inspect_err(|err| debug!("Resolution with `uv.lock` failed: {err}"))
             .ok()
             .filter(|resolution| {
                 // Ensure no diagnostics were emitted that may be caused by stale metadata in the lockfile.
-                !resolution.diagnostics().iter().any(|diagnostic| {
-                    matches!(
-                        diagnostic,
-                        ResolutionDiagnostic::MissingDev { .. }
-                            | ResolutionDiagnostic::MissingExtra { .. }
-                    )
-                })
+                if resolution.diagnostics().is_empty() {
+                    return true;
+                }
+
+                debug!("Resolution with `uv.lock` failed due to diagnostics:");
+                for diagnostic in resolution.diagnostics() {
+                    debug!("{}", diagnostic.message());
+                }
+
+                false
             })
         }
     };
@@ -283,6 +290,8 @@ pub(super) async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         None => {
+            debug!("Starting clean resolution.");
+
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
                 &client,
