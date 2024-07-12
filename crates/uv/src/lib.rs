@@ -596,8 +596,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::Run(args),
+            command: run_variant @ (ToolCommand::Uvx(_) | ToolCommand::Run(_)),
         }) => {
+            let (args, uvx) = match run_variant {
+                ToolCommand::Uvx(args) => (args, true),
+                ToolCommand::Run(args) => (args, false),
+                // OK guarded by the outer match statement
+                _ => unreachable!(),
+            };
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::ToolRunSettings::resolve(args, filesystem);
             show_settings!(args);
@@ -610,35 +617,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.with,
                 args.python,
                 args.settings,
-                false,
-                globals.isolated,
-                globals.preview,
-                globals.python_preference,
-                globals.python_fetch,
-                globals.connectivity,
-                Concurrency::default(),
-                globals.native_tls,
-                &cache,
-                printer,
-            )
-            .await
-        }
-        Commands::Tool(ToolNamespace {
-            command: ToolCommand::Uvx(args),
-        }) => {
-            // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolRunSettings::resolve(args, filesystem);
-            show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
-            commands::tool_run(
-                args.command,
-                args.from,
-                args.with,
-                args.python,
-                args.settings,
-                true,
+                uvx,
                 globals.isolated,
                 globals.preview,
                 globals.python_preference,
