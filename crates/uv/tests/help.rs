@@ -42,6 +42,9 @@ fn help() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -98,6 +101,9 @@ fn help_flag() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -153,6 +159,9 @@ fn help_short_flag() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -248,6 +257,10 @@ fn help_subcommand() {
               - automatic: Automatically fetch managed Python installations when needed
               - manual:    Do not automatically fetch managed Python installations; require explicit
                 installation
+
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
 
       -n, --no-cache
               Avoid reading from or writing to the cache
@@ -362,6 +375,10 @@ fn help_subsubcommand() {
               - manual:    Do not automatically fetch managed Python installations; require explicit
                 installation
 
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
+
       -n, --no-cache
               Avoid reading from or writing to the cache
               
@@ -429,6 +446,9 @@ fn help_flag_subcommand() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -481,6 +501,9 @@ fn help_flag_subsubcommand() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -590,6 +613,9 @@ fn help_with_global_option() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
+          --isolated
+              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
+              parent directories
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]

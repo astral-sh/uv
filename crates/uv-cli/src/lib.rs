@@ -148,7 +148,7 @@ pub struct GlobalArgs {
 
     /// Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
     /// parent directories.
-    #[arg(global = true, long, hide = true)]
+    #[arg(global = true, long)]
     pub isolated: bool,
 
     /// Show the resolved settings for the current command.
