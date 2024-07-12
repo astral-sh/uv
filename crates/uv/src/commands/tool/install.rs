@@ -451,7 +451,13 @@ fn matching_packages(
         .filter_map(|package| {
             match entrypoint_paths(environment, package.name(), package.version()).ok() {
                 Some(entrypoints) => {
-                    if entrypoints.iter().any(|e| e.0 == name.as_ref()) {
+                    if entrypoints.iter().any(|e| {
+                        if let Some(stripped) = e.0.strip_suffix(".exe") {
+                            stripped == name.as_ref()
+                        } else {
+                            e.0 == name.as_ref()
+                        }
+                    }) {
                         Some(package.clone())
                     } else {
                         None
