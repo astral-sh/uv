@@ -444,20 +444,30 @@ impl SourceBuild {
         // Setup the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         if build_isolation.is_isolated() {
-            let resolved_requirements = Self::get_resolved_requirements(
-                build_context,
-                source_build_context,
-                &default_backend,
-                pep517_backend.as_ref(),
-            )
-            .await?;
-
-            build_context
-                .install(&resolved_requirements, &venv)
+            let build_context_ = build_context.clone();
+            let source_build_context = source_build_context.clone();
+            let default_backend = default_backend.clone();
+            let pep517_backend = pep517_backend.clone();
+            let resolved_requirements = tokio::task::spawn(async move {
+                Self::get_resolved_requirements(
+                    &build_context_,
+                    source_build_context,
+                    &default_backend,
+                    pep517_backend.as_ref(),
+                )
                 .await
-                .map_err(|err| {
-                    Error::RequirementsInstall("build-system.requires (install)", err)
-                })?;
+            })
+            .await
+            .expect("Tokio executor failed, was there a panic?")?;
+
+            let build_context_ = build_context.clone();
+            let venv = venv.clone();
+            tokio::task::spawn(async move {
+                build_context_.install(&resolved_requirements, &venv).await
+            })
+            .await
+            .expect("Tokio executor failed, was there a panic?")
+            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
         }
 
         // Figure out what the modified path should be
