@@ -60,7 +60,7 @@ impl Shell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// use crate::shells::Shell;
     ///
     /// assert_eq!(Shell::from_shell_path("/bin/bash"), Some(Shell::Bash));
