@@ -1156,6 +1156,7 @@ jobs:
 
       - name: "Install requirements and prime cache"
         run: |
+          sudo apt-get update
           sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
           cargo run --bin uv -- venv --cache-dir .cache
           cargo run --bin uv -- pip compile scripts/requirements/airflow.in --cache-dir .cache
