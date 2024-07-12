@@ -2458,3 +2458,171 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Read from both a `uv.toml` and `pyproject.toml` file in the current directory.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_both() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a `uv.toml` file to the directory.
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        [pip]
+        resolution = "lowest-direct"
+        generate-hashes = true
+        index-url = "https://pypi.org/simple"
+    "#})?;
+
+    // Write a `pyproject.toml` file to the directory
+    let config = context.temp_dir.child("pyproject.toml");
+    config.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+
+        [tool.uv.pip]
+        resolution = "highest"
+        extra-index-url = ["https://test.pypi.org/simple"]
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("--show-settings")
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        connectivity: Online,
+        isolated: false,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        overrides_from_workspace: [],
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                index: Some(
+                    Pypi(
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "pypi.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/simple",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://pypi.org/simple",
+                            ),
+                        },
+                    ),
+                ),
+                extra_index: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: LowestDirect,
+            prerelease: IfNecessaryOrExplicit,
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: true,
+            setup_py: Pep517,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            require_hashes: false,
+            upgrade: None,
+            reinstall: None,
+            concurrency: Concurrency {
+                downloads: 50,
+                builds: 16,
+                installs: 8,
+            },
+        },
+    }
+
+    ----- stderr -----
+    warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file.
+    "###
+    );
+
+    Ok(())
+}
