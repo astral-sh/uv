@@ -11,14 +11,20 @@ mod common;
 
 // Wraps a group of snapshots and runs them multiple times in sequence.
 ///
-/// This is useful to ensure that the lockfile does not change across repeated calls to `uv lock`
-/// when resolving from the lockfile.
+/// This is useful to ensure that resolution runs independent of an existing lockfile
+/// and does not change across repeated calls to `uv lock`.
 macro_rules! deterministic {
-    ($($x:tt)*) => {
+    ($context:ident => $($x:tt)*) => {
         insta::allow_duplicates! {
-            for _ in 0..2 {
-                $($x)*
-            }
+            // Run the first resolution.
+            $($x)*
+
+            // Run a second resolution with the new lockfile.
+            $($x)*
+
+            // Run a final clean resolution without a lockfile to ensure identical results.
+            let _ = fs_err::remove_file(&$context.temp_dir.join("uv.lock"));
+            $($x)*
         }
     };
 }
@@ -39,7 +45,7 @@ fn lock_wheel_registry() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -138,7 +144,7 @@ fn lock_sdist_registry() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
         success: true
         exit_code: 0
@@ -210,7 +216,7 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -281,7 +287,7 @@ fn lock_wheel_url() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -379,7 +385,7 @@ fn lock_sdist_url() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -478,7 +484,7 @@ fn lock_project_extra() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -654,7 +660,7 @@ fn lock_dependency_extra() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -841,7 +847,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
     let lockfile = context.temp_dir.join("uv.lock");
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1090,7 +1096,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1260,7 +1266,7 @@ fn lock_preference() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1313,50 +1319,50 @@ fn lock_preference() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
-        // Ensure that the locked version is still respected.
-        uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    // Ensure that the locked version is still respected.
+    //
+    // Note that we do not use `deterministic!` here because the results depend on the existing lockfile.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "iniconfig"
-            version = "1.1.1"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
-            ]
+        [[distribution]]
+        name = "iniconfig"
+        version = "1.1.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
+        ]
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "iniconfig" },
-            ]
-            "###
-            );
-        });
-    }
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+        "###
+        );
+    });
 
-    deterministic! {
+    deterministic! { context =>
         // Run with `--upgrade`; ensure that `iniconfig` is upgraded.
         uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
         success: true
@@ -1420,7 +1426,7 @@ fn lock_git_sha() -> Result<()> {
     )?;
 
     let mut lock = String::new();
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1473,47 +1479,46 @@ fn lock_git_sha() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
-        uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    // Note that we do not use `deterministic!` here because the results depend on the existing lockfile.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning.
+    Resolved 2 packages in [TIME]
+    "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        // The lockfile should resolve to `0dacfd662c64cb4ceb16e6cf65a157a8b715b979`, even though it's
-        // not the latest commit on `main`.
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
+    // The lockfile should resolve to `0dacfd662c64cb4ceb16e6cf65a157a8b715b979`, even though it's
+    // not the latest commit on `main`.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-            "###
-            );
-        });
-    }
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
+        );
+    });
 
-    deterministic! {
+    deterministic! { context =>
         // Relock with `--upgrade`.
         uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("uv-public-pypackage"), @r###"
         success: true
@@ -1576,7 +1581,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: false
         exit_code: 1
@@ -1614,7 +1619,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1762,7 +1767,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1900,7 +1905,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2009,6 +2014,155 @@ fn lock_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// Lock a requirement from PyPI, respecting the `Requires-Python` metadata
+#[test]
+fn lock_requires_python_wheels() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    let lockfile = context.temp_dir.join("uv.lock");
+
+    // Require ==3.12.*.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = ["frozenlist"]
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning.
+        Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+        Resolved 2 packages in [TIME]
+        "###);
+
+        let lock = fs_err::read_to_string(&lockfile).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12, <3.13"
+
+            [[distribution]]
+            name = "frozenlist"
+            version = "1.4.1"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/cf/3d/2102257e7acad73efc4a0c306ad3953f68c504c16982bbdfee3ad75d8085/frozenlist-1.4.1.tar.gz", hash = "sha256:c037a86e8513059a2613aaba4d817bb90b9d9b6b69aace3ce9c877e8c8ed402b", size = 37820 }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/b4/db/4cf37556a735bcdb2582f2c3fa286aefde2322f92d3141e087b8aeb27177/frozenlist-1.4.1-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:1979bc0aeb89b33b588c51c54ab0161791149f2461ea7c7c946d95d5f93b56ae", size = 93937 },
+                { url = "https://files.pythonhosted.org/packages/46/03/69eb64642ca8c05f30aa5931d6c55e50b43d0cd13256fdd01510a1f85221/frozenlist-1.4.1-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:cc7b01b3754ea68a62bd77ce6020afaffb44a590c2289089289363472d13aedb", size = 53656 },
+                { url = "https://files.pythonhosted.org/packages/3f/ab/c543c13824a615955f57e082c8a5ee122d2d5368e80084f2834e6f4feced/frozenlist-1.4.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:c9c92be9fd329ac801cc420e08452b70e7aeab94ea4233a4804f0915c14eba9b", size = 51868 },
+                { url = "https://files.pythonhosted.org/packages/a9/b8/438cfd92be2a124da8259b13409224d9b19ef8f5a5b2507174fc7e7ea18f/frozenlist-1.4.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5c3894db91f5a489fc8fa6a9991820f368f0b3cbdb9cd8849547ccfab3392d86", size = 280652 },
+                { url = "https://files.pythonhosted.org/packages/54/72/716a955521b97a25d48315c6c3653f981041ce7a17ff79f701298195bca3/frozenlist-1.4.1-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:ba60bb19387e13597fb059f32cd4d59445d7b18b69a745b8f8e5db0346f33480", size = 286739 },
+                { url = "https://files.pythonhosted.org/packages/65/d8/934c08103637567084568e4d5b4219c1016c60b4d29353b1a5b3587827d6/frozenlist-1.4.1-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:8aefbba5f69d42246543407ed2461db31006b0f76c4e32dfd6f42215a2c41d09", size = 289447 },
+                { url = "https://files.pythonhosted.org/packages/70/bb/d3b98d83ec6ef88f9bd63d77104a305d68a146fd63a683569ea44c3085f6/frozenlist-1.4.1-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:780d3a35680ced9ce682fbcf4cb9c2bad3136eeff760ab33707b71db84664e3a", size = 265466 },
+                { url = "https://files.pythonhosted.org/packages/0b/f2/b8158a0f06faefec33f4dff6345a575c18095a44e52d4f10c678c137d0e0/frozenlist-1.4.1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9acbb16f06fe7f52f441bb6f413ebae6c37baa6ef9edd49cdd567216da8600cd", size = 281530 },
+                { url = "https://files.pythonhosted.org/packages/ea/a2/20882c251e61be653764038ece62029bfb34bd5b842724fff32a5b7a2894/frozenlist-1.4.1-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:23b701e65c7b36e4bf15546a89279bd4d8675faabc287d06bbcfac7d3c33e1e6", size = 281295 },
+                { url = "https://files.pythonhosted.org/packages/4c/f9/8894c05dc927af2a09663bdf31914d4fb5501653f240a5bbaf1e88cab1d3/frozenlist-1.4.1-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:3e0153a805a98f5ada7e09826255ba99fb4f7524bb81bf6b47fb702666484ae1", size = 268054 },
+                { url = "https://files.pythonhosted.org/packages/37/ff/a613e58452b60166507d731812f3be253eb1229808e59980f0405d1eafbf/frozenlist-1.4.1-cp312-cp312-musllinux_1_1_ppc64le.whl", hash = "sha256:dd9b1baec094d91bf36ec729445f7769d0d0cf6b64d04d86e45baf89e2b9059b", size = 286904 },
+                { url = "https://files.pythonhosted.org/packages/cc/6e/0091d785187f4c2020d5245796d04213f2261ad097e0c1cf35c44317d517/frozenlist-1.4.1-cp312-cp312-musllinux_1_1_s390x.whl", hash = "sha256:1a4471094e146b6790f61b98616ab8e44f72661879cc63fa1049d13ef711e71e", size = 290754 },
+                { url = "https://files.pythonhosted.org/packages/a5/c2/e42ad54bae8bcffee22d1e12a8ee6c7717f7d5b5019261a8c861854f4776/frozenlist-1.4.1-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:5667ed53d68d91920defdf4035d1cdaa3c3121dc0b113255124bcfada1cfa1b8", size = 282602 },
+                { url = "https://files.pythonhosted.org/packages/b6/61/56bad8cb94f0357c4bc134acc30822e90e203b5cb8ff82179947de90c17f/frozenlist-1.4.1-cp312-cp312-win32.whl", hash = "sha256:beee944ae828747fd7cb216a70f120767fc9f4f00bacae8543c14a6831673f89", size = 44063 },
+                { url = "https://files.pythonhosted.org/packages/3e/dc/96647994a013bc72f3d453abab18340b7f5e222b7b7291e3697ca1fcfbd5/frozenlist-1.4.1-cp312-cp312-win_amd64.whl", hash = "sha256:64536573d0a2cb6e625cf309984e2d873979709f2cf22839bf2d61790b448ad5", size = 50452 },
+                { url = "https://files.pythonhosted.org/packages/83/10/466fe96dae1bff622021ee687f68e5524d6392b0a2f80d05001cd3a451ba/frozenlist-1.4.1-py3-none-any.whl", hash = "sha256:04ced3e6a46b4cfffe20f9ae482818e34eba9b5fb0ce4056e4cc9b6e212d09b7", size = 11552 },
+            ]
+
+            [[distribution]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "frozenlist" },
+            ]
+            "###
+            );
+        });
+    }
+
+    // Change to ==3.11.*, which should different wheels in the lockfile.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.11.*"
+        dependencies = ["frozenlist"]
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning.
+        Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+        Resolved 2 packages in [TIME]
+        "###);
+
+        let lock = fs_err::read_to_string(&lockfile).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.11, <3.12"
+
+            [[distribution]]
+            name = "frozenlist"
+            version = "1.4.1"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/cf/3d/2102257e7acad73efc4a0c306ad3953f68c504c16982bbdfee3ad75d8085/frozenlist-1.4.1.tar.gz", hash = "sha256:c037a86e8513059a2613aaba4d817bb90b9d9b6b69aace3ce9c877e8c8ed402b", size = 37820 }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/01/bc/8d33f2d84b9368da83e69e42720cff01c5e199b5a868ba4486189a4d8fa9/frozenlist-1.4.1-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:a0cb6f11204443f27a1628b0e460f37fb30f624be6051d490fa7d7e26d4af3d0", size = 97060 },
+                { url = "https://files.pythonhosted.org/packages/af/b2/904500d6a162b98a70e510e743e7ea992241b4f9add2c8063bf666ca21df/frozenlist-1.4.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:b46c8ae3a8f1f41a0d2ef350c0b6e65822d80772fe46b653ab6b6274f61d4a49", size = 55347 },
+                { url = "https://files.pythonhosted.org/packages/5b/9c/f12b69997d3891ddc0d7895999a00b0c6a67f66f79498c0e30f27876435d/frozenlist-1.4.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:fde5bd59ab5357e3853313127f4d3565fc7dad314a74d7b5d43c22c6a5ed2ced", size = 53374 },
+                { url = "https://files.pythonhosted.org/packages/ac/6e/e0322317b7c600ba21dec224498c0c5959b2bce3865277a7c0badae340a9/frozenlist-1.4.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:722e1124aec435320ae01ee3ac7bec11a5d47f25d0ed6328f2273d287bc3abb0", size = 273288 },
+                { url = "https://files.pythonhosted.org/packages/a7/76/180ee1b021568dad5b35b7678616c24519af130ed3fa1e0f1ed4014e0f93/frozenlist-1.4.1-cp311-cp311-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:2471c201b70d58a0f0c1f91261542a03d9a5e088ed3dc6c160d614c01649c106", size = 284737 },
+                { url = "https://files.pythonhosted.org/packages/05/08/40159d706a6ed983c8aca51922a93fc69f3c27909e82c537dd4054032674/frozenlist-1.4.1-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:c757a9dd70d72b076d6f68efdbb9bc943665ae954dad2801b874c8c69e185068", size = 280267 },
+                { url = "https://files.pythonhosted.org/packages/e0/18/9f09f84934c2b2aa37d539a322267939770362d5495f37783440ca9c1b74/frozenlist-1.4.1-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:f146e0911cb2f1da549fc58fc7bcd2b836a44b79ef871980d605ec392ff6b0d2", size = 258778 },
+                { url = "https://files.pythonhosted.org/packages/b3/c9/0bc5ee7e1f5cc7358ab67da0b7dfe60fbd05c254cea5c6108e7d1ae28c63/frozenlist-1.4.1-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4f9c515e7914626b2a2e1e311794b4c35720a0be87af52b79ff8e1429fc25f19", size = 272276 },
+                { url = "https://files.pythonhosted.org/packages/12/5d/147556b73a53ad4df6da8bbb50715a66ac75c491fdedac3eca8b0b915345/frozenlist-1.4.1-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:c302220494f5c1ebeb0912ea782bcd5e2f8308037b3c7553fad0e48ebad6ad82", size = 272424 },
+                { url = "https://files.pythonhosted.org/packages/83/61/2087bbf24070b66090c0af922685f1d0596c24bb3f3b5223625bdeaf03ca/frozenlist-1.4.1-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:442acde1e068288a4ba7acfe05f5f343e19fac87bfc96d89eb886b0363e977ec", size = 260881 },
+                { url = "https://files.pythonhosted.org/packages/a8/be/a235bc937dd803258a370fe21b5aa2dd3e7bfe0287a186a4bec30c6cccd6/frozenlist-1.4.1-cp311-cp311-musllinux_1_1_ppc64le.whl", hash = "sha256:1b280e6507ea8a4fa0c0a7150b4e526a8d113989e28eaaef946cc77ffd7efc0a", size = 282327 },
+                { url = "https://files.pythonhosted.org/packages/5d/e7/b2469e71f082948066b9382c7b908c22552cc705b960363c390d2e23f587/frozenlist-1.4.1-cp311-cp311-musllinux_1_1_s390x.whl", hash = "sha256:fe1a06da377e3a1062ae5fe0926e12b84eceb8a50b350ddca72dc85015873f74", size = 281502 },
+                { url = "https://files.pythonhosted.org/packages/db/1b/6a5b970e55dffc1a7d0bb54f57b184b2a2a2ad0b7bca16a97ca26d73c5b5/frozenlist-1.4.1-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:db9e724bebd621d9beca794f2a4ff1d26eed5965b004a97f1f1685a173b869c2", size = 272292 },
+                { url = "https://files.pythonhosted.org/packages/1a/05/ebad68130e6b6eb9b287dacad08ea357c33849c74550c015b355b75cc714/frozenlist-1.4.1-cp311-cp311-win32.whl", hash = "sha256:e774d53b1a477a67838a904131c4b0eef6b3d8a651f8b138b04f748fccfefe17", size = 44446 },
+                { url = "https://files.pythonhosted.org/packages/b3/21/c5aaffac47fd305d69df46cfbf118768cdf049a92ee6b0b5cb029d449dcf/frozenlist-1.4.1-cp311-cp311-win_amd64.whl", hash = "sha256:fb3c2db03683b5767dedb5769b8a40ebb47d6f7f45b1b3e3b4b51ec8ad9d9825", size = 50459 },
+                { url = "https://files.pythonhosted.org/packages/83/10/466fe96dae1bff622021ee687f68e5524d6392b0a2f80d05001cd3a451ba/frozenlist-1.4.1-py3-none-any.whl", hash = "sha256:04ced3e6a46b4cfffe20f9ae482818e34eba9b5fb0ce4056e4cc9b6e212d09b7", size = 11552 },
+            ]
+
+            [[distribution]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "frozenlist" },
+            ]
+            "###
+            );
+        });
+    }
+
+    Ok(())
+}
+
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata. In this case,
 /// `Requires-Python` uses the equals-star syntax.
 #[test]
@@ -2028,7 +2182,7 @@ fn lock_requires_python_star() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2137,7 +2291,7 @@ fn lock_requires_python_pre() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2244,7 +2398,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2321,7 +2475,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2405,7 +2559,7 @@ fn lock_dev() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2505,7 +2659,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2566,7 +2720,7 @@ fn lock_multiple_markers() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2668,7 +2822,7 @@ fn relative_and_absolute_paths() -> Result<()> {
     "#})?;
     context.temp_dir.child("c/c/__init__.py").touch()?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
         success: true
         exit_code: 0
@@ -2730,7 +2884,7 @@ fn lock_cycles() -> Result<()> {
         "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2918,7 +3072,7 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
         success: true
         exit_code: 0
@@ -3027,7 +3181,7 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    deterministic! {
+    deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
         success: true
         exit_code: 0

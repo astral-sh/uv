@@ -199,6 +199,23 @@ pub(super) async fn do_lock(
     }
 
     let start = std::time::Instant::now();
+
+    let requires_python = find_requires_python(workspace)?;
+    let existing_lock = existing_lock.filter(|lock| {
+        match (lock.requires_python(), requires_python.as_ref()) {
+            // If the Requires-Python bound in the lockfile is weaker or equivalent to the
+            // Requires-Python bound in the workspace, we should have the necessary wheels to perform
+            // a locked resolution.
+            (None, Some(_)) => true,
+            (Some(locked), Some(specified)) if locked.bound() == specified.bound() => true,
+
+            // On the other hand, if the bound in the lockfile is stricter, meaning the
+            // bound has since been weakened, we have to perform a clean resolution to ensure
+            // we fetch the necessary wheels.
+            _ => false,
+        }
+    });
+
     let resolution = match existing_lock {
         None => None,
 
