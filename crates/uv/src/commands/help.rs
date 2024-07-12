@@ -67,11 +67,12 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
     };
 
     let is_terminal = std::io::stdout().is_terminal();
-    if !no_pager && !is_root && is_terminal && which("less").is_ok() {
+    let should_page = !no_pager && !is_root && is_terminal;
+    if should_page && which("less").is_ok() {
         // When using less, we use the command name as the file name and can support colors
         let prompt = format!("help: uv {}", query.join(" "));
         spawn_pager("less", &["-R", "-P", &prompt], &help_ansi)?;
-    } else if !no_pager && !is_root && is_terminal && which("more").is_ok() {
+    } else if should_page && which("more").is_ok() {
         // When using more, we skip the ANSI color codes
         spawn_pager("more", &[], &help)?;
     } else {
