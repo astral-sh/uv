@@ -2242,7 +2242,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution is included with neither wheels nor a source
     /// distribution.
-    #[error("found distribution {id} with neither wheels nor source distribution")]
+    #[error("distribution {id} can't be installed because it has neither a source distribution nor a wheel for the current platform")]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution that has a missing base.
         id: DistributionId,
