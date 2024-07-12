@@ -39,7 +39,7 @@ If tests fail due to a mismatch in the JSON Schema, run: `cargo dev generate-jso
 Testing uv requires multiple specific Python versions; they can be installed with:
 
 ```shell
-cargo run toolchain install
+cargo run python install
 ```
 
 The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
