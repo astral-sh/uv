@@ -664,7 +664,7 @@ fn fork_incomplete_markers() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning.
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     "###
     );
 
@@ -699,9 +699,21 @@ fn fork_incomplete_markers() -> Result<()> {
         name = "package-b"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }
+        dependencies = [
+            { name = "package-c", marker = "python_version == '3.10'" },
+        ]
         sdist = { url = "https://astral-sh.github.io/packse/0.3.30/files/fork_incomplete_markers_b-1.0.0.tar.gz#sha256=c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1", hash = "sha256:c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/0.3.30/files/fork_incomplete_markers_b-1.0.0-py3-none-any.whl#sha256=5c2a5f446580787ed7b3673431b112474237ddeaf1c81325bb30b86e7ee76adb", hash = "sha256:5c2a5f446580787ed7b3673431b112474237ddeaf1c81325bb30b86e7ee76adb" },
+        ]
+
+        [[distribution]]
+        name = "package-c"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/0.3.30/files/fork_incomplete_markers_c-1.0.0.tar.gz#sha256=ecc02ea1cc8d3b561c8dcb9d2ba1abcdae2dd32de608bf8e8ed2878118426022", hash = "sha256:ecc02ea1cc8d3b561c8dcb9d2ba1abcdae2dd32de608bf8e8ed2878118426022" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/0.3.30/files/fork_incomplete_markers_c-1.0.0-py3-none-any.whl#sha256=03fa287aa4cb78457211cb3df7459b99ba1ee2259aae24bc745eaab45e7eaaee", hash = "sha256:03fa287aa4cb78457211cb3df7459b99ba1ee2259aae24bc745eaab45e7eaaee" },
         ]
 
         [[distribution]]
