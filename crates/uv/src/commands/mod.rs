@@ -36,7 +36,7 @@ pub(crate) use tool::dir::dir as tool_dir;
 pub(crate) use tool::install::install as tool_install;
 pub(crate) use tool::list::list as tool_list;
 pub(crate) use tool::run::run as tool_run;
-pub(crate) use tool::run::ToolRunInvocationSource;
+pub(crate) use tool::run::ToolRunCommand;
 pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 use uv_cache::Cache;
 use uv_fs::Simplified;

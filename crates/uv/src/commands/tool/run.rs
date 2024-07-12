@@ -32,17 +32,19 @@ use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
-/// Represents the source from which a tool was invoked.
-pub(crate) enum ToolRunInvocationSource {
+/// The user-facing command used to invoke a tool run.
+pub(crate) enum ToolRunCommand {
+    /// via the `uvx` alias
     Uvx,
+    /// via `uv tool run`
     ToolRun,
 }
 
-impl Display for ToolRunInvocationSource {
+impl Display for ToolRunCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToolRunInvocationSource::Uvx => write!(f, "uvx"),
-            ToolRunInvocationSource::ToolRun => write!(f, "uv tool run"),
+            ToolRunCommand::Uvx => write!(f, "uvx"),
+            ToolRunCommand::ToolRun => write!(f, "uv tool run"),
         }
     }
 }
@@ -54,7 +56,7 @@ pub(crate) async fn run(
     with: Vec<String>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-    invocation_source: ToolRunInvocationSource,
+    invocation_source: ToolRunCommand,
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
