@@ -596,7 +596,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::Run(args) | ToolCommand::Uvx(args),
+            command: ToolCommand::Run(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::ToolRunSettings::resolve(args, filesystem);
@@ -604,14 +604,41 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
-
             commands::tool_run(
                 args.command,
                 args.from,
                 args.with,
                 args.python,
                 args.settings,
-                args.invoked_via_uvx,
+                false,
+                globals.isolated,
+                globals.preview,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.connectivity,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Uvx(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolRunSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+            commands::tool_run(
+                args.command,
+                args.from,
+                args.with,
+                args.python,
+                args.settings,
+                true,
                 globals.isolated,
                 globals.preview,
                 globals.python_preference,
