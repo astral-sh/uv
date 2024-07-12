@@ -96,6 +96,7 @@ fn install(
     link_mode: LinkMode,
     reporter: Option<Box<dyn Reporter>>,
 ) -> Result<Vec<CachedDist>> {
+    let locks = install_wheel_rs::linker::Locks::default();
     wheels.par_iter().try_for_each(|wheel| {
         install_wheel_rs::linker::install_wheel(
             &layout,
@@ -109,6 +110,7 @@ fn install(
                 .as_ref(),
             installer_name.as_deref(),
             link_mode,
+            &locks,
         )
         .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
 
