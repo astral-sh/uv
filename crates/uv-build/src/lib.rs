@@ -409,7 +409,7 @@ impl SourceBuild {
         version_id: String,
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
-        build_isolation: BuildIsolation<'_>,
+        build_isolation: BuildIsolation,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
         concurrent_builds: usize,
@@ -430,7 +430,7 @@ impl SourceBuild {
                 .map_err(|err| *err)?;
 
         // Create a virtual environment, or install into the shared environment if requested.
-        let venv = match build_isolation {
+        let venv = match &build_isolation {
             BuildIsolation::Isolated => uv_virtualenv::create_venv(
                 temp_dir.path(),
                 interpreter.clone(),

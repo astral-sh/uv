@@ -2,13 +2,14 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-use std::ffi::{OsStr, OsString};
-use std::path::Path;
-
 use anyhow::{anyhow, Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
+use std::ffi::{OsStr, OsString};
+use std::ops::Deref;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, instrument};
 
 use distribution_types::{CachedDist, IndexLocations, Name, Resolution, SourceDist};
@@ -31,49 +32,59 @@ use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrateg
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
-pub struct BuildDispatch<'a> {
-    client: &'a RegistryClient,
-    cache: &'a Cache,
-    interpreter: &'a Interpreter,
-    index_locations: &'a IndexLocations,
+#[derive(Clone)]
+pub struct BuildDispatch(Arc<BuildDispatchInner>);
+
+impl Deref for BuildDispatch {
+    type Target = BuildDispatchInner;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub struct BuildDispatchInner {
+    client: RegistryClient,
+    cache: Cache,
+    interpreter: Interpreter,
+    index_locations: IndexLocations,
     index_strategy: IndexStrategy,
-    flat_index: &'a FlatIndex,
+    flat_index: FlatIndex,
     index: InMemoryIndex,
     git: GitResolver,
     in_flight: InFlight,
     setup_py: SetupPyStrategy,
-    build_isolation: BuildIsolation<'a>,
+    build_isolation: BuildIsolation,
     link_mode: install_wheel_rs::linker::LinkMode,
-    build_options: &'a BuildOptions,
-    config_settings: &'a ConfigSettings,
+    build_options: BuildOptions,
+    config_settings: ConfigSettings,
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
-    build_extra_env_vars: FxHashMap<OsString, OsString>,
+    build_extra_env_vars: Mutex<FxHashMap<OsString, OsString>>,
     concurrency: Concurrency,
     preview_mode: PreviewMode,
 }
 
-impl<'a> BuildDispatch<'a> {
+impl BuildDispatch {
     pub fn new(
-        client: &'a RegistryClient,
-        cache: &'a Cache,
-        interpreter: &'a Interpreter,
-        index_locations: &'a IndexLocations,
-        flat_index: &'a FlatIndex,
+        client: RegistryClient,
+        cache: Cache,
+        interpreter: Interpreter,
+        index_locations: IndexLocations,
+        flat_index: FlatIndex,
         index: InMemoryIndex,
         git: GitResolver,
         in_flight: InFlight,
         index_strategy: IndexStrategy,
         setup_py: SetupPyStrategy,
-        config_settings: &'a ConfigSettings,
-        build_isolation: BuildIsolation<'a>,
+        config_settings: ConfigSettings,
+        build_isolation: BuildIsolation,
         link_mode: install_wheel_rs::linker::LinkMode,
-        build_options: &'a BuildOptions,
+        build_options: BuildOptions,
         exclude_newer: Option<ExcludeNewer>,
         concurrency: Concurrency,
         preview_mode: PreviewMode,
     ) -> Self {
-        Self {
+        Self(Arc::new(BuildDispatchInner {
             client,
             cache,
             interpreter,
@@ -91,20 +102,20 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             concurrency,
             source_build_context: SourceBuildContext::default(),
-            build_extra_env_vars: FxHashMap::default(),
+            build_extra_env_vars: Mutex::new(FxHashMap::default()),
             preview_mode,
-        }
+        }))
     }
 
     /// Set the environment variables to be used when building a source distribution.
     #[must_use]
-    pub fn with_build_extra_env_vars<I, K, V>(mut self, sdist_build_env_variables: I) -> Self
+    pub fn with_build_extra_env_vars<I, K, V>(self, sdist_build_env_variables: I) -> Self
     where
         I: IntoIterator<Item = (K, V)>,
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        self.build_extra_env_vars = sdist_build_env_variables
+        *self.0.build_extra_env_vars.lock().unwrap() = sdist_build_env_variables
             .into_iter()
             .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
             .collect();
@@ -112,11 +123,11 @@ impl<'a> BuildDispatch<'a> {
     }
 }
 
-impl<'a> BuildContext for BuildDispatch<'a> {
+impl BuildContext for BuildDispatch {
     type SourceDistBuilder = SourceBuild;
 
     fn cache(&self) -> &Cache {
-        self.cache
+        &self.cache
     }
 
     fn git(&self) -> &GitResolver {
@@ -124,19 +135,19 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     }
 
     fn interpreter(&self) -> &Interpreter {
-        self.interpreter
+        &self.interpreter
     }
 
     fn build_options(&self) -> &BuildOptions {
-        self.build_options
+        &self.build_options
     }
 
     fn index_locations(&self) -> &IndexLocations {
-        self.index_locations
+        &self.index_locations
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
-        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
+        let python_requirement = PythonRequirement::from_interpreter(&self.interpreter);
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
@@ -148,13 +159,13 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             &python_requirement,
             Some(markers),
             Some(tags),
-            self.flat_index,
+            &self.flat_index,
             &self.index,
             &HashStrategy::None,
             self,
             EmptyInstalledPackages,
             DistributionDatabase::new(
-                self.client,
+                &self.client,
                 self,
                 self.concurrency.downloads,
                 self.preview_mode,
@@ -208,7 +219,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             &Reinstall::default(),
             &BuildOptions::default(),
             &HashStrategy::default(),
-            self.index_locations,
+            &self.index_locations,
             self.cache(),
             venv,
             tags,
@@ -237,11 +248,11 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         } else {
             // TODO(konstin): Check that there is no endless recursion.
             let preparer = Preparer::new(
-                self.cache,
+                &self.cache,
                 tags,
                 &HashStrategy::None,
                 DistributionDatabase::new(
-                    self.client,
+                    &self.client,
                     self,
                     self.concurrency.downloads,
                     self.preview_mode,
@@ -321,18 +332,19 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             return Err(anyhow!("Building source distributions is disabled"));
         }
 
+        let build_extra_env_vars = self.build_extra_env_vars.lock().unwrap().clone();
         let builder = SourceBuild::setup(
             source,
             subdirectory,
-            self.interpreter,
+            &self.interpreter,
             self,
             self.source_build_context.clone(),
             version_id.to_string(),
             self.setup_py,
             self.config_settings.clone(),
-            self.build_isolation,
+            self.build_isolation.clone(),
             build_kind,
-            self.build_extra_env_vars.clone(),
+            build_extra_env_vars,
             self.concurrency.builds,
         )
         .boxed()

@@ -1,14 +1,14 @@
 use uv_python::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.
-#[derive(Debug, Default, Copy, Clone)]
-pub enum BuildIsolation<'a> {
+#[derive(Debug, Default, Clone)]
+pub enum BuildIsolation {
     #[default]
     Isolated,
-    Shared(&'a PythonEnvironment),
+    Shared(PythonEnvironment),
 }
 
-impl<'a> BuildIsolation<'a> {
+impl BuildIsolation {
     /// Returns `true` if build isolation is enforced.
     pub fn is_isolated(&self) -> bool {
         matches!(self, Self::Isolated)

@@ -287,26 +287,26 @@ pub(crate) async fn pip_compile(
     let environment;
     let build_isolation = if no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
+        BuildIsolation::Shared(environment)
     } else {
         BuildIsolation::Isolated
     };
 
     let build_dispatch = BuildDispatch::new(
-        &client,
-        &cache,
-        &interpreter,
-        &index_locations,
-        &flat_index,
+        client.clone(),
+        cache.clone(),
+        interpreter.clone(),
+        index_locations.clone(),
+        flat_index.clone(),
         source_index.clone(),
         git.clone(),
         in_flight.clone(),
         index_strategy,
         setup_py,
-        &config_settings,
+        config_settings,
         build_isolation,
         link_mode,
-        &build_options,
+        build_options.clone(),
         exclude_newer,
         concurrency,
         preview,
