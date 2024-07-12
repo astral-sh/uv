@@ -1,14 +1,16 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tokio::process::Command;
-use tracing::debug;
+use tracing::{debug, warn};
 
-use distribution_types::UnresolvedRequirementSpecification;
+use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
@@ -20,7 +22,7 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
     PythonRequest,
 };
-use uv_tool::InstalledTools;
+use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user_once;
 
 use crate::commands::project::environment::CachedEnvironment;
@@ -51,6 +53,8 @@ pub(crate) async fn run(
         warn_user_once!("`uv tool run` is experimental and may change without warning.");
     }
 
+    let has_from = from.is_some();
+
     let (target, args) = command.split();
     let Some(target) = target else {
         return Err(anyhow::anyhow!("No tool command provided"));
@@ -79,7 +83,6 @@ pub(crate) async fn run(
         printer,
     )
     .await?;
-
     // TODO(zanieb): Determine the command via the package entry points
     let command = target;
 
@@ -118,9 +121,52 @@ pub(crate) async fn run(
         command.to_string_lossy(),
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
-    let mut handle = process
-        .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
+    let mut handle = match process.spawn() {
+        Ok(handle) => Ok(handle),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            match get_entrypoints(&from, &environment) {
+                Ok(entrypoints) => {
+                    if entrypoints.is_empty() {
+                        writeln!(
+                            printer.stdout(),
+                            "The executable {} was not found.",
+                            command.to_string_lossy().red(),
+                        )?;
+                    } else {
+                        writeln!(
+                            printer.stdout(),
+                            "The executable {} was not found.",
+                            command.to_string_lossy().red()
+                        )?;
+                        if has_from {
+                            writeln!(
+                                printer.stdout(),
+                                "However, the following executables are available:",
+                            )?;
+                        } else {
+                            let command = format!("uv tool run --from {from} <EXECUTABLE>");
+                            writeln!(
+                                printer.stdout(),
+                                "However, the following executables are available via {}:",
+                                command.green(),
+                            )?;
+                        }
+                        for (name, _) in entrypoints {
+                            writeln!(printer.stdout(), "- {}", name.cyan())?;
+                        }
+                    }
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(err) => {
+                    warn!("Failed to get entrypoints for `{from}`: {err}");
+                }
+            }
+            Err(err)
+        }
+        Err(err) => Err(err),
+    }
+    .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
+
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
@@ -130,6 +176,23 @@ pub(crate) async fn run(
     } else {
         Ok(ExitStatus::Failure)
     }
+}
+
+/// Return the entry points for the specified package.
+fn get_entrypoints(from: &str, environment: &PythonEnvironment) -> Result<Vec<(String, PathBuf)>> {
+    let site_packages = SitePackages::from_environment(environment)?;
+    let package = PackageName::from_str(from)?;
+
+    let installed = site_packages.get_packages(&package);
+    let Some(installed_dist) = installed.first().copied() else {
+        bail!("Expected at least one requirement")
+    };
+
+    Ok(entrypoint_paths(
+        environment,
+        installed_dist.name(),
+        installed_dist.version(),
+    )?)
 }
 
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
