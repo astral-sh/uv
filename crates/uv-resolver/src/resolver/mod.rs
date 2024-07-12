@@ -2476,6 +2476,13 @@ impl Dependencies {
             };
             assert!(fork_groups.forks.len() >= 2, "expected definitive fork");
             let mut new_forks: Vec<Fork> = vec![];
+            if let Some(markers) = fork_groups.remaining_universe() {
+                debug!("Adding split to cover possibly incomplete markers: {markers}");
+                new_forks.push(Fork {
+                    dependencies: vec![],
+                    markers,
+                });
+            }
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
                 for (index, _) in group.packages {
@@ -2730,6 +2737,22 @@ impl<'a> PossibleForkGroups<'a> {
             .iter_mut()
             .find(|fork| fork.is_overlapping(marker))
     }
+
+    /// Returns a marker tree corresponding to the set of marker expressions
+    /// outside of this fork group.
+    ///
+    /// In many cases, it can be easily known that the set of marker
+    /// expressions referred to by this marker tree is empty. In this case,
+    /// `None` is returned. But note that if a marker tree is returned, it is
+    /// still possible for it to describe exactly zero marker environments.
+    fn remaining_universe(&self) -> Option<MarkerTree> {
+        let have = MarkerTree::Or(self.forks.iter().map(PossibleFork::union).collect());
+        let missing = have.negate();
+        if crate::marker::is_definitively_empty_set(&missing) {
+            return None;
+        }
+        Some(missing)
+    }
 }
 
 /// Intermediate state representing a single possible fork.
@@ -2764,6 +2787,19 @@ impl<'a> PossibleFork<'a> {
             }
         }
         false
+    }
+
+    /// Returns the union of all the marker expressions in this possible fork.
+    ///
+    /// Each marker expression in the union returned is guaranteed to be overlapping
+    /// with at least one other expression in the same union.
+    fn union(&self) -> MarkerTree {
+        MarkerTree::Or(
+            self.packages
+                .iter()
+                .map(|&(_, tree)| (*tree).clone())
+                .collect(),
+        )
     }
 }
 
