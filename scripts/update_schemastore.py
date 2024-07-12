@@ -46,8 +46,9 @@ def update_schemastore(schemastore: Path, *, root: Path) -> None:
     )
 
     # Run npm install
+    check_call(["npm", "install"], cwd=schemastore)
+
     src = schemastore.joinpath("src")
-    check_call(["npm", "install"], cwd=src)
 
     # Update the schema and format appropriately
     schema = json.loads(root.joinpath("uv.schema.json").read_text())
@@ -57,7 +58,7 @@ def update_schemastore(schemastore: Path, *, root: Path) -> None:
     )
     check_call(
         [
-            "node_modules/.bin/prettier",
+            "../node_modules/.bin/prettier",
             "--plugin",
             "prettier-plugin-sort-json",
             "--write",
@@ -104,7 +105,7 @@ def main() -> None:
         update_schemastore(schemastore, root=root)
     else:
         with TemporaryDirectory() as temp_dir:
-            update_schemastore(Path(temp_dir).joinpath("schemastore"))
+            update_schemastore(Path(temp_dir).joinpath("schemastore"), root=root)
 
 
 if __name__ == "__main__":
