@@ -190,7 +190,7 @@ pub(crate) async fn install(
                 if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
                     // We're done.
                     writeln!(printer.stderr(), "`{from}` is already installed")?;
-                    return Ok(ExitStatus::Failure);
+                    return Ok(ExitStatus::Success);
                 }
             }
         }
