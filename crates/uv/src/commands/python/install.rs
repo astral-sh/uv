@@ -26,7 +26,7 @@ use crate::printer::Printer;
 /// Download and install Python versions.
 pub(crate) async fn install(
     targets: Vec<String>,
-    force: bool,
+    reinstall: bool,
     native_tls: bool,
     connectivity: Connectivity,
     preview: PreviewMode,
@@ -96,7 +96,7 @@ pub(crate) async fn install(
                     installation.key().green(),
                 )?;
             }
-            if force {
+            if reinstall {
                 writeln!(
                     printer.stderr(),
                     "Uninstalling {}",

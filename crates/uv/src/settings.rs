@@ -359,16 +359,16 @@ impl PythonListSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PythonInstallSettings {
     pub(crate) targets: Vec<String>,
-    pub(crate) force: bool,
+    pub(crate) reinstall: bool,
 }
 
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let PythonInstallArgs { targets, force } = args;
+        let PythonInstallArgs { targets, reinstall } = args;
 
-        Self { targets, force }
+        Self { targets, reinstall }
     }
 }
 

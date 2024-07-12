@@ -712,7 +712,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             commands::python_install(
                 args.targets,
-                args.force,
+                args.reinstall,
                 globals.native_tls,
                 globals.connectivity,
                 globals.preview,
