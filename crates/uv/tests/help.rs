@@ -302,7 +302,7 @@ fn help_subsubcommand() {
 
     Options:
       -r, --reinstall
-              Reinstall the requested Python version
+              Reinstall the requested Python version, if it's already installed
 
       -q, --quiet
               Do not print any output
@@ -463,7 +463,7 @@ fn help_flag_subsubcommand() {
 
     Options:
       -r, --reinstall
-              Reinstall the requested Python version
+              Reinstall the requested Python version, if it's already installed
       -q, --quiet
               Do not print any output
       -v, --verbose...

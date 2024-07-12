@@ -2205,8 +2205,8 @@ pub struct PythonInstallArgs {
     /// installed any Python versions. If not, it will install the latest stable version of Python.
     pub targets: Vec<String>,
 
-    /// Reinstall the requested Python version.
-    #[arg(long, short)]
+    /// Reinstall the requested Python version, if it's already installed.
+    #[arg(long, short, alias = "force")]
     pub reinstall: bool,
 }
 
