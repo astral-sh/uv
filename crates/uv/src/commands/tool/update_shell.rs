@@ -15,9 +15,9 @@ use crate::printer::Printer;
 use crate::shell::Shell;
 
 /// Ensure that the executable directory is in PATH.
-pub(crate) async fn ensurepath(preview: PreviewMode, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn update_shell(preview: PreviewMode, printer: Printer) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tool ensurepath` is experimental and may change without warning.");
+        warn_user_once!("`uv tool update-shell` is experimental and may change without warning.");
     }
 
     let executable_directory = find_executable_directory()?;

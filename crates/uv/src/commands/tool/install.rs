@@ -375,17 +375,31 @@ pub(crate) async fn install(
 
     // If the executable directory isn't on the user's PATH, warn.
     if !Shell::contains_path(&executable_directory) {
-        if let Some(command) =
-            Shell::from_env().and_then(|shell| shell.prepend_path(&executable_directory))
-        {
-            warn_user!(
-                "{} is not on your PATH. To use installed tools, run:\n  {}",
-                executable_directory.simplified_display().cyan(),
-                command.green()
-            );
+        if let Some(shell) = Shell::from_env() {
+            if let Some(command) = shell.prepend_path(&executable_directory) {
+                if shell.configuration_files().is_empty() {
+                    warn_user!(
+                        "{} is not on your PATH. To use installed tools, run {}.",
+                        executable_directory.simplified_display().cyan(),
+                        command.green()
+                    );
+                } else {
+                    warn_user!(
+                        "{} is not on your PATH. To use installed tools, run {} or {}.",
+                        executable_directory.simplified_display().cyan(),
+                        command.green(),
+                        "uv tool update-shell".green()
+                    );
+                }
+            } else {
+                warn_user!(
+                    "{} is not on your PATH. To use installed tools, add the directory to your PATH.",
+                    executable_directory.simplified_display().cyan(),
+                );
+            }
         } else {
             warn_user!(
-                "{} is not on your PATH. To use installed tools, add the directory to your PATH",
+                "{} is not on your PATH. To use installed tools, add the directory to your PATH.",
                 executable_directory.simplified_display().cyan(),
             );
         }
