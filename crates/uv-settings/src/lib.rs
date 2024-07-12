@@ -92,6 +92,20 @@ impl FilesystemOptions {
                 let options: Options = toml::from_str(&content)
                     .map_err(|err| Error::UvToml(path.user_display().to_string(), err))?;
 
+                // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
+                // warn.
+                let pyproject = dir.as_ref().join("pyproject.toml");
+                if let Some(pyproject) = fs_err::read_to_string(pyproject)
+                    .ok()
+                    .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
+                {
+                    if pyproject.tool.is_some_and(|tool| tool.uv.is_some()) {
+                        warn_user!(
+                            "Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file."
+                        );
+                    }
+                }
+
                 debug!("Found workspace configuration at `{}`", path.display());
                 return Ok(Some(Self(options)));
             }
