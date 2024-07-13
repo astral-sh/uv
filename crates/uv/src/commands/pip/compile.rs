@@ -528,7 +528,7 @@ fn cmd(
 
             // Skip any `--find-links` URLs, unless requested.
             if !include_find_links {
-                if arg.starts_with("--find-links=") || arg.starts_with("-f=") {
+                if arg.starts_with("--find-links=") || arg.starts_with("-f") {
                     // Reset state; skip this iteration.
                     *skip_next = None;
                     return Some(None);
