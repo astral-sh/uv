@@ -1,3 +1,5 @@
+#![cfg_attr(windows, allow(unreachable_code))]
+
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -25,6 +27,26 @@ pub(crate) async fn update_shell(preview: PreviewMode, printer: Printer) -> Resu
         "Ensuring that the executable directory is in PATH: {}",
         executable_directory.simplified_display()
     );
+
+    #[cfg(windows)]
+    {
+        if uv_shell::windows::prepend_path(&executable_directory)? {
+            writeln!(
+                printer.stderr(),
+                "Updated PATH to include executable directory {}",
+                executable_directory.simplified_display().cyan()
+            )?;
+            writeln!(printer.stderr(), "Restart your shell to apply changes.")?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Executable directory {} is already in PATH",
+                executable_directory.simplified_display().cyan()
+            )?;
+        }
+
+        return Ok(ExitStatus::Success);
+    }
 
     if Shell::contains_path(&executable_directory) {
         writeln!(

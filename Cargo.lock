@@ -5089,9 +5089,12 @@ dependencies = [
 name = "uv-shell"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "home",
  "same-file",
+ "tracing",
  "uv-fs",
+ "winreg",
 ]
 
 [[package]]
