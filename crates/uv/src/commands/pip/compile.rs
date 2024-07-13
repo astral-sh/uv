@@ -528,7 +528,7 @@ fn cmd(
 
             // Skip any `--find-links` URLs, unless requested.
             if !include_find_links {
-                if arg.starts_with("--find-links=") || arg.starts_with("-f=") {
+                if arg.starts_with("--find-links=") || arg.starts_with("-f") {
                     // Reset state; skip this iteration.
                     *skip_next = None;
                     return Some(None);
@@ -547,7 +547,14 @@ fn cmd(
                 return Some(None);
             }
 
-            // Always skip the `--upgrade-package` flag, and mark the next item as skipped
+            // Always skip the `--upgrade-package` flag
+            if arg.starts_with("--upgrade-package=") || arg.starts_with("-P") {
+                // Reset state; skip this iteration.
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Mark the next item as (to be) skipped.
             if arg == "--upgrade-package" || arg == "-P" {
                 *skip_next = Some(true);
                 return Some(None);
