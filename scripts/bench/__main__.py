@@ -1089,9 +1089,9 @@ def main():
         else list(Benchmark)
     )
 
-    logging.info("Reading requirements from: {}".format(requirements_file))
+    logging.info(f"Reading requirements from: {requirements_file}")
     logging.info("```")
-    with open(args.file, "r") as f:
+    with open(args.file) as f:
         for line in f:
             logging.info(line.rstrip())
     logging.info("```")
