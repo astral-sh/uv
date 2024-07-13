@@ -1,3 +1,5 @@
+pub mod windows;
+
 use std::path::{Path, PathBuf};
 use uv_fs::Simplified;
 
@@ -150,9 +152,11 @@ impl Shell {
                 // On Csh, we need to update both `.cshrc` and `.login`, like Bash.
                 vec![home_dir.join(".cshrc"), home_dir.join(".login")]
             }
-            // TODO(charlie): Add support for Nushell, PowerShell, and Cmd.
+            // TODO(charlie): Add support for Nushell.
             Shell::Nushell => vec![],
+            // See: [`crate::windows::prepend_path`].
             Shell::Powershell => vec![],
+            // See: [`crate::windows::prepend_path`].
             Shell::Cmd => vec![],
         }
     }
