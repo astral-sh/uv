@@ -1,6 +1,8 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use common::{uv_snapshot, TestContext};
+use indoc::indoc;
 use insta::assert_snapshot;
 use uv_python::{
     platform::{Arch, Os},
@@ -209,6 +211,44 @@ fn python_pin() {
     3.7
     "###);
     }
+}
+
+#[test]
+fn python_pin_in_workspace_subfolder() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11"]);
+
+    // Create a simple pyproject.toml
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.10"
+        dependencies = []
+    "#})
+        .unwrap();
+
+    // Create a subfolder
+    let working_dir = context.temp_dir.child("subfolder");
+    working_dir.create_dir_all().unwrap();
+
+    // Run python pin command in subfolder
+    uv_snapshot!(context.filters(), context.python_pin().current_dir(&working_dir).arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned to `3.11`
+
+    ----- stderr -----
+    "###);
+
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    assert_snapshot!(python_version, @r###"
+3.11
+"###);
 }
 
 /// We do not need a Python interpreter to pin without `--resolved`

@@ -1,14 +1,14 @@
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 
 use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
+use uv_distribution::Workspace;
 use uv_fs::Simplified;
 use uv_python::{
-    requests_from_version_file, EnvironmentPreference, PythonInstallation, PythonPreference,
+    requests_from_version_file_in, EnvironmentPreference, PythonInstallation, PythonPreference,
     PythonRequest, PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
@@ -29,9 +29,16 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning.");
     }
 
+    let working_dir =
+        if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
+            workspace.install_path().to_owned()
+        } else {
+            std::env::current_dir()?
+        };
+
     let Some(request) = request else {
         // Display the current pinned Python version
-        if let Some(pins) = requests_from_version_file().await? {
+        if let Some(pins) = requests_from_version_file_in(&working_dir).await? {
             for pin in pins {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
             }
@@ -69,7 +76,7 @@ pub(crate) async fn pin(
     };
 
     debug!("Using pin `{}`", output);
-    let version_file = PathBuf::from(PYTHON_VERSION_FILENAME);
+    let version_file = working_dir.join(PYTHON_VERSION_FILENAME);
     let exists = version_file.exists();
 
     debug!("Writing pin to {}", version_file.user_display());
