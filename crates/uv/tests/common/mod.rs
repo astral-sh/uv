@@ -488,10 +488,6 @@ impl TestContext {
         let mut command = std::process::Command::new(get_bin());
         command.arg("tool").arg("install");
         self.add_shared_args(&mut command);
-        command.env(
-            "UV_EXCLUDE_NEWER",
-            chrono::offset::Local::now().format("%Y-%m-%d").to_string(),
-        );
         command
     }
 

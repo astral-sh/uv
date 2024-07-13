@@ -178,6 +178,8 @@ fn tool_install_suggest_other_packages_with_executable() {
 
     uv_snapshot!(context.filters(), context.tool_install_without_exclude_newer()
     .arg("fastapi==0.111.0")
+    .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
+    // (FastAPI 0.111 is only available from this date onwards)
     .env("UV_TOOL_DIR", tool_dir.as_os_str())
     .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
@@ -191,27 +193,27 @@ fn tool_install_suggest_other_packages_with_executable() {
     Resolved 35 packages in [TIME]
     Prepared 35 packages in [TIME]
     Installed 35 packages in [TIME]
-     + annotated-types==0.7.0
-     + anyio==4.4.0
-     + certifi==2024.7.4
+     + annotated-types==0.6.0
+     + anyio==4.3.0
+     + certifi==2024.2.2
      + click==8.1.7
      + dnspython==2.6.1
-     + email-validator==2.2.0
+     + email-validator==2.1.1
      + fastapi==0.111.0
-     + fastapi-cli==0.0.4
+     + fastapi-cli==0.0.2
      + h11==0.14.0
      + httpcore==1.0.5
      + httptools==0.6.1
      + httpx==0.27.0
      + idna==3.7
-     + jinja2==3.1.4
+     + jinja2==3.1.3
      + markdown-it-py==3.0.0
      + markupsafe==2.1.5
      + mdurl==0.1.2
-     + orjson==3.10.6
-     + pydantic==2.8.2
-     + pydantic-core==2.20.1
-     + pygments==2.18.0
+     + orjson==3.10.3
+     + pydantic==2.7.1
+     + pydantic-core==2.18.2
+     + pygments==2.17.2
      + python-dotenv==1.0.1
      + python-multipart==0.0.9
      + pyyaml==6.0.1
@@ -220,11 +222,11 @@ fn tool_install_suggest_other_packages_with_executable() {
      + sniffio==1.3.1
      + starlette==0.37.2
      + typer==0.12.3
-     + typing-extensions==4.12.2
-     + ujson==5.10.0
-     + uvicorn==0.30.1
+     + typing-extensions==4.11.0
+     + ujson==5.9.0
+     + uvicorn==0.29.0
      + uvloop==0.19.0
-     + watchfiles==0.22.0
+     + watchfiles==0.21.0
      + websockets==12.0
     "###);
 }
