@@ -62,7 +62,26 @@ def main(target: str) -> None:
         else:
             raise ValueError("Version not found in pyproject.toml")
 
-    # Replace any relative URLs with absolute URLs.
+    # Replace the badges with versioned URLs.
+    for existing, replacement in [
+        (
+            "https://img.shields.io/pypi/v/uv.svg",
+            f"https://img.shields.io/pypi/v/uv/{version}.svg",
+        ),
+        (
+            "https://img.shields.io/pypi/l/uv.svg",
+            f"https://img.shields.io/pypi/l/uv/{version}.svg",
+        ),
+        (
+            "https://img.shields.io/pypi/pyversions/uv.svg",
+            f"https://img.shields.io/pypi/pyversions/uv/{version}.svg",
+        ),
+    ]:
+        if existing not in content:
+            raise ValueError(f"Badge not found in README.md: {existing}")
+        content = content.replace(existing, replacement)
+
+    # Replace any relative URLs (e.g., `[PIP_COMPATIBILITY.md`) with absolute URLs.
     def replace(match: re.Match) -> str:
         url = match.group(1)
         if not url.startswith("http"):
