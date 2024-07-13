@@ -8,7 +8,11 @@ adjusts the images in the README.md to support the given target.
 from __future__ import annotations
 
 import argparse
+import re
+import urllib.parse
 from pathlib import Path
+
+import tomllib
 
 URL = "https://github.com/astral-sh/uv/assets/1309177/{}"
 URL_LIGHT = URL.format("629e59c0-9c6e-4013-9ad4-adb2bcf5080d")
@@ -35,6 +39,8 @@ PYPI = f"""
 
 def main(target: str) -> None:
     """Modify the README.md to support the given target."""
+
+    # Replace the benchmark images based on the target.
     with Path("README.md").open(encoding="utf8") as fp:
         content = fp.read()
         if GITHUB not in content:
@@ -42,11 +48,33 @@ def main(target: str) -> None:
             raise ValueError(msg)
 
     if target == "pypi":
-        with Path("README.md").open("w", encoding="utf8") as fp:
-            fp.write(content.replace(GITHUB, PYPI))
+        content = content.replace(GITHUB, PYPI)
     else:
         msg = f"Unknown target: {target}"
         raise ValueError(msg)
+
+    # Read the current version from the `pyproject.toml`.
+    with Path("pyproject.toml").open(mode="rb") as fp:
+        # Parse the TOML.
+        pyproject = tomllib.load(fp)
+        if "project" in pyproject and "version" in pyproject["project"]:
+            version = pyproject["project"]["version"]
+        else:
+            raise ValueError("Version not found in pyproject.toml")
+
+    # Replace any relative URLs with absolute URLs.
+    def replace(match: re.Match) -> str:
+        url = match.group(1)
+        if not url.startswith("http"):
+            url = urllib.parse.urljoin(
+                f"https://github.com/astral-sh/uv/blob/{version}/README.md", url
+            )
+        return f"]({url})"
+
+    content = re.sub(r"]\(([^)]+)\)", replace, content)
+
+    with Path("README.md").open("w", encoding="utf8") as fp:
+        fp.write(content)
 
 
 if __name__ == "__main__":

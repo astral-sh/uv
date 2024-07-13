@@ -9,8 +9,8 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import sys
 import subprocess
+import sys
 import tempfile
 
 DEFAULT_TEST_PACKAGES = [
