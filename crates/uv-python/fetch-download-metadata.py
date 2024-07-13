@@ -27,7 +27,6 @@ import json
 import logging
 import re
 import os
-import sys
 from enum import StrEnum
 from dataclasses import dataclass
 from pathlib import Path
@@ -169,7 +168,7 @@ class CPythonFinder(Finder):
 
         # Collect all available Python downloads
         for page in range(1, pages):
-            logging.info("Fetching indygreg release page %d", page)
+            logging.info("Fetching CPython release page %d", page)
             resp = await self.client.get(self.RELEASE_URL, params={"page": page})
             resp.raise_for_status()
             rows = resp.json()
@@ -206,8 +205,8 @@ class CPythonFinder(Finder):
         """Fetch the checksums for the given downloads."""
         checksum_urls = set()
         for download in downloads:
-            release_url = download.url.rsplit("/", maxsplit=1)[0]
-            checksum_url = release_url + "/SHA256SUMS"
+            release_base_url = download.url.rsplit("/", maxsplit=1)[0]
+            checksum_url = release_base_url + "/SHA256SUMS"
             checksum_urls.add(checksum_url)
 
         async def fetch_checksums(url: str) -> httpx.Response | None:
@@ -223,7 +222,9 @@ class CPythonFinder(Finder):
         completed = 0
         tasks = []
         for batch in batched(checksum_urls, n):
-            logging.info("Fetching checksums: %d/%d", completed, len(checksum_urls))
+            logging.info(
+                "Fetching CPython checksums: %d/%d", completed, len(checksum_urls)
+            )
             async with asyncio.TaskGroup() as tg:
                 for url in batch:
                     task = tg.create_task(fetch_checksums(url))
@@ -362,13 +363,13 @@ def render(downloads: list[PythonDownload]) -> None:
 async def find() -> None:
     token = os.environ.get("GH_TOKEN")
     if not token:
-        logging.error("Please set `GH_TOKEN` environment variable.")
-        sys.exit(1)
+        logging.warning(
+            "`GH_TOKEN` env var not found, you may hit rate limits for GitHub API requests."
+        )
 
-    headers = {
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Authorization": "Bearer " + token,
-    }
+    headers = {"X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = "Bearer " + token
     client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=15)
 
     # TODO: Add PyPyFinder
