@@ -170,6 +170,14 @@ pub fn create_bare_venv(
                 interpreter.python_minor(),
             )),
         )?;
+
+        if interpreter.markers().implementation_name() == "pypy" {
+            uv_fs::replace_symlink(
+                "python",
+                scripts.join(format!("pypy{}", interpreter.python_major())),
+            )?;
+            uv_fs::replace_symlink("python", scripts.join("pypy"))?;
+        }
     }
 
     // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
