@@ -22,6 +22,7 @@ use uv_python::{
     EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
+use uv_shell::Shell;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -31,7 +32,6 @@ use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
-use crate::shell::Shell;
 
 /// Install a tool.
 pub(crate) async fn install(

@@ -53,7 +53,6 @@ pub(crate) mod commands;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
-pub(crate) mod shell;
 pub(crate) mod version;
 
 #[instrument(skip_all)]
