@@ -61,7 +61,7 @@ impl Error {
                 return true;
             }
 
-            // The server doesn't support rage requests (it doesn't return the necessary headers).
+            // The server doesn't support range requests (it doesn't return the necessary headers).
             ErrorKind::AsyncHttpRangeReader(
                 AsyncHttpRangeReaderError::ContentLengthMissing
                 | AsyncHttpRangeReaderError::ContentRangeMissing,
