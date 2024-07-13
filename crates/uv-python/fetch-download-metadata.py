@@ -69,9 +69,6 @@ class Version(NamedTuple):
     def __str__(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}"
 
-    def __neg__(self) -> Self:
-        return Version(-self.major, -self.minor, -self.patch)
-
 
 class ImplementationName(StrEnum):
     CPYTHON = "cpython"
@@ -328,12 +325,14 @@ class CPythonFinder(Finder):
 def render(downloads: list[PythonDownload]) -> None:
     """Render `download-metadata.json`."""
 
-    def sort_key(download: PythonDownload) -> tuple[int, Version, PlatformTriple]:
+    def sort_key(download: PythonDownload) -> tuple:
         # Sort by implementation, version (latest first), and then by triple.
         impl_order = [ImplementationName.CPYTHON, ImplementationName.PYPY]
         return (
             impl_order.index(download.implementation),
-            -download.version,
+            -download.version.major,
+            -download.version.minor,
+            -download.version.patch,
             download.triple,
         )
 
