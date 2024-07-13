@@ -175,8 +175,10 @@ fn tool_install_suggest_other_packages_with_executable() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
+    let mut filters = context.filters();
+    filters.push(("\\+ uvloop(.+)\n ", ""));
 
-    uv_snapshot!(context.filters(), context.tool_install_without_exclude_newer()
+    uv_snapshot!(filters, context.tool_install_without_exclude_newer()
     .arg("fastapi==0.111.0")
     .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
     // (FastAPI 0.111 is only available from this date onwards)
@@ -225,7 +227,6 @@ fn tool_install_suggest_other_packages_with_executable() {
      + typing-extensions==4.11.0
      + ujson==5.9.0
      + uvicorn==0.29.0
-     + uvloop==0.19.0
      + watchfiles==0.21.0
      + websockets==12.0
     "###);
