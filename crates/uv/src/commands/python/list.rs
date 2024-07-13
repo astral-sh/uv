@@ -120,7 +120,8 @@ pub(crate) async fn list(
                 }
             }
             if let [major, minor, patch] = version.release() {
-                if !seen_patch.insert((os.clone(), *major, *minor, *patch, *key.arch(), key.libc())) {
+                if !seen_patch.insert((os.clone(), *major, *minor, *patch, *key.arch(), key.libc()))
+                {
                     if matches!(kind, Kind::Download) {
                         continue;
                     }
