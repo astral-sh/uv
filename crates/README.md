@@ -109,6 +109,10 @@ Utilities for reading package requirements from `pyproject.toml` and `requiremen
 
 Functionality for resolving Python packages and their dependencies.
 
+## [uv-shell](./uv-shell)
+
+Utilities for detecting and manipulating shell environments.
+
 ## [uv-types](./uv-types)
 
 Shared traits for uv, to avoid circular dependencies.

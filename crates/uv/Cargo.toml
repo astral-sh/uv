@@ -32,12 +32,13 @@ uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
+uv-python = { workspace = true, features = ["schemars"]}
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
+uv-shell = { workspace = true }
 uv-tool = { workspace = true }
-uv-python = { workspace = true, features = ["schemars"]}
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
@@ -50,7 +51,6 @@ clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-home = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
@@ -59,7 +59,6 @@ owo-colors = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
-same-file = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 textwrap = { workspace = true }

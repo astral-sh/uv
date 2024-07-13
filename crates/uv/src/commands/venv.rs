@@ -26,12 +26,12 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{pip, ExitStatus, SharedState};
 use crate::printer::Printer;
-use crate::shell::Shell;
 
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]

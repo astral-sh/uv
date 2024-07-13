@@ -4,7 +4,7 @@ use uv_fs::Simplified;
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[allow(clippy::doc_markdown)]
-pub(crate) enum Shell {
+pub enum Shell {
     /// Bourne Again SHell (bash)
     Bash,
     /// Friendly Interactive SHell (fish)
@@ -32,7 +32,7 @@ impl Shell {
     ///
     /// If `SHELL` is set, but contains a value that doesn't correspond to one of the supported
     /// shell types, then return `None`.
-    pub(crate) fn from_env() -> Option<Shell> {
+    pub fn from_env() -> Option<Shell> {
         if std::env::var_os("NU_VERSION").is_some() {
             Some(Shell::Nushell)
         } else if std::env::var_os("FISH_VERSION").is_some() {
@@ -68,7 +68,7 @@ impl Shell {
     /// assert_eq!(Shell::from_shell_path("/usr/bin/zsh"), Some(Shell::Zsh));
     /// assert_eq!(Shell::from_shell_path("/opt/my_custom_shell"), None);
     /// ```
-    pub(crate) fn from_shell_path(path: impl AsRef<Path>) -> Option<Shell> {
+    pub fn from_shell_path(path: impl AsRef<Path>) -> Option<Shell> {
         parse_shell_from_path(path.as_ref())
     }
 
@@ -77,7 +77,7 @@ impl Shell {
     /// Some of the logic here is based on rustup's rc file detection.
     ///
     /// See: <https://github.com/rust-lang/rustup/blob/fede22fea7b160868cece632bd213e6d72f8912f/src/cli/self_update/shell.rs#L197>
-    pub(crate) fn configuration_files(self) -> Vec<PathBuf> {
+    pub fn configuration_files(self) -> Vec<PathBuf> {
         let Some(home_dir) = home::home_dir() else {
             return vec![];
         };
@@ -158,7 +158,7 @@ impl Shell {
     }
 
     /// Returns `true` if the given path is on the `PATH` in this shell.
-    pub(crate) fn contains_path(path: &Path) -> bool {
+    pub fn contains_path(path: &Path) -> bool {
         std::env::var_os("PATH")
             .as_ref()
             .iter()
@@ -167,7 +167,7 @@ impl Shell {
     }
 
     /// Returns the command necessary to prepend a directory to the `PATH` in this shell.
-    pub(crate) fn prepend_path(self, path: &Path) -> Option<String> {
+    pub fn prepend_path(self, path: &Path) -> Option<String> {
         match self {
             Shell::Nushell => None,
             Shell::Bash | Shell::Zsh => Some(format!(

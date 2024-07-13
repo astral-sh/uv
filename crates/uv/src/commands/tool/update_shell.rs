@@ -7,12 +7,12 @@ use tracing::debug;
 
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
+use uv_shell::Shell;
 use uv_tool::find_executable_directory;
 use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::shell::Shell;
 
 /// Ensure that the executable directory is in PATH.
 pub(crate) async fn update_shell(preview: PreviewMode, printer: Printer) -> Result<ExitStatus> {

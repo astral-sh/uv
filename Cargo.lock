@@ -4456,7 +4456,6 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
- "home",
  "ignore",
  "indexmap",
  "indicatif",
@@ -4476,7 +4475,6 @@ dependencies = [
  "regex",
  "reqwest",
  "rustc-hash 2.0.0",
- "same-file",
  "serde",
  "serde_json",
  "textwrap",
@@ -4506,6 +4504,7 @@ dependencies = [
  "uv-resolver",
  "uv-scripts",
  "uv-settings",
+ "uv-shell",
  "uv-tool",
  "uv-types",
  "uv-virtualenv",
@@ -5084,6 +5083,15 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-warnings",
+]
+
+[[package]]
+name = "uv-shell"
+version = "0.0.1"
+dependencies = [
+ "home",
+ "same-file",
+ "uv-fs",
 ]
 
 [[package]]
