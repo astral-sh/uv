@@ -113,14 +113,14 @@ pub(crate) async fn list(
         // Only show the latest patch version for each download unless all were requested
         if !matches!(kind, Kind::System) {
             if let [major, minor, ..] = version.release() {
-                if !seen_minor.insert((os.clone(), *major, *minor)) {
+                if !seen_minor.insert((os.clone(), *major, *minor, *key.arch(), *key.libc())) {
                     if matches!(kind, Kind::Download) && !all_versions {
                         continue;
                     }
                 }
             }
             if let [major, minor, patch] = version.release() {
-                if !seen_patch.insert((os.clone(), *major, *minor, *patch)) {
+                if !seen_patch.insert((os.clone(), *major, *minor, *patch, *key.arch(), key.libc())) {
                     if matches!(kind, Kind::Download) {
                         continue;
                     }
