@@ -233,6 +233,11 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
+        if let Some(libc) = &self.libc {
+            if key.libc != *libc {
+                return false;
+            }
+        }
         if let Some(implementation) = &self.implementation {
             if key.implementation != LenientImplementationName::from(*implementation) {
                 return false;
