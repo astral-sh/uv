@@ -45,6 +45,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
 
@@ -59,6 +63,9 @@ jobs:
 
       - name: "Ruff check"
         run: pipx run ruff check .
+
+      - name: "README check"
+        run: python scripts/transform_readme.py --target pypi
 
   cargo-clippy:
     needs: determine_changes
@@ -637,7 +644,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Install Python"
-        run: dnf install which -y && python3 -m ensurepip
+        run: dnf install python3 which -y && python3 -m ensurepip
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
