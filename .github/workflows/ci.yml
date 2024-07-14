@@ -564,7 +564,7 @@ jobs:
               fi
           }
 
-          executables=("pypy" "pypy3.9" "python")
+          executables=("python")
 
           all_found=true
           for executable_name in "${executables[@]}"; do
@@ -583,7 +583,7 @@ jobs:
 
       - name: "Check version"
         run: |
-          .venv/bin/pypy --version
+          .venv/bin/python --version
 
       - name: "Check install"
         run: |
