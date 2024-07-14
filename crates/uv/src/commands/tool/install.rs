@@ -8,7 +8,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
-use distribution_types::{InstalledDist, Name};
+use distribution_types::Name;
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -19,17 +19,19 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
-    PythonRequest,
+    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_shell::Shell;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::project::{resolve_environment, sync_environment, update_environment};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
+use crate::commands::{
+    project::{resolve_environment, sync_environment, update_environment},
+    tool::common::matching_packages,
+};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -297,7 +299,7 @@ pub(crate) async fn install(
         .collect::<BTreeSet<_>>();
 
     if target_entry_points.is_empty() {
-        match matching_packages(&from.name, &environment) {
+        match matching_packages(from.name.as_ref(), &environment) {
             Ok(packages) => {
                 writeln!(
                     printer.stdout(),
@@ -445,35 +447,4 @@ pub(crate) async fn install(
     }
 
     Ok(ExitStatus::Success)
-}
-
-/// Return all packages which contain an executable for the given package name.
-fn matching_packages(
-    name: &PackageName,
-    environment: &PythonEnvironment,
-) -> Result<Vec<InstalledDist>> {
-    let site_packages = SitePackages::from_environment(environment)?;
-    let entrypoints = site_packages
-        .iter()
-        .filter_map(|package| {
-            match entrypoint_paths(environment, package.name(), package.version()).ok() {
-                Some(entrypoints) => {
-                    if entrypoints.iter().any(|e| {
-                        if let Some(stripped) = e.0.strip_suffix(".exe") {
-                            stripped == name.as_ref()
-                        } else {
-                            e.0 == name.as_ref()
-                        }
-                    }) {
-                        Some(package.clone())
-                    } else {
-                        None
-                    }
-                }
-                None => None,
-            }
-        })
-        .collect();
-
-    Ok(entrypoints)
 }
