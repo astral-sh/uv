@@ -196,6 +196,23 @@ pub fn create_bare_venv(
             &scripts,
             python_home,
         )?;
+
+        if interpreter.markers().implementation_name() == "pypy" {
+            copy_launcher_windows(
+                WindowsExecutable::PyPy,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PyPyw,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+        }
     }
 
     #[cfg(not(any(unix, windows)))]
@@ -314,6 +331,10 @@ enum WindowsExecutable {
     Python,
     /// The `pythonw.exe` executable (or `venvwlauncher.exe` launcher shim).
     Pythonw,
+    // The `pypy.exe` executable
+    PyPy,
+    // The `pypyw.exe` executable
+    PyPyw,
 }
 
 impl WindowsExecutable {
@@ -322,6 +343,8 @@ impl WindowsExecutable {
         match self {
             WindowsExecutable::Python => "python.exe",
             WindowsExecutable::Pythonw => "pythonw.exe",
+            WindowsExecutable::PyPy => "pypy.exe",
+            WindowsExecutable::PyPyw => "pypyw.exe",
         }
     }
 
@@ -330,6 +353,8 @@ impl WindowsExecutable {
         match self {
             WindowsExecutable::Python => "venvlauncher.exe",
             WindowsExecutable::Pythonw => "venvwlauncher.exe",
+            WindowsExecutable::PyPy => "venvlauncher.exe",
+            WindowsExecutable::PyPyw => "venvwlauncher.exe",
         }
     }
 }

@@ -571,13 +571,13 @@ jobs:
               fi
           }
 
-          executables=("python")
+          executables=("pypy" "pypy3.9" "python")
 
           all_found=true
           for executable_name in "${executables[@]}"; do
               check_in_bin "$executable_name" "$folder_path"
               result=$?
-            
+
               if [[ $result -ne 0 ]]; then
                   all_found=false
               fi
