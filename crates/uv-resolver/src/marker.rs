@@ -1,10 +1,10 @@
 #![allow(clippy::enum_glob_use, clippy::single_match_else)]
 
-use std::collections::HashMap;
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
 
 use pubgrub::range::{Range as PubGrubRange, Range};
+use rustc_hash::FxHashMap;
 
 use pep440_rs::{Operator, Version, VersionSpecifier};
 use pep508_rs::{
@@ -205,7 +205,7 @@ pub(crate) fn normalize_all(
     match tree {
         MarkerTree::And(trees) => {
             let mut reduced = Vec::new();
-            let mut versions: HashMap<_, Vec<_>> = HashMap::new();
+            let mut versions: FxHashMap<_, Vec<_>> = FxHashMap::default();
 
             for subtree in trees {
                 // Normalize nested expressions as much as possible first.
@@ -251,7 +251,7 @@ pub(crate) fn normalize_all(
 
         MarkerTree::Or(trees) => {
             let mut reduced = Vec::new();
-            let mut versions: HashMap<_, Vec<_>> = HashMap::new();
+            let mut versions: FxHashMap<_, Vec<_>> = FxHashMap::default();
 
             for subtree in trees {
                 // Normalize nested expressions as much as possible first.
@@ -300,6 +300,12 @@ pub(crate) fn normalize_all(
 
             reduced.sort();
             reduced.dedup();
+
+            // If the reduced trees contain complementary terms (e.g., `sys_platform == 'linux' or sys_platform != 'linux'`),
+            // the expression is always true and can be removed.
+            if contains_complements(&reduced) {
+                return None;
+            }
 
             match reduced.len() {
                 0 => None,
@@ -551,7 +557,7 @@ fn filter_conjunctions(tree: &mut MarkerTree, disjunct: &MarkerExpression) -> bo
 /// Simplify version expressions.
 fn simplify_ranges(
     reduced: &mut Vec<MarkerTree>,
-    versions: HashMap<MarkerValueVersion, Vec<PubGrubRange<Version>>>,
+    versions: FxHashMap<MarkerValueVersion, Vec<PubGrubRange<Version>>>,
     combine: impl Fn(&Vec<PubGrubRange<Version>>) -> PubGrubRange<Version>,
 ) {
     for (key, ranges) in versions {
@@ -664,6 +670,42 @@ fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> boo
 
     // there is no version that is contained in both ranges
     range.is_disjoint(&range2)
+}
+
+/// Return `true` if the tree contains complementary terms (e.g., `sys_platform == 'linux' or sys_platform != 'linux'`).
+fn contains_complements(trees: &[MarkerTree]) -> bool {
+    let mut terms = FxHashMap::default();
+    for tree in trees {
+        let MarkerTree::Expression(
+            MarkerExpression::String {
+                key,
+                operator,
+                value,
+            }
+            | MarkerExpression::StringInverted {
+                value,
+                operator,
+                key,
+            },
+        ) = tree
+        else {
+            continue;
+        };
+        match operator {
+            MarkerOperator::Equal => {
+                if let Some(MarkerOperator::NotEqual) = terms.insert((key, value), operator) {
+                    return true;
+                }
+            }
+            MarkerOperator::NotEqual => {
+                if let Some(MarkerOperator::Equal) = terms.insert((key, value), operator) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Returns the key and version range for a version expression.
@@ -891,6 +933,20 @@ mod tests {
         assert_normalizes_to(
             "python_version != '3.8' and python_version != '3.9'",
             "(python_version < '3.8' or python_version > '3.8') and (python_version < '3.9' or python_version > '3.9')",
+        );
+
+        // normalize out redundant expressions
+        assert_normalizes_out("sys_platform == 'win32' or sys_platform != 'win32'");
+
+        assert_normalizes_out("'win32' == sys_platform or sys_platform != 'win32'");
+
+        assert_normalizes_out(
+            "sys_platform == 'win32' or sys_platform == 'win32' or sys_platform != 'win32'",
+        );
+
+        assert_normalizes_to(
+            "sys_platform == 'win32' and sys_platform != 'win32'",
+            "sys_platform == 'win32' and sys_platform != 'win32'",
         );
     }
 
