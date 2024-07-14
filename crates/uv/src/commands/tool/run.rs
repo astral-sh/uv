@@ -23,11 +23,11 @@ use uv_python::{
     PythonRequest,
 };
 use uv_tool::{entrypoint_paths, InstalledTools};
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
+use crate::commands::{project::environment::CachedEnvironment, tool::common::matching_packages};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -139,6 +139,43 @@ pub(crate) async fn run(
         command.to_string_lossy(),
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
+    // We check if the provided command is not part of the executables for the `from` package.
+    // If the command is found in other packages, we warn the user about the correct package to use.
+    if let (Some(command), Ok(from_package_name)) = (command.to_str(), PackageName::from_str(&from))
+    {
+        if let Ok(packages) = matching_packages(command, &environment) {
+            if !packages.iter().any(|p| p.name() == &from_package_name) {
+                match packages.as_slice() {
+                    [] => {}
+                    [package] => {
+                        let correct_command =
+                            format!("{invocation_source} --from {} {}", package.name(), command);
+                        warn_user!(
+                                "The {} executable is not part of the {} package. It is provided by the {} package. Use `{}` instead.",
+                                command.green(),
+                                from_package_name.red(),
+                                package.name().green(),
+                                correct_command.cyan()
+                            );
+                    }
+                    packages => {
+                        let correct_command = format!("{invocation_source} --from PKG {command}");
+                        warn_user_once!(
+                                "The {} executable is not part of the {} package. It is provided by the the following packages via {}:",
+                                command.green(),
+                                from_package_name.red(),
+                                correct_command.cyan(),
+                            );
+
+                        for package in packages {
+                            writeln!(printer.stdout(), "- {}", package.name().cyan())?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
