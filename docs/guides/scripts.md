@@ -1,5 +1,8 @@
 # Running scripts
 
+A Python script is a file intended for standalone execution, e.g., with `python <script>.py`. Using uv to execute scripts will ensure that
+script dependencies are properly managed inside and outside of projects.
+
 ## Running a script without dependencies
 
 If a script has no dependencies, it can be executed with `uv run`:
