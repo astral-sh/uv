@@ -31,6 +31,8 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning.");
     }
 
+    let virtual_project = VirtualProject::discover(&std::env::current_dir()?, None).await;
+
     let Some(request) = request else {
         // Display the current pinned Python version
         if let Some(pins) = requests_from_version_file().await? {
@@ -50,8 +52,10 @@ pub(crate) async fn pin(
                     Err(err) => return Err(err.into()),
                 };
                 if !isolated {
-                    if let Some(ref python) = python {
-                        assert_python_compatibility(python).await?;
+                    if let (Some(python), Ok(virtual_project)) = (&python, &virtual_project) {
+                        if let Err(e) = assert_python_compatibility(python, virtual_project) {
+                            warn_user_once!("{}", e);
+                        }
                     }
                 }
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
@@ -78,8 +82,8 @@ pub(crate) async fn pin(
     };
 
     if !isolated {
-        if let Some(ref python) = python {
-            assert_python_compatibility(python).await?;
+        if let (Some(python), Ok(virtual_project)) = (&python, &virtual_project) {
+            assert_python_compatibility(python, virtual_project)?;
         }
     }
 
@@ -111,36 +115,37 @@ pub(crate) async fn pin(
 }
 
 /// Checks if the pinned Python version is compatible with the workspace/project's `Requires-Python`.
-async fn assert_python_compatibility(python: &uv_python::PythonInstallation) -> Result<()> {
-    if let Ok(project) = VirtualProject::discover(&std::env::current_dir()?, None).await {
-        let (requires_python, project_type) = match project {
-            VirtualProject::Project(project_workspace) => {
-                debug!(
-                    "Discovered project `{}` at: {}",
-                    project_workspace.project_name(),
-                    project_workspace.workspace().install_path().display()
-                );
-                let requires_python = find_requires_python(project_workspace.workspace())?;
-                (requires_python, "project")
-            }
-            VirtualProject::Virtual(workspace) => {
-                debug!(
-                    "Discovered virtual workspace at: {}",
-                    workspace.install_path().display()
-                );
-                let requires_python = find_requires_python(&workspace)?;
-                (requires_python, "virtual")
-            }
-        };
+fn assert_python_compatibility(
+    python: &uv_python::PythonInstallation,
+    virtual_project: &VirtualProject,
+) -> Result<()> {
+    let (requires_python, project_type) = match virtual_project {
+        VirtualProject::Project(project_workspace) => {
+            debug!(
+                "Discovered project `{}` at: {}",
+                project_workspace.project_name(),
+                project_workspace.workspace().install_path().display()
+            );
+            let requires_python = find_requires_python(project_workspace.workspace())?;
+            (requires_python, "project")
+        }
+        VirtualProject::Virtual(workspace) => {
+            debug!(
+                "Discovered virtual workspace at: {}",
+                workspace.install_path().display()
+            );
+            let requires_python = find_requires_python(workspace)?;
+            (requires_python, "workspace")
+        }
+    };
 
-        if let Some(requires_python) = requires_python {
-            if !requires_python.contains(python.python_version()) {
-                anyhow::bail!(
-                    "The pinned Python version is incompatible with the {}'s `Requires-Python` of {}.",
-                    project_type,
-                    requires_python
-                );
-            }
+    if let Some(requires_python) = requires_python {
+        if !requires_python.contains(python.python_version()) {
+            anyhow::bail!(
+                "The pinned Python version is incompatible with the {}'s `Requires-Python` of {}.",
+                project_type,
+                requires_python
+            );
         }
     }
     Ok(())
