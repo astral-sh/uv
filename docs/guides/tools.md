@@ -113,7 +113,7 @@ $ ruff --version
 
 Unlike `uvx`, `uv tool install` operates on a _package_ and will install all executables provided by the tool.
 
-For example, the following will install `http`, `https`, and `httpie`:
+For example, the following will install the `http`, `https`, and `httpie` executables:
 
 ```console
 $ uv tool install httpie
