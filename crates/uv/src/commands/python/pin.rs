@@ -22,6 +22,7 @@ pub(crate) async fn pin(
     resolved: bool,
     python_preference: PythonPreference,
     preview: PreviewMode,
+    isolated: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -29,12 +30,13 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning.");
     }
 
-    let target_dir =
-        if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
-            workspace.install_path().to_owned()
-        } else {
-            std::env::current_dir()?
-        };
+    let target_dir = if isolated {
+        std::env::current_dir()?
+    } else if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
+        workspace.install_path().to_owned()
+    } else {
+        std::env::current_dir()?
+    };
 
     let Some(request) = request else {
         // Display the current pinned Python version

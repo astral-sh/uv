@@ -777,6 +777,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.resolved,
                 globals.python_preference,
                 globals.preview,
+                globals.isolated,
                 &cache,
                 printer,
             )

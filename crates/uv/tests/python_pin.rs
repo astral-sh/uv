@@ -215,7 +215,7 @@ fn python_pin() {
 
 #[test]
 fn python_pin_in_workspace_subfolder() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11"]);
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Create a simple pyproject.toml
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -249,6 +249,35 @@ fn python_pin_in_workspace_subfolder() {
     assert_snapshot!(python_version, @r###"
 3.11
 "###);
+
+    // Run python pin command in subfolder with --isolated option
+    uv_snapshot!(
+        context.filters(),
+        context
+            .python_pin()
+            .current_dir(&working_dir)
+            .arg("3.12")
+            .arg("--isolated"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned to `3.12`
+
+    ----- stderr -----
+    "###);
+
+    // Verify pin in workspace directory has not been changed
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    assert_snapshot!(python_version, @r###"
+    3.11
+    "###);
+
+    // Verify new pin in current working directory
+    let python_version = fs_err::read_to_string(working_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    assert_snapshot!(python_version, @r###"
+    3.12
+    "###);
 }
 
 /// We do not need a Python interpreter to pin without `--resolved`
