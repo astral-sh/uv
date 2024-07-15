@@ -143,37 +143,13 @@ pub(crate) async fn run(
     // If the command is found in other packages, we warn the user about the correct package to use.
     if let (Some(command), Ok(from_package_name)) = (command.to_str(), PackageName::from_str(&from))
     {
-        if let Ok(packages) = matching_packages(command, &environment) {
-            if !packages.iter().any(|p| p.name() == &from_package_name) {
-                match packages.as_slice() {
-                    [] => {}
-                    [package] => {
-                        let correct_command =
-                            format!("{invocation_source} --from {} {}", package.name(), command);
-                        warn_user!(
-                                "The {} executable is not part of the {} package. It is provided by the {} package. Use `{}` instead.",
-                                command.green(),
-                                from_package_name.red(),
-                                package.name().green(),
-                                correct_command.cyan()
-                            );
-                    }
-                    packages => {
-                        let correct_command = format!("{invocation_source} --from PKG {command}");
-                        warn_user_once!(
-                                "The {} executable is not part of the {} package. It is provided by the the following packages via {}:",
-                                command.green(),
-                                from_package_name.red(),
-                                correct_command.cyan(),
-                            );
-
-                        for package in packages {
-                            writeln!(printer.stdout(), "- {}", package.name().cyan())?;
-                        }
-                    }
-                }
-            }
-        }
+        hint_executable_from_dependency(
+            command,
+            &from_package_name,
+            &environment,
+            &invocation_source,
+            printer,
+        )?;
     }
 
     let mut handle = match process.spawn() {
@@ -248,6 +224,49 @@ fn get_entrypoints(from: &str, environment: &PythonEnvironment) -> Result<Vec<(S
         installed_dist.name(),
         installed_dist.version(),
     )?)
+}
+
+/// Displays a hint if an executable matching the command can be found in a dependency of the package.
+fn hint_executable_from_dependency(
+    command: &str,
+    from_package_name: &PackageName,
+    environment: &PythonEnvironment,
+    invocation_source: &ToolRunCommand,
+    printer: Printer,
+) -> Result<()> {
+    if let Ok(packages) = matching_packages(command, environment) {
+        if !packages.iter().any(|p| p.name() == from_package_name) {
+            match packages.as_slice() {
+                [] => {}
+                [package] => {
+                    let correct_command =
+                        format!("{invocation_source} --from {} {}", package.name(), command);
+                    warn_user!(
+                                "The {} executable is not part of the {} package. It is provided by the {} package. Use `{}` instead.",
+                                command.green(),
+                                from_package_name.red(),
+                                package.name().green(),
+                                correct_command.cyan()
+                            );
+                }
+                packages => {
+                    let correct_command = format!("{invocation_source} --from PKG {command}");
+                    warn_user_once!(
+                                "The {} executable is not part of the {} package. It is provided by the the following packages via {}:",
+                                command.green(),
+                                from_package_name.red(),
+                                correct_command.cyan(),
+                            );
+
+                    for package in packages {
+                        writeln!(printer.stdout(), "- {}", package.name().cyan())?;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.

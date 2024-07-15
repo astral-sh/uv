@@ -56,7 +56,7 @@ pub(super) fn matching_packages(
     environment: &PythonEnvironment,
 ) -> anyhow::Result<Vec<InstalledDist>> {
     let site_packages = SitePackages::from_environment(environment)?;
-    let entrypoints = site_packages
+    let packages = site_packages
         .iter()
         .filter_map(|package| {
             entrypoint_paths(environment, package.name(), package.version())
@@ -75,5 +75,5 @@ pub(super) fn matching_packages(
         })
         .collect();
 
-    Ok(entrypoints)
+    Ok(packages)
 }
