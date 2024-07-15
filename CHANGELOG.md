@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.2.25
+
+### Enhancements
+
+- Include PyPy-specific executables when creating virtual environments with `uv venv` ([#5047](https://github.com/astral-sh/uv/pull/5047))
+- Add a custom error message for `--no-build-isolation` `torch` dependencies ([#5041](https://github.com/astral-sh/uv/pull/5041))
+- Improve missing `wheel` error message with `--no-build-isolation` ([#4964](https://github.com/astral-sh/uv/pull/4964))
+
+### CLI
+
+- Add `--no-pager` option in `help` command ([#5007](https://github.com/astral-sh/uv/pull/5007))
+- Unhide `--isolated` global argument ([#5005](https://github.com/astral-sh/uv/pull/5005))
+- Warn when unused `pyproject.toml` configuration is detected ([#5025](https://github.com/astral-sh/uv/pull/5025))
+
+### Bug fixes
+
+- Fall back to streaming wheel when `Content-Length` header is absent ([#5000](https://github.com/astral-sh/uv/pull/5000))
+- Fix substring marker expression disjointness checks ([#4998](https://github.com/astral-sh/uv/pull/4998))
+- Lock directories to synchronize wheel-install copies ([#4978](https://github.com/astral-sh/uv/pull/4978))
+- Normalize out complementary == or != markers ([#5050](https://github.com/astral-sh/uv/pull/5050))
+- Retry on permission errors when persisting extracted source distributions to the cache ([#5076](https://github.com/astral-sh/uv/pull/5076))
+- Set absolute URLs prior to uploading to PyPI ([#5038](https://github.com/astral-sh/uv/pull/5038))
+- Exclude `--upgrade-package` from the `pip compile` header ([#5032](https://github.com/astral-sh/uv/pull/5032))
+- Exclude `--upgrade-package` when option and value are passed as a single argument ([#5033](https://github.com/astral-sh/uv/pull/5033))
+- Add split to cover marker universe when existing splits are incomplete ([#5074](https://github.com/astral-sh/uv/pull/5074))
+- Use correct `pyproject.toml` path in warnings ([#5069](https://github.com/astral-sh/uv/pull/5069))
+
+### Documentation
+
+- Fix `CONTRIBUTING.md` instructions to install multiple Python versions ([#5015](https://github.com/astral-sh/uv/pull/5015))
+- Use versioned badges when uploading to PyPI ([#5039](https://github.com/astral-sh/uv/pull/5039))
+
 ## 0.2.24
 
 ### Enhancements
