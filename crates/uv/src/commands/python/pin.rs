@@ -92,7 +92,7 @@ pub(crate) async fn pin(
     if target_dir != std::env::current_dir()? {
         // Print the version file use to pin only
         // if it's not in the current working directory
-        message = format!("{message} in `{}`", version_file.display())
+        message = format!("{message} in `{}`", version_file.display());
     };
 
     writeln!(printer.stdout(), "{message}")?;
