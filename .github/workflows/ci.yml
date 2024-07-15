@@ -571,7 +571,7 @@ jobs:
               fi
           }
 
-          executables=("pypy" "pypy3.9" "python")
+          executables=("pypy" "pypy3" "python")
 
           all_found=true
           for executable_name in "${executables[@]}"; do
