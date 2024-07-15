@@ -255,7 +255,8 @@ fn tool_run_warn_executable_not_in_from() {
     let bin_dir = context.temp_dir.child("bin");
     let mut filters = context.filters();
     filters.push(("\\+ uvloop(.+)\n ", ""));
-    filters.push(("(?s)Usage: fastapi.*", ""));
+    // Strip off the `fastapi` command output.
+    filters.push(("(?s)fastapi` instead.*", "fastapi` instead."));
 
     uv_snapshot!(filters, context.tool_run()
     .arg("--from")
