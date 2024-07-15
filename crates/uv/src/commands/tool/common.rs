@@ -50,7 +50,7 @@ pub(super) async fn resolve_requirements(
     .await
 }
 
-/// Return all packages which contain an executable for the given executable name.
+/// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(
     name: &str,
     environment: &PythonEnvironment,
@@ -59,22 +59,19 @@ pub(super) fn matching_packages(
     let entrypoints = site_packages
         .iter()
         .filter_map(|package| {
-            match entrypoint_paths(environment, package.name(), package.version()).ok() {
-                Some(entrypoints) => {
-                    if entrypoints.iter().any(|e| {
-                        if let Some(stripped) = e.0.strip_suffix(".exe") {
-                            stripped == name
-                        } else {
-                            e.0 == name
-                        }
-                    }) {
-                        Some(package.clone())
-                    } else {
-                        None
-                    }
-                }
-                None => None,
-            }
+            entrypoint_paths(environment, package.name(), package.version())
+                .ok()
+                .and_then(|entrypoints| {
+                    entrypoints
+                        .iter()
+                        .any(|entrypoint| {
+                            entrypoint
+                                .0
+                                .strip_suffix(std::env::consts::EXE_SUFFIX)
+                                .is_some_and(|stripped| stripped == name)
+                        })
+                        .then(|| package.clone())
+                })
         })
         .collect();
 

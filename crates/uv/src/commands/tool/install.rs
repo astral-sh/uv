@@ -19,7 +19,8 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_shell::Shell;
@@ -299,45 +300,14 @@ pub(crate) async fn install(
         .collect::<BTreeSet<_>>();
 
     if target_entry_points.is_empty() {
-        match matching_packages(from.name.as_ref(), &environment) {
-            Ok(packages) => {
-                writeln!(
-                    printer.stdout(),
-                    "The executable {} was not found.",
-                    from.name.red()
-                )?;
+        writeln!(
+            printer.stdout(),
+            "No executables are provided by package `{}`.",
+            from.name.red()
+        )?;
 
-                match packages.as_slice() {
-                    [] => {}
-                    [package] => {
-                        let command = format!("uv tool install {}", package.name());
-                        writeln!(
-                            printer.stdout(),
-                            "However, the executable {} is available via dependency {}. Did you mean {}?",
-                            from.name.green(),
-                            package.name().green(),
-                            command.green(),
-                        )?;
-                    }
-                    packages => {
-                        let command = "uv tool install <PACKAGE>";
-                        writeln!(
-                            printer.stdout(),
-                            "However, the executable {} is available via {}:",
-                            from.name.green(),
-                            command.green(),
-                        )?;
+        hint_executable_from_dependency(&from, &environment, printer)?;
 
-                        for package in packages {
-                            writeln!(printer.stdout(), "- {}", package.name().cyan())?;
-                        }
-                    }
-                }
-            }
-            Err(err) => {
-                warn!("Failed to determine executables for packages: {err}");
-            }
-        }
         // Clean up the environment we just created
         installed_tools.remove_environment(&from.name)?;
         return Ok(ExitStatus::Failure);
@@ -447,4 +417,47 @@ pub(crate) async fn install(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Displays a hint if an executable matching the package name can be found in a dependency of the package.
+fn hint_executable_from_dependency(
+    from: &Requirement,
+    environment: &PythonEnvironment,
+    printer: Printer,
+) -> Result<()> {
+    match matching_packages(from.name.as_ref(), environment) {
+        Ok(packages) => match packages.as_slice() {
+            [] => {}
+            [package] => {
+                let command = format!("uv tool install {}", package.name());
+                writeln!(
+                        printer.stdout(),
+                        "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
+                        from.name.green(),
+                        package.name().green(),
+                        command.bold(),
+                    )?;
+            }
+            packages => {
+                writeln!(
+                    printer.stdout(),
+                    "However, an executable with the name `{}` is available via the following dependencies::",
+                    from.name.green(),
+                )?;
+
+                for package in packages {
+                    writeln!(printer.stdout(), "- {}", package.name().cyan())?;
+                }
+                writeln!(
+                    printer.stdout(),
+                    "Did you mean to install one of them instead?"
+                )?;
+            }
+        },
+        Err(err) => {
+            warn!("Failed to determine executables for packages: {err}");
+        }
+    }
+
+    Ok(())
 }
