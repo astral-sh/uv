@@ -33,7 +33,7 @@ These commands are used to manage Python itself. uv is capable of installing and
 - `uv python list`
 - `uv python find`
 
-See the documentation on [toolchains](./preview/toolchains.md) for more details on getting started.
+See the documentation on [toolchains](./python-versions.md) for more details on getting started.
 
 ### Command-line tool management
 

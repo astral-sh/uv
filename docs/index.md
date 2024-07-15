@@ -9,11 +9,11 @@ An extremely fast Python package installer and resolver, written in Rust. Design
 replacement for common `pip` and `pip-tools` workflows.
 
 <p align="center">
-  <picture align="center">
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/astral-sh/uv/assets/1309177/03aa9163-1c79-4a87-a31d-7a9311ed9310">
-    <source media="(prefers-color-scheme: light)" srcset="https://github.com/astral-sh/uv/assets/1309177/629e59c0-9c6e-4013-9ad4-adb2bcf5080d">
-    <img alt="Shows a bar chart with benchmark results." src="https://github.com/astral-sh/uv/assets/1309177/629e59c0-9c6e-4013-9ad4-adb2bcf5080d">
-  </picture>
+  <img alt="Shows a bar chart with benchmark results." src="{URL_LIGHT}#only-light">
+</p>
+
+<p align="center">
+  <img alt="Shows a bar chart with benchmark results." src="{URL_DARK}#only-dark">
 </p>
 
 <p align="center">
@@ -53,14 +53,14 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 Or, see our [installation guide](./installation.md) for more options.
 
-Then, check out our documentation [creating an environment](pip/environments.html).
+Then, check out our documentation [creating an environment](pip/environments.md).
 
 ## Features
 
 uv supports features familiar from `pip` and `pip-tools`:
 
 - [Managing Python environments](pip/environments.md)
-- [Installing packages](pip/basics.md)
+- [Installing packages](pip/packages.md)
 - [Inspecting packages](pip/inspection.md)
 - [Locking environments](pip/compile.md)
 
