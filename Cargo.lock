@@ -2670,9 +2670,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.85"
+version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22244ce15aa966053a896d1accb3a6e68469b97c7f33f284b99f0d576879fc23"
+checksum = "5e719e8df665df0d1c8fbfd238015744736151d4445ec0836b8e628aae103b77"
 dependencies = [
  "unicode-ident",
 ]
@@ -4890,8 +4890,10 @@ dependencies = [
 name = "uv-macros"
 version = "0.0.1"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn 2.0.71",
+ "textwrap",
 ]
 
 [[package]]
