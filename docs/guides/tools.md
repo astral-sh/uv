@@ -4,7 +4,7 @@ Many Python packages provide command-line tools. uv has specialized support for 
 
 ## Using `uvx`
 
-The `uvx` command is an alias for `uv tool run` which can be used to invoke a tool without installing it.
+The `uvx` command is an alias for `uv tool run`, which can be used to invoke a tool without installing it.
 
 For example, to run `ruff`:
 
