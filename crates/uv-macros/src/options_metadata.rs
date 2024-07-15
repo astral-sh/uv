@@ -91,8 +91,8 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
 
             Ok(quote! {
                 #[automatically_derived]
-                impl crate::options_base::OptionsMetadata for #ident {
-                    fn record(visit: &mut dyn crate::options_base::Visit) {
+                impl uv_options_metadata::OptionsMetadata for #ident {
+                    fn record(visit: &mut dyn uv_options_metadata::Visit) {
                         #(#output);*
                     }
 
@@ -130,7 +130,7 @@ fn handle_option_group(field: &Field) -> syn::Result<proc_macro2::TokenStream> {
                 let kebab_name = LitStr::new(&ident.to_string().replace('_', "-"), ident.span());
 
                 Ok(quote_spanned!(
-                    ident.span() => (visit.record_set(#kebab_name, crate::options_base::OptionSet::of::<#path>()))
+                    ident.span() => (visit.record_set(#kebab_name, uv_options_metadata::OptionSet::of::<#path>()))
                 ))
             }
             _ => Err(syn::Error::new(
@@ -219,14 +219,14 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<proc_macro2::To
         let note = quote_option(deprecated.note);
         let since = quote_option(deprecated.since);
 
-        quote!(Some(crate::options_base::Deprecated { since: #since, message: #note }))
+        quote!(Some(uv_options_metadata::Deprecated { since: #since, message: #note }))
     } else {
         quote!(None)
     };
 
     Ok(quote_spanned!(
         ident.span() => {
-            visit.record_field(#kebab_name, crate::options_base::OptionField{
+            visit.record_field(#kebab_name, uv_options_metadata::OptionField{
                 doc: &#doc,
                 default: &#default,
                 value_type: &#value_type,

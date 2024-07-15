@@ -44,6 +44,7 @@ mod build;
 mod clear_compile;
 mod compile;
 mod generate_json_schema;
+mod generate_options_reference;
 mod render_benchmarks;
 mod wheel_metadata;
 
@@ -61,6 +62,8 @@ enum Cli {
     ClearCompile(ClearCompileArgs),
     /// Generate JSON schema for the TOML configuration file.
     GenerateJSONSchema(GenerateJsonSchemaArgs),
+    /// Generate the options reference for the documentation.
+    GenerateOptionsReference,
     #[cfg(feature = "render")]
     /// Render the benchmarks.
     RenderBenchmarks(RenderBenchmarksArgs),
@@ -78,6 +81,7 @@ async fn run() -> Result<()> {
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
+        Cli::GenerateOptionsReference => println!("{}", generate_options_reference::generate()),
         #[cfg(feature = "render")]
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
     }

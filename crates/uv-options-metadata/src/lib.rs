@@ -1,6 +1,6 @@
 //! Taken directly from Ruff.
 //!
-//! See: <https://github.com/astral-sh/ruff/blob/dc8db1afb08704ad6a788c497068b01edf8b460d/crates/ruff_workspace/src/options_base.rs>
+//! See: <https://github.com/astral-sh/ruff/blob/dc8db1afb08704ad6a788c497068b01edf8b460d/crates/ruff_workspace/sr.rs>
 
 use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
@@ -106,7 +106,7 @@ impl OptionSet {
     /// ### Test for the existence of a child option
     ///
     /// ```rust
-    /// # use uv_settings::options_base::{OptionField, OptionsMetadata, Visit};
+    /// # use uv_options_metadata::{OptionField, OptionsMetadata, Visit};
     ///
     /// struct WithOptions;
     ///
@@ -129,7 +129,7 @@ impl OptionSet {
     /// ### Test for the existence of a nested option
     ///
     /// ```rust
-    /// # use uv_settings::options_base::{OptionField, OptionsMetadata, Visit};
+    /// # use uv_options_metadata::{OptionField, OptionsMetadata, Visit};
     ///
     /// struct Root;
     ///
@@ -180,7 +180,7 @@ impl OptionSet {
     /// ### Find a child option
     ///
     /// ```rust
-    /// # use uv_settings::options_base::{OptionEntry, OptionField, OptionsMetadata, Visit};
+    /// # use uv_options_metadata::{OptionEntry, OptionField, OptionsMetadata, Visit};
     ///
     /// struct WithOptions;
     ///
@@ -205,7 +205,7 @@ impl OptionSet {
     /// ### Find a nested option
     ///
     /// ```rust
-    /// # use uv_settings::options_base::{OptionEntry, OptionField, OptionsMetadata, Visit};
+    /// # use uv_options_metadata::{OptionEntry, OptionField, OptionsMetadata, Visit};
     ///
     /// static HARD_TABS: OptionField = OptionField {
     ///     doc: "Use hard tabs for indentation and spaces for alignment.",

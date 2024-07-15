@@ -4683,6 +4683,7 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "install-wheel-rs",
+ "itertools 0.13.0",
  "mimalloc",
  "owo-colors",
  "pep508_rs",
@@ -4695,6 +4696,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tagu",
+ "textwrap",
  "tikv-jemallocator",
  "tokio",
  "tracing",
@@ -4708,6 +4710,8 @@ dependencies = [
  "uv-distribution",
  "uv-git",
  "uv-installer",
+ "uv-macros",
+ "uv-options-metadata",
  "uv-python",
  "uv-resolver",
  "uv-settings",
@@ -4781,7 +4785,9 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-git",
+ "uv-macros",
  "uv-normalize",
+ "uv-options-metadata",
  "uv-types",
  "uv-warnings",
  "zip",
@@ -4902,6 +4908,13 @@ version = "0.0.1"
 dependencies = [
  "rkyv",
  "schemars",
+ "serde",
+]
+
+[[package]]
+name = "uv-options-metadata"
+version = "0.0.1"
+dependencies = [
  "serde",
 ]
 
@@ -5071,6 +5084,7 @@ dependencies = [
  "uv-fs",
  "uv-macros",
  "uv-normalize",
+ "uv-options-metadata",
  "uv-python",
  "uv-resolver",
  "uv-warnings",
