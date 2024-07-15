@@ -88,7 +88,7 @@ $ uv run --isolated --with ruff -- ruff
 
 However, there are a couple notable differences when using uv's tool interface:
 
-- The `--with` is not needed — the required package is inferred from the command name.
+- The `--with` option is not needed — the required package is inferred from the command name.
 - The temporary environment is cached in a dedicated location.
 - The `--isolated` flag is not needed — tools are always run isolated from the project.
 - If a tool is already installed, `uv tool run` will use the installed version but `uv run` will not.
@@ -103,7 +103,7 @@ To install `ruff`:
 $ uv tool install ruff
 ```
 
-When a tool is installed, its executables are placed in a `bin` directory on the `PATH` which allows the tool to be run without uv (if it's not on the `PATH`, we'll warn you).
+When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows the tool to be run without uv (if it's not on the `PATH`, we'll warn you).
 
 After installing `ruff`, it should be available:
 
