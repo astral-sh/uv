@@ -53,7 +53,7 @@ See the [projects](./projects.md) guide for more details on working in projects.
 
 ## Running a script with dependencies
 
-When a script requires dependencies, they must be installed into the environment that the script runs in. uv prefers to create these environments on-demand instead of having a long-lived virtual environment with manually managed dependencies. This requires declaration
+When a script requires dependencies, they must be installed into the environment that the script runs in. uv prefers to create these environments on-demand instead of maintaining a long-lived virtual environment with manually managed dependencies. This requires explicit declaration
 of dependencies that are required for the script. Generally, it's recommended to use a [project](./projects.md) or [inline metadata](#declaring-script-dependencies) to declare dependencies, but uv supports requesting dependencies per invocation as well.
 
 For example, the following script requires `rich`.
