@@ -115,7 +115,7 @@ data = resp.json()
 pprint([(k, v["title"]) for k, v in data.items()][:10])
 ```
 
-uv will automatically create an environment with the dependencies when running the script, e.g.:
+uv will automatically create an environment with the dependencies necessary to run the script, e.g.:
 
 ```console
 $ uv run example.py
