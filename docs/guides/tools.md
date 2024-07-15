@@ -1,6 +1,6 @@
 # Using tools
 
-Many Python packages provide command-line tools. uv has specialized support for invoking tools provided by these packages.
+Many Python packages provide command-line tools. uv has specialized support for invoking tools provided by these packages without installing them into your environment.
 
 ## Using `uvx`
 
@@ -95,7 +95,7 @@ However, there are a couple notable differences when using uv's tool interface:
 
 ## Installing tools
 
-If a tool is used often, it can be useful to install it to a persistent environment instead of invoking `uvx` repeatedly. 
+If a tool is used often, it can be useful to install it to a persistent environment instead of invoking `uvx` repeatedly.
 
 To install `ruff`:
 
@@ -110,6 +110,14 @@ After installing `ruff`, it should be available:
 ```console
 $ ruff --version
 ```
+
+Unlike `uv pip install`, installing a tool does not make its modules available in the current environment. For example, the following command will fail:
+
+```console
+$ python -c "import ruff"
+```
+
+This isolation is important for reducing interactions and conflicts between dependencies of tools, scripts, and projects.
 
 Unlike `uvx`, `uv tool install` operates on a _package_ and will install all executables provided by the tool.
 
