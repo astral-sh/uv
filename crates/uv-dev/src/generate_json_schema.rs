@@ -9,6 +9,7 @@ use serde::Deserialize;
 use uv_distribution::pyproject::ToolUv as WorkspaceOptions;
 use uv_settings::Options as SettingsOptions;
 
+use crate::generate_all::Mode;
 use crate::ROOT_DIR;
 
 #[derive(Deserialize, JsonSchema)]
@@ -25,26 +26,13 @@ struct CombinedOptions {
 }
 
 #[derive(clap::Args)]
-pub(crate) struct GenerateJsonSchemaArgs {
-    /// Write the generated table to stdout (rather than to `uv.schema.json`).
+pub(crate) struct Args {
+    /// Write the generated output to stdout (rather than to `uv.schema.json`).
     #[arg(long, default_value_t, value_enum)]
-    mode: Mode,
+    pub(crate) mode: Mode,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, clap::ValueEnum, Default)]
-enum Mode {
-    /// Update the content in the `configuration.md`.
-    #[default]
-    Write,
-
-    /// Don't write to the file, check if the file is up-to-date and error if not.
-    Check,
-
-    /// Write the generated help to stdout.
-    DryRun,
-}
-
-pub(crate) fn main(args: &GenerateJsonSchemaArgs) -> Result<()> {
+pub(crate) fn main(args: &Args) -> Result<()> {
     let schema = schema_for!(CombinedOptions);
     let schema_string = serde_json::to_string_pretty(&schema).unwrap();
     let filename = "uv.schema.json";
@@ -98,9 +86,9 @@ mod tests {
 
     use anyhow::Result;
 
-    use crate::generate_json_schema::Mode;
+    use crate::generate_all::Mode;
 
-    use super::{main, GenerateJsonSchemaArgs};
+    use super::{main, Args};
 
     #[test]
     fn test_generate_json_schema() -> Result<()> {
@@ -109,6 +97,6 @@ mod tests {
         } else {
             Mode::Check
         };
-        main(&GenerateJsonSchemaArgs { mode })
+        main(&Args { mode })
     }
 }

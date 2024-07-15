@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use tracing::info;
+
 use uv_cache::{Cache, CacheArgs};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
