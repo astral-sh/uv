@@ -531,6 +531,71 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
+  integration-test-pypy:
+    needs: build-binary-linux
+    name: "integration test | pypy on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "pypy3.9"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: PyPy info
+        run: which pypy
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p $(which pypy)
+
+      - name: "Check for executables"
+        run: |
+          check_in_bin() {
+              local executable_name=$1
+              local bin_path=".venv/bin"
+
+              if [[ -x "$bin_path/$executable_name" ]]; then
+                  return 0
+              else
+                  echo "Executable '$executable_name' not found in folder '$bin_path'."
+                  return 1
+              fi
+          }
+
+          executables=("python")
+
+          all_found=true
+          for executable_name in "${executables[@]}"; do
+              check_in_bin "$executable_name" "$folder_path"
+              result=$?
+            
+              if [[ $result -ne 0 ]]; then
+                  all_found=false
+              fi
+          done
+
+          if ! $all_found; then
+            echo "One or more expected executables were not found."
+            exit 1
+          fi
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check install"
+        run: |
+          ./uv pip install anyio
+
   integration-test-github-actions:
     needs: build-binary-linux
     name: "integration test | github actions"
