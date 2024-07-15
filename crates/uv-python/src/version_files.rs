@@ -1,5 +1,5 @@
 use fs_err as fs;
-use std::{io, path::PathBuf};
+use std::{io, path::Path, path::PathBuf};
 use tracing::debug;
 
 use crate::PythonRequest;
@@ -51,9 +51,9 @@ pub async fn request_from_version_file_in(
     }
 }
 
-async fn read_versions_file_in(root: &PathBuf) -> Result<Option<Vec<String>>, io::Error> {
-    let mut version_file = PathBuf::from(root);
-    version_file.push(PYTHON_VERSIONS_FILENAME);
+/// Read a `.python-versions` file in `root` folder if present.
+async fn read_versions_file_in(root: impl AsRef<Path>) -> Result<Option<Vec<String>>, io::Error> {
+    let version_file = root.as_ref().join(PYTHON_VERSIONS_FILENAME);
     if !version_file.try_exists()? {
         return Ok(None);
     }
@@ -66,9 +66,9 @@ async fn read_versions_file_in(root: &PathBuf) -> Result<Option<Vec<String>>, io
     Ok(Some(lines))
 }
 
-async fn read_version_file_in(root: &PathBuf) -> Result<Option<String>, io::Error> {
-    let mut version_file = PathBuf::from(root);
-    version_file.push(PYTHON_VERSION_FILENAME);
+/// Read a `.python-version` file in `root` folder if present.
+async fn read_version_file_in(root: impl AsRef<Path>) -> Result<Option<String>, io::Error> {
+    let version_file = root.as_ref().join(PYTHON_VERSION_FILENAME);
     if !version_file.try_exists()? {
         return Ok(None);
     }
