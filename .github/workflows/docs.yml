@@ -84,13 +84,18 @@ jobs:
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
         run: mkdocs build --strict -f mkdocs.public.yml
 
+      - name: "Add SSH key"
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ASTRAL_DOCS_SSH_KEY }}
+
       - name: "Clone repo"
         run: |
           version="${{ env.version }}"
-          git clone https://${{ secrets.ASTRAL_DOCS_PAT }}@github.com/astral-sh/docs.git astral-docs
+          git clone https://github.com/astral-sh/docs.git astral-docs
 
       - name: "Copy docs"
-        run: rm -rf astral-docs/site/uv && mkdir -p astral-docs/site && cp -r site/uv astral-docs/site/uv
+        run: rm -rf astral-docs/uv && cp -r site/uv astral-docs/uv
 
       - name: "Commit docs"
         working-directory: astral-docs
@@ -114,17 +119,17 @@ jobs:
           # set the PR title
           pull_request_title="Update documentation for $display_name"
 
+          # authenticate with GitHub
+          echo ${{ secrets.ASTRAL_DOCS_PAT}} | gh auth login --with-token
+
           # Delete any existing pull requests that are open for this version
-          # by checking against pull_request_title because the new PR will
+          # by checking against pull_reqeust_title because the new PR will
           # supersede the old one.
           gh pr list --state open --json title --jq '.[] | select(.title == "$pull_request_title") | .number' | \
             xargs -I {} gh pr close {}
 
           # push the branch to GitHub
           git push origin $branch_name
-
-          # authenticate with GitHub
-          echo ${{ secrets.ASTRAL_DOCS_PAT}} | gh auth login --with-token
 
           # create the PR
           gh pr create --base main --head $branch_name \
