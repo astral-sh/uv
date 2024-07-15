@@ -26,7 +26,7 @@ use distribution_types::{
     IncompatibleWheel, IndexLocations, InstalledDist, PythonRequirementKind, RemoteSource,
     ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
-pub(crate) use locals::Locals;
+pub(crate) use locals::ForkLocals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
 use platform_tags::Tags;
@@ -92,7 +92,6 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     git: GitResolver,
     exclusions: Exclusions,
     urls: Urls,
-    locals: Locals,
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
     /// When not set, the resolver is in "universal" mode.
@@ -197,7 +196,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers, git, options.dependency_mode)?,
-            locals: Locals::from_manifest(&manifest, markers, options.dependency_mode),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
@@ -292,6 +290,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             next: root,
             pins: FilePins::default(),
             fork_urls: ForkUrls::default(),
+            fork_locals: ForkLocals::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
             markers: MarkerTree::And(vec![]),
@@ -473,6 +472,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &state.next,
                         &version,
                         &state.fork_urls,
+                        &state.fork_locals,
                         &state.markers,
                         state.requires_python.as_ref(),
                     )?;
@@ -501,6 +501,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     package,
                                     version: _,
                                     url: _,
+                                    local: _,
                                 } = dependency;
                                 let url = package.name().and_then(|name| state.fork_urls.get(name));
                                 self.visit_package(package, url, &request_sink)?;
@@ -571,6 +572,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         package,
                                         version: _,
                                         url: _,
+                                        local: _,
                                     } = dependency;
                                     let url = package
                                         .name()
@@ -1033,10 +1035,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         fork_urls: &ForkUrls,
+        fork_locals: &ForkLocals,
         markers: &MarkerTree,
         requires_python: Option<&MarkerTree>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let result = self.get_dependencies(package, version, fork_urls, markers, requires_python);
+        let result = self.get_dependencies(
+            package,
+            version,
+            fork_urls,
+            fork_locals,
+            markers,
+            requires_python,
+        );
         if self.markers.is_some() {
             return result.map(|deps| match deps {
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
@@ -1053,6 +1063,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         fork_urls: &ForkUrls,
+        fork_locals: &ForkLocals,
         markers: &MarkerTree,
         requires_python: Option<&MarkerTree>,
     ) -> Result<Dependencies, ResolveError> {
@@ -1073,7 +1084,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, None, &self.locals)
+                        PubGrubDependency::from_requirement(requirement, None, fork_locals)
+                            // Keep track of local versions to propagate to transitive dependencies.
+                            .map_ok(|dependency| PubGrubDependency {
+                                local: locals::from_source(&requirement.source),
+                                ..dependency
+                            })
                     })
                     .collect::<Result<Vec<_>, _>>()?
             }
@@ -1202,13 +1218,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let mut dependencies = requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, Some(name), &self.locals)
+                        PubGrubDependency::from_requirement(requirement, Some(name), fork_locals)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+
                 // If a package has metadata for an enabled dependency group,
                 // add a dependency from it to the same package with the group
                 // enabled.
-
                 if extra.is_none() && dev.is_none() {
                     for group in &self.dev {
                         if !metadata.dev_dependencies.contains_key(group) {
@@ -1222,6 +1238,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             url: None,
+                            local: None,
                         });
                     }
                 }
@@ -1244,6 +1261,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }),
                             version: Range::singleton(version.clone()),
                             url: None,
+                            local: None,
                         })
                         .collect(),
                 ))
@@ -1271,6 +1289,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     }),
                                     version: Range::singleton(version.clone()),
                                     url: None,
+                                    local: None,
                                 })
                         })
                         .collect(),
@@ -1296,6 +1315,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     }),
                                     version: Range::singleton(version.clone()),
                                     url: None,
+                                    local: None,
                                 })
                         })
                         .collect(),
@@ -1884,6 +1904,8 @@ struct ForkState {
     /// one URL per package. By prioritizing direct URL dependencies over registry dependencies,
     /// this map is populated for all direct URL packages before we look at any registry packages.
     fork_urls: ForkUrls,
+    /// The local versions required by packages in this fork.
+    fork_locals: ForkLocals,
     /// When dependencies for a package are retrieved, this map of priorities
     /// is updated based on how each dependency was specified. Certain types
     /// of dependencies have more "priority" than others (like direct URL
@@ -1927,7 +1949,7 @@ struct ForkState {
 
 impl ForkState {
     /// Add the dependencies for the selected version of the current package, checking for
-    /// self-dependencies, and handling URLs.
+    /// self-dependencies, and handling URLs and locals.
     fn add_package_version_dependencies(
         &mut self,
         for_package: Option<&str>,
@@ -1941,16 +1963,24 @@ impl ForkState {
                 package,
                 version,
                 url,
+                local,
             } = dependency;
 
-            // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
-            // requirement was a URL requirement. `Urls` applies canonicalization to this and
-            // override URLs to both URL and registry requirements, which we then check for
-            // conflicts using [`ForkUrl`].
             if let Some(name) = package.name() {
+                // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
+                // requirement was a URL requirement. `Urls` applies canonicalization to this and
+                // override URLs to both URL and registry requirements, which we then check for
+                // conflicts using [`ForkUrl`].
                 if let Some(url) = urls.get_url(name, url.as_ref(), git)? {
                     self.fork_urls.insert(name, url, &self.markers)?;
                 };
+
+                // `PubGrubDependency` also gives us a local version if specified by the user.
+                // Keep track of which local version we will be using in this fork for transitive
+                // dependencies.
+                if let Some(local) = local {
+                    self.fork_locals.insert(name.clone(), local.clone());
+                }
             }
 
             if let Some(for_package) = for_package {
@@ -1972,6 +2002,7 @@ impl ForkState {
                     package,
                     version,
                     url: _,
+                    local: _,
                 } = dependency;
                 (package, version)
             }),
