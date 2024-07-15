@@ -81,11 +81,19 @@ pub(crate) async fn pin(
 
     debug!("Writing pin to {}", version_file.user_display());
     fs_err::write(&version_file, format!("{output}\n"))?;
-    if exists {
-        writeln!(printer.stdout(), "Replaced existing pin with `{output}`")?;
+    let mut message = if exists {
+        format!("Replaced existing pin with `{output}`")
     } else {
-        writeln!(printer.stdout(), "Pinned to `{output}`")?;
-    }
+        format!("Pinned to `{output}`")
+    };
+
+    if target_dir != std::env::current_dir()? {
+        // Print the version file use to pin only
+        // if it's not in the current working directory
+        message = format!("{message} in `{}`", version_file.display())
+    };
+
+    writeln!(printer.stdout(), "{message}")?;
 
     Ok(ExitStatus::Success)
 }

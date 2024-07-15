@@ -239,7 +239,7 @@ fn python_pin_in_workspace_subfolder() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned to `3.11`
+    Pinned to `3.11` in `[TEMP_DIR]/.python-version`
 
     ----- stderr -----
     "###);
