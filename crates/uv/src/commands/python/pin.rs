@@ -29,7 +29,7 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning.");
     }
 
-    let working_dir =
+    let target_dir =
         if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
             workspace.install_path().to_owned()
         } else {
@@ -38,7 +38,7 @@ pub(crate) async fn pin(
 
     let Some(request) = request else {
         // Display the current pinned Python version
-        if let Some(pins) = requests_from_version_file_in(&working_dir).await? {
+        if let Some(pins) = requests_from_version_file_in(&target_dir).await? {
             for pin in pins {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
             }
@@ -76,7 +76,7 @@ pub(crate) async fn pin(
     };
 
     debug!("Using pin `{}`", output);
-    let version_file = working_dir.join(PYTHON_VERSION_FILENAME);
+    let version_file = target_dir.join(PYTHON_VERSION_FILENAME);
     let exists = version_file.exists();
 
     debug!("Writing pin to {}", version_file.user_display());
