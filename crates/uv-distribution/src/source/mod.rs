@@ -1320,7 +1320,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
             .await
             .map_err(Error::CacheWrite)?;
-        fs_err::tokio::rename(extracted, target)
+        rename_with_retry(extracted, target)
             .await
             .map_err(Error::CacheWrite)?;
 
