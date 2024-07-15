@@ -148,8 +148,8 @@ fn tool_run_at_version() {
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable pytest@8.0.0 was not found.
-    However, the following executables are available:
+    The executable `pytest@8.0.0` was not found.
+    The following executables are provided by `pytest`:
     - py.test
     - pytest
 
@@ -162,6 +162,7 @@ fn tool_run_at_version() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
+    warning: A `pytest@8.0.0` executable is not provided by package `pytest`.
     "###);
 }
 
@@ -210,8 +211,8 @@ fn tool_run_suggest_valid_commands() {
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable orange was not found.
-    However, the following executables are available:
+    The executable `orange` was not found.
+    The following executables are provided by `black`:
     - black
     - blackd
 
@@ -226,6 +227,7 @@ fn tool_run_suggest_valid_commands() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
+    warning: A `orange` executable is not provided by package `black`.
     "###);
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -235,7 +237,7 @@ fn tool_run_suggest_valid_commands() {
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable fastapi-cli was not found.
+    The executable `fastapi-cli` was not found.
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
@@ -245,6 +247,7 @@ fn tool_run_suggest_valid_commands() {
      + fastapi-cli==0.0.1
      + importlib-metadata==1.7.0
      + zipp==3.18.1
+    warning: A `fastapi-cli` executable is not provided by package `fastapi-cli`.
     "###);
 }
 
@@ -309,7 +312,7 @@ fn tool_run_warn_executable_not_in_from() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    warning: The fastapi executable is not part of the fastapi package. It is provided by the fastapi-cli package. Use `uv tool run --from fastapi-cli fastapi` instead.
+    warning: A `fastapi` executable is not provided by package `fastapi` but is available via the dependency `fastapi-cli`. Consider using `uv tool run --from fastapi-cli fastapi` instead.
     "###);
 }
 

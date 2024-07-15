@@ -7,6 +7,7 @@ use std::{borrow::Cow, fmt::Display};
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use pypi_types::Requirement;
 use tokio::process::Command;
 use tracing::{debug, warn};
 
@@ -71,8 +72,6 @@ pub(crate) async fn run(
         warn_user_once!("`{invocation_source}` is experimental and may change without warning.");
     }
 
-    let has_from = from.is_some();
-
     let (target, args) = command.split();
     let Some(target) = target else {
         return Err(anyhow::anyhow!("No tool command provided"));
@@ -85,7 +84,7 @@ pub(crate) async fn run(
     };
 
     // Get or create a compatible environment in which to execute the tool.
-    let environment = get_or_create_environment(
+    let (from, environment) = get_or_create_environment(
         &from,
         &with,
         python.as_deref(),
@@ -101,11 +100,12 @@ pub(crate) async fn run(
         printer,
     )
     .await?;
-    // TODO(zanieb): Determine the command via the package entry points
-    let command = target;
+
+    // TODO(zanieb): Determine the executable command via the package entry points
+    let executable = target;
 
     // Construct the command
-    let mut process = Command::new(command.as_ref());
+    let mut process = Command::new(executable.as_ref());
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -136,52 +136,35 @@ pub(crate) async fn run(
     let space = if args.is_empty() { "" } else { " " };
     debug!(
         "Running `{}{space}{}`",
-        command.to_string_lossy(),
+        executable.to_string_lossy(),
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
+
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
-    if let (Some(command), Ok(from_package_name)) = (command.to_str(), PackageName::from_str(&from))
-    {
-        hint_executable_from_dependency(
-            command,
-            &from_package_name,
-            &environment,
-            &invocation_source,
-            printer,
-        )?;
-    }
+    warn_executable_not_provided_by_package(
+        &executable.to_string_lossy(),
+        &from.name,
+        &environment,
+        &invocation_source,
+    );
 
     let mut handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            match get_entrypoints(&from, &environment) {
+            match get_entrypoints(&from.name, &environment) {
                 Ok(entrypoints) => {
-                    if entrypoints.is_empty() {
+                    writeln!(
+                        printer.stdout(),
+                        "The executable `{}` was not found.",
+                        executable.to_string_lossy().red(),
+                    )?;
+                    if !entrypoints.is_empty() {
                         writeln!(
                             printer.stdout(),
-                            "The executable {} was not found.",
-                            command.to_string_lossy().red(),
+                            "The following executables are provided by `{}`:",
+                            &from.name.green()
                         )?;
-                    } else {
-                        writeln!(
-                            printer.stdout(),
-                            "The executable {} was not found.",
-                            command.to_string_lossy().red()
-                        )?;
-                        if has_from {
-                            writeln!(
-                                printer.stdout(),
-                                "However, the following executables are available:",
-                            )?;
-                        } else {
-                            let command = format!("{invocation_source} --from {from} <EXECUTABLE>");
-                            writeln!(
-                                printer.stdout(),
-                                "However, the following executables are available via {}:",
-                                command.green(),
-                            )?;
-                        }
                         for (name, _) in entrypoints {
                             writeln!(printer.stdout(), "- {}", name.cyan())?;
                         }
@@ -196,7 +179,7 @@ pub(crate) async fn run(
         }
         Err(err) => Err(err),
     }
-    .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
+    .with_context(|| format!("Failed to spawn: `{}`", executable.to_string_lossy()))?;
 
     let status = handle.wait().await.context("Child process disappeared")?;
 
@@ -210,11 +193,13 @@ pub(crate) async fn run(
 }
 
 /// Return the entry points for the specified package.
-fn get_entrypoints(from: &str, environment: &PythonEnvironment) -> Result<Vec<(String, PathBuf)>> {
+fn get_entrypoints(
+    from: &PackageName,
+    environment: &PythonEnvironment,
+) -> Result<Vec<(String, PathBuf)>> {
     let site_packages = SitePackages::from_environment(environment)?;
-    let package = PackageName::from_str(from)?;
 
-    let installed = site_packages.get_packages(&package);
+    let installed = site_packages.get_packages(from);
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
     };
@@ -226,47 +211,60 @@ fn get_entrypoints(from: &str, environment: &PythonEnvironment) -> Result<Vec<(S
     )?)
 }
 
-/// Displays a hint if an executable matching the command can be found in a dependency of the package.
-fn hint_executable_from_dependency(
-    command: &str,
-    from_package_name: &PackageName,
+/// Display a warning if an executable is not provided by package.
+///
+/// If found in a dependency of the requested package instead of the requested package itself, we will hint to use that instead.
+fn warn_executable_not_provided_by_package(
+    executable: &str,
+    from_package: &PackageName,
     environment: &PythonEnvironment,
     invocation_source: &ToolRunCommand,
-    printer: Printer,
-) -> Result<()> {
-    if let Ok(packages) = matching_packages(command, environment) {
-        if !packages.iter().any(|p| p.name() == from_package_name) {
+) {
+    if let Ok(packages) = matching_packages(executable, environment) {
+        if !packages
+            .iter()
+            .any(|package| package.name() == from_package)
+        {
             match packages.as_slice() {
-                [] => {}
-                [package] => {
-                    let correct_command =
-                        format!("{invocation_source} --from {} {}", package.name(), command);
+                [] => {
                     warn_user!(
-                                "The {} executable is not part of the {} package. It is provided by the {} package. Use `{}` instead.",
-                                command.green(),
-                                from_package_name.red(),
-                                package.name().green(),
-                                correct_command.cyan()
-                            );
+                        "A `{}` executable is not provided by package `{}`.",
+                        executable.green(),
+                        from_package.red()
+                    );
+                }
+                [package] => {
+                    let suggested_command = format!(
+                        "{invocation_source} --from {} {}",
+                        package.name(),
+                        executable
+                    );
+                    warn_user!(
+                        "A `{}` executable is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
+                        executable.green(),
+                        from_package.red(),
+                        package.name().green(),
+                        suggested_command.cyan()
+                    );
                 }
                 packages => {
-                    let correct_command = format!("{invocation_source} --from PKG {command}");
-                    warn_user_once!(
-                                "The {} executable is not part of the {} package. It is provided by the the following packages via {}:",
-                                command.green(),
-                                from_package_name.red(),
-                                correct_command.cyan(),
-                            );
-
-                    for package in packages {
-                        writeln!(printer.stdout(), "- {}", package.name().cyan())?;
-                    }
+                    let suggested_command = format!("{invocation_source} --from PKG {executable}");
+                    let provided_by = packages
+                        .iter()
+                        .map(distribution_types::Name::name)
+                        .map(|name| format!("- {}", name.cyan()))
+                        .join("\n");
+                    warn_user!(
+                        "A `{}` executable is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
+                        executable.green(),
+                        from_package.red(),
+                        provided_by,
+                        suggested_command.cyan(),
+                    );
                 }
             }
         }
     }
-
-    Ok(())
 }
 
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
@@ -287,7 +285,7 @@ async fn get_or_create_environment(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<PythonEnvironment> {
+) -> Result<(Requirement, PythonEnvironment)> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -382,7 +380,7 @@ async fn get_or_create_environment(
                 Ok(SatisfiesResult::Fresh { .. })
             ) {
                 debug!("Using existing tool `{}`", from.name);
-                return Ok(environment);
+                return Ok((from, environment));
             }
         }
     }
@@ -404,7 +402,7 @@ async fn get_or_create_environment(
     )
     .await?;
 
-    Ok(environment.into())
+    Ok((from, environment.into()))
 }
 
 /// Parse a target into a command name and a requirement.
