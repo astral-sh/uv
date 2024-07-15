@@ -6,7 +6,8 @@ use pretty_assertions::StrComparison;
 use schemars::{schema_for, JsonSchema};
 use serde::Deserialize;
 
-use uv_settings::Options;
+use uv_distribution::pyproject::ToolUv as WorkspaceOptions;
+use uv_settings::Options as SettingsOptions;
 
 use crate::ROOT_DIR;
 
@@ -16,11 +17,11 @@ use crate::ROOT_DIR;
 // The names and docstrings of this struct and the types it contains are used as `title` and
 // `description` in uv.schema.json, see https://github.com/SchemaStore/schemastore/blob/master/editor-features.md#title-as-an-expected-object-type
 /// Metadata and configuration for uv.
-struct ToolUv {
+struct CombinedOptions {
     #[serde(flatten)]
-    options: Options,
+    options: SettingsOptions,
     #[serde(flatten)]
-    dep_spec: uv_distribution::pyproject::ToolUv,
+    workspace: WorkspaceOptions,
 }
 
 #[derive(clap::Args)]
@@ -44,7 +45,7 @@ enum Mode {
 }
 
 pub(crate) fn main(args: &GenerateJsonSchemaArgs) -> Result<()> {
-    let schema = schema_for!(ToolUv);
+    let schema = schema_for!(CombinedOptions);
     let schema_string = serde_json::to_string_pretty(&schema).unwrap();
     let filename = "uv.schema.json";
     let schema_path = PathBuf::from(ROOT_DIR).join(filename);

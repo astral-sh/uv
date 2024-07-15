@@ -26,7 +26,9 @@ uv-configuration = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
+uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
+uv-options-metadata = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 
@@ -61,3 +63,6 @@ regex = { workspace = true }
 
 [features]
 schemars = ["dep:schemars"]
+
+[package.metadata.cargo-shear]
+ignored = ["uv-options-metadata"]

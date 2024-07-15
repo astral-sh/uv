@@ -30,7 +30,7 @@ pub(crate) struct Tools {
 
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
@@ -38,6 +38,7 @@ pub struct Options {
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+    #[option_group]
     pub pip: Option<PipOptions>,
     #[cfg_attr(
         feature = "schemars",
@@ -120,6 +121,20 @@ pub struct ResolverOptions {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverInstallerOptions {
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
+    /// directory laid out in the same format.
+    ///
+    /// The index provided by this setting is given lower priority than any indexes specified via
+    /// [`extra_index_url`](#extra-index-url).
+    #[option(
+        default = "https://pypi.org/simple",
+        value_type = "str",
+        example = r#"
+            index-url = "https://pypi.org/simple"
+        "#
+    )]
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
     pub no_index: Option<bool>,

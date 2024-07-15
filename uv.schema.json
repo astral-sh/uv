@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ToolUv",
+  "title": "CombinedOptions",
   "description": "Metadata and configuration for uv.",
   "type": "object",
   "properties": {
@@ -75,6 +75,7 @@
       ]
     },
     "index-url": {
+      "description": "The URL of the Python package index (by default: <https://pypi.org/simple>).\n\nAccepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.\n\nThe index provided by this setting is given lower priority than any indexes specified via [`extra_index_url`](#extra-index-url).",
       "anyOf": [
         {
           "$ref": "#/definitions/IndexUrl"
@@ -1260,6 +1261,7 @@
       "type": "object",
       "properties": {
         "exclude": {
+          "description": "Packages to exclude as workspace members. If a package matches both `members` and `exclude`, it will be excluded.\n\nSupports both globs and explicit paths.\n\nFor more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).",
           "type": [
             "array",
             "null"
@@ -1269,6 +1271,7 @@
           }
         },
         "members": {
+          "description": "Packages to include as workspace members.\n\nSupports both globs and explicit paths.\n\nFor more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).",
           "type": [
             "array",
             "null"

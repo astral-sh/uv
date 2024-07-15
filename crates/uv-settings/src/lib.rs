@@ -10,7 +10,6 @@ pub use crate::combine::*;
 pub use crate::settings::*;
 
 mod combine;
-pub mod options_base;
 mod settings;
 
 /// The [`Options`] as loaded from a configuration file on disk.
