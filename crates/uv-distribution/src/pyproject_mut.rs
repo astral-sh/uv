@@ -436,7 +436,7 @@ fn reformat_array_multiline(deps: &mut Array) {
                 .and_then(|s| s.as_str())
                 .map(|s| s.split('#').next().unwrap_or("").to_string())
                 .unwrap_or(String::new())
-                .trim_start_matches("\n")
+                .trim_start_matches('\n')
                 .to_string();
 
             // if there is no indentation then apply a default one
@@ -447,15 +447,13 @@ fn reformat_array_multiline(deps: &mut Array) {
             });
         }
 
-        let indentation_prefix_str = indentation_prefix.as_ref().unwrap();
+        let indentation_prefix_str = format!("\n{}", indentation_prefix.as_ref().unwrap());
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
-            prefix.push_str("\n");
-            prefix.push_str(indentation_prefix_str);
+            prefix.push_str(&indentation_prefix_str);
             prefix.push_str(comment);
         }
-        prefix.push_str("\n");
-        prefix.push_str(indentation_prefix_str);
+        prefix.push_str(&indentation_prefix_str);
         decor.set_prefix(prefix);
         decor.set_suffix("");
     }
