@@ -199,6 +199,20 @@ pub fn create_bare_venv(
 
         if interpreter.markers().implementation_name() == "pypy" {
             copy_launcher_windows(
+                WindowsExecutable::PythonMajor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PythonMajorMinor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
                 WindowsExecutable::PyPy,
                 interpreter,
                 &base_python,
@@ -350,6 +364,10 @@ pub fn create_bare_venv(
 enum WindowsExecutable {
     /// The `python.exe` executable (or `venvlauncher.exe` launcher shim).
     Python,
+    /// The `python3.exe` executable (or `venvlauncher.exe` launcher shim).
+    PythonMajor,
+    /// The `python3.<minor>.exe` executable (or `venvlauncher.exe` launcher shim).
+    PythonMajorMinor,
     /// The `pythonw.exe` executable (or `venvwlauncher.exe` launcher shim).
     Pythonw,
     // The `pypy.exe` executable
@@ -369,6 +387,16 @@ impl WindowsExecutable {
     fn exe(self, interpreter: &Interpreter) -> String {
         match self {
             WindowsExecutable::Python => String::from("python.exe"),
+            WindowsExecutable::PythonMajor => {
+                format!("python{}.exe", interpreter.python_major())
+            }
+            WindowsExecutable::PythonMajorMinor => {
+                format!(
+                    "python{}.{}.exe",
+                    interpreter.python_major(),
+                    interpreter.python_minor()
+                )
+            }
             WindowsExecutable::Pythonw => String::from("pythonw.exe"),
             WindowsExecutable::PyPy => String::from("pypy.exe"),
             WindowsExecutable::PyPyMajor => {
@@ -396,6 +424,8 @@ impl WindowsExecutable {
     fn launcher(self) -> &'static str {
         match self {
             WindowsExecutable::Python => "venvlauncher.exe",
+            WindowsExecutable::PythonMajor => "venvlauncher.exe",
+            WindowsExecutable::PythonMajorMinor => "venvlauncher.exe",
             WindowsExecutable::Pythonw => "venvwlauncher.exe",
             // From 3.13 on these should replace the `python.exe` and `pythonw.exe` shims.
             // These are not relevant as of now for PyPy as it doesn't yet support Python 3.13.
