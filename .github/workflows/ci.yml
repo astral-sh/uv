@@ -590,6 +590,8 @@ jobs:
 
       - name: "Check version"
         run: |
+          .venv/bin/pypy --version
+          .venv/bin/pypy3 --version
           .venv/bin/python --version
 
       - name: "Check install"
@@ -652,7 +654,9 @@ jobs:
 
       - name: "Check version"
         run: |
-          & .venv\Scripts\python --version
+          & .venv\Scripts\pypy3.9.exe --version
+          & .venv\Scripts\pypy3.exe --version
+          & .venv\Scripts\python.exe --version
 
       - name: "Check install"
         env:
