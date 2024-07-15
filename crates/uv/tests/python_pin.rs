@@ -245,13 +245,13 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.python_pin().arg("3.10"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: The pinned Python version is incompatible with the project's `Requires-Python` of >=3.11.
-        "###);
+    ----- stderr -----
+    error: The pinned Python version 3.10 is incompatible with the project's `Requires-Python` of >=3.11.
+    "###);
 
     uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
         success: true
@@ -290,7 +290,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     3.11
 
     ----- stderr -----
-    warning: The pinned Python version is incompatible with the project's `Requires-Python` of >=3.12.
+    warning: The pinned Python version 3.11 is incompatible with the project's `Requires-Python` of >=3.12.
     "###);
 
     Ok(())
@@ -299,6 +299,17 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
 #[test]
 fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
     let python_version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
     python_version_file.write_str(r"3.12")?;
     if cfg!(windows) {
@@ -309,7 +320,7 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
         3.12
 
         ----- stderr -----
-        warning: No interpreter found for Python 3.12 in system path or `py` launcher
+        warning: Failed to resolve pinned Python version from Python 3.12: No interpreter found for Python 3.12 in system path or `py` launcher
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_pin(), @r###"
@@ -319,7 +330,7 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
         3.12
 
         ----- stderr -----
-        warning: No interpreter found for Python 3.12 in system path
+        warning: Failed to resolve pinned Python version from Python 3.12: No interpreter found for Python 3.12 in system path
         "###);
     }
 
