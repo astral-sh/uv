@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
 use std::sync::Arc;
@@ -11,9 +11,8 @@ use std::{iter, thread};
 
 use dashmap::DashMap;
 use either::Either;
-use futures::{FutureExt, StreamExt, TryFutureExt};
+use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -24,8 +23,8 @@ use tracing::{debug, enabled, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
-    IncompatibleWheel, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    IncompatibleWheel, IndexLocations, InstalledDist, PythonRequirementKind, RemoteSource,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -41,7 +40,7 @@ use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
-use crate::error::ResolveError;
+use crate::error::{NoSolutionError, ResolveError};
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::marker::{normalize, requires_python_marker};
@@ -245,51 +244,26 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let (request_sink, request_stream) = mpsc::channel(300);
 
         // Run the fetcher.
-        let requests_fut = state
-            .clone()
-            .fetch(provider.clone(), request_stream)
-            .map_err(|err| (err, FxHashSet::default()))
-            .fuse();
+        let requests_fut = state.clone().fetch(provider.clone(), request_stream).fuse();
 
         // Spawn the PubGrub solver on a dedicated thread.
         let solver = state.clone();
+        let index_locations = provider.index_locations().clone();
         let (tx, rx) = oneshot::channel();
         thread::Builder::new()
             .name("uv-resolver".into())
             .spawn(move || {
-                let result = solver.solve(request_sink);
+                let result = solver.solve(index_locations, request_sink);
                 tx.send(result).unwrap();
             })
             .unwrap();
 
-        let resolve_fut = async move {
-            rx.await
-                .map_err(|_| (ResolveError::ChannelClosed, FxHashSet::default()))
-                .and_then(|result| result)
-        };
+        let resolve_fut = async move { rx.await.map_err(|_| ResolveError::ChannelClosed) };
 
         // Wait for both to complete.
-        match tokio::try_join!(requests_fut, resolve_fut) {
-            Ok(((), resolution)) => {
-                state.on_complete();
-                Ok(resolution)
-            }
-            Err((err, visited)) => {
-                // Add version information to improve unsat error messages.
-                Err(if let ResolveError::NoSolution(err) = err {
-                    ResolveError::NoSolution(
-                        err.with_available_versions(&visited, state.index.packages())
-                            .with_selector(state.selector.clone())
-                            .with_python_requirement(&state.python_requirement)
-                            .with_index_locations(provider.index_locations())
-                            .with_unavailable_packages(&state.unavailable_packages)
-                            .with_incomplete_packages(&state.incomplete_packages),
-                    )
-                } else {
-                    err
-                })
-            }
-        }
+        let ((), resolution) = tokio::try_join!(requests_fut, resolve_fut)?;
+        state.on_complete();
+        resolution
     }
 }
 
@@ -297,19 +271,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     #[instrument(skip_all)]
     fn solve(
         self: Arc<Self>,
-        request_sink: Sender<Request>,
-    ) -> Result<ResolutionGraph, (ResolveError, FxHashSet<PackageName>)> {
-        let mut visited = FxHashSet::default();
-        self.solve_tracked(&mut visited, request_sink)
-            .map_err(|err| (err, visited))
-    }
-
-    /// Run the PubGrub solver, updating the `visited` set for each package visited during
-    /// resolution.
-    #[instrument(skip_all)]
-    fn solve_tracked(
-        self: Arc<Self>,
-        visited: &mut FxHashSet<PackageName>,
+        // No solution error context.
+        index_locations: IndexLocations,
         request_sink: Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         debug!(
@@ -319,6 +282,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if let Some(target) = self.python_requirement.target() {
             debug!("Solving with target Python version: {}", target);
         }
+
+        let mut visited = FxHashSet::default();
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let mut prefetcher = BatchPrefetcher::default();
@@ -351,12 +316,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let start = Instant::now();
             loop {
                 // Run unit propagation.
-                state
-                    .pubgrub
-                    .unit_propagation(state.next.clone())
-                    .map_err(|err| {
-                        ResolveError::from_pubgrub_error(err, state.fork_urls.clone())
-                    })?;
+                if let Err(err) = state.pubgrub.unit_propagation(state.next.clone()) {
+                    return Err(self.convert_no_solution_err(
+                        err,
+                        state.fork_urls.clone(),
+                        &visited,
+                        &index_locations,
+                    ));
+                }
 
                 // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
                 // the dependency mode is direct, we only need to visit the root package.
@@ -420,14 +387,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .pubgrub
                     .partial_solution
                     .term_intersection_for_package(&state.next)
-                    .ok_or_else(|| {
-                        ResolveError::from_pubgrub_error(
-                            PubGrubError::Failure(
-                                "a package was chosen but we don't have a term.".into(),
-                            ),
-                            state.fork_urls.clone(),
-                        )
-                    })?;
+                    .expect("a package was chosen but we don't have a term.");
                 let decision = self.choose_version(
                     &state.next,
                     term_intersection.unwrap_positive(),
@@ -435,7 +395,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &preferences,
                     &state.fork_urls,
                     &state.python_requirement,
-                    visited,
+                    &mut visited,
                     &request_sink,
                 )?;
 
@@ -534,7 +494,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 &self.urls,
                                 dependencies.clone(),
                                 &self.git,
-                                &prefetcher,
                             )?;
                             // Emit a request to fetch the metadata for each registry package.
                             for dependency in &dependencies {
@@ -605,7 +564,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     &self.urls,
                                     fork.dependencies.clone(),
                                     &self.git,
-                                    &prefetcher,
                                 )?;
                                 // Emit a request to fetch the metadata for each registry package.
                                 for dependency in &fork.dependencies {
@@ -1806,6 +1764,75 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
     }
 
+    fn convert_no_solution_err(
+        &self,
+        mut err: pubgrub::error::NoSolutionError<UvDependencyProvider>,
+        fork_urls: ForkUrls,
+        visited: &FxHashSet<PackageName>,
+        index_locations: &IndexLocations,
+    ) -> ResolveError {
+        NoSolutionError::collapse_proxies(&mut err);
+
+        let mut unavailable_packages = FxHashMap::default();
+        for package in err.packages() {
+            if let PubGrubPackageInner::Package { name, .. } = &**package {
+                if let Some(reason) = self.unavailable_packages.get(name) {
+                    unavailable_packages.insert(name.clone(), reason.clone());
+                }
+            }
+        }
+
+        let mut incomplete_packages = FxHashMap::default();
+        for package in err.packages() {
+            if let PubGrubPackageInner::Package { name, .. } = &**package {
+                if let Some(versions) = self.incomplete_packages.get(name) {
+                    for entry in versions.iter() {
+                        let (version, reason) = entry.pair();
+                        incomplete_packages
+                            .entry(name.clone())
+                            .or_insert_with(BTreeMap::default)
+                            .insert(version.clone(), reason.clone());
+                    }
+                }
+            }
+        }
+
+        let mut available_versions = FxHashMap::default();
+        for package in err.packages() {
+            let PubGrubPackageInner::Package { name, .. } = &**package else {
+                continue;
+            };
+            if !visited.contains(name) {
+                // Avoid including available versions for packages that exist in the derivation
+                // tree, but were never visited during resolution. We _may_ have metadata for
+                // these packages, but it's non-deterministic, and omitting them ensures that
+                // we represent the self of the resolver at the time of failure.
+                continue;
+            }
+            if let Some(response) = self.index.packages().get(name) {
+                if let VersionsResponse::Found(ref version_maps) = *response {
+                    for version_map in version_maps {
+                        available_versions
+                            .entry(package.clone())
+                            .or_insert_with(BTreeSet::new)
+                            .extend(version_map.iter().map(|(version, _)| version.clone()));
+                    }
+                }
+            }
+        }
+
+        ResolveError::NoSolution(NoSolutionError::new(
+            err,
+            available_versions,
+            self.selector.clone(),
+            self.python_requirement.clone(),
+            index_locations.clone(),
+            unavailable_packages,
+            incomplete_packages,
+            fork_urls,
+        ))
+    }
+
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
         if let Some(reporter) = self.reporter.as_ref() {
             match &**package {
@@ -1908,25 +1935,7 @@ impl ForkState {
         urls: &Urls,
         dependencies: Vec<PubGrubDependency>,
         git: &GitResolver,
-        prefetcher: &BatchPrefetcher,
     ) -> Result<(), ResolveError> {
-        // Check for self-dependencies.
-        if dependencies
-            .iter()
-            .any(|dependency| dependency.package == self.next)
-        {
-            if enabled!(Level::DEBUG) {
-                prefetcher.log_tried_versions();
-            }
-            return Err(ResolveError::from_pubgrub_error(
-                PubGrubError::SelfDependency {
-                    package: self.next.clone(),
-                    version: version.clone(),
-                },
-                self.fork_urls.clone(),
-            ));
-        }
-
         for dependency in &dependencies {
             let PubGrubDependency {
                 package,
