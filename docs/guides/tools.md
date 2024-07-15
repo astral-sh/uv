@@ -38,7 +38,7 @@ $ uvx pycowsay hello from uv
 
 In `uvx ruff`, the `ruff` package is installed to provide the `ruff` command. However, sometimes the package name differs from the command name.
 
-To invoke a command from a specific package, e.g., `http` which is provided by `httpie`:
+The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is provided by `httpie`:
 
 ```console
 $ uvx --from httpie http
