@@ -353,6 +353,8 @@ impl WindowsExecutable {
         match self {
             WindowsExecutable::Python => "venvlauncher.exe",
             WindowsExecutable::Pythonw => "venvwlauncher.exe",
+            // From 3.13 on these should replace the `python.exe` and `pythonw.exe` shims.
+            // These are not relevant as of now for PyPy as it doesn't yet support Python 3.13.
             WindowsExecutable::PyPy => "venvlauncher.exe",
             WindowsExecutable::PyPyw => "venvwlauncher.exe",
         }
