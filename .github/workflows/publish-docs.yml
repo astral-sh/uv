@@ -20,9 +20,6 @@ on:
 jobs:
   mkdocs:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     env:
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
@@ -39,7 +36,7 @@ jobs:
           version="${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}"
           # if version is missing, exit with error
           if [[ -z "$version" ]]; then
-          echo "Can't build versioned docs without a version!"
+          echo "Can't build docs without a version."
           exit 1
           fi
 
@@ -90,22 +87,24 @@ jobs:
           git clone https://${{ secrets.ASTRAL_DOCS_PAT }}@github.com/astral-sh/docs.git astral-docs
 
       - name: "Copy docs"
-        run: rm -rf astral-docs/site/uv && mkdir -p astral-docs/site && cp -r site/uv astral-docs/site/uv
+        run: rm -rf astral-docs/docs/uv && mkdir -p astral-docs/docs && cp -r docs/uv astral-docs/docs/
 
       - name: "Commit docs"
         working-directory: astral-docs
         run: |
           branch_name="${{ env.branch_name }}"
 
-          git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions-bot@example.com"
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
           git checkout -b $branch_name
-          git add uv
+          git add docs/uv
           git commit -m "Update uv documentation for $version"
 
       - name: "Create Pull Request"
         working-directory: astral-docs
+        env:
+          GITHUB_TOKEN: ${{ secrets.ASTRAL_DOCS_PAT }}
         run: |
           version="${{ env.version }}"
           display_name="${{ env.display_name }}"
@@ -122,9 +121,6 @@ jobs:
 
           # push the branch to GitHub
           git push origin $branch_name
-
-          # authenticate with GitHub
-          echo ${{ secrets.ASTRAL_DOCS_PAT}} | gh auth login --with-token
 
           # create the PR
           gh pr create --base main --head $branch_name \
