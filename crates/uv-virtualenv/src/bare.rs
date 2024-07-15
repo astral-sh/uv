@@ -206,7 +206,28 @@ pub fn create_bare_venv(
                 python_home,
             )?;
             copy_launcher_windows(
+                WindowsExecutable::PyPyMajor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PyPyMajorMinor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
                 WindowsExecutable::PyPyw,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PyPyMajorMinorw,
                 interpreter,
                 &base_python,
                 &scripts,
@@ -333,18 +354,41 @@ enum WindowsExecutable {
     Pythonw,
     // The `pypy.exe` executable
     PyPy,
+    // The `pypy3.exe` executable
+    PyPyMajor,
+    // The `pypy3.<minor>.exe` executable
+    PyPyMajorMinor,
     // The `pypyw.exe` executable
     PyPyw,
+    // The `pypy3.<minor>w.exe` executable
+    PyPyMajorMinorw,
 }
 
 impl WindowsExecutable {
     /// The name of the Python executable.
-    fn exe(self) -> &'static str {
+    fn exe(self, interpreter: &Interpreter) -> String {
         match self {
-            WindowsExecutable::Python => "python.exe",
-            WindowsExecutable::Pythonw => "pythonw.exe",
-            WindowsExecutable::PyPy => "pypy.exe",
-            WindowsExecutable::PyPyw => "pypyw.exe",
+            WindowsExecutable::Python => String::from("python.exe"),
+            WindowsExecutable::Pythonw => String::from("pythonw.exe"),
+            WindowsExecutable::PyPy => String::from("pypy.exe"),
+            WindowsExecutable::PyPyMajor => {
+                format!("pypy{}.exe", interpreter.python_major())
+            }
+            WindowsExecutable::PyPyMajorMinor => {
+                format!(
+                    "pypy{}.{}.exe",
+                    interpreter.python_major(),
+                    interpreter.python_minor()
+                )
+            }
+            WindowsExecutable::PyPyw => String::from("pypyw.exe"),
+            WindowsExecutable::PyPyMajorMinorw => {
+                format!(
+                    "pypy{}.{}w.exe",
+                    interpreter.python_major(),
+                    interpreter.python_minor()
+                )
+            }
         }
     }
 
@@ -356,7 +400,10 @@ impl WindowsExecutable {
             // From 3.13 on these should replace the `python.exe` and `pythonw.exe` shims.
             // These are not relevant as of now for PyPy as it doesn't yet support Python 3.13.
             WindowsExecutable::PyPy => "venvlauncher.exe",
+            WindowsExecutable::PyPyMajor => "venvlauncher.exe",
+            WindowsExecutable::PyPyMajorMinor => "venvlauncher.exe",
             WindowsExecutable::PyPyw => "venvwlauncher.exe",
+            WindowsExecutable::PyPyMajorMinorw => "venvwlauncher.exe",
         }
     }
 }
@@ -379,8 +426,8 @@ fn copy_launcher_windows(
         .join("venv")
         .join("scripts")
         .join("nt")
-        .join(executable.exe());
-    match fs_err::copy(shim, scripts.join(executable.exe())) {
+        .join(executable.exe(interpreter));
+    match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => {
@@ -397,7 +444,7 @@ fn copy_launcher_windows(
         .join("scripts")
         .join("nt")
         .join(executable.launcher());
-    match fs_err::copy(shim, scripts.join(executable.exe())) {
+    match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => {
@@ -408,7 +455,7 @@ fn copy_launcher_windows(
     // Third priority: on Conda at least, we can look for the launcher shim next to
     // the Python executable itself.
     let shim = base_python.with_file_name(executable.launcher());
-    match fs_err::copy(shim, scripts.join(executable.exe())) {
+    match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => {
@@ -420,8 +467,8 @@ fn copy_launcher_windows(
     // an embedded Python. Copy the Python executable itself, along with
     // the DLLs, `.pyd` files, and `.zip` files in the same directory.
     match fs_err::copy(
-        base_python.with_file_name(executable.exe()),
-        scripts.join(executable.exe()),
+        base_python.with_file_name(executable.exe(interpreter)),
+        scripts.join(executable.exe(interpreter)),
     ) {
         Ok(_) => {
             // Copy `.dll` and `.pyd` files from the top-level, and from the
