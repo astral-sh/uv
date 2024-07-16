@@ -81,7 +81,7 @@ jobs:
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
         run: mkdocs build --strict -f mkdocs.public.yml
 
-      - name: "Clone repo"
+      - name: "Clone docs repo"
         run: |
           version="${{ env.version }}"
           git clone https://${{ secrets.ASTRAL_DOCS_PAT }}@github.com/astral-sh/docs.git astral-docs
@@ -127,3 +127,16 @@ jobs:
             --title "$pull_request_title" \
             --body "Automated documentation update for $display_name" \
             --label "documentation"
+
+      - name: "Merge Pull Request"
+        if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+        working-directory: astral-docs
+        env:
+          GITHUB_TOKEN: ${{ secrets.ASTRAL_DOCS_PAT }}
+        run: |
+          branch_name="${{ env.branch_name }}"
+
+          # auto-merge the PR if the build was triggered by a release. Manual builds should be reviewed by a human.
+          # give the PR a few seconds to be created before trying to auto-merge it
+          sleep 10
+          gh pr merge --squash $branch_name
