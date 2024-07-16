@@ -33,11 +33,11 @@ jobs:
 
       - name: "Set docs version"
         run: |
-          version="${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}"
-          # if version is missing, exit with error
-          if [[ -z "$version" ]]; then
-          echo "Can't build docs without a version."
-          exit 1
+          version="${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }"
+          # if version is missing, use 'latest'
+          if [ -z "$version" ]; then
+            echo "Using 'latest' as version"
+            version="latest"
           fi
 
           # Use version as display name for now
@@ -87,7 +87,7 @@ jobs:
           git clone https://${{ secrets.ASTRAL_DOCS_PAT }}@github.com/astral-sh/docs.git astral-docs
 
       - name: "Copy docs"
-        run: rm -rf astral-docs/docs/uv && mkdir -p astral-docs/docs && cp -r docs/uv astral-docs/docs/
+        run: rm -rf astral-docs/site/uv && mkdir -p astral-docs/site && cp -r site/uv astral-docs/site/
 
       - name: "Commit docs"
         working-directory: astral-docs
