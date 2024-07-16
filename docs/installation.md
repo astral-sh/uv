@@ -16,6 +16,16 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 uv is installed to `~/.cargo/bin`.
 
+!!! note
+
+    The installation script may be inspected with:
+
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | less
+    ```
+
+    Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
+
 A specific release can be requested by including the version in the URL:
 
 ```bash
@@ -63,3 +73,9 @@ brew install uv
 uv provides a Docker image at [`ghcr.io/astral-sh/uv`](https://github.com/astral-sh/uv/pkgs/container/uv).
 
 See our guide on [using uv in Docker](./guides/docker.md) for more details.
+
+## GitHub Releases
+
+uv artifacts can be downloaded directly from [GitHub Releases](https://github.com/astral-sh/uv/releases).
+
+Each release page includes binaries for all support platforms as well as instructions for using the standalone installer via `github.com` instead of `astral.sh`.
