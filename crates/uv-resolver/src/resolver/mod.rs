@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write};
 use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
@@ -19,7 +19,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, enabled, instrument, trace, warn, Level};
+use tracing::{debug, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
@@ -345,7 +345,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .partial_solution
                     .pick_highest_priority_pkg(|package, _range| state.priorities.get(package))
                 else {
-                    if enabled!(Level::DEBUG) {
+                    if tracing::enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
                     }
                     debug!(
@@ -609,6 +609,50 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut combined = Resolution::default();
         for resolution in resolutions {
             combined.union(resolution);
+        }
+        // When trace level logging is enabled, we dump the final
+        // unioned resolution, including markers, to help with
+        // debugging. Namely, this tells use precisely the state
+        // emitted by the resolver before going off to construct a
+        // resolution graph.
+        if tracing::enabled!(Level::TRACE) {
+            for (names, versions) in &combined.dependencies {
+                trace!(
+                    "Resolution: {} -> {}",
+                    names
+                        .from
+                        .as_ref()
+                        .map(PackageName::as_str)
+                        .unwrap_or("ROOT"),
+                    names.to,
+                );
+                for v in versions {
+                    // The unwraps below are OK because `write`ing to
+                    // a String can never fail (except for OOM).
+                    let mut msg = String::new();
+                    write!(msg, "{}", v.from_version).unwrap();
+                    if let Some(ref extra) = v.from_extra {
+                        write!(msg, " (extra: {extra})").unwrap();
+                    }
+                    if let Some(ref dev) = v.from_dev {
+                        write!(msg, " (group: {dev})").unwrap();
+                    }
+
+                    write!(msg, " -> ").unwrap();
+
+                    write!(msg, "{}", v.to_version).unwrap();
+                    if let Some(ref extra) = v.to_extra {
+                        write!(msg, " (extra: {extra})").unwrap();
+                    }
+                    if let Some(ref dev) = v.to_dev {
+                        write!(msg, " (group: {dev})").unwrap();
+                    }
+                    if let Some(ref marker) = v.marker {
+                        write!(msg, " ; {marker}").unwrap();
+                    }
+                    trace!("Resolution:     {msg}");
+                }
+            }
         }
         ResolutionGraph::from_state(
             &self.requirements,
