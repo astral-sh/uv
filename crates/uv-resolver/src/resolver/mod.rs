@@ -154,6 +154,9 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             database,
             flat_index,
             tags,
+            python_requirement
+                .target()
+                .and_then(|target| target.as_requires_python()),
             AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
             hasher,
             options.exclude_newer,

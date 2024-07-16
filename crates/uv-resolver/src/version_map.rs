@@ -8,7 +8,8 @@ use tracing::instrument;
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    PythonRequirementKind, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use pep440_rs::Version;
 use platform_tags::{TagCompatibility, Tags};
@@ -20,7 +21,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{yanks::AllowedYanks, ExcludeNewer};
+use crate::{yanks::AllowedYanks, ExcludeNewer, RequiresPython};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -44,6 +45,7 @@ impl VersionMap {
         package_name: &PackageName,
         index: &IndexUrl,
         tags: Option<&Tags>,
+        requires_python: Option<&RequiresPython>,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
         exclude_newer: Option<&ExcludeNewer>,
@@ -105,6 +107,7 @@ impl VersionMap {
                 no_build: build_options.no_build_package(package_name),
                 index: index.clone(),
                 tags: tags.cloned(),
+                requires_python: requires_python.cloned(),
                 exclude_newer: exclude_newer.copied(),
                 allowed_yanks,
                 required_hashes,
@@ -288,6 +291,8 @@ struct VersionMapLazy {
     allowed_yanks: FxHashSet<Version>,
     /// The hashes of allowed distributions.
     required_hashes: Vec<HashDigest>,
+    /// The `requires-python` constraint for the resolution.
+    requires_python: Option<RequiresPython>,
 }
 
 impl VersionMapLazy {
@@ -507,6 +512,17 @@ impl VersionMapLazy {
                 HashComparison::Mismatched
             }
         };
+
+        // Check if the wheel is compatible with the `requires-python` (i.e., the Python ABI tag
+        // is not less than the `requires-python` minimum version).
+        if let Some(requires_python) = self.requires_python.as_ref() {
+            if !filename.matches_requires_python(requires_python.specifiers()) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
+                    requires_python.specifiers().clone(),
+                    PythonRequirementKind::Target,
+                ));
+            }
+        }
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag.clone();

@@ -10,7 +10,7 @@ use uv_types::{BuildContext, HashStrategy};
 use crate::flat_index::FlatIndex;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
-use crate::ExcludeNewer;
+use crate::{ExcludeNewer, RequiresPython};
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
@@ -76,6 +76,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: FlatIndex,
     tags: Option<Tags>,
+    requires_python: Option<RequiresPython>,
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
@@ -88,6 +89,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
         tags: Option<&'a Tags>,
+        requires_python: Option<&'a RequiresPython>,
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
@@ -97,6 +99,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             fetcher,
             flat_index: flat_index.clone(),
             tags: tags.cloned(),
+            requires_python: requires_python.cloned(),
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
@@ -127,6 +130,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                             package_name,
                             &index,
                             self.tags.as_ref(),
+                            self.requires_python.as_ref(),
                             &self.allowed_yanks,
                             &self.hasher,
                             self.exclude_newer.as_ref(),
