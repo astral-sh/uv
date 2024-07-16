@@ -37,6 +37,7 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
+use uv_warnings::warn_user_once;
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
@@ -52,6 +53,7 @@ use crate::pubgrub::{
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
+use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
@@ -497,6 +499,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 &self.urls,
                                 dependencies.clone(),
                                 &self.git,
+                                self.selector.resolution_strategy(),
                             )?;
                             // Emit a request to fetch the metadata for each registry package.
                             for dependency in &dependencies {
@@ -568,6 +571,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     &self.urls,
                                     fork.dependencies.clone(),
                                     &self.git,
+                                    self.selector.resolution_strategy(),
                                 )?;
                                 // Emit a request to fetch the metadata for each registry package.
                                 for dependency in &fork.dependencies {
@@ -2004,6 +2008,7 @@ impl ForkState {
         urls: &Urls,
         dependencies: Vec<PubGrubDependency>,
         git: &GitResolver,
+        resolution_strategy: &ResolutionStrategy,
     ) -> Result<(), ResolveError> {
         for dependency in &dependencies {
             let PubGrubDependency {
@@ -2013,6 +2018,7 @@ impl ForkState {
                 local,
             } = dependency;
 
+            let mut has_url = false;
             if let Some(name) = package.name() {
                 // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
@@ -2020,6 +2026,7 @@ impl ForkState {
                 // conflicts using [`ForkUrl`].
                 if let Some(url) = urls.get_url(name, url.as_ref(), git)? {
                     self.fork_urls.insert(name, url, &self.markers)?;
+                    has_url = true;
                 };
 
                 // `PubGrubDependency` also gives us a local version if specified by the user.
@@ -2035,6 +2042,19 @@ impl ForkState {
             } else {
                 // A dependency from the root package or requirements.txt.
                 debug!("Adding direct dependency: {package}{version}");
+
+                // Warn the user if the direct dependency lacks a lower bound in lowest resolution.
+                let missing_lower_bound = version
+                    .bounding_range()
+                    .map(|(lowest, _highest)| lowest == Bound::Unbounded)
+                    .unwrap_or(true);
+                let strategy_lowest = matches!(
+                    resolution_strategy,
+                    ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
+                );
+                if !has_url && missing_lower_bound && strategy_lowest {
+                    warn_user_once!("The direct dependency `{package}` is unpinned. Consider setting a lower bound.");
+                }
             }
 
             // Update the package priorities.
