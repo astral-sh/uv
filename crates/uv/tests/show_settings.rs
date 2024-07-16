@@ -59,6 +59,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -191,6 +192,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -324,6 +326,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -489,6 +492,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -623,6 +627,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -743,6 +748,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -900,6 +906,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -1057,6 +1064,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -1259,6 +1267,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -1415,6 +1424,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -1541,6 +1551,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -1695,6 +1706,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -1873,6 +1885,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -1989,6 +2002,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -2105,6 +2119,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -2223,6 +2238,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -2366,6 +2382,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
@@ -2510,6 +2527,7 @@ fn resolve_both() -> anyhow::Result<()> {
         preview: Disabled,
         python_preference: OnlySystem,
         python_fetch: Automatic,
+        no_progress: false,
     }
     CacheSettings {
         no_cache: false,
