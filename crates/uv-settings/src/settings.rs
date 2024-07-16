@@ -157,7 +157,10 @@ pub struct ResolverInstallerOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
 }
 
-/// A `[tool.uv.pip]` section.
+/// Settings that are specific to the `uv pip` command-line interface.
+///
+/// These values will be ignored when running commands outside the `uv pip` namespace (e.g.,
+/// `uv lock`, `uvx`).
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
