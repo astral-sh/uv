@@ -960,8 +960,8 @@ impl VirtualProject {
     /// Similar to calling [`ProjectWorkspace::discover`] with a fallback to [`Workspace::discover`],
     /// but avoids rereading the `pyproject.toml` (and relying on error-handling as control flow).
     ///
-    /// This method always uses absolute path, i.e. this method only supports discovering the main
-    /// workspace.
+    /// This method requires an absolute path and panics otherwise, i.e. this method only supports
+    /// discovering the main workspace.
     pub async fn discover(
         path: &Path,
         stop_discovery_at: Option<&Path>,
