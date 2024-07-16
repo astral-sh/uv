@@ -13,7 +13,7 @@ docker run ghcr.io/astral-sh/uv --help
 uv can be installed by copying from the official Docker image:
 
 ```dockerfile
-FROM ghcr.io/astral-sh/uv:latest as uv
+FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM python:3.12-slim-bullseye
 COPY --from=uv /uv /bin/uv
 ```
