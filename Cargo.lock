@@ -4804,6 +4804,7 @@ dependencies = [
  "md-5",
  "pypi-types",
  "rayon",
+ "reqwest",
  "rustc-hash 2.0.0",
  "sha2",
  "thiserror",
