@@ -9,8 +9,8 @@ pub(crate) enum Printer {
     Quiet,
     /// A printer that prints all output, including debug messages.
     Verbose,
-    /// A printer that prints all output, excluding all progress bars
-    NoProgressBar,
+    /// A printer that prints to standard streams, excluding all progress outputs
+    NoProgress,
 }
 
 impl Printer {
@@ -22,7 +22,7 @@ impl Printer {
             // Confusingly, hide the progress bar when in verbose mode.
             // Otherwise, it gets interleaved with debug messages.
             Self::Verbose => ProgressDrawTarget::hidden(),
-            Self::NoProgressBar => ProgressDrawTarget::hidden(),
+            Self::NoProgress => ProgressDrawTarget::hidden(),
         }
     }
 
@@ -32,7 +32,7 @@ impl Printer {
             Self::Default => Stdout::Enabled,
             Self::Quiet => Stdout::Disabled,
             Self::Verbose => Stdout::Enabled,
-            Self::NoProgressBar => Stdout::Enabled,
+            Self::NoProgress => Stdout::Enabled,
         }
     }
 
@@ -42,7 +42,7 @@ impl Printer {
             Self::Default => Stderr::Enabled,
             Self::Quiet => Stderr::Disabled,
             Self::Verbose => Stderr::Enabled,
-            Self::NoProgressBar => Stderr::Enabled,
+            Self::NoProgress => Stderr::Enabled,
         }
     }
 }

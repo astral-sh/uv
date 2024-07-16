@@ -110,7 +110,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     } else if globals.verbose > 0 {
         Printer::Verbose
     } else if globals.no_progress {
-        Printer::NoProgressBar
+        Printer::NoProgress
     } else {
         Printer::Default
     };
