@@ -14,6 +14,7 @@ pub(crate) struct ForkLocals(FxHashMap<PackageName, Version>);
 impl ForkLocals {
     /// Insert the local [`Version`] to which a package is pinned for this fork.
     pub(crate) fn insert(&mut self, package_name: PackageName, local: Version) {
+        assert!(local.is_local());
         self.0.insert(package_name, local);
     }
 

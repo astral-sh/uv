@@ -6776,6 +6776,8 @@ fn universal_transitive_disjoint_locals() -> Result<()> {
         torchvision==0.15.1
     "})?;
 
+    // The marker expressions on the output here are incorrect due to https://github.com/astral-sh/uv/issues/5086,
+    // but the local versions are still respected correctly.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("--universal"), @r###"
