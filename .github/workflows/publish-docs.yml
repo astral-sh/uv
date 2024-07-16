@@ -33,7 +33,7 @@ jobs:
 
       - name: "Set docs version"
         run: |
-          version="${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }"
+          version="${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}"
           # if version is missing, use 'latest'
           if [ -z "$version" ]; then
             echo "Using 'latest' as version"
