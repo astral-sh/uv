@@ -3,10 +3,10 @@ use std::collections::hash_map::Entry;
 use rustc_hash::FxHashMap;
 
 use distribution_types::Verbatim;
-use pep508_rs::MarkerTree;
 use pypi_types::VerbatimParsedUrl;
 use uv_normalize::PackageName;
 
+use crate::resolver::ResolverMarkers;
 use crate::ResolveError;
 
 /// See [`crate::resolver::SolveState`].
@@ -29,7 +29,7 @@ impl ForkUrls {
         &mut self,
         package_name: &PackageName,
         url: &VerbatimParsedUrl,
-        fork_markers: Option<&MarkerTree>,
+        fork_markers: &ResolverMarkers,
     ) -> Result<(), ResolveError> {
         match self.0.entry(package_name.clone()) {
             Entry::Occupied(previous) => {
@@ -39,17 +39,18 @@ impl ForkUrls {
                         url.verbatim.verbatim().to_string(),
                     ];
                     conflicting_url.sort();
-                    return if let Some(fork_markers) = fork_markers {
-                        Err(ResolveError::ConflictingUrlsInFork {
-                            package_name: package_name.clone(),
-                            urls: conflicting_url,
-                            fork_markers: fork_markers.clone(),
-                        })
-                    } else {
-                        Err(ResolveError::ConflictingUrls(
+                    return match fork_markers {
+                        ResolverMarkers::Universal => Err(ResolveError::ConflictingUrlsUniversal(
                             package_name.clone(),
                             conflicting_url,
-                        ))
+                        )),
+                        ResolverMarkers::Fork(fork_markers) => {
+                            Err(ResolveError::ConflictingUrlsFork {
+                                package_name: package_name.clone(),
+                                urls: conflicting_url,
+                                fork_markers: fork_markers.clone(),
+                            })
+                        }
                     };
                 }
             }

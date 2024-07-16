@@ -18,7 +18,7 @@ use crate::pubgrub::{
     PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
 };
 use crate::python_requirement::PythonRequirement;
-use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
+use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -50,10 +50,10 @@ pub enum ResolveError {
     ConflictingOverrideUrls(PackageName, String, String),
 
     #[error("Requirements contain conflicting URLs for package `{0}`:\n- {}", _1.join("\n- "))]
-    ConflictingUrls(PackageName, Vec<String>),
+    ConflictingUrlsUniversal(PackageName, Vec<String>),
 
     #[error("Requirements contain conflicting URLs for package `{package_name}` in split `{fork_markers}`:\n- {}", urls.join("\n- "))]
-    ConflictingUrlsInFork {
+    ConflictingUrlsFork {
         package_name: PackageName,
         urls: Vec<String>,
         fork_markers: MarkerTree,
@@ -125,15 +125,18 @@ pub struct NoSolutionError {
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
-    markers: Option<MarkerTree>,
+    markers: ResolverMarkers,
 }
 
 impl NoSolutionError {
     pub fn header(&self) -> String {
-        if let Some(markers) = &self.markers {
-            format!("No solution found when resolving dependencies for split ({markers}):")
-        } else {
-            "No solution found when resolving dependencies:".to_string()
+        match &self.markers {
+            ResolverMarkers::Universal => {
+                "No solution found when resolving dependencies:".to_string()
+            }
+            ResolverMarkers::Fork(markers) => {
+                format!("No solution found when resolving dependencies for split ({markers}):")
+            }
         }
     }
 
@@ -146,7 +149,7 @@ impl NoSolutionError {
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
-        markers: Option<MarkerTree>,
+        markers: ResolverMarkers,
     ) -> Self {
         Self {
             error,
