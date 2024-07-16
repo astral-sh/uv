@@ -142,7 +142,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // Index all the built wheels, created by downloading and building source distributions
             // from the registry.
             let cache_shard = cache.shard(
-                CacheBucket::BuiltWheels,
+                CacheBucket::SourceDistributions,
                 WheelCache::Index(index_url).wheel_dir(package.to_string()),
             );
 

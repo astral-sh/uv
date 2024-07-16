@@ -30,7 +30,7 @@ pub(crate) struct PubGrubReportFormatter<'a> {
     pub(crate) available_versions: &'a FxHashMap<PubGrubPackage, BTreeSet<Version>>,
 
     /// The versions that were available for each package
-    pub(crate) python_requirement: Option<&'a PythonRequirement>,
+    pub(crate) python_requirement: &'a PythonRequirement,
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
@@ -47,33 +47,31 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 format!("we are solving dependencies of {package} {version}")
             }
             External::NoVersions(package, set) => {
-                if let Some(python) = self.python_requirement {
-                    if matches!(
-                        &**package,
-                        PubGrubPackageInner::Python(PubGrubPython::Target)
-                    ) {
-                        return if let Some(target) = python.target() {
-                            format!(
-                                "the requested {package} version ({target}) does not satisfy {}",
-                                PackageRange::compatibility(package, set)
-                            )
-                        } else {
-                            format!(
-                                "the requested {package} version does not satisfy {}",
-                                PackageRange::compatibility(package, set)
-                            )
-                        };
-                    }
-                    if matches!(
-                        &**package,
-                        PubGrubPackageInner::Python(PubGrubPython::Installed)
-                    ) {
-                        return format!(
-                            "the current {package} version ({}) does not satisfy {}",
-                            python.installed(),
+                if matches!(
+                    &**package,
+                    PubGrubPackageInner::Python(PubGrubPython::Target)
+                ) {
+                    return if let Some(target) = self.python_requirement.target() {
+                        format!(
+                            "the requested {package} version ({target}) does not satisfy {}",
                             PackageRange::compatibility(package, set)
-                        );
-                    }
+                        )
+                    } else {
+                        format!(
+                            "the requested {package} version does not satisfy {}",
+                            PackageRange::compatibility(package, set)
+                        )
+                    };
+                }
+                if matches!(
+                    &**package,
+                    PubGrubPackageInner::Python(PubGrubPython::Installed)
+                ) {
+                    return format!(
+                        "the current {package} version ({}) does not satisfy {}",
+                        self.python_requirement.installed(),
+                        PackageRange::compatibility(package, set)
+                    );
                 }
 
                 let set = self.simplify_set(set, package);
@@ -404,8 +402,8 @@ impl PubGrubReportFormatter<'_> {
     pub(crate) fn hints(
         &self,
         derivation_tree: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
-        selector: &Option<CandidateSelector>,
-        index_locations: &Option<IndexLocations>,
+        selector: &CandidateSelector,
+        index_locations: &IndexLocations,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
@@ -417,28 +415,22 @@ impl PubGrubReportFormatter<'_> {
             ) => {
                 if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
-                    if let Some(selector) = selector {
-                        if !fork_urls.contains_key(name) {
-                            self.prerelease_available_hint(
-                                package, name, set, selector, &mut hints,
-                            );
-                        }
+                    if !fork_urls.contains_key(name) {
+                        self.prerelease_available_hint(package, name, set, selector, &mut hints);
                     }
                 }
 
                 if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to no `--find-links` flat index
-                    if let Some(index_locations) = index_locations {
-                        Self::index_hints(
-                            package,
-                            name,
-                            set,
-                            index_locations,
-                            unavailable_packages,
-                            incomplete_packages,
-                            &mut hints,
-                        );
-                    }
+                    Self::index_hints(
+                        package,
+                        name,
+                        set,
+                        index_locations,
+                        unavailable_packages,
+                        incomplete_packages,
+                        &mut hints,
+                    );
                 }
             }
             DerivationTree::External(External::FromDependencyOf(
@@ -452,16 +444,15 @@ impl PubGrubReportFormatter<'_> {
                     &**dependency,
                     PubGrubPackageInner::Python(PubGrubPython::Target)
                 ) {
-                    if let Some(python) = self.python_requirement {
-                        if let Some(PythonTarget::RequiresPython(requires_python)) = python.target()
-                        {
-                            hints.insert(PubGrubHint::RequiresPython {
-                                requires_python: requires_python.clone(),
-                                package: package.clone(),
-                                package_set: self.simplify_set(package_set, package).into_owned(),
-                                package_requires_python: dependency_set.clone(),
-                            });
-                        }
+                    if let Some(PythonTarget::RequiresPython(requires_python)) =
+                        self.python_requirement.target()
+                    {
+                        hints.insert(PubGrubHint::RequiresPython {
+                            requires_python: requires_python.clone(),
+                            package: package.clone(),
+                            package_set: self.simplify_set(package_set, package).into_owned(),
+                            package_requires_python: dependency_set.clone(),
+                        });
                     }
                 }
             }

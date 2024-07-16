@@ -15,6 +15,47 @@ use pep508_rs::{
 use crate::pubgrub::PubGrubSpecifier;
 use crate::RequiresPythonBound;
 
+/// Returns true when it can be proven that the given marker expression
+/// evaluates to true for precisely zero marker environments.
+///
+/// When this returns false, it *may* be the case that is evaluates to
+/// true for precisely zero marker environments. That is, this routine
+/// never has false positives but may have false negatives.
+pub(crate) fn is_definitively_empty_set(tree: &MarkerTree) -> bool {
+    match *tree {
+        // A conjunction is definitively empty when it is known that
+        // *any* two of its conjuncts are disjoint. Since this would
+        // imply that the entire conjunction could never be true.
+        MarkerTree::And(ref trees) => {
+            // Since this is quadratic in the case where the
+            // expression is *not* empty, we limit ourselves
+            // to a small number of conjuncts. In practice,
+            // this should hopefully cover most cases.
+            if trees.len() > 10 {
+                return false;
+            }
+            for (i, tree1) in trees.iter().enumerate() {
+                for tree2 in &trees[i..] {
+                    if is_disjoint(tree1, tree2) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        // A disjunction is definitively empty when all of its
+        // disjuncts are definitively empty.
+        MarkerTree::Or(ref trees) => trees.iter().all(is_definitively_empty_set),
+        // An "arbitrary" expression is always false, so we
+        // at least know it is definitively empty.
+        MarkerTree::Expression(MarkerExpression::Arbitrary { .. }) => true,
+        // Can't really do much with a single expression. There are maybe
+        // trivial cases we could check (like `python_version < '0'`), but I'm
+        // not sure it's worth doing?
+        MarkerTree::Expression(_) => false,
+    }
+}
+
 /// Returns `true` if there is no environment in which both marker trees can both apply, i.e.
 /// the expression `first and second` is always false.
 pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
@@ -1079,6 +1120,27 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn is_definitively_empty_set() {
+        assert!(is_empty("'wat' == 'wat'"));
+        assert!(is_empty(
+            "python_version < '3.10' and python_version >= '3.10'"
+        ));
+        assert!(is_empty(
+            "(python_version < '3.10' and python_version >= '3.10') \
+             or (python_version < '3.9' and python_version >= '3.9')",
+        ));
+
+        assert!(!is_empty("python_version < '3.10'"));
+        assert!(!is_empty("python_version < '0'"));
+        assert!(!is_empty(
+            "python_version < '3.10' and python_version >= '3.9'"
+        ));
+        assert!(!is_empty(
+            "python_version < '3.10' or python_version >= '3.11'"
+        ));
+    }
+
     fn test_version_bounds_disjointness(version: &str) {
         assert!(!is_disjoint(
             format!("{version} > '2.7.0'"),
@@ -1123,6 +1185,11 @@ mod tests {
             format!("{version} == '3.7.0'"),
             format!("{version} != '3.7.0'")
         ));
+    }
+
+    fn is_empty(tree: &str) -> bool {
+        let tree = MarkerTree::parse_reporter(tree, &mut TracingReporter).unwrap();
+        super::is_definitively_empty_set(&tree)
     }
 
     fn is_disjoint(one: impl AsRef<str>, two: impl AsRef<str>) -> bool {

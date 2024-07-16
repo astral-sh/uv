@@ -35,7 +35,7 @@ impl<'a> BuiltWheelIndex<'a> {
     pub fn url(&self, source_dist: &DirectUrlSourceDist) -> Result<Option<CachedWheel>, Error> {
         // For direct URLs, cache directly under the hash of the URL itself.
         let cache_shard = self.cache.shard(
-            CacheBucket::BuiltWheels,
+            CacheBucket::SourceDistributions,
             WheelCache::Url(source_dist.url.raw()).root(),
         );
 
@@ -57,7 +57,7 @@ impl<'a> BuiltWheelIndex<'a> {
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
     pub fn path(&self, source_dist: &PathSourceDist) -> Result<Option<CachedWheel>, Error> {
         let cache_shard = self.cache.shard(
-            CacheBucket::BuiltWheels,
+            CacheBucket::SourceDistributions,
             WheelCache::Path(&source_dist.url).root(),
         );
 
@@ -92,7 +92,7 @@ impl<'a> BuiltWheelIndex<'a> {
         source_dist: &DirectorySourceDist,
     ) -> Result<Option<CachedWheel>, Error> {
         let cache_shard = self.cache.shard(
-            CacheBucket::BuiltWheels,
+            CacheBucket::SourceDistributions,
             if source_dist.editable {
                 WheelCache::Editable(&source_dist.url).root()
             } else {
@@ -139,7 +139,7 @@ impl<'a> BuiltWheelIndex<'a> {
         let git_sha = source_dist.git.precise()?;
 
         let cache_shard = self.cache.shard(
-            CacheBucket::BuiltWheels,
+            CacheBucket::SourceDistributions,
             WheelCache::Git(&source_dist.url, &git_sha.to_short_string()).root(),
         );
 

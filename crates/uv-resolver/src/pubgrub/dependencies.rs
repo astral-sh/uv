@@ -12,7 +12,7 @@ use pypi_types::{
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
-use crate::resolver::Locals;
+use crate::resolver::ForkLocals;
 use crate::{PubGrubSpecifier, ResolveError};
 
 #[derive(Clone, Debug)]
@@ -23,23 +23,26 @@ pub(crate) struct PubGrubDependency {
     /// even if this field is None where there is an override with a URL or there is a different
     /// requirement or constraint for the same package that has a URL.
     pub(crate) url: Option<VerbatimParsedUrl>,
+    /// The local version for this requirement, if specified.
+    pub(crate) local: Option<Version>,
 }
 
 impl PubGrubDependency {
     pub(crate) fn from_requirement<'a>(
         requirement: &'a Requirement,
         source_name: Option<&'a PackageName>,
-        locals: &'a Locals,
+        fork_locals: &'a ForkLocals,
     ) -> impl Iterator<Item = Result<Self, ResolveError>> + 'a {
         // Add the package, plus any extra variants.
         iter::once(None)
             .chain(requirement.extras.clone().into_iter().map(Some))
-            .map(|extra| PubGrubRequirement::from_requirement(requirement, extra, locals))
+            .map(|extra| PubGrubRequirement::from_requirement(requirement, extra, fork_locals))
             .filter_map_ok(move |requirement| {
                 let PubGrubRequirement {
                     package,
                     version,
                     url,
+                    local,
                 } = requirement;
                 match &*package {
                     PubGrubPackageInner::Package { name, .. } => {
@@ -53,12 +56,14 @@ impl PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
                             url,
+                            local,
                         })
                     }
                     PubGrubPackageInner::Marker { .. } => Some(PubGrubDependency {
                         package: package.clone(),
                         version: version.clone(),
                         url,
+                        local,
                     }),
                     PubGrubPackageInner::Extra { name, .. } => {
                         debug_assert!(
@@ -69,6 +74,7 @@ impl PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
                             url: None,
+                            local: None,
                         })
                     }
                     _ => None,
@@ -83,6 +89,7 @@ pub(crate) struct PubGrubRequirement {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Range<Version>,
     pub(crate) url: Option<VerbatimParsedUrl>,
+    pub(crate) local: Option<Version>,
 }
 
 impl PubGrubRequirement {
@@ -91,11 +98,11 @@ impl PubGrubRequirement {
     pub(crate) fn from_requirement(
         requirement: &Requirement,
         extra: Option<ExtraName>,
-        locals: &Locals,
+        fork_locals: &ForkLocals,
     ) -> Result<Self, ResolveError> {
         let (verbatim_url, parsed_url) = match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
-                return Self::from_registry_requirement(specifier, extra, requirement, locals);
+                return Self::from_registry_requirement(specifier, extra, requirement, fork_locals);
             }
             RequirementSource::Url {
                 subdirectory,
@@ -162,6 +169,7 @@ impl PubGrubRequirement {
                 parsed_url,
                 verbatim: verbatim_url.clone(),
             }),
+            local: None,
         })
     }
 
@@ -169,15 +177,15 @@ impl PubGrubRequirement {
         specifier: &VersionSpecifiers,
         extra: Option<ExtraName>,
         requirement: &Requirement,
-        locals: &Locals,
+        fork_locals: &ForkLocals,
     ) -> Result<PubGrubRequirement, ResolveError> {
-        // If the specifier is an exact version, and the user requested a local version that's
-        // more precise than the specifier, use the local version instead.
-        let version = if let Some(expected) = locals.get(&requirement.name) {
+        // If the specifier is an exact version and the user requested a local version for this
+        // fork that's more precise than the specifier, use the local version instead.
+        let version = if let Some(local) = fork_locals.get(&requirement.name) {
             specifier
                 .iter()
                 .map(|specifier| {
-                    Locals::map(expected, specifier)
+                    ForkLocals::map(local, specifier)
                         .map_err(ResolveError::InvalidVersion)
                         .and_then(|specifier| {
                             Ok(PubGrubSpecifier::from_pep440_specifier(&specifier)?)
@@ -198,7 +206,9 @@ impl PubGrubRequirement {
             ),
             version,
             url: None,
+            local: None,
         };
+
         Ok(requirement)
     }
 }

@@ -1,0 +1,7 @@
+black>=23.10.0
+mkdocs>=1.5.0
+mkdocs-material>=9.1.18
+mkdocs-redirects>=1.2.1
+mdformat>=0.7.17
+mdformat-mkdocs>=2.0.4
+mdformat-admon>=2.0.2

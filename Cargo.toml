@@ -41,6 +41,7 @@ uv-git = { path = "crates/uv-git" }
 uv-installer = { path = "crates/uv-installer" }
 uv-macros = { path = "crates/uv-macros" }
 uv-normalize = { path = "crates/uv-normalize" }
+uv-options-metadata = { path = "crates/uv-options-metadata" }
 uv-python = { path = "crates/uv-python" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
@@ -68,7 +69,7 @@ cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.8" }
 chrono = { version = "0.4.31" }
 clap = { version = "4.5.9" }
-clap_complete_command = { version = "0.5.1" }
+clap_complete_command = { version = "0.6.0" }
 configparser = { version = "3.0.4" }
 console = { version = "0.15.8", default-features = false }
 csv = { version = "1.3.0" }
@@ -107,7 +108,8 @@ path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "b4435e2f3af10dab2336a0345b35dcd622699d06" }
+proc-macro2 = { version = "1.0.86" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "3f0ba760951ab0deeac874b98bb18fc90103fcf7" }
 pyo3 = { version = "0.21.0" }
 pyo3-log = { version = "0.10.0" }
 quote = { version = "1.0.36" }
@@ -143,7 +145,7 @@ toml_edit = { version = "0.22.13" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.2.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
-tracing-tree = { version = "0.3.0" }
+tracing-tree = { version = "0.4.0" }
 unicode-width = { version = "0.1.11" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.0" }

@@ -777,7 +777,7 @@ async fn find_workspace(
             // We require that a `project.toml` file either declares a workspace or a project.
             warn_user!(
                 "pyproject.toml does not contain `project` table: `{}`",
-                workspace_root.simplified_display()
+                pyproject_path.simplified_display()
             );
             Ok(None)
         };
