@@ -36,7 +36,7 @@ Note when all other installers are used, self updates are disabled.
 
 ## PyPI
 
-For convenience, uv is published to [PyPI](https://pypi.org/project/uv/). When installed from PyPI, uv can be built from source but there are prebuilt distributions (wheels) for many platforms.
+For convenience, uv is published to [PyPI](https://pypi.org/project/uv/).
 
 If installing from PyPI, we recommend using `pipx` to install uv into an isolated environment:
 
@@ -49,6 +49,8 @@ However, `pip` can also be used:
 ```bash
 pip install uv
 ```
+
+There are prebuilt distributions (wheels) for many platforms; if not available for a given platform, uv will be built from source which requires a Rust toolchain to be installed. See the [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup) for details on requirements for building from source.
 
 ## Homebrew
 
