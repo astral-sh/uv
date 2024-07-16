@@ -45,6 +45,8 @@ fn help() {
           --isolated
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
+          --no-progress
+              Hides all progress outputs when set
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -104,6 +106,8 @@ fn help_flag() {
           --isolated
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
+          --no-progress
+              Hides all progress outputs when set
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -162,6 +166,8 @@ fn help_short_flag() {
           --isolated
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
+          --no-progress
+              Hides all progress outputs when set
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -261,6 +267,9 @@ fn help_subcommand() {
           --isolated
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
+
+          --no-progress
+              Hides all progress outputs when set
 
       -n, --no-cache
               Avoid reading from or writing to the cache
@@ -379,6 +388,9 @@ fn help_subsubcommand() {
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
 
+          --no-progress
+              Hides all progress outputs when set
+
       -n, --no-cache
               Avoid reading from or writing to the cache
               
@@ -449,6 +461,8 @@ fn help_flag_subcommand() {
           --isolated
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
+          --no-progress
+              Hides all progress outputs when set
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -504,6 +518,8 @@ fn help_flag_subsubcommand() {
           --isolated
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
+          --no-progress
+              Hides all progress outputs when set
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -616,6 +632,8 @@ fn help_with_global_option() {
           --isolated
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
+          --no-progress
+              Hides all progress outputs when set
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
@@ -708,6 +726,8 @@ fn test_with_no_pager() {
           --isolated
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
+          --no-progress
+              Hides all progress outputs when set
       -n, --no-cache
               Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
