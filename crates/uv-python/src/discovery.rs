@@ -1641,6 +1641,14 @@ mod tests {
             PythonRequest::Implementation(ImplementationName::PyPy)
         );
         assert_eq!(
+            PythonRequest::parse("graalpy"),
+            PythonRequest::Implementation(ImplementationName::GraalPy)
+        );
+        assert_eq!(
+            PythonRequest::parse("gp"),
+            PythonRequest::Implementation(ImplementationName::GraalPy)
+        );
+        assert_eq!(
             PythonRequest::parse("cp"),
             PythonRequest::Implementation(ImplementationName::CPython)
         );
@@ -1655,6 +1663,20 @@ mod tests {
             PythonRequest::parse("pp310"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            PythonRequest::parse("graalpy3.10"),
+            PythonRequest::ImplementationVersion(
+                ImplementationName::GraalPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            PythonRequest::parse("gp310"),
+            PythonRequest::ImplementationVersion(
+                ImplementationName::GraalPy,
                 VersionRequest::from_str("3.10").unwrap()
             )
         );
@@ -1676,6 +1698,20 @@ mod tests {
             PythonRequest::parse("pypy310"),
             PythonRequest::ImplementationVersion(
                 ImplementationName::PyPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            PythonRequest::parse("graalpy@3.10"),
+            PythonRequest::ImplementationVersion(
+                ImplementationName::GraalPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+        );
+        assert_eq!(
+            PythonRequest::parse("graalpy310"),
+            PythonRequest::ImplementationVersion(
+                ImplementationName::GraalPy,
                 VersionRequest::from_str("3.10").unwrap()
             )
         );
@@ -1748,6 +1784,18 @@ mod tests {
             )
             .to_canonical_string(),
             "pypy@3.10"
+        );
+        assert_eq!(
+            PythonRequest::Implementation(ImplementationName::GraalPy).to_canonical_string(),
+            "graalpy"
+        );
+        assert_eq!(
+            PythonRequest::ImplementationVersion(
+                ImplementationName::GraalPy,
+                VersionRequest::from_str("3.10").unwrap()
+            )
+            .to_canonical_string(),
+            "graalpy@3.10"
         );
 
         let tempdir = TempDir::new().unwrap();

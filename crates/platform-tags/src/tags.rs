@@ -298,6 +298,7 @@ impl std::fmt::Display for Tags {
 enum Implementation {
     CPython { gil_disabled: bool },
     PyPy,
+    GraalPy,
     Pyston,
 }
 
@@ -310,6 +311,8 @@ impl Implementation {
             Self::CPython { .. } => format!("cp{}{}", python_version.0, python_version.1),
             // Ex) `pp39`
             Self::PyPy => format!("pp{}{}", python_version.0, python_version.1),
+            // Ex) `graalpy310`
+            Self::GraalPy => format!("graalpy{}{}", python_version.0, python_version.1),
             // Ex) `pt38``
             Self::Pyston => format!("pt{}{}", python_version.0, python_version.1),
         }
@@ -342,6 +345,16 @@ impl Implementation {
                 implementation_version.0,
                 implementation_version.1
             ),
+            // Ex) `graalpy310_graalpy240_310_native
+            Self::GraalPy => format!(
+                "graalpy{}{}_graalpy{}{}_{}{}_native",
+                python_version.0,
+                python_version.1,
+                implementation_version.0,
+                implementation_version.1,
+                python_version.0,
+                python_version.1
+            ),
             // Ex) `pyston38-pyston_23`
             Self::Pyston => format!(
                 "pyston{}{}-pyston_{}{}",
@@ -361,6 +374,7 @@ impl Implementation {
             // Known and supported implementations.
             "cpython" => Ok(Self::CPython { gil_disabled }),
             "pypy" => Ok(Self::PyPy),
+            "graalpy" => Ok(Self::GraalPy),
             "pyston" => Ok(Self::Pyston),
             // Known but unsupported implementations.
             "python" => Err(TagsError::UnsupportedImplementation(name.to_string())),

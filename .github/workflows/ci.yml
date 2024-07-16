@@ -692,6 +692,135 @@ jobs:
         run: |
           .\uv.exe pip install anyio
 
+  integration-test-graalpy-linux:
+    needs: build-binary-linux
+    name: "integration test | graalpy on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "graalpy24.0"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: Graalpy info
+        run: which graalpy
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p $(which graalpy)
+
+      - name: "Check for executables"
+        run: |
+          check_in_bin() {
+              local executable_name=$1
+              local bin_path=".venv/bin"
+
+              if [[ -x "$bin_path/$executable_name" ]]; then
+                  return 0
+              else
+                  echo "Executable '$executable_name' not found in folder '$bin_path'."
+                  return 1
+              fi
+          }
+
+          executables=("graalpy" "python3" "python")
+
+          all_found=true
+          for executable_name in "${executables[@]}"; do
+              check_in_bin "$executable_name" "$folder_path"
+              result=$?
+
+              if [[ $result -ne 0 ]]; then
+                  all_found=false
+              fi
+          done
+
+          if ! $all_found; then
+            echo "One or more expected executables were not found."
+            exit 1
+          fi
+
+      - name: "Check version"
+        run: |
+          .venv/bin/graalpy --version
+          .venv/bin/python3 --version
+          .venv/bin/python --version
+
+      - name: "Check install"
+        run: |
+          ./uv pip install anyio
+
+  integration-test-graalpy-windows:
+    needs: build-binary-windows
+    name: "integration test | graalpy on windows"
+    runs-on: windows-latest
+
+    steps:
+      - uses: timfel/setup-python@fc9bcb4a04f5b1ea7d678c2ca7ea1c479a2468d7
+        with:
+          python-version: "graalpy24.0"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: Graalpy info
+        run: Get-Command graalpy
+
+      - name: "Create a virtual environment"
+        run: |
+          $graalpy = (Get-Command graalpy).source
+          .\uv.exe venv -p $graalpy
+
+      - name: "Check for executables"
+        shell: python
+        run: |
+          import sys
+          from pathlib import Path
+
+          def binary_exist(binary):
+            binaries_path = Path(".venv\\Scripts")
+            if (binaries_path / binary).exists():
+              return True
+            print(f"Executable '{binary}' not found in folder '{binaries_path}'.")
+
+          all_found = True
+          expected_binaries = [
+              "graalpy.exe",
+              "python.exe",
+              "python3.exe",
+          ]
+          for binary in expected_binaries:
+            if not binary_exist(binary):
+              all_found = False
+
+          if not all_found:
+            print("One or more expected executables were not found.")
+            sys.exit(1)
+
+      - name: "Check version"
+        run: |
+          & .venv\Scripts\graalpy.exe --version
+          & .venv\Scripts\python3.exe --version
+          & .venv\Scripts\python.exe --version
+
+      - name: "Check install"
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+        run: |
+          .\uv.exe pip install anyio
+
   integration-test-github-actions:
     needs: build-binary-linux
     name: "integration test | github actions"
