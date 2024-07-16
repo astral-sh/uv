@@ -48,6 +48,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) preview: PreviewMode,
     pub(crate) python_preference: PythonPreference,
     pub(crate) python_fetch: PythonFetch,
+    pub(crate) no_progress_bar: bool,
 }
 
 impl GlobalSettings {
@@ -118,6 +119,7 @@ impl GlobalSettings {
                 .python_fetch
                 .combine(workspace.and_then(|workspace| workspace.globals.python_fetch))
                 .unwrap_or_default(),
+            no_progress_bar: args.no_progress_bar,
         }
     }
 }
