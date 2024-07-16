@@ -201,19 +201,37 @@ pub(crate) fn lower_requirement(
             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                 return Err(LoweringError::ConflictingUrls);
             }
-            let path = workspace
+            let member = workspace
                 .packages()
                 .get(&requirement.name)
                 .ok_or(LoweringError::UndeclaredWorkspacePackage)?
                 .clone();
-            // The lockfile is relative to the workspace root.
-            let relative_to_workspace = relative_to(path.root(), workspace.install_path())
+
+            // Say we have:
+            // ```
+            // root
+            // ├── main_workspace  <- We want to the path from here ...
+            // │   ├── pyproject.toml
+            // │   └── uv.lock
+            // └──current_workspace
+            //    └── packages
+            //        └── current_package  <- ... to here.
+            //            └── pyproject.toml
+            // ```
+            // The path we need in the lockfile: `../current_workspace/packages/current_project`
+            // member root: `/root/current_workspace/packages/current_project`
+            // workspace install root: `/root/current_workspace`
+            // relative to workspace: `packages/current_project`
+            // workspace lock root: `../current_workspace`
+            // relative to main workspace: `../current_workspace/packages/current_project`
+            let relative_to_workspace = relative_to(member.root(), workspace.install_path())
                 .map_err(LoweringError::RelativeTo)?;
-            let url = VerbatimUrl::parse_absolute_path(path.root())?
-                .with_given(relative_to_workspace.to_string_lossy());
+            let relative_to_main_workspace = workspace.lock_path().join(relative_to_workspace);
+            let url = VerbatimUrl::parse_absolute_path(member.root())?
+                .with_given(relative_to_main_workspace.to_string_lossy());
             RequirementSource::Directory {
-                install_path: path.root().clone(),
-                lock_path: relative_to_workspace,
+                install_path: member.root().clone(),
+                lock_path: relative_to_main_workspace,
                 url,
                 editable: editable.unwrap_or(true),
             }

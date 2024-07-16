@@ -423,8 +423,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub(crate) async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
         let requires_dist = read_requires_dist(project_root).await?;
-        let requires_dist =
-            RequiresDist::from_workspace(requires_dist, project_root, self.preview_mode).await?;
+        let requires_dist = RequiresDist::from_project_maybe_workspace(
+            requires_dist,
+            project_root,
+            project_root,
+            self.preview_mode,
+        )
+        .await?;
         Ok(requires_dist)
     }
 
@@ -916,7 +921,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, &resource.path, None, &cache_shard)
+            .build_distribution(source, &resource.install_path, None, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -978,14 +983,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode)
-                    .await?,
+                Metadata::from_workspace(
+                    metadata,
+                    resource.install_path.as_ref(),
+                    resource.lock_path.as_ref(),
+                    self.preview_mode,
+                )
+                .await?,
             ));
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, &resource.path, None)
+            .build_metadata(source, &resource.install_path, None)
             .boxed_local()
             .await?
         {
@@ -998,8 +1008,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode)
-                    .await?,
+                Metadata::from_workspace(
+                    metadata,
+                    resource.install_path.as_ref(),
+                    resource.lock_path.as_ref(),
+                    self.preview_mode,
+                )
+                .await?,
             ));
         }
 
@@ -1010,7 +1025,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, &resource.path, None, &cache_shard)
+            .build_distribution(source, &resource.install_path, None, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -1025,7 +1040,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(metadata, resource.path.as_ref(), self.preview_mode).await?,
+            Metadata::from_workspace(
+                metadata,
+                resource.install_path.as_ref(),
+                resource.lock_path.as_ref(),
+                self.preview_mode,
+            )
+            .await?,
         ))
     }
 
@@ -1036,15 +1057,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
     ) -> Result<Revision, Error> {
         // Verify that the source tree exists.
-        if !resource.path.is_dir() {
+        if !resource.install_path.is_dir() {
             return Err(Error::NotFound(resource.url.clone()));
         }
 
         // Determine the last-modified time of the source distribution.
         let Some(modified) =
-            ArchiveTimestamp::from_source_tree(&resource.path).map_err(Error::CacheRead)?
+            ArchiveTimestamp::from_source_tree(&resource.install_path).map_err(Error::CacheRead)?
         else {
-            return Err(Error::DirWithoutEntrypoint(resource.path.to_path_buf()));
+            return Err(Error::DirWithoutEntrypoint(
+                resource.install_path.to_path_buf(),
+            ));
         };
 
         // Read the existing metadata from the cache. We treat source trees as if `--refresh` is
@@ -1225,7 +1248,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
+                    Metadata::from_workspace(
+                        metadata,
+                        fetch.path(),
+                        fetch.path(),
+                        self.preview_mode,
+                    )
+                    .await?,
                 ));
             }
         }
@@ -1245,7 +1274,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
+                Metadata::from_workspace(metadata, fetch.path(), fetch.path(), self.preview_mode)
+                    .await?,
             ));
         }
 
@@ -1271,7 +1301,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(metadata, fetch.path(), self.preview_mode).await?,
+            Metadata::from_workspace(metadata, fetch.path(), fetch.path(), self.preview_mode)
+                .await?,
         ))
     }
 

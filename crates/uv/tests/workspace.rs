@@ -1,11 +1,16 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::{FileWriteStr, PathChild};
+use indoc::indoc;
+use insta::assert_json_snapshot;
+use serde::{Deserialize, Serialize};
 
-use crate::common::{copy_dir_ignore, uv_snapshot, TestContext};
+use crate::common::{copy_dir_ignore, make_project, uv_snapshot, TestContext};
 
 mod common;
 
@@ -563,5 +568,125 @@ fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
             "packages/seeds",
         ],
     )?;
+    Ok(())
+}
+
+/// Extract just the sources from the lock file, to test path resolution.
+#[derive(Deserialize, Serialize)]
+struct SourceLock {
+    distribution: Vec<Distribution>,
+}
+
+impl SourceLock {
+    fn sources(self) -> BTreeMap<String, toml::Value> {
+        self.distribution
+            .into_iter()
+            .map(|distribution| (distribution.name, distribution.source))
+            .collect()
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+struct Distribution {
+    name: String,
+    source: toml::Value,
+}
+
+/// Test path dependencies from one workspace into another.
+///
+/// We have a main workspace with packages `a` and `b`, and a second workspace with `c`, `d` and
+/// `e`. We have `a -> b`, `b -> c`, `c -> d`. `e` should not be installed.
+#[test]
+fn workspace_to_workspace_paths_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace ...
+    let main_workspace = context.temp_dir.child("main-workspace");
+    main_workspace
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&main_workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r#"
+        dependencies = ["c"]
+
+        [tool.uv.sources]
+        c = { path = "../../../other-workspace/packages/c", editable = true }
+    "#};
+    make_project(&main_workspace.join("packages").join("b"), "b", deps)?;
+
+    // Build the second workspace ...
+    let other_workspace = context.temp_dir.child("other-workspace");
+    other_workspace
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with c  ...
+    let deps = indoc! {r#"
+        dependencies = ["d"]
+
+        [tool.uv.sources]
+        d = { workspace = true }
+    "#};
+    make_project(&other_workspace.join("packages").join("c"), "c", deps)?;
+
+    // ... and d ...
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(&other_workspace.join("packages").join("d"), "d", deps)?;
+
+    // ... and e.
+    let deps = indoc! {r#"
+        dependencies = ["numpy>=2.0.0,<3"]
+    "#};
+    make_project(&other_workspace.join("packages").join("e"), "e", deps)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    "###
+    );
+
+    let lock: SourceLock =
+        toml::from_str(&fs_err::read_to_string(main_workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "a": {
+        "editable": "packages/a"
+      },
+      "b": {
+        "editable": "packages/b"
+      },
+      "c": {
+        "editable": "../other-workspace/packages/c"
+      },
+      "d": {
+        "editable": "../other-workspace/packages/d"
+      }
+    }
+    "###);
+
     Ok(())
 }
