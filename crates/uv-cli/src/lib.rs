@@ -621,9 +621,9 @@ pub struct PipCompileArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
-    /// source distributions will be reused, but operations that require building distributions will
-    /// exit with an error.
+    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
+    /// already-built source distributions will be reused, but operations that require building
+    /// distributions will exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -645,8 +645,8 @@ pub struct PipCompileArgs {
 
     /// Don't install pre-built wheels.
     ///
-    /// The given packages will be installed from a source distribution. The resolver
-    /// will still use pre-built wheels for metadata.
+    /// The given packages will be built and installed from source. The resolver will still use
+    /// pre-built wheels to extract package metadata, if available.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
@@ -884,9 +884,9 @@ pub struct PipSyncArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
-    /// source distributions will be reused, but operations that require building distributions will
-    /// exit with an error.
+    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
+    /// already-built source distributions will be reused, but operations that require building
+    /// distributions will exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -908,8 +908,8 @@ pub struct PipSyncArgs {
 
     /// Don't install pre-built wheels.
     ///
-    /// The given packages will be installed from a source distribution. The resolver
-    /// will still use pre-built wheels for metadata.
+    /// The given packages will be built and installed from source. The resolver will still use
+    /// pre-built wheels to extract package metadata, if available.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
@@ -1156,9 +1156,9 @@ pub struct PipInstallArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
-    /// source distributions will be reused, but operations that require building distributions will
-    /// exit with an error.
+    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
+    /// already-built source distributions will be reused, but operations that require building
+    /// distributions will exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -1180,8 +1180,8 @@ pub struct PipInstallArgs {
 
     /// Don't install pre-built wheels.
     ///
-    /// The given packages will be installed from a source distribution. The resolver
-    /// will still use pre-built wheels for metadata.
+    /// The given packages will be built and installed from source. The resolver will still use
+    /// pre-built wheels to extract package metadata, if available.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
@@ -1878,7 +1878,7 @@ pub struct LockArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AddArgs {
-    /// The packages to add, as PEP 508 requirements (e.g., `flask==2.2.3`).
+    /// The packages to add, as PEP 508 requirements (e.g., `ruff==0.5.0`).
     #[arg(required = true)]
     pub requirements: Vec<String>,
 
@@ -1948,7 +1948,7 @@ pub struct AddArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RemoveArgs {
-    /// The names of the packages to remove (e.g., `flask`).
+    /// The names of the packages to remove (e.g., `ruff`).
     #[arg(required = true)]
     pub requirements: Vec<PackageName>,
 
@@ -2270,23 +2270,25 @@ pub struct IndexArgs {
     /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
     /// directory laid out in the same format.
     ///
-    /// All indexes given via this flag take priority over the index
-    /// in `--index-url` (which defaults to PyPI). And when multiple
-    /// `--extra-index-url` flags are given, earlier values take priority.
+    /// All indexes provided via this flag take priority over the index specified by
+    /// `--index-url` (which defaults to PyPI). When multiple `--extra-index-url` flags are
+    /// provided, earlier values take priority.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
     pub extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
-    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    /// Locations to search for candidate distributions, in addition to those found in the registry
+    /// indexes.
     ///
-    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
+    /// If a path, the target must be a directory that contains packages as wheel files (`.whl`) or
     /// source distributions (`.tar.gz` or `.zip`) at the top level.
     ///
-    /// If a URL, the page must contain a flat list of links to package files.
+    /// If a URL, the page must contain a flat list of links to package files adhering to the
+    /// formats described above.
     #[arg(long, short)]
     pub find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
-    /// discovered via `--find-links`.
+    /// provided via `--find-links`.
     #[arg(long)]
     pub no_index: bool,
 }
@@ -2316,9 +2318,9 @@ pub struct RefreshArgs {
 pub struct BuildArgs {
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
-    /// source distributions will be reused, but operations that require building distributions will
-    /// exit with an error.
+    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
+    /// already-built source distributions will be reused, but operations that require building
+    /// distributions will exit with an error.
     #[arg(long, overrides_with("build"))]
     pub no_build: bool,
 
@@ -2331,8 +2333,8 @@ pub struct BuildArgs {
 
     /// Don't install pre-built wheels.
     ///
-    /// The given packages will be installed from a source distribution. The resolver
-    /// will still use pre-built wheels for metadata.
+    /// The given packages will be built and installed from source. The resolver will still use
+    /// pre-built wheels to extract package metadata, if available.
     #[arg(long, overrides_with("binary"))]
     pub no_binary: bool,
 
