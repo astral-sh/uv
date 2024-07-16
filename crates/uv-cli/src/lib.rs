@@ -157,7 +157,7 @@ pub struct GlobalArgs {
 
     /// Hides all progress outputs when set
     #[arg(global = true, long)]
-    pub no_progress_bar: bool,
+    pub no_progress: bool,
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
