@@ -9,7 +9,6 @@ theme:
     - navigation.expand
     - navigation.tracking
     - content.code.annotate
-    - toc.integrate
     - toc.follow
     - navigation.path
     - navigation.top
