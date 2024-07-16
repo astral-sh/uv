@@ -4807,7 +4807,7 @@ fn upgrade_constraint() -> Result<()> {
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt")
-            .arg("--upgrade-package")
+            .arg("-P")
             .arg("iniconfig"), @r###"
     success: true
     exit_code: 0
