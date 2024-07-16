@@ -682,7 +682,7 @@ pub struct PipCompileArgs {
 
     /// Perform a universal resolution, attempting to generate a single `requirements.txt` output
     /// file that is compatible with all operating systems, architectures, and Python
-    /// implementations.
+    /// implementations. Implies `--no-strip-markers`.
     ///
     /// In universal mode, the current Python version (or user-provided `--python-version`) will be
     /// treated as a lower bound. For example, `--universal --python-version 3.7` would produce a
