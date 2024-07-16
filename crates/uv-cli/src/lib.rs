@@ -84,14 +84,14 @@ pub struct Cli {
 #[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
     /// Do not print any output.
-    #[arg(global = true, long, short, conflicts_with_all = ["verbose", "no_progress_bar"])]
+    #[arg(global = true, long, short, conflicts_with = "verbose")]
     pub quiet: bool,
 
     /// Use verbose output.
     ///
     /// You can configure fine-grained logging using the `RUST_LOG` environment variable.
     /// (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
-    #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with_all = ["quiet", "no_progress_bar"])]
+    #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "quiet")]
     pub verbose: u8,
 
     /// Disable colors; provided for compatibility with `pip`.
@@ -155,8 +155,8 @@ pub struct GlobalArgs {
     #[arg(global = true, long, hide = true)]
     pub show_settings: bool,
 
-    /// Hides all progress bars when set
-    #[arg(global = true, long, conflicts_with_all = ["quiet", "verbose"])]
+    /// Hides all progress outputs when set
+    #[arg(global = true, long)]
     pub no_progress_bar: bool,
 }
 
