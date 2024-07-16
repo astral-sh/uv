@@ -157,21 +157,6 @@ dev-dependencies = [
 ]
 ```
 
-You can also put development dependencies into groups and install them individually:
-
-```toml
-[tool.uv.dev-dependencies]
-test = [
-  "pytest >=8.1.1,<9"
-]
-lint = [
-  "mypy >=1,<2"
-]
-
-[tool.uv]
-default-dev-dependencies = ["test"]
-```
-
 ## PEP 508
 
 The [PEP 508](https://peps.python.org/pep-0508/) syntax allows you to specify, in order:
