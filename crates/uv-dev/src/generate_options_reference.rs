@@ -216,7 +216,18 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
     output.push_str("\n\n");
     output.push_str(&format!("**Default value**: `{}`\n", field.default));
     output.push('\n');
-    output.push_str(&format!("**Type**: `{}`\n", field.value_type));
+    if let Some(possible_values) = field
+        .possible_values
+        .as_ref()
+        .filter(|values| !values.is_empty())
+    {
+        output.push_str("**Possible values**:\n\n");
+        for value in possible_values {
+            output.push_str(format!("- {value}\n").as_str());
+        }
+    } else {
+        output.push_str(&format!("**Type**: `{}`\n", field.value_type));
+    }
     output.push('\n');
     output.push_str("**Example usage**:\n\n");
     output.push_str(&format_tab(

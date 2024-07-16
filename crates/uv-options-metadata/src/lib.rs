@@ -119,6 +119,7 @@ impl OptionSet {
     ///             example: "",
     ///             scope: None,
     ///             deprecated: None,
+    ///             possible_values: None
     ///         });
     ///     }
     /// }
@@ -141,7 +142,8 @@ impl OptionSet {
     ///             value_type: "bool",
     ///             example: "",
     ///             scope: None,
-    ///             deprecated: None
+    ///             deprecated: None,
+    ///             possible_values: None
     ///         });
     ///
     ///         visit.record_set("format", Nested::metadata());
@@ -158,7 +160,8 @@ impl OptionSet {
     ///             value_type: "bool",
     ///             example: "",
     ///             scope: None,
-    ///             deprecated: None
+    ///             deprecated: None,
+    ///             possible_values: None
     ///         });
     ///     }
     /// }
@@ -190,7 +193,8 @@ impl OptionSet {
     ///     value_type: "bool",
     ///     example: "",
     ///     scope: None,
-    ///     deprecated: None
+    ///     deprecated: None,
+    ///     possible_values: None
     ///  };
     ///
     /// impl OptionsMetadata for WithOptions {
@@ -213,7 +217,8 @@ impl OptionSet {
     ///     value_type: "bool",
     ///     example: "",
     ///     scope: None,
-    ///     deprecated: None
+    ///     deprecated: None,
+    ///     possible_values: None
     /// };
     ///
     /// struct Root;
@@ -226,7 +231,8 @@ impl OptionSet {
     ///             value_type: "bool",
     ///             example: "",
     ///             scope: None,
-    ///             deprecated: None
+    ///             deprecated: None,
+    ///             possible_values: None
     ///         });
     ///
     ///         visit.record_set("format", Nested::metadata());
@@ -388,6 +394,7 @@ pub struct OptionField {
     pub scope: Option<&'static str>,
     pub example: &'static str,
     pub deprecated: Option<Deprecated>,
+    pub possible_values: Option<Vec<PossibleValue>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -400,8 +407,22 @@ impl Display for OptionField {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", self.doc)?;
         writeln!(f)?;
+
         writeln!(f, "Default value: {}", self.default)?;
-        writeln!(f, "Type: {}", self.value_type)?;
+
+        if let Some(possible_values) = self
+            .possible_values
+            .as_ref()
+            .filter(|values| !values.is_empty())
+        {
+            writeln!(f, "Possible values:")?;
+            writeln!(f)?;
+            for value in possible_values {
+                writeln!(f, "- {value}")?;
+            }
+        } else {
+            writeln!(f, "Type: {}", self.value_type)?;
+        }
 
         if let Some(deprecated) = &self.deprecated {
             write!(f, "Deprecated")?;
@@ -418,5 +439,23 @@ impl Display for OptionField {
         }
 
         writeln!(f, "Example usage:\n```toml\n{}\n```", self.example)
+    }
+}
+
+/// A possible value for an enum, similar to Clap's `PossibleValue` type (but without a dependency
+/// on Clap).
+#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
+pub struct PossibleValue {
+    pub name: String,
+    pub help: Option<String>,
+}
+
+impl Display for PossibleValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "`\"{}\"`", self.name)?;
+        if let Some(help) = &self.help {
+            write!(f, ": {help}")?;
+        }
+        Ok(())
     }
 }

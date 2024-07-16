@@ -8,7 +8,7 @@ use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{
     AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, ExprLit, Field,
-    Fields, Lit, LitStr, Meta, Path, PathArguments, PathSegment, Type, TypePath,
+    Fields, GenericArgument, Lit, LitStr, Meta, Path, PathArguments, PathSegment, Type, TypePath,
 };
 use textwrap::dedent;
 
@@ -194,6 +194,7 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<proc_macro2::To
         value_type,
         example,
         scope,
+        possible_values,
     } = parse_field_attributes(attr)?;
     let kebab_name = LitStr::new(&ident.to_string().replace('_', "-"), ident.span());
 
@@ -224,6 +225,25 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<proc_macro2::To
         quote!(None)
     };
 
+    let possible_values = if possible_values == Some(true) {
+        let inner_type = get_inner_type_if_option(&field.ty).unwrap_or(&field.ty);
+        let inner_type = quote!(#inner_type);
+        quote!(
+            Some(
+                <#inner_type as clap::ValueEnum>::value_variants()
+                    .iter()
+                    .filter_map(clap::ValueEnum::to_possible_value)
+                    .map(|value| uv_options_metadata::PossibleValue {
+                        name: value.get_name().to_string(),
+                        help: value.get_help().map(ToString::to_string),
+                    })
+                    .collect()
+            )
+        )
+    } else {
+        quote!(None)
+    };
+
     Ok(quote_spanned!(
         ident.span() => {
             visit.record_field(#kebab_name, uv_options_metadata::OptionField{
@@ -232,7 +252,8 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<proc_macro2::To
                 value_type: &#value_type,
                 example: &#example,
                 scope: #scope,
-                deprecated: #deprecated
+                deprecated: #deprecated,
+                possible_values: #possible_values,
             })
         }
     ))
@@ -244,6 +265,7 @@ struct FieldAttributes {
     value_type: String,
     example: String,
     scope: Option<String>,
+    possible_values: Option<bool>,
 }
 
 fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes> {
@@ -251,6 +273,7 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
     let mut value_type = None;
     let mut example = None;
     let mut scope = None;
+    let mut possible_values = None;
 
     attribute.parse_nested_meta(|meta| {
         if meta.path.is_ident("default") {
@@ -262,6 +285,8 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
         } else if meta.path.is_ident("example") {
             let example_text = get_string_literal(&meta, "value_type", "option")?.value();
             example = Some(dedent(&example_text).trim_matches('\n').to_string());
+        } else if meta.path.is_ident("possible_values") {
+            possible_values = get_bool_literal(&meta, "possible_values", "option")?;
         } else {
             return Err(syn::Error::new(
                 meta.path.span(),
@@ -292,6 +317,7 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
         value_type,
         example,
         scope,
+        possible_values,
     })
 }
 
@@ -316,6 +342,23 @@ fn parse_deprecated_attribute(attribute: &Attribute) -> syn::Result<DeprecatedAt
     })?;
 
     Ok(deprecated)
+}
+
+fn get_inner_type_if_option(ty: &Type) -> Option<&Type> {
+    if let Type::Path(type_path) = ty {
+        if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option" {
+            if let PathArguments::AngleBracketed(angle_bracketed_args) =
+                &type_path.path.segments[0].arguments
+            {
+                if angle_bracketed_args.args.len() == 1 {
+                    if let GenericArgument::Type(inner_type) = &angle_bracketed_args.args[0] {
+                        return Some(inner_type);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 fn get_string_literal(
@@ -347,6 +390,32 @@ fn get_string_literal(
         Err(syn::Error::new(
             expr.span(),
             format!("expected {attribute_name} attribute to be a string: `{meta_name} = \"...\"`"),
+        ))
+    }
+}
+
+fn get_bool_literal(
+    meta: &ParseNestedMeta,
+    meta_name: &str,
+    attribute_name: &str,
+) -> syn::Result<Option<bool>> {
+    let expr: syn::Expr = meta.value()?.parse()?;
+
+    let mut value = &expr;
+    while let syn::Expr::Group(e) = value {
+        value = &e.expr;
+    }
+
+    if let syn::Expr::Lit(ExprLit {
+        lit: Lit::Bool(lit),
+        ..
+    }) = value
+    {
+        Ok(Some(lit.value))
+    } else {
+        Err(syn::Error::new(
+            expr.span(),
+            format!("expected {attribute_name} attribute to be a boolean: `{meta_name} = true`"),
         ))
     }
 }
