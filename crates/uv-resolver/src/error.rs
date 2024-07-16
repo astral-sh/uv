@@ -125,9 +125,18 @@ pub struct NoSolutionError {
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
+    markers: Option<MarkerTree>,
 }
 
 impl NoSolutionError {
+    pub fn header(&self) -> String {
+        if let Some(markers) = &self.markers {
+            format!("No solution found when resolving dependencies for split ({markers}):")
+        } else {
+            "No solution found when resolving dependencies:".to_string()
+        }
+    }
+
     pub(crate) fn new(
         error: pubgrub::error::NoSolutionError<UvDependencyProvider>,
         available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
@@ -137,6 +146,7 @@ impl NoSolutionError {
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
+        markers: Option<MarkerTree>,
     ) -> Self {
         Self {
             error,
@@ -147,6 +157,7 @@ impl NoSolutionError {
             unavailable_packages,
             incomplete_packages,
             fork_urls,
+            markers,
         }
     }
 

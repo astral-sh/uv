@@ -342,8 +342,7 @@ pub(crate) async fn pip_install(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}"))
-                .context("No solution found when resolving dependencies:");
+            let report = miette::Report::msg(format!("{err}")).context(err.header());
             eprint!("{report:?}");
             return Ok(ExitStatus::Failure);
         }

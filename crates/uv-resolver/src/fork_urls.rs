@@ -29,7 +29,7 @@ impl ForkUrls {
         &mut self,
         package_name: &PackageName,
         url: &VerbatimParsedUrl,
-        fork_markers: &MarkerTree,
+        fork_markers: Option<&MarkerTree>,
     ) -> Result<(), ResolveError> {
         match self.0.entry(package_name.clone()) {
             Entry::Occupied(previous) => {
@@ -39,17 +39,17 @@ impl ForkUrls {
                         url.verbatim.verbatim().to_string(),
                     ];
                     conflicting_url.sort();
-                    return if fork_markers.is_universal() {
-                        Err(ResolveError::ConflictingUrls(
-                            package_name.clone(),
-                            conflicting_url,
-                        ))
-                    } else {
+                    return if let Some(fork_markers) = fork_markers {
                         Err(ResolveError::ConflictingUrlsInFork {
                             package_name: package_name.clone(),
                             urls: conflicting_url,
                             fork_markers: fork_markers.clone(),
                         })
+                    } else {
+                        Err(ResolveError::ConflictingUrls(
+                            package_name.clone(),
+                            conflicting_url,
+                        ))
                     };
                 }
             }

@@ -296,7 +296,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             fork_locals: ForkLocals::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
-            markers: MarkerTree::And(vec![]),
+            markers: None,
             python_requirement: self.python_requirement.clone(),
             requires_python: self.requires_python.clone(),
         };
@@ -305,14 +305,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
-            if !state.markers.is_universal() {
+            if let Some(markers) = state.markers.as_ref() {
                 if let Some(requires_python) = state.requires_python.as_ref() {
                     debug!(
                         "Solving split {} (requires-python: {})",
-                        state.markers, requires_python
+                        markers, requires_python
                     );
                 } else {
-                    debug!("Solving split {}", state.markers);
+                    debug!("Solving split {}", markers);
                 }
             }
             let start = Instant::now();
@@ -321,7 +321,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let Err(err) = state.pubgrub.unit_propagation(state.next.clone()) {
                     return Err(self.convert_no_solution_err(
                         err,
-                        state.fork_urls.clone(),
+                        state.fork_urls,
+                        state.markers,
                         &visited,
                         &index_locations,
                     ));
@@ -347,11 +348,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if tracing::enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
                     }
-                    debug!(
-                        "Split {} took {:.3}s",
-                        state.markers,
-                        start.elapsed().as_secs_f32()
-                    );
+                    if let Some(markers) = state.markers.as_ref() {
+                        debug!(
+                            "Split {} resolution took {:.3}s",
+                            markers,
+                            start.elapsed().as_secs_f32()
+                        );
+                    } else {
+                        debug!(
+                            "Split universal resolution took {:.3}s",
+                            start.elapsed().as_secs_f32()
+                        );
+                    }
 
                     let resolution = state.into_resolution();
 
@@ -540,15 +548,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     cur_state = Some(forked_state.clone());
                                 }
 
-                                forked_state.markers.and(fork.markers);
-                                forked_state.markers = normalize(forked_state.markers, None)
-                                    .unwrap_or(MarkerTree::And(Vec::new()));
+                                if let Some(markers) = &mut forked_state.markers {
+                                    markers.and(fork.markers);
+                                } else {
+                                    forked_state.markers = Some(fork.markers);
+                                }
+                                forked_state.markers = forked_state
+                                    .markers
+                                    .and_then(|markers| normalize(markers, None));
 
                                 // If the fork contains a narrowed Python requirement, apply it.
-                                let python_requirement = requires_python_marker(
-                                    &forked_state.markers,
-                                )
-                                .and_then(|marker| forked_state.python_requirement.narrow(&marker));
+                                let python_requirement = forked_state
+                                    .markers
+                                    .as_ref()
+                                    .and_then(requires_python_marker)
+                                    .and_then(|marker| {
+                                        forked_state.python_requirement.narrow(&marker)
+                                    });
                                 if let Some(python_requirement) = python_requirement {
                                     if let Some(target) = python_requirement.target() {
                                         debug!("Narrowed `requires-python` bound to: {target}");
@@ -584,15 +600,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 }
                                 forked_states.push(forked_state);
                             }
-                            if markers.is_universal() {
+                            if let Some(markers) = markers {
                                 debug!(
-                                    "Pre-fork split universal took {:.3}s",
+                                    "Pre-fork split {} took {:.3}s",
+                                    markers,
                                     start.elapsed().as_secs_f32()
                                 );
                             } else {
                                 debug!(
-                                    "Pre-fork split {} took {:.3}s",
-                                    markers,
+                                    "Pre-fork split universal took {:.3}s",
                                     start.elapsed().as_secs_f32()
                                 );
                             }
@@ -1083,7 +1099,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         fork_urls: &ForkUrls,
         fork_locals: &ForkLocals,
-        markers: &MarkerTree,
+        markers: Option<&MarkerTree>,
         requires_python: Option<&MarkerTree>,
     ) -> Result<ForkedDependencies, ResolveError> {
         let result = self.get_dependencies(
@@ -1111,7 +1127,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         fork_urls: &ForkUrls,
         fork_locals: &ForkLocals,
-        markers: &MarkerTree,
+        markers: Option<&MarkerTree>,
         requires_python: Option<&MarkerTree>,
     ) -> Result<Dependencies, ResolveError> {
         let url = package.name().and_then(|name| fork_urls.get(name));
@@ -1383,7 +1399,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         extra: Option<&'a ExtraName>,
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
-        markers: &'a MarkerTree,
+        markers: Option<&'a MarkerTree>,
         requires_python: Option<&'a MarkerTree>,
     ) -> Vec<Cow<'a, Requirement>> {
         // Start with the requirements for the current extra of the package (for an extra
@@ -1448,7 +1464,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
-        markers: &'parameters MarkerTree,
+        markers: Option<&'parameters MarkerTree>,
         requires_python: Option<&'parameters MarkerTree>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
@@ -1473,9 +1489,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // non-trivial marker expression that provoked the resolver to fork.
                 // In that case, we should ignore any dependency that cannot possibly
                 // satisfy the markers that provoked the fork.
-                if !possible_to_satisfy_markers(markers, requirement) {
-                    trace!("skipping {requirement} because of context resolver markers {markers}");
-                    return false;
+                if let Some(markers) = markers {
+                    if !possible_to_satisfy_markers(markers, requirement) {
+                        trace!("skipping {requirement} because of context resolver markers {markers}");
+                        return false;
+                    }
                 }
 
                 // If the requirement isn't relevant for the current platform, skip it.
@@ -1516,9 +1534,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 return false;
                             }
 
-                            if !possible_to_satisfy_markers(markers, constraint) {
-                                trace!("skipping {constraint} because of context resolver markers {markers}");
-                                return false;
+                            if let Some(markers) = markers {
+                                if !possible_to_satisfy_markers(markers, constraint) {
+                                    trace!("skipping {constraint} because of context resolver markers {markers}");
+                                    return false;
+                                }
                             }
 
                             // If the constraint isn't relevant for the current platform, skip it.
@@ -1835,6 +1855,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         mut err: pubgrub::error::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
+        markers: Option<MarkerTree>,
         visited: &FxHashSet<PackageName>,
         index_locations: &IndexLocations,
     ) -> ResolveError {
@@ -1897,6 +1918,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             unavailable_packages,
             incomplete_packages,
             fork_urls,
+            markers,
         ))
     }
 
@@ -1976,7 +1998,7 @@ struct ForkState {
     /// completely disjoint marker expression (i.e., it can never be true given
     /// that the marker expression that provoked the fork is true), then that
     /// dependency is completely ignored.
-    markers: MarkerTree,
+    markers: Option<MarkerTree>,
     /// The Python requirement for this fork. Defaults to the Python requirement for
     /// the resolution, but may be narrowed if a `python_version` marker is present
     /// in a given fork.
@@ -2019,7 +2041,7 @@ impl ForkState {
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
                 if let Some(url) = urls.get_url(name, url.as_ref(), git)? {
-                    self.fork_urls.insert(name, url, &self.markers)?;
+                    self.fork_urls.insert(name, url, self.markers.as_ref())?;
                 };
 
                 // `PubGrubDependency` also gives us a local version if specified by the user.

@@ -6872,7 +6872,7 @@ fn universal_requires_python() -> Result<()> {
 
     ----- stderr -----
     warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (python_version >= '3.9'):
       ╰─▶ Because only the following versions of numpy{python_version >= '3.9'} are available:
               numpy{python_version >= '3.9'}<=1.26.0
               numpy{python_version >= '3.9'}==1.26.1
