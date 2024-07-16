@@ -155,6 +155,10 @@ pub struct GlobalArgs {
     /// Show the resolved settings for the current command.
     #[arg(global = true, long, hide = true)]
     pub show_settings: bool,
+
+    /// Hides all progress outputs when set
+    #[arg(global = true, long)]
+    pub no_progress: bool,
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
