@@ -75,9 +75,9 @@ nav:
       - Installing Python: guides/install-python.md
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
-      - Creating a project: guides/projects.md
+      - Working on projects: guides/projects.md
   - Concepts:
-      - Projects: preview/projects.md
+      - Projects: projects.md
       - Command-line tools: preview/tools.md
       - Python versions: python-versions.md
       - Workspaces: preview/workspaces.md
