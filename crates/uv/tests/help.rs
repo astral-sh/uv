@@ -37,8 +37,9 @@ fn help() {
           --offline
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system [possible values: only-managed,
-              installed, managed, system, only-system]
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv [possible values: only-managed, installed,
+              managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -46,7 +47,8 @@ fn help() {
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
       -n, --no-cache
-              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
@@ -96,8 +98,9 @@ fn help_flag() {
           --offline
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system [possible values: only-managed,
-              installed, managed, system, only-system]
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv [possible values: only-managed, installed,
+              managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -105,7 +108,8 @@ fn help_flag() {
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
       -n, --no-cache
-              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
@@ -154,8 +158,9 @@ fn help_short_flag() {
           --offline
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system [possible values: only-managed,
-              installed, managed, system, only-system]
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv [possible values: only-managed, installed,
+              managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -163,7 +168,8 @@ fn help_short_flag() {
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
       -n, --no-cache
-              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
@@ -223,8 +229,8 @@ fn help_subcommand() {
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store.
               
-              By default, `uv` loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in `uv`
+              By default, uv loads certificates from the bundled `webpki-roots` crate. The
+              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
               improves portability and performance (especially on macOS).
               
               However, in some cases, you may want to use the platform's native certificate store,
@@ -237,7 +243,8 @@ fn help_subcommand() {
               Disable network access, relying only on locally cached data and locally available files
 
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -263,7 +270,8 @@ fn help_subcommand() {
               parent directories
 
       -n, --no-cache
-              Avoid reading from or writing to the cache
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation
               
               [env: UV_NO_CACHE=]
 
@@ -340,8 +348,8 @@ fn help_subsubcommand() {
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store.
               
-              By default, `uv` loads certificates from the bundled `webpki-roots` crate. The
-              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in `uv`
+              By default, uv loads certificates from the bundled `webpki-roots` crate. The
+              `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
               improves portability and performance (especially on macOS).
               
               However, in some cases, you may want to use the platform's native certificate store,
@@ -354,7 +362,8 @@ fn help_subsubcommand() {
               Disable network access, relying only on locally cached data and locally available files
 
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -380,7 +389,8 @@ fn help_subsubcommand() {
               parent directories
 
       -n, --no-cache
-              Avoid reading from or writing to the cache
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation
               
               [env: UV_NO_CACHE=]
 
@@ -441,8 +451,9 @@ fn help_flag_subcommand() {
           --offline
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system [possible values: only-managed,
-              installed, managed, system, only-system]
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv [possible values: only-managed, installed,
+              managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -450,7 +461,8 @@ fn help_flag_subcommand() {
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
       -n, --no-cache
-              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
@@ -496,8 +508,9 @@ fn help_flag_subsubcommand() {
           --offline
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system [possible values: only-managed,
-              installed, managed, system, only-system]
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv [possible values: only-managed, installed,
+              managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -505,7 +518,8 @@ fn help_flag_subsubcommand() {
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
       -n, --no-cache
-              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
@@ -608,8 +622,9 @@ fn help_with_global_option() {
           --offline
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system [possible values: only-managed,
-              installed, managed, system, only-system]
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv [possible values: only-managed, installed,
+              managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -617,7 +632,8 @@ fn help_with_global_option() {
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
       -n, --no-cache
-              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
@@ -700,8 +716,9 @@ fn test_with_no_pager() {
           --offline
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python from uv or on the system [possible values: only-managed,
-              installed, managed, system, only-system]
+              Whether to prefer using Python installations that are already present on the system, or
+              those that are downloaded and installed by uv [possible values: only-managed, installed,
+              managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -709,7 +726,8 @@ fn test_with_no_pager() {
               Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
               parent directories
       -n, --no-cache
-              Avoid reading from or writing to the cache [env: UV_NO_CACHE=]
+              Avoid reading from or writing to the cache, instead using a temporary directory for the
+              duration of the operation [env: UV_NO_CACHE=]
           --cache-dir [CACHE_DIR]
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>

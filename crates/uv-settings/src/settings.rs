@@ -56,12 +56,81 @@ pub struct Options {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct GlobalOptions {
+    /// Whether to load TLS certificates from the platform's native certificate store.
+    ///
+    /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
+    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
+    /// improves portability and performance (especially on macOS).
+    ///
+    /// However, in some cases, you may want to use the platform's native certificate store,
+    /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
+    /// included in your system's certificate store.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            native-tls = true
+        "#
+    )]
     pub native_tls: Option<bool>,
+    /// Disable network access, relying only on locally cached data and locally available files.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            offline = true
+        "#
+    )]
     pub offline: Option<bool>,
+    /// Avoid reading from or writing to the cache, instead using a temporary directory for the
+    /// duration of the operation.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-cache = true
+        "#
+    )]
     pub no_cache: Option<bool>,
+    /// Path to the cache directory.
+    ///
+    /// Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
+    /// Linux, and `{FOLDERID_LocalAppData}\uv\cache` on Windows.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            cache-dir = "./.uv_cache"
+        "#
+    )]
     pub cache_dir: Option<PathBuf>,
+    /// Whether to enable experimental, preview features.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            preview = true
+        "#
+    )]
     pub preview: Option<bool>,
+    /// Whether to prefer using Python installations that are already present on the system, or
+    /// those that are downloaded and installed by uv.
+    #[option(
+        default = "\"installed\"",
+        value_type = "str",
+        example = r#"
+            python-preference = "managed"
+        "#
+    )]
     pub python_preference: Option<PythonPreference>,
+    /// Whether to automatically download Python when required.
+    #[option(
+        default = "\"automatic\"",
+        value_type = "str",
+        example = r#"
+            python-fetch = \"automatic\"
+        "#
+    )]
     pub python_fetch: Option<PythonFetch>,
 }
 
@@ -182,7 +251,7 @@ pub struct ResolverInstallerOptions {
     pub find_links: Option<Vec<FlatIndexLocation>>,
     /// The strategy to use when resolving against multiple index URLs.
     ///
-    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// By default, uv will stop at the first index on which a given package is available, and
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
     /// same name to a secondary.
@@ -202,7 +271,7 @@ pub struct ResolverInstallerOptions {
     pub index_strategy: Option<IndexStrategy>,
     /// Attempt to use `keyring` for authentication for index URLs.
     ///
-    /// At present, only `--keyring-provider subprocess` is supported, which configures `uv` to
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
     /// use the `keyring` CLI to handle authentication.
     #[option(
         default = "\"disabled\"",
@@ -215,7 +284,7 @@ pub struct ResolverInstallerOptions {
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
-    /// By default, `uv` will use the latest compatible version of each package (`highest`).
+    /// By default, uv will use the latest compatible version of each package (`highest`).
     #[option(
         default = "\"highest\"",
         value_type = "str",
@@ -226,7 +295,7 @@ pub struct ResolverInstallerOptions {
     pub resolution: Option<ResolutionMode>,
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, `uv` will accept pre-releases for packages that _only_ publish pre-releases,
+    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
     #[option(

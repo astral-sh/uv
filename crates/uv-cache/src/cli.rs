@@ -8,7 +8,8 @@ use crate::Cache;
 
 #[derive(Parser, Debug, Clone)]
 pub struct CacheArgs {
-    /// Avoid reading from or writing to the cache.
+    /// Avoid reading from or writing to the cache, instead using a temporary directory for the
+    /// duration of the operation.
     #[arg(
         global = true,
         long,

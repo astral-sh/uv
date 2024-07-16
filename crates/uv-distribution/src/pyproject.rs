@@ -78,7 +78,7 @@ pub struct ToolUv {
     /// The workspace definition for the project, if any.
     #[option_group]
     pub workspace: Option<ToolUvWorkspace>,
-    /// Whether the project is managed by `uv`. If `false`, `uv` will ignore the project when
+    /// Whether the project is managed by uv. If `false`, uv will ignore the project when
     /// `uv run` is invoked.
     #[option(
         default = r#"true"#,

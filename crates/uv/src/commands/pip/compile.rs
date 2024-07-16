@@ -491,7 +491,7 @@ pub(crate) async fn pip_compile(
     Ok(ExitStatus::Success)
 }
 
-/// Format the `uv` command used to generate the output file.
+/// Format the uv command used to generate the output file.
 #[allow(clippy::fn_params_excessive_bools)]
 fn cmd(
     include_index_url: bool,
