@@ -3227,7 +3227,6 @@ fn no_stream() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + hashb-foxglove-protocolbuffers-python==25.3.0.1.20240226043130+465630478360
     "###
