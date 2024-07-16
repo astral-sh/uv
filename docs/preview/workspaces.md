@@ -6,7 +6,7 @@ Workspaces help organize large codebases by splitting them into multiple package
 independent dependencies.
 
 When using the `uv pip` interface, workspace dependencies behave like automatic editable path
-dependencies. Using the `uv` project interface, all of the workspace packages are locked together.
+dependencies. Using the uv project interface, all of the workspace packages are locked together.
 `uv run` installs only the current package (unless overridden with `--package`) and its workspace and
 non-workspace dependencies.
 

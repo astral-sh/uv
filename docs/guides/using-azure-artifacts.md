@@ -1,6 +1,6 @@
 # Using Azure Artifacts
 
-`uv` can install packages from [Azure DevOps Artifacts](https://learn.microsoft.com/en-us/azure/devops/artifacts/start-using-azure-artifacts?view=azure-devops&tabs=nuget%2Cnugetserver). You can authenticate to a feed using a [Personal Access Token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows) or interactively using Keyring.
+uv can install packages from [Azure DevOps Artifacts](https://learn.microsoft.com/en-us/azure/devops/artifacts/start-using-azure-artifacts?view=azure-devops&tabs=nuget%2Cnugetserver). You can authenticate to a feed using a [Personal Access Token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows) or interactively using Keyring.
 
 
 ## Authenticate using a PAT
@@ -19,7 +19,7 @@ If you don’t have a PAT handy, you can authenticate to Artifacts using [`keyri
 
 The `artifacts-keyring` plugin wraps [the Azure Artifacts Credential Provider tool](https://github.com/microsoft/artifacts-credprovider). The credential provider supports a few different authentication modes including interactive login — see [the tool's docs](https://github.com/microsoft/artifacts-credprovider) for information on how to configure it.
 
-[`uv` only supports using Keyring in subprocess mode](https://github.com/astral-sh/uv/blob/main/PIP_COMPATIBILITY.md#registry-authentication). The `keyring` executable must be on the `PATH`, meaning it should be installed globally or into your currently-active virtual environment. Keyring’s CLI requires a username in the URL, so you should modify your index URL to include the default username `VssSessionToken`.
+[uv only supports using Keyring in subprocess mode](https://github.com/astral-sh/uv/blob/main/PIP_COMPATIBILITY.md#registry-authentication). The `keyring` executable must be on the `PATH`, meaning it should be installed globally or into your currently-active virtual environment. Keyring’s CLI requires a username in the URL, so you should modify your index URL to include the default username `VssSessionToken`.
 
 ```bash
 # preinstall keyring and the Artifacts plugin from the public PyPI
