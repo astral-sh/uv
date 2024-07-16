@@ -14,6 +14,7 @@ from pathlib import Path
 
 import tomllib
 
+# To be kept in sync with: `docs/index.md`
 URL = "https://github.com/astral-sh/uv/assets/1309177/{}"
 URL_LIGHT = URL.format("629e59c0-9c6e-4013-9ad4-adb2bcf5080d")
 URL_DARK = URL.format("03aa9163-1c79-4a87-a31d-7a9311ed9310")
