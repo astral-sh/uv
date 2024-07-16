@@ -105,7 +105,7 @@ fn generate() -> String {
 fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
     match &set {
         Set::Global(_) => {
-            output.push_str("### Global\n");
+            output.push_str("## Global\n");
         }
         Set::Named { name, .. } => {
             let title = parents
@@ -113,7 +113,7 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
                 .filter_map(|set| set.name())
                 .chain(std::iter::once(name.as_str()))
                 .join(".");
-            writeln!(output, "#### `{title}`\n").unwrap();
+            writeln!(output, "## `{title}`\n").unwrap();
 
             if let Some(documentation) = set.metadata().documentation() {
                 output.push_str(documentation);
@@ -176,7 +176,7 @@ impl Set {
 }
 
 fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[Set]) {
-    let header_level = if parents.is_empty() { "####" } else { "#####" };
+    let header_level = if parents.is_empty() { "###" } else { "####" };
     let parents_anchor = parents.iter().filter_map(|parent| parent.name()).join("_");
 
     if parents_anchor.is_empty() {

@@ -441,7 +441,7 @@
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
     },
     "PipOptions": {
-      "description": "A `[tool.uv.pip]` section.",
+      "description": "Settings that are specific to the `uv pip` command-line interface.\n\nThese values will be ignored when running commands outside the `uv pip` namespace (e.g., `uv lock`, `uvx`).",
       "type": "object",
       "properties": {
         "all-extras": {
