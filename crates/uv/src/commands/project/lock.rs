@@ -1,12 +1,17 @@
 #![allow(clippy::single_match_else)]
 
 use anstream::eprint;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::{fmt::Write, path::Path};
 
 use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
-use tracing::debug;
+use tracing::{debug, level_filters::LevelFilter};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::ResolvedRepositoryReference;
@@ -367,7 +372,21 @@ pub(super) async fn do_lock(
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    Ok(Lock::from_resolution_graph(&resolution)?)
+    let new_lock = Lock::from_resolution_graph(&resolution)?;
+
+    // Notify the user of any dependency updates
+    if !matches!(upgrade, Upgrade::None) {
+        if let Some(existing_lock) = existing_lock {
+            check_lockfile_version_changes(
+                &new_lock,
+                existing_lock,
+                workspace.install_path(),
+                printer,
+            )?;
+        }
+    }
+
+    Ok(new_lock)
 }
 
 /// Write the lockfile to disk.
@@ -392,4 +411,58 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err.into()),
     }
+}
+
+/// Checks if versions in the lockfile changed during an upgrade.
+fn check_lockfile_version_changes(
+    new_lock: &Lock,
+    existing_lock: &Lock,
+    workspace_root: &Path,
+    printer: Printer,
+) -> anyhow::Result<()> {
+    let existing_distributions = existing_lock.distributions().iter().fold(
+        FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
+        |mut acc, distribution| {
+            acc.entry(distribution.name()).or_insert(distribution);
+            acc
+        },
+    );
+
+    let mut num_unchanged_versions = 0;
+
+    for distribution in new_lock.distributions() {
+        let distribution_name = distribution.name();
+        if let Some(existing_distribution) = existing_distributions.get(&distribution_name) {
+            if let (
+                Ok(distribution_types::VersionId::NameVersion(_, existing_version)),
+                Ok(distribution_types::VersionId::NameVersion(_, new_version)),
+            ) = (
+                existing_distribution.version_id(workspace_root),
+                distribution.version_id(workspace_root),
+            ) {
+                if new_version == existing_version {
+                    debug!("Unchanged {distribution_name} v{new_version}");
+                    num_unchanged_versions += 1;
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "{} {distribution_name} v{existing_version} -> v{new_version}",
+                        "Updating".green(),
+                    )?;
+                }
+            }
+        }
+    }
+
+    if num_unchanged_versions > 0 {
+        if let LevelFilter::INFO = LevelFilter::current() {
+            writeln!(
+                printer.stderr(),
+                "{}: pass `--verbose` to see {num_unchanged_versions} unchanged dependencies",
+                "note".green(),
+            )?;
+        }
+    }
+
+    Ok(())
 }
