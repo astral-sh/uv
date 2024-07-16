@@ -79,14 +79,18 @@ pub(crate) async fn pin(
         // Error if the request is incompatible with the Python requirement
         if let PythonRequest::Version(version) = &request {
             if let Ok(python_version) = pep440_rs::Version::from_str(&version.to_string()) {
-                assert_python_compatibility(&python_version, virtual_project)?;
+                assert_python_compatibility(
+                    &PythonVersionCompatibility::Requested(&python_version),
+                    virtual_project,
+                )?;
             }
         } else {
             if let Some(python) = &python {
                 // Warn if the resolved Python is incompatible with the Python requirement unless --resolved is used
-                if let Err(err) =
-                    assert_python_compatibility(python.python_version(), virtual_project)
-                {
+                if let Err(err) = assert_python_compatibility(
+                    &PythonVersionCompatibility::Resolved(python.python_version()),
+                    virtual_project,
+                ) {
                     if resolved {
                         return Err(err);
                     };
@@ -143,7 +147,10 @@ fn check_request_requires_python_compatibility(
         if !matches!(request_version, uv_python::VersionRequest::Range(_)) {
             // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed
             let version = pep440_rs::Version::from_str(&request_version.to_string()).unwrap();
-            if let Err(err) = assert_python_compatibility(&version, virtual_project) {
+            if let Err(err) = assert_python_compatibility(
+                &PythonVersionCompatibility::Requested(&version),
+                virtual_project,
+            ) {
                 warn_user_once!("{}", err);
                 return;
             }
@@ -163,7 +170,10 @@ fn check_request_requires_python_compatibility(
                 "The pinned Python version {} resolves to {}",
                 pin, python_version
             );
-            if let Err(err) = assert_python_compatibility(python_version, virtual_project) {
+            if let Err(err) = assert_python_compatibility(
+                &PythonVersionCompatibility::Resolved(python_version),
+                virtual_project,
+            ) {
                 warn_user_once!("{}", err);
             }
         }
@@ -177,9 +187,13 @@ fn check_request_requires_python_compatibility(
     }
 }
 
+enum PythonVersionCompatibility<'a> {
+    Requested(&'a pep440_rs::Version),
+    Resolved(&'a pep440_rs::Version),
+}
 /// Checks if the pinned Python version is compatible with the workspace/project's `Requires-Python`.
 fn assert_python_compatibility(
-    python_version: &pep440_rs::Version,
+    python_version: &PythonVersionCompatibility,
     virtual_project: &VirtualProject,
 ) -> Result<()> {
     let (requires_python, project_type) = match virtual_project {
@@ -203,13 +217,27 @@ fn assert_python_compatibility(
     };
 
     if let Some(requires_python) = requires_python {
-        if !requires_python.contains(python_version) {
-            anyhow::bail!(
-                "The pinned Python version {} is incompatible with the {}'s `Requires-Python` of {}.",
-                python_version,
-                project_type,
-                requires_python
-            );
+        match python_version {
+            PythonVersionCompatibility::Resolved(resolved_version) => {
+                if !requires_python.contains(resolved_version) {
+                    anyhow::bail!(
+                        "The pinned resolved Python version `{}` is incompatible with the {}'s `Requires-Python` of `{}`.",
+                        resolved_version,
+                        project_type,
+                        requires_python
+                    );
+                }
+            }
+            PythonVersionCompatibility::Requested(requested_version) => {
+                if !requires_python.contains(requested_version) {
+                    anyhow::bail!(
+                        "The pinned requested Python version `{}` is incompatible with the {}'s `Requires-Python` of `{}`.",
+                        requested_version,
+                        project_type,
+                        requires_python
+                    );
+                }
+            }
         }
     }
     Ok(())
