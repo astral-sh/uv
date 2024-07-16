@@ -89,6 +89,7 @@ nav:
   - Configuration:
       - Configuration files: configuration/files.md
       - Environment variables: configuration/environment.md
+      - Settings: settings.md
   - Integration guides:
       - Using in Docker: guides/docker.md
       - Using in GitHub Actions: guides/github.md
