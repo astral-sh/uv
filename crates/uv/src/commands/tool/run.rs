@@ -411,7 +411,7 @@ fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
         return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
     };
 
-    // e.g. `uv`, no special handling
+    // e.g. uv, no special handling
     let Some((name, version)) = target_str.split_once('@') else {
         return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
     };

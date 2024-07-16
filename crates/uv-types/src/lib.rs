@@ -1,4 +1,4 @@
-//! Fundamental types shared across `uv` crates.
+//! Fundamental types shared across uv crates.
 pub use builds::*;
 pub use downloads::*;
 pub use hash::*;

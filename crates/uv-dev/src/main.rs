@@ -124,7 +124,7 @@ async fn main() -> ExitCode {
         (None, None)
     };
 
-    // Show `INFO` messages from the `uv` crate, but allow `RUST_LOG` to override.
+    // Show `INFO` messages from the uv crate, but allow `RUST_LOG` to override.
     let default_directive = Directive::from_str("uv=info").unwrap();
 
     let filter = EnvFilter::builder()

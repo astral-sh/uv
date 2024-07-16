@@ -987,7 +987,7 @@ async fn run_project(
 /// The main entry point for a uv invocation.
 ///
 /// WARNING: This entry point is not recommended for external consumption, the
-/// `uv` binary interface is the official public API. When using this entry
+/// uv binary interface is the official public API. When using this entry
 /// point, uv assumes it is running in a process it controls and that the
 /// entire process lifetime is managed by uv. Unexpected behavior may be
 /// encountered if this entry pointis called multiple times in a single process.

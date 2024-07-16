@@ -1,4 +1,32 @@
 ## Global
+#### [`cache-dir`](#cache-dir) {: #cache-dir }
+
+Path to the cache directory.
+
+Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
+Linux, and `{FOLDERID_LocalAppData}\uv\cache` on Windows.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    cache-dir = "./.uv_cache"
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    cache-dir = "./.uv_cache"
+    ```
+
+---
+
 #### [`compile-bytecode`](#compile-bytecode) {: #compile-bytecode }
 
 Compile Python files to bytecode after installation.
@@ -155,7 +183,7 @@ formats described above.
 
 The strategy to use when resolving against multiple index URLs.
 
-By default, `uv` will stop at the first index on which a given package is available, and
+By default, uv will stop at the first index on which a given package is available, and
 limit resolutions to those present on that first index (`first-match`). This prevents
 "dependency confusion" attacks, whereby an attack can upload a malicious package under the
 same name to a secondary.
@@ -222,7 +250,7 @@ The index provided by this setting is given lower priority than any indexes spec
 
 Attempt to use `keyring` for authentication for index URLs.
 
-At present, only `--keyring-provider subprocess` is supported, which configures `uv` to
+At present, only `--keyring-provider subprocess` is supported, which configures uv to
 use the `keyring` CLI to handle authentication.
 
 **Default value**: `"disabled"`
@@ -276,7 +304,7 @@ Windows.
 
 #### [`managed`](#managed) {: #managed }
 
-Whether the project is managed by `uv`. If `false`, `uv` will ignore the project when
+Whether the project is managed by uv. If `false`, uv will ignore the project when
 `uv run` is invoked.
 
 **Default value**: `true`
@@ -296,6 +324,39 @@ Whether the project is managed by `uv`. If `false`, `uv` will ignore the project
     ```toml
     
     managed = false
+    ```
+
+---
+
+#### [`native-tls`](#native-tls) {: #native-tls }
+
+Whether to load TLS certificates from the platform's native certificate store.
+
+By default, uv loads certificates from the bundled `webpki-roots` crate. The
+`webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
+improves portability and performance (especially on macOS).
+
+However, in some cases, you may want to use the platform's native certificate store,
+especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
+included in your system's certificate store.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    native-tls = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    native-tls = true
     ```
 
 ---
@@ -407,6 +468,32 @@ Don't build source distributions for a specific package.
 
 ---
 
+#### [`no-cache`](#no-cache) {: #no-cache }
+
+Avoid reading from or writing to the cache, instead using a temporary directory for the
+duration of the operation.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    no-cache = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    no-cache = true
+    ```
+
+---
+
 #### [`no-index`](#no-index) {: #no-index }
 
 Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and
@@ -433,11 +520,36 @@ those provided via `--find-links`.
 
 ---
 
+#### [`offline`](#offline) {: #offline }
+
+Disable network access, relying only on locally cached data and locally available files.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    offline = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    offline = true
+    ```
+
+---
+
 #### [`prerelease`](#prerelease) {: #prerelease }
 
 The strategy to use when considering pre-release versions.
 
-By default, `uv` will accept pre-releases for packages that _only_ publish pre-releases,
+By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
 along with first-party requirements that contain an explicit pre-release marker in the
 declared specifiers (`if-necessary-or-explicit`).
 
@@ -458,6 +570,82 @@ declared specifiers (`if-necessary-or-explicit`).
     ```toml
     
     prerelease = "allow"
+    ```
+
+---
+
+#### [`preview`](#preview) {: #preview }
+
+Whether to enable experimental, preview features.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    preview = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    preview = true
+    ```
+
+---
+
+#### [`python-fetch`](#python-fetch) {: #python-fetch }
+
+Whether to automatically download Python when required.
+
+**Default value**: `"automatic"`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-fetch = \"automatic\"
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    python-fetch = \"automatic\"
+    ```
+
+---
+
+#### [`python-preference`](#python-preference) {: #python-preference }
+
+Whether to prefer using Python installations that are already present on the system, or
+those that are downloaded and installed by uv.
+
+**Default value**: `"installed"`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-preference = "managed"
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    python-preference = "managed"
     ```
 
 ---
@@ -517,7 +705,7 @@ Reinstall a specific package, regardless of whether it's already installed.
 The strategy to use when selecting between the different compatible versions for a given
 package requirement.
 
-By default, `uv` will use the latest compatible version of each package (`highest`).
+By default, uv will use the latest compatible version of each package (`highest`).
 
 **Default value**: `"highest"`
 

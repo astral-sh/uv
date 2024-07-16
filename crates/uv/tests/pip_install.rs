@@ -1282,14 +1282,14 @@ fn install_no_index_version() {
 
 /// Install a package via --extra-index-url.
 ///
-/// This is a regression test where previously `uv` would consult test.pypi.org
-/// first, and if the package was found there, `uv` would not look at any other
+/// This is a regression test where previously uv would consult test.pypi.org
+/// first, and if the package was found there, uv would not look at any other
 /// indexes. We fixed this by flipping the priority order of indexes so that
 /// test.pypi.org becomes the fallback (in this example) and the extra indexes
 /// (regular PyPI) are checked first.
 ///
 /// (Neither approach matches `pip`'s behavior, which considers versions of
-/// each package from all indexes. `uv` stops at the first index it finds a
+/// each package from all indexes. uv stops at the first index it finds a
 /// package in.)
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/1600>
@@ -1308,7 +1308,7 @@ fn install_extra_index_url_has_priority() {
         // `black==24.2.0` is on pypi.org and NOT test.pypi.org. So
         // this would previously check for `black` on test.pypi.org,
         // find it, but then not find a compatible version. After
-        // the fix, `uv` will check pypi.org first since it is given
+        // the fix, uv will check pypi.org first since it is given
         // priority via --extra-index-url.
         .arg("black==24.2.0")
         .arg("--no-deps")
@@ -3520,7 +3520,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     Ok(())
 }
 
-/// This tests that `uv` can read UTF-16LE encoded requirements.txt files.
+/// This tests that uv can read UTF-16LE encoded requirements.txt files.
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/2276>
 #[test]
@@ -3547,7 +3547,7 @@ fn install_utf16le_requirements() -> Result<()> {
     Ok(())
 }
 
-/// This tests that `uv` can read UTF-16BE encoded requirements.txt files.
+/// This tests that uv can read UTF-16BE encoded requirements.txt files.
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/2276>
 #[test]

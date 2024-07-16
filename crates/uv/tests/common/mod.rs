@@ -313,7 +313,7 @@ impl TestContext {
         }
     }
 
-    /// Create a `uv` command for testing.
+    /// Create a uv command for testing.
     pub fn command(&self) -> Command {
         let mut command = Command::new(get_bin());
         self.add_shared_args(&mut command);

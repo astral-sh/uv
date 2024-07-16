@@ -1300,7 +1300,7 @@ impl VenvSettings {
     }
 }
 
-/// The resolved settings to use for an invocation of the `uv` CLI when installing dependencies.
+/// The resolved settings to use for an invocation of the uv CLI when installing dependencies.
 ///
 /// Combines the `[tool.uv]` persistent configuration with the command-line arguments
 /// ([`InstallerArgs`], represented as [`InstallerOptions`]).
@@ -1317,7 +1317,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) build_options: &'a BuildOptions,
 }
 
-/// The resolved settings to use for an invocation of the `uv` CLI when resolving dependencies.
+/// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
 ///
 /// Combines the `[tool.uv]` persistent configuration with the command-line arguments
 /// ([`ResolverArgs`], represented as [`ResolverOptions`]).
@@ -1446,10 +1446,10 @@ impl ResolverSettings {
     }
 }
 
-/// The resolved settings to use for an invocation of the `uv` CLI with both resolver and installer
+/// The resolved settings to use for an invocation of the uv CLI with both resolver and installer
 /// capabilities.
 ///
-/// Represents the shared settings that are used across all `uv` commands outside the `pip` API.
+/// Represents the shared settings that are used across all uv commands outside the `pip` API.
 /// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
