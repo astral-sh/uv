@@ -111,7 +111,7 @@ jobs:
           branch_name="${{ env.branch_name }}"
 
           # set the PR title
-          pull_request_title="Update documentation for $display_name"
+          pull_request_title="Update uv documentation for $display_name"
 
           # Delete any existing pull requests that are open for this version
           # by checking against pull_request_title because the new PR will
