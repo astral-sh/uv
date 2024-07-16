@@ -146,8 +146,6 @@ excel = [
 
 ## Development dependencies
 
-_N.B. This feature is not yet implemented._
-
 Unlike optional dependencies, development dependencies are local-only and will _not_ be published
 to PyPI or other indexes. As such, development dependencies are included under `[tool.uv]` instead
 of `[project]`. `tool.uv.sources` applies to them equally.
