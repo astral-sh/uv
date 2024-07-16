@@ -320,7 +320,7 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
         3.12
 
         ----- stderr -----
-        warning: Failed to resolve pinned Python version from Python 3.12: No interpreter found for Python 3.12 in system path or `py` launcher
+        warning: Failed to resolve pinned Python version from `3.12`: No interpreter found for Python 3.12 in system path or `py` launcher
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_pin(), @r###"
@@ -330,7 +330,7 @@ fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
         3.12
 
         ----- stderr -----
-        warning: Failed to resolve pinned Python version from Python 3.12: No interpreter found for Python 3.12 in system path
+        warning: Failed to resolve pinned Python version from `3.12`: No interpreter found for Python 3.12 in system path
         "###);
     }
 

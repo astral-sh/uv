@@ -34,8 +34,8 @@ pub(crate) async fn pin(
     let virtual_project = match VirtualProject::discover(&std::env::current_dir()?, None).await {
         Ok(virtual_project) if !isolated => Some(virtual_project),
         Ok(_) => None,
-        Err(e) => {
-            debug!("Failed to discover virtual project: {e}");
+        Err(err) => {
+            debug!("Failed to discover virtual project: {err}");
             None
         }
     };
@@ -84,13 +84,13 @@ pub(crate) async fn pin(
         } else {
             if let Some(python) = &python {
                 // Warn if the resolved Python is incompatible with the Python requirement unless --resolved is used
-                if let Err(e) =
+                if let Err(err) =
                     assert_python_compatibility(python.python_version(), virtual_project)
                 {
                     if resolved {
-                        return Err(e);
+                        return Err(err);
                     };
-                    warn_user_once!("{}", e);
+                    warn_user_once!("{}", err);
                 }
             }
         };
@@ -130,55 +130,48 @@ fn check_request_requires_python_compatibility(
     python_preference: PythonPreference,
     cache: &Cache,
 ) {
-    let requested_version = match pin {
-        PythonRequest::Version(ref version) => {
-            let version = pep440_rs::Version::from_str(&version.to_string());
-            match version {
-                Ok(version) => Some(version),
-                Err(e) => {
-                    debug!("Failed to parse PEP440 python version from {pin}: {e}");
-                    None
-                }
-            }
-        }
+    let request_version = match pin {
+        PythonRequest::Version(ref version)
+        | PythonRequest::ImplementationVersion(_, ref version) => Some(version),
+        PythonRequest::Key(download_request) => download_request.version(),
         _ => None,
     };
 
     // Check if the requested version is compatible with the project.
     // If the compatibility check fails, exit early.
-    if let Some(version) = requested_version {
-        if let Err(e) = assert_python_compatibility(&version, virtual_project) {
-            warn_user_once!("{}", e);
-            return;
+    if let Some(request_version) = request_version {
+        if !matches!(request_version, uv_python::VersionRequest::Range(_)) {
+            // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed
+            let version = pep440_rs::Version::from_str(&request_version.to_string()).unwrap();
+            if let Err(err) = assert_python_compatibility(&version, virtual_project) {
+                warn_user_once!("{}", err);
+                return;
+            }
         }
-    };
+    }
 
     // If the requested version is either not specified or compatible, attempt to resolve the request into an interpreter.
-    let python_version = match PythonInstallation::find(
+    match PythonInstallation::find(
         pin,
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
     ) {
-        Ok(python) => Ok(python.python_version().clone()),
-        Err(err) => Err(err.to_string()),
-    };
-
-    match python_version {
-        Ok(python_version) => {
+        Ok(python) => {
+            let python_version = python.python_version();
             debug!(
                 "The pinned Python version {} resolves to {}",
                 pin, python_version
             );
-            if let Err(e) = assert_python_compatibility(&python_version, virtual_project) {
-                warn_user_once!("{}", e);
+            if let Err(err) = assert_python_compatibility(python_version, virtual_project) {
+                warn_user_once!("{}", err);
             }
         }
-        Err(e) => {
+        Err(err) => {
             warn_user_once!(
-                "Failed to resolve pinned Python version from {}: {}",
-                pin,
-                e
+                "Failed to resolve pinned Python version from `{}`: {}",
+                pin.to_canonical_string(),
+                err
             );
         }
     }
