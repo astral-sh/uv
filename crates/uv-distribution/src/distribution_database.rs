@@ -208,10 +208,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                     }),
-                    Err(Error::Extract(err)) if err.is_http_streaming_unsupported() => {
-                        warn!(
-                            "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
-                        );
+                    Err(Error::Extract(err)) => {
+                        if err.is_http_streaming_unsupported() {
+                            warn!(
+                                "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
+                            );
+                        } else if err.is_http_streaming_failed() {
+                            warn!("Streaming failed for {dist}; downloading wheel to disk ({err})");
+                        } else {
+                            return Err(Error::Extract(err));
+                        }
 
                         // If the request failed because streaming is unsupported, download the
                         // wheel directly.

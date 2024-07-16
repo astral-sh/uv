@@ -28,4 +28,12 @@ impl Error {
             Self::AsyncZip(async_zip::error::ZipError::FeatureNotSupported(_))
         )
     }
+
+    /// Returns `true` if the error is due to HTTP streaming request failed.
+    pub fn is_http_streaming_failed(&self) -> bool {
+        matches!(
+            self,
+            Self::AsyncZip(async_zip::error::ZipError::UpstreamReadError(_)) | Self::Io(_)
+        )
+    }
 }
