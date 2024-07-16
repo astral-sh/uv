@@ -98,7 +98,7 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
           git checkout -b $branch_name
-          git add docs/uv
+          git add site/uv
           git commit -m "Update uv documentation for $version"
 
       - name: "Create Pull Request"
