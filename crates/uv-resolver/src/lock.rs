@@ -3,7 +3,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Debug, Display};
-use std::iter;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -308,15 +307,16 @@ impl Lock {
 
             // Also check that our sources are consistent with whether we have
             // hashes or not.
-            let requires_hash = dist.id.source.requires_hash();
-            for wheel in &dist.wheels {
-                if requires_hash != wheel.hash.is_some() {
-                    return Err(LockErrorKind::Hash {
-                        id: dist.id.clone(),
-                        artifact_type: "wheel",
-                        expected: requires_hash,
+            if let Some(requires_hash) = dist.id.source.requires_hash() {
+                for wheel in &dist.wheels {
+                    if requires_hash != wheel.hash.is_some() {
+                        return Err(LockErrorKind::Hash {
+                            id: dist.id.clone(),
+                            artifact_type: "wheel",
+                            expected: requires_hash,
+                        }
+                        .into());
                     }
-                    .into());
                 }
             }
         }
@@ -794,7 +794,10 @@ impl Distribution {
                 let file = Box::new(distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
-                    hashes: vec![sdist.hash().0.clone()],
+                    hashes: sdist
+                        .hash()
+                        .map(|hash| vec![hash.0.clone()])
+                        .unwrap_or_default(),
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: None,
@@ -833,8 +836,11 @@ impl Distribution {
                 {
                     // When resolving from a lockfile all sources are equally compatible.
                     let compat = SourceDistCompatibility::Compatible(HashComparison::Matched);
-                    let hash = self.sdist.as_ref().unwrap().hash().0.clone();
-                    prioritized_dist.insert_source(sdist, iter::once(hash), compat);
+                    let hash = self
+                        .sdist
+                        .as_ref()
+                        .and_then(|sdist| sdist.hash().map(|h| h.0.clone()));
+                    prioritized_dist.insert_source(sdist, hash, compat);
                 };
 
                 // Add any wheels.
@@ -1026,7 +1032,9 @@ impl Distribution {
     fn hashes(&self) -> Vec<HashDigest> {
         let mut hashes = Vec::new();
         if let Some(ref sdist) = self.sdist {
-            hashes.push(sdist.hash().0.clone());
+            if let Some(hash) = sdist.hash() {
+                hashes.push(hash.0.clone());
+            }
         }
         for wheel in &self.wheels {
             hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
@@ -1430,14 +1438,18 @@ impl Source {
         }
     }
 
-    /// Returns true when this source kind requires a hash.
+    /// Returns `Some(true)` to indicate that the source kind _must_ include a
+    /// hash.
     ///
-    /// When this returns false, it also implies that a hash should
-    /// _not_ be present.
-    fn requires_hash(&self) -> bool {
+    /// Returns `Some(false)` to indicate that the source kind _must not_
+    /// include a hash.
+    ///
+    /// Returns `None` to indicate that the source kind _may_ include a hash.
+    fn requires_hash(&self) -> Option<bool> {
         match *self {
-            Self::Registry(..) | Self::Direct(..) | Self::Path(..) => true,
-            Self::Git(..) | Self::Directory(..) | Self::Editable(..) => false,
+            Self::Registry(..) => None,
+            Self::Direct(..) | Self::Path(..) => Some(true),
+            Self::Git(..) | Self::Directory(..) | Self::Editable(..) => Some(false),
         }
     }
 }
@@ -1572,7 +1584,7 @@ enum GitSourceKind {
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
 struct SourceDistMetadata {
     /// A hash of the source distribution.
-    hash: Hash,
+    hash: Option<Hash>,
     /// The size of the source distribution in bytes.
     ///
     /// This is only present for source distributions that come from registries.
@@ -1629,12 +1641,13 @@ impl SourceDist {
         }
     }
 
-    fn hash(&self) -> &Hash {
+    fn hash(&self) -> Option<&Hash> {
         match &self {
-            SourceDist::Url { metadata, .. } => &metadata.hash,
-            SourceDist::Path { metadata, .. } => &metadata.hash,
+            SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
+            SourceDist::Path { metadata, .. } => metadata.hash.as_ref(),
         }
     }
+
     fn size(&self) -> Option<u64> {
         match &self {
             SourceDist::Url { metadata, .. } => metadata.size,
@@ -1655,7 +1668,9 @@ impl SourceDist {
                 table.insert("path", Value::from(serialize_path_with_dot(path).as_ref()));
             }
         }
-        table.insert("hash", Value::from(self.hash().to_string()));
+        if let Some(hash) = self.hash() {
+            table.insert("hash", Value::from(hash.to_string()));
+        }
         if let Some(size) = self.size() {
             table.insert("size", Value::from(i64::try_from(size)?));
         }
@@ -1686,7 +1701,7 @@ impl SourceDist {
                 let Some(sdist) = built_dist.sdist.as_ref() else {
                     return Ok(None);
                 };
-                SourceDist::from_registry_dist(id, sdist).map(Some)
+                SourceDist::from_registry_dist(sdist).map(Some)
             }
             Dist::Built(_) => Ok(None),
             Dist::Source(ref source_dist) => SourceDist::from_source_dist(id, source_dist, hashes),
@@ -1700,7 +1715,7 @@ impl SourceDist {
     ) -> Result<Option<SourceDist>, LockError> {
         match *source_dist {
             distribution_types::SourceDist::Registry(ref reg_dist) => {
-                SourceDist::from_registry_dist(id, reg_dist).map(Some)
+                SourceDist::from_registry_dist(reg_dist).map(Some)
             }
             distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 SourceDist::from_direct_dist(id, direct_dist, hashes).map(Some)
@@ -1714,24 +1729,14 @@ impl SourceDist {
         }
     }
 
-    fn from_registry_dist(
-        id: &DistributionId,
-        reg_dist: &RegistrySourceDist,
-    ) -> Result<SourceDist, LockError> {
+    fn from_registry_dist(reg_dist: &RegistrySourceDist) -> Result<SourceDist, LockError> {
         let url = reg_dist
             .file
             .url
             .to_url()
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
-        let Some(hash) = reg_dist.file.hashes.first().cloned().map(Hash::from) else {
-            let kind = LockErrorKind::Hash {
-                id: id.clone(),
-                artifact_type: "registry source distribution",
-                expected: true,
-            };
-            return Err(kind.into());
-        };
+        let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
         let size = reg_dist.file.size;
         Ok(SourceDist::Url {
             url,
@@ -1754,7 +1759,10 @@ impl SourceDist {
         };
         Ok(SourceDist::Url {
             url: direct_dist.url.to_url(),
-            metadata: SourceDistMetadata { hash, size: None },
+            metadata: SourceDistMetadata {
+                hash: Some(hash),
+                size: None,
+            },
         })
     }
 }
@@ -2649,7 +2657,7 @@ name = "a"
     }
 
     #[test]
-    fn hash_required_present() {
+    fn hash_optional_missing() {
         let data = r#"
 version = 1
 
@@ -2664,7 +2672,22 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
     }
 
     #[test]
-    fn hash_optional_missing() {
+    fn hash_optional_present() {
+        let data = r#"
+version = 1
+
+[[distribution]]
+name = "anyio"
+version = "4.3.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
+"#;
+        let result: Result<Lock, _> = toml::from_str(data);
+        insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn hash_required_present() {
         let data = r#"
 version = 1
 

@@ -36,7 +36,14 @@ Ok(
                         url: UrlString(
                             "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
                         ),
-                        hash: None,
+                        hash: Some(
+                            Hash(
+                                HashDigest {
+                                    algorithm: Sha256,
+                                    digest: "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8",
+                                },
+                            ),
+                        ),
                         size: None,
                         filename: WheelFilename {
                             name: PackageName(
