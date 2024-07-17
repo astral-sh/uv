@@ -50,7 +50,7 @@ However, `pip` can also be used:
 pip install uv
 ```
 
-There are prebuilt distributions (wheels) for many platforms; if not available for a given platform, uv will be built from source which requires a Rust toolchain to be installed. See the [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup) for details on requirements for building from source.
+There are prebuilt distributions (wheels) for many platforms; if not available for a given platform, uv will be built from source which requires a Rust toolchain to be installed. See the [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup) for details on building uv from source.
 
 ## Homebrew
 
