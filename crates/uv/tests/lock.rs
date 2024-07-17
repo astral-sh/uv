@@ -1417,7 +1417,6 @@ fn lock_upgrade_log() -> Result<()> {
     warning: `uv lock` is experimental and may change without warning.
     Resolved 9 packages in [TIME]
     Updating flask v2.3.3 -> v3.0.2
-    note: pass `--verbose` to see 7 unchanged dependencies
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();

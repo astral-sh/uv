@@ -375,11 +375,11 @@ pub(super) async fn do_lock(
     let new_lock = Lock::from_resolution_graph(&resolution)?;
 
     // Notify the user of any dependency updates
-    if !matches!(upgrade, Upgrade::None) {
+    if !upgrade.is_none() {
         if let Some(existing_lock) = existing_lock {
-            check_lockfile_version_changes(
-                &new_lock,
+            report_upgrades(
                 existing_lock,
+                &new_lock,
                 workspace.install_path(),
                 printer,
             )?;
@@ -413,10 +413,10 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
     }
 }
 
-/// Checks if versions in the lockfile changed during an upgrade.
-fn check_lockfile_version_changes(
-    new_lock: &Lock,
+/// Reports on the versions that were upgraded in the new lockfile.
+fn report_upgrades(
     existing_lock: &Lock,
+    new_lock: &Lock,
     workspace_root: &Path,
     printer: Printer,
 ) -> anyhow::Result<()> {
@@ -427,8 +427,6 @@ fn check_lockfile_version_changes(
             acc
         },
     );
-
-    let mut num_unchanged_versions = 0;
 
     for distribution in new_lock.distributions() {
         let distribution_name = distribution.name();
@@ -442,25 +440,14 @@ fn check_lockfile_version_changes(
             ) {
                 if new_version == existing_version {
                     debug!("Unchanged {distribution_name} v{new_version}");
-                    num_unchanged_versions += 1;
                 } else {
                     writeln!(
                         printer.stderr(),
                         "{} {distribution_name} v{existing_version} -> v{new_version}",
-                        "Updating".green(),
+                        "Updating".green().bold(),
                     )?;
                 }
             }
-        }
-    }
-
-    if num_unchanged_versions > 0 {
-        if let LevelFilter::INFO = LevelFilter::current() {
-            writeln!(
-                printer.stderr(),
-                "{}: pass `--verbose` to see {num_unchanged_versions} unchanged dependencies",
-                "note".green(),
-            )?;
         }
     }
 
