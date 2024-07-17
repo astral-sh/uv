@@ -2,7 +2,9 @@ use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ExtrasSpecification, HashCheckingMode, PreviewMode, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
 use uv_installer::SitePackages;
@@ -230,8 +232,10 @@ pub(super) async fn do_sync(
     // optional on the downstream APIs.
     let build_isolation = BuildIsolation::default();
     let dry_run = false;
-    let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
+
+    // Extract the hashes from the lockfile.
+    let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

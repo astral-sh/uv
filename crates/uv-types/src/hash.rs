@@ -3,7 +3,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
-use distribution_types::{DistributionMetadata, HashPolicy, UnresolvedRequirement, VersionId};
+use distribution_types::{
+    DistributionMetadata, HashPolicy, Name, Resolution, UnresolvedRequirement, VersionId,
+};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{HashDigest, HashError, Requirement, RequirementSource};
@@ -168,10 +170,37 @@ impl HashStrategy {
             hashes.insert(id, digests);
         }
 
-        let hashes = Arc::new(hashes);
         match mode {
-            HashCheckingMode::Verify => Ok(Self::Verify(hashes)),
-            HashCheckingMode::Require => Ok(Self::Require(hashes)),
+            HashCheckingMode::Verify => Ok(Self::Verify(Arc::new(hashes))),
+            HashCheckingMode::Require => Ok(Self::Require(Arc::new(hashes))),
+        }
+    }
+
+    /// Generate the required hashes from a [`Resolution`].
+    pub fn from_resolution(
+        resolution: &Resolution,
+        mode: HashCheckingMode,
+    ) -> Result<Self, HashStrategyError> {
+        let mut hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
+
+        for dist in resolution.distributions() {
+            let digests = resolution.get_hashes(dist.name());
+            if digests.is_empty() {
+                // Under `--require-hashes`, every requirement must include a hash.
+                if mode.is_require() {
+                    return Err(HashStrategyError::MissingHashes(
+                        dist.name().to_string(),
+                        mode,
+                    ));
+                }
+                continue;
+            }
+            hashes.insert(dist.version_id(), digests.to_vec());
+        }
+
+        match mode {
+            HashCheckingMode::Verify => Ok(Self::Verify(Arc::new(hashes))),
+            HashCheckingMode::Require => Ok(Self::Require(Arc::new(hashes))),
         }
     }
 
