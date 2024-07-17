@@ -11,8 +11,8 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, PreviewMode,
-    Reinstall, SetupPyStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
+    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -41,7 +41,7 @@ pub(crate) async fn pip_sync(
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
-    require_hashes: bool,
+    hash_checking: Option<HashCheckingMode>,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
@@ -180,12 +180,13 @@ pub(crate) async fn pip_sync(
     let (tags, markers) = resolution_environment(python_version, python_platform, interpreter)?;
 
     // Collect the set of required hashes.
-    let hasher = if require_hashes {
+    let hasher = if let Some(hash_checking) = hash_checking {
         HashStrategy::from_requirements(
             requirements
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&markers),
+            hash_checking,
         )?
     } else {
         HashStrategy::None

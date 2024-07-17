@@ -1018,6 +1018,19 @@ pub struct PipOptions {
         "#
     )]
     pub require_hashes: Option<bool>,
+    /// Validate any hashes provided in the requirements file.
+    ///
+    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
+    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
+    /// include them.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            verify-hashes = true
+        "#
+    )]
+    pub verify_hashes: Option<bool>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",

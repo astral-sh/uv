@@ -907,6 +907,13 @@
           "items": {
             "$ref": "#/definitions/Requirement"
           }
+        },
+        "verify-hashes": {
+          "description": "Validate any hashes provided in the requirements file.\n\nUnlike `--require-hashes`, `--verify-hashes` does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
