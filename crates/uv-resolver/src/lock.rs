@@ -1736,7 +1736,7 @@ impl SourceDist {
             .to_url()
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
-        let hash = reg_dist.file.hashes.first().cloned().map(Hash::from);
+        let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
         let size = reg_dist.file.size;
         Ok(SourceDist::Url {
             url,
@@ -1749,7 +1749,7 @@ impl SourceDist {
         direct_dist: &DirectUrlSourceDist,
         hashes: &[HashDigest],
     ) -> Result<SourceDist, LockError> {
-        let Some(hash) = hashes.first().cloned().map(Hash::from) else {
+        let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
                 artifact_type: "direct URL source distribution",
@@ -1920,7 +1920,7 @@ impl Wheel {
             .to_url_string()
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
-        let hash = wheel.file.hashes.first().cloned().map(Hash::from);
+        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
         let size = wheel.file.size;
         Ok(Wheel {
             url,
@@ -1933,7 +1933,7 @@ impl Wheel {
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
             url: direct_dist.url.to_url().into(),
-            hash: hashes.first().cloned().map(Hash::from),
+            hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             filename: direct_dist.filename.clone(),
         }
@@ -1942,7 +1942,7 @@ impl Wheel {
     fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
             url: path_dist.url.to_url().into(),
-            hash: hashes.first().cloned().map(Hash::from),
+            hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             filename: path_dist.filename.clone(),
         }
