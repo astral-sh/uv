@@ -7298,7 +7298,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
     cmake==3.28.4 ; platform_machine == 'x86_64' and platform_system == 'Linux'
         # via triton
-    . ; os_name == 'Linux'
+    . ; (os_name == 'Linux' and platform_machine == 'x86_64') or (os_name == 'Linux' and platform_machine != 'x86_64')
         # via -r requirements.in
     filelock==3.13.1
         # via
@@ -7766,7 +7766,7 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -p 3.8 --universal
     alabaster==0.7.13
         # via sphinx
-    astroid==3.1.0
+    astroid==3.1.0 ; python_version < '3.11' or python_version >= '3.12'
         # via pylint
     babel==2.14.0
         # via sphinx
@@ -7778,7 +7778,7 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via
         #   pylint
         #   sphinx
-    dill==0.3.8
+    dill==0.3.8 ; python_version < '3.11' or python_version >= '3.12'
         # via pylint
     docutils==0.20.1
         # via sphinx
@@ -7788,17 +7788,17 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via sphinx
     importlib-metadata==7.1.0 ; python_version < '3.10'
         # via sphinx
-    isort==5.13.2
+    isort==5.13.2 ; python_version < '3.11' or python_version >= '3.12'
         # via pylint
     jinja2==3.1.3
         # via sphinx
     markupsafe==2.1.5
         # via jinja2
-    mccabe==0.7.0
+    mccabe==0.7.0 ; python_version < '3.11' or python_version >= '3.12'
         # via pylint
     packaging==24.0
         # via sphinx
-    platformdirs==4.2.0
+    platformdirs==4.2.0 ; python_version < '3.11' or python_version >= '3.12'
         # via pylint
     pygments==2.17.2
         # via sphinx
@@ -7826,7 +7826,7 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via sphinx
     tomli==2.0.1 ; python_version < '3.11'
         # via pylint
-    tomlkit==0.12.4
+    tomlkit==0.12.4 ; python_version < '3.11' or python_version >= '3.12'
         # via pylint
     typing-extensions==4.10.0 ; python_version < '3.11'
         # via
@@ -7916,7 +7916,7 @@ fn universal_marker_propagation() -> Result<()> {
         # via requests
     filelock==3.13.1
         # via torch
-    fsspec==2024.3.1
+    fsspec==2024.3.1 ; platform_machine != 'x86_64'
         # via torch
     idna==3.6
         # via requests
@@ -7936,17 +7936,17 @@ fn universal_marker_propagation() -> Result<()> {
         # via torchvision
     sympy==1.12
         # via torch
-    torch==2.0.0
+    torch==2.0.0 ; platform_machine == 'x86_64'
         # via
         #   -r requirements.in
         #   torchvision
-    torch==2.2.0
+    torch==2.2.0 ; platform_machine != 'x86_64'
         # via
         #   -r requirements.in
         #   torchvision
-    torchvision==0.15.1+rocm5.4.2
+    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64'
         # via -r requirements.in
-    torchvision==0.17.0+rocm5.7
+    torchvision==0.17.0+rocm5.7 ; platform_machine != 'x86_64'
         # via -r requirements.in
     typing-extensions==4.10.0
         # via torch

@@ -2901,9 +2901,9 @@ fn lock_python_version_marker_complement() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "attrs" },
-                { name = "iniconfig" },
-                { name = "typing-extensions", marker = "python_full_version <= '3.10' or python_full_version > '3.10'" },
+                { name = "attrs", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
+                { name = "iniconfig", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
+                { name = "typing-extensions", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
             ]
 
             [[distribution]]

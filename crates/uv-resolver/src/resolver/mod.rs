@@ -2735,10 +2735,22 @@ impl Dependencies {
             let mut new_forks: Vec<Fork> = vec![];
             if let Some(markers) = fork_groups.remaining_universe() {
                 trace!("Adding split to cover possibly incomplete markers: {markers}");
-                new_forks.push(Fork {
-                    dependencies: vec![],
-                    markers,
-                });
+                let mut new_forks_for_remaining_universe = forks.clone();
+                for fork in &mut new_forks_for_remaining_universe {
+                    fork.markers.and(markers.clone());
+                    fork.dependencies.retain(|dep| {
+                        let Some(dep_marker) = dep.package.marker() else {
+                            return true;
+                        };
+                        // After we constrain the markers on an existing
+                        // fork, we should ensure that any existing
+                        // dependencies that are no longer possible in this
+                        // fork are removed. This mirrors the check we do in
+                        // `add_nonfork_package`.
+                        !crate::marker::is_disjoint(&fork.markers, dep_marker)
+                    });
+                }
+                new_forks.extend(new_forks_for_remaining_universe);
             }
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
@@ -2751,6 +2763,9 @@ impl Dependencies {
             }
             forks = new_forks;
             diverging_packages.push(name.clone());
+        }
+        for fork in &mut forks {
+            fork.propagate_markers();
         }
         ForkedDependencies::Forked {
             forks,
@@ -2878,6 +2893,21 @@ impl Fork {
                 .marker()
                 .map_or(true, |pkg_marker| !is_disjoint(pkg_marker, fork_marker))
         });
+    }
+
+    /// This attaches the marker in this fork to each of its dependencies.
+    ///
+    /// In effect, this "propagates" the markers to each individual dependency
+    /// that was spawned as the result of a fork. While in many cases the
+    /// markers will be combined when multiple forks choose the same version of
+    /// a dependency, in some cases, the version chosen can be specific to a
+    /// particular set of marker environments. In this case, the dependencies
+    /// will be platform specific and thus require marker expressions to appear
+    /// in the lock file.
+    fn propagate_markers(&mut self) {
+        for dependency in &mut self.dependencies {
+            dependency.and_markers(&self.markers);
+        }
     }
 }
 
