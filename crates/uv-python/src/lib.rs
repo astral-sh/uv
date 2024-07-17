@@ -1753,6 +1753,32 @@ mod tests {
     }
 
     #[test]
+    fn find_python_all_minors() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_interpreters(&[
+            (true, ImplementationName::CPython, "python", "3.10.0"),
+            (true, ImplementationName::CPython, "python3", "3.10.0"),
+            (true, ImplementationName::CPython, "python3.12", "3.12.0"),
+        ])?;
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::parse(">= 3.11"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should find matching minor version even if they aren't called `python` or `python3`"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn find_python_pypy_prefers_executable_with_implementation_name() -> Result<()> {
         let mut context = TestContext::new()?;
 
