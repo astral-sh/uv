@@ -1,8 +1,12 @@
 #![allow(clippy::single_match_else)]
 
 use anstream::eprint;
-
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
+use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
+use owo_colors::OwoColorize;
+use pep440_rs::Version;
+use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::BTreeSet;
+use std::{fmt::Write, path::Path};
 use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -10,6 +14,7 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall,
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::ResolvedRepositoryReference;
+use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
@@ -367,7 +372,16 @@ pub(super) async fn do_lock(
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    Ok(Lock::from_resolution_graph(&resolution)?)
+    let new_lock = Lock::from_resolution_graph(&resolution)?;
+
+    // Notify the user of any dependency updates
+    if !upgrade.is_none() {
+        if let Some(existing_lock) = existing_lock {
+            report_upgrades(existing_lock, &new_lock, workspace.install_path(), printer)?;
+        }
+    }
+
+    Ok(new_lock)
 }
 
 /// Write the lockfile to disk.
@@ -392,4 +406,62 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err.into()),
     }
+}
+
+/// Reports on the versions that were upgraded in the new lockfile.
+fn report_upgrades(
+    existing_lock: &Lock,
+    new_lock: &Lock,
+    workspace_root: &Path,
+    printer: Printer,
+) -> anyhow::Result<()> {
+    let existing_distributions: FxHashMap<PackageName, BTreeSet<Version>> =
+        existing_lock.distributions().iter().fold(
+            FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
+            |mut acc, distribution| {
+                if let Ok(VersionId::NameVersion(name, version)) =
+                    distribution.version_id(workspace_root)
+                {
+                    acc.entry(name).or_default().insert(version);
+                }
+                acc
+            },
+        );
+
+    let new_distribution_names: FxHashMap<PackageName, BTreeSet<Version>> =
+        new_lock.distributions().iter().fold(
+            FxHashMap::with_capacity_and_hasher(new_lock.distributions().len(), FxBuildHasher),
+            |mut acc, distribution| {
+                if let Ok(VersionId::NameVersion(name, version)) =
+                    distribution.version_id(workspace_root)
+                {
+                    acc.entry(name).or_default().insert(version);
+                }
+                acc
+            },
+        );
+
+    for (name, new_versions) in new_distribution_names {
+        if let Some(existing_versions) = existing_distributions.get(&name) {
+            if new_versions != *existing_versions {
+                let existing_versions = existing_versions
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let new_versions = new_versions
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {name} v{existing_versions} -> v{new_versions}",
+                    "Updating".green().bold()
+                )?;
+            }
+        }
+    }
+
+    Ok(())
 }
