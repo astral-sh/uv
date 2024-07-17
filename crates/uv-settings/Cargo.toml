@@ -14,18 +14,19 @@ workspace = true
 
 [dependencies]
 distribution-types = { workspace = true, features = ["schemars"] }
-install-wheel-rs = { workspace = true, features = ["schemars"] }
+install-wheel-rs = { workspace = true, features = ["schemars", "clap"] }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
-uv-configuration = { workspace = true, features = ["schemars"] }
+uv-configuration = { workspace = true, features = ["schemars", "clap"] }
 uv-fs = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
 uv-options-metadata = { workspace = true }
-uv-python = { workspace = true, features = ["schemars"] }
-uv-resolver = { workspace = true, features = ["schemars"] }
+uv-python = { workspace = true, features = ["schemars", "clap"] }
+uv-resolver = { workspace = true, features = ["schemars", "clap"] }
 uv-warnings = { workspace = true }
 
+clap = { workspace = true }
 dirs-sys = { workspace = true }
 fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
@@ -35,4 +36,4 @@ toml = { workspace = true }
 tracing = { workspace = true }
 
 [package.metadata.cargo-shear]
-ignored = ["uv-options-metadata"]
+ignored = ["uv-options-metadata", "clap"]

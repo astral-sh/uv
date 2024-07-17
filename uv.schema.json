@@ -71,7 +71,7 @@
       }
     },
     "index-strategy": {
-      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attack can upload a malicious package under the same name to a secondary.\n\nPossible values:\n\n- `\"first-index\"`:        Only use results from the first index that returns a match for a given package name. - `\"unsafe-first-match\"`: Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next. - `\"unsafe-best-match\"`:  Search for every package name across all indexes, preferring the \"best\" version found. If a package version is in multiple indexes, only look at the entry for the first index.",
+      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attack can upload a malicious package under the same name to a secondary.",
       "anyOf": [
         {
           "$ref": "#/definitions/IndexStrategy"
@@ -638,7 +638,7 @@
           ]
         },
         "index-strategy": {
-          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attack can upload a malicious package under the same name to a secondary.\n\nPossible values:\n\n- `\"first-index\"`:        Only use results from the first index that returns a match for a given package name. - `\"unsafe-first-match\"`: Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next. - `\"unsafe-best-match\"`:  Search for every package name across all indexes, preferring the \"best\" version found. If a package version is in multiple indexes, only look at the entry for the first index.",
+          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attack can upload a malicious package under the same name to a secondary.",
           "anyOf": [
             {
               "$ref": "#/definitions/IndexStrategy"

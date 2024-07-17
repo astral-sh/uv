@@ -5070,6 +5070,7 @@ dependencies = [
 name = "uv-settings"
 version = "0.0.1"
 dependencies = [
+ "clap",
  "dirs-sys",
  "distribution-types",
  "fs-err",

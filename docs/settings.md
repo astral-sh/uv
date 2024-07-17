@@ -189,15 +189,13 @@ limit resolutions to those present on that first index (`first-match`). This pre
 "dependency confusion" attacks, whereby an attack can upload a malicious package under the
 same name to a secondary.
 
-Possible values:
-
-- `"first-index"`:        Only use results from the first index that returns a match for a given package name.
-- `"unsafe-first-match"`: Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next.
-- `"unsafe-best-match"`:  Search for every package name across all indexes, preferring the "best" version found. If a package version is in multiple indexes, only look at the entry for the first index.
-
 **Default value**: `"first-index"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"first-index"`: Only use results from the first index that returns a match for a given package name
+- `"unsafe-first-match"`: Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next
+- `"unsafe-best-match"`: Search for every package name across all indexes, preferring the "best" version found. If a package version is in multiple indexes, only look at the entry for the first index
 
 **Example usage**:
 
@@ -284,7 +282,11 @@ Windows.
 
 **Default value**: `"clone" (macOS) or "hardlink" (Linux, Windows)`
 
-**Type**: `str`
+**Possible values**:
+
+- `"clone"`: Clone (i.e., copy-on-write) packages from the wheel into the site packages
+- `"copy"`: Copy packages from the wheel into the site packages
+- `"hardlink"`: Hard link packages from the wheel into the site packages
 
 **Example usage**:
 
@@ -556,7 +558,13 @@ declared specifiers (`if-necessary-or-explicit`).
 
 **Default value**: `"if-necessary-or-explicit"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"disallow"`: Disallow all pre-release versions
+- `"allow"`: Allow all pre-release versions
+- `"if-necessary"`: Allow pre-release versions if all versions of a package are pre-release
+- `"explicit"`: Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements
+- `"if-necessary-or-explicit"`: Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements
 
 **Example usage**:
 
@@ -606,7 +614,10 @@ Whether to automatically download Python when required.
 
 **Default value**: `"automatic"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"automatic"`: Automatically fetch managed Python installations when needed
+- `"manual"`: Do not automatically fetch managed Python installations; require explicit installation
 
 **Example usage**:
 
@@ -632,7 +643,13 @@ those that are downloaded and installed by uv.
 
 **Default value**: `"installed"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"only-managed"`: Only use managed Python installations; never use system Python installations
+- `"installed"`: Prefer installed Python installations, only download managed Python installations if no system Python installation is found
+- `"managed"`: Prefer managed Python installations over system Python installations, even if fetching is required
+- `"system"`: Prefer system Python installations over managed Python installations
+- `"only-system"`: Only use system Python installations; never use managed Python installations
 
 **Example usage**:
 
@@ -710,7 +727,11 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 **Default value**: `"highest"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"highest"`: Resolve the highest compatible version of each package
+- `"lowest"`: Resolve the lowest compatible version of each package
+- `"lowest-direct"`: Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies
 
 **Example usage**:
 
@@ -852,7 +873,10 @@ source of each package.
 
 **Default value**: `"split"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"line"`: Render the annotations on a single, comma-separated line
+- `"split"`: Render each annotation on its own line
 
 **Example usage**:
 
@@ -1372,15 +1396,13 @@ limit resolutions to those present on that first index (`first-match`). This pre
 "dependency confusion" attacks, whereby an attack can upload a malicious package under the
 same name to a secondary.
 
-Possible values:
-
-- `"first-index"`:        Only use results from the first index that returns a match for a given package name.
-- `"unsafe-first-match"`: Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next.
-- `"unsafe-best-match"`:  Search for every package name across all indexes, preferring the "best" version found. If a package version is in multiple indexes, only look at the entry for the first index.
-
 **Default value**: `"first-index"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"first-index"`: Only use results from the first index that returns a match for a given package name
+- `"unsafe-first-match"`: Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next
+- `"unsafe-best-match"`: Search for every package name across all indexes, preferring the "best" version found. If a package version is in multiple indexes, only look at the entry for the first index
 
 **Example usage**:
 
@@ -1497,7 +1519,11 @@ Windows.
 
 **Default value**: `"clone" (macOS) or "hardlink" (Linux, Windows)`
 
-**Type**: `str`
+**Possible values**:
+
+- `"clone"`: Clone (i.e., copy-on-write) packages from the wheel into the site packages
+- `"copy"`: Copy packages from the wheel into the site packages
+- `"hardlink"`: Hard link packages from the wheel into the site packages
 
 **Example usage**:
 
@@ -1906,7 +1932,13 @@ declared specifiers (`if-necessary-or-explicit`).
 
 **Default value**: `"if-necessary-or-explicit"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"disallow"`: Disallow all pre-release versions
+- `"allow"`: Allow all pre-release versions
+- `"if-necessary"`: Allow pre-release versions if all versions of a package are pre-release
+- `"explicit"`: Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements
+- `"if-necessary-or-explicit"`: Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements
 
 **Example usage**:
 
@@ -2121,7 +2153,11 @@ By default, uv will use the latest compatible version of each package (`highest`
 
 **Default value**: `"highest"`
 
-**Type**: `str`
+**Possible values**:
+
+- `"highest"`: Resolve the highest compatible version of each package
+- `"lowest"`: Resolve the lowest compatible version of each package
+- `"lowest-direct"`: Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies
 
 **Example usage**:
 
