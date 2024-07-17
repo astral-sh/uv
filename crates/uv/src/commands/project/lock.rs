@@ -1,20 +1,20 @@
 #![allow(clippy::single_match_else)]
 
 use anstream::eprint;
+use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
 use owo_colors::OwoColorize;
+use pep440_rs::Version;
 use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::BTreeSet;
 use std::{fmt::Write, path::Path};
-
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
-use tracing::{debug, level_filters::LevelFilter};
+use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{Workspace, DEV_DEPENDENCIES};
 use uv_git::ResolvedRepositoryReference;
+use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
@@ -377,12 +377,7 @@ pub(super) async fn do_lock(
     // Notify the user of any dependency updates
     if !upgrade.is_none() {
         if let Some(existing_lock) = existing_lock {
-            report_upgrades(
-                existing_lock,
-                &new_lock,
-                workspace.install_path(),
-                printer,
-            )?;
+            report_upgrades(existing_lock, &new_lock, workspace.install_path(), printer)?;
         }
     }
 
@@ -420,33 +415,50 @@ fn report_upgrades(
     workspace_root: &Path,
     printer: Printer,
 ) -> anyhow::Result<()> {
-    let existing_distributions = existing_lock.distributions().iter().fold(
-        FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
-        |mut acc, distribution| {
-            acc.entry(distribution.name()).or_insert(distribution);
-            acc
-        },
-    );
-
-    for distribution in new_lock.distributions() {
-        let distribution_name = distribution.name();
-        if let Some(existing_distribution) = existing_distributions.get(&distribution_name) {
-            if let (
-                Ok(distribution_types::VersionId::NameVersion(_, existing_version)),
-                Ok(distribution_types::VersionId::NameVersion(_, new_version)),
-            ) = (
-                existing_distribution.version_id(workspace_root),
-                distribution.version_id(workspace_root),
-            ) {
-                if new_version == existing_version {
-                    debug!("Unchanged {distribution_name} v{new_version}");
-                } else {
-                    writeln!(
-                        printer.stderr(),
-                        "{} {distribution_name} v{existing_version} -> v{new_version}",
-                        "Updating".green().bold(),
-                    )?;
+    let existing_distributions: FxHashMap<PackageName, BTreeSet<Version>> =
+        existing_lock.distributions().iter().fold(
+            FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
+            |mut acc, distribution| {
+                if let Ok(VersionId::NameVersion(name, version)) =
+                    distribution.version_id(workspace_root)
+                {
+                    acc.entry(name).or_default().insert(version);
                 }
+                acc
+            },
+        );
+
+    let new_distribution_names: FxHashMap<PackageName, BTreeSet<Version>> =
+        new_lock.distributions().iter().fold(
+            FxHashMap::with_capacity_and_hasher(new_lock.distributions().len(), FxBuildHasher),
+            |mut acc, distribution| {
+                if let Ok(VersionId::NameVersion(name, version)) =
+                    distribution.version_id(workspace_root)
+                {
+                    acc.entry(name).or_default().insert(version);
+                }
+                acc
+            },
+        );
+
+    for (name, new_versions) in new_distribution_names {
+        if let Some(existing_versions) = existing_distributions.get(&name) {
+            if new_versions != *existing_versions {
+                let existing_versions = existing_versions
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let new_versions = new_versions
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {name} v{existing_versions} -> v{new_versions}",
+                    "Updating".green().bold()
+                )?;
             }
         }
     }
