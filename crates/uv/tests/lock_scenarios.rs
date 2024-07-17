@@ -723,7 +723,7 @@ fn fork_incomplete_markers() -> Result<()> {
         dependencies = [
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }, marker = "python_version < '3.10'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }, marker = "python_version >= '3.11'" },
-            { name = "package-b" },
+            { name = "package-b", marker = "python_version < '3.10' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.10')" },
         ]
         "###
         );
@@ -1804,7 +1804,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         dependencies = [
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }, marker = "sys_platform == 'linux'" },
-            { name = "package-b" },
+            { name = "package-b", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
         ]
         "###
         );
@@ -1919,7 +1919,7 @@ fn fork_marker_selection() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a" },
+            { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
             { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
@@ -2059,7 +2059,7 @@ fn fork_marker_track() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a" },
+            { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
             { name = "package-b", version = "2.7", source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-b", version = "2.8", source = { registry = "https://astral-sh.github.io/packse/0.3.30/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
