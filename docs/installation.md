@@ -24,6 +24,10 @@ uv is installed to `~/.cargo/bin`.
     curl -LsSf https://astral.sh/uv/install.sh | less
     ```
 
+    On Windows
+    ```powershell
+    powershell -c "irm https://astral.sh/uv/install.ps1 | more"
+    ```
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
 A specific release can be requested by including the version in the URL:
