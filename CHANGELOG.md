@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.26
+
+### CLI
+
+- Add `--no-progress` global option to hide all progress animations ([#5098](https://github.com/astral-sh/uv/pull/5098))
+
+### Performance
+
+- Cache downloaded wheel when range requests aren't supported ([#5089](https://github.com/astral-sh/uv/pull/5089))
+
+### Bug fixes
+
+- Download wheel to disk when streaming unzip failed with HTTP streaming error ([#5094](https://github.com/astral-sh/uv/pull/5094))
+- Filter out invalid wheels based on `requires-python` ([#5084](https://github.com/astral-sh/uv/pull/5084))
+- Filter out none ABI wheels with mismatched Python versions ([#5087](https://github.com/astral-sh/uv/pull/5087))
+- Lock Git cache on resolve ([#5051](https://github.com/astral-sh/uv/pull/5051))
+- Change order of `pip compile` command checks to handle exact argument first ([#5111](https://github.com/astral-sh/uv/pull/5111))
+
+### Documentation
+
+- Document that `--universal` implies `--no-strip-markers` ([#5121](https://github.com/astral-sh/uv/pull/5121))
+
 ## 0.2.25
 
 ### Enhancements

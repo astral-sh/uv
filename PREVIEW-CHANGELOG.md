@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.26
+
+### Preview features
+
+- Indicate that `uv lock --upgrade` has updated the lock file ([#5110](https://github.com/astral-sh/uv/pull/5110))
+- Sort managed Python installations by version ([#5140](https://github.com/astral-sh/uv/pull/5140))
+- Support workspace to workspace path dependencies ([#4833](https://github.com/astral-sh/uv/pull/4833))
+- Allow conflicting locals when forking ([#5104](https://github.com/astral-sh/uv/pull/5104))
+- Rework `pyproject.toml` reformatting to respect original indentation ([#5075](https://github.com/astral-sh/uv/pull/5075))
+
+### Documentation
+
+- Add stubs for the project documentation ([#5135](https://github.com/astral-sh/uv/pull/5135))
+- Add `settings.md` to docs ([#5091](https://github.com/astral-sh/uv/pull/5091))
+- Add contributor documentation for the docs ([#5108](https://github.com/astral-sh/uv/pull/5108))
+- Add reference documentation for global settings ([#5123](https://github.com/astral-sh/uv/pull/5123))
+- Add reference documentation for pip settings ([#5125](https://github.com/astral-sh/uv/pull/5125))
+- Add reference documentation for resolver settings ([#5122](https://github.com/astral-sh/uv/pull/5122))
+- Add uv to docs Pull Request titles ([#5115](https://github.com/astral-sh/uv/pull/5115))
+- Auto-merge docs PRs on release ([#5101](https://github.com/astral-sh/uv/pull/5101))
+- Autogenerate possible values for enums in reference documentation ([#5137](https://github.com/astral-sh/uv/pull/5137))
+
 ## 0.2.25
 
 ### Preview features
