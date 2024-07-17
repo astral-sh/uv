@@ -5,6 +5,7 @@ use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
+use uv_fs::Simplified;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
@@ -13,6 +14,7 @@ use crate::printer::Printer;
 
 /// List installed tools.
 pub(crate) async fn list(
+    show_paths: bool,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -49,11 +51,29 @@ pub(crate) async fn list(
             }
         };
 
-        writeln!(printer.stdout(), "{}", format!("{name} v{version}").bold())?;
+        if show_paths {
+            writeln!(
+                printer.stdout(),
+                "{} ({})",
+                format!("{name} v{version}").bold(),
+                installed_tools.tool_dir(&name).simplified_display().cyan()
+            )?;
+        } else {
+            writeln!(printer.stdout(), "{}", format!("{name} v{version}").bold())?;
+        }
 
         // Output tool entrypoints
         for entrypoint in tool.entrypoints() {
-            writeln!(printer.stdout(), "- {}", &entrypoint.name)?;
+            if show_paths {
+                writeln!(
+                    printer.stdout(),
+                    "- {} ({})",
+                    entrypoint.name,
+                    entrypoint.install_path.simplified_display().cyan()
+                )?;
+            } else {
+                writeln!(printer.stdout(), "- {}", entrypoint.name)?;
+            }
         }
     }
 

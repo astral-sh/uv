@@ -2202,7 +2202,11 @@ pub struct ToolInstallArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct ToolListArgs;
+pub struct ToolListArgs {
+    /// Whether to display the path to each tool environment and installed executable.
+    #[arg(long)]
+    pub show_paths: bool,
+}
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
