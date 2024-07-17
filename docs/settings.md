@@ -2350,6 +2350,36 @@ Accepts both standalone package names (`ruff`) and version specifiers (`ruff<0.5
 
 ---
 
+#### [`verify-hashes`](#pip_verify-hashes) {: #pip_verify-hashes }
+<span id="verify-hashes"></span>
+
+Validate any hashes provided in the requirements file.
+
+Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
+hashes; instead, it will limit itself to verifying the hashes of those requirements that do
+include them.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    verify-hashes = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    verify-hashes = true
+    ```
+
+---
+
 ## `workspace`
 
 #### [`exclude`](#workspace_exclude) {: #workspace_exclude }

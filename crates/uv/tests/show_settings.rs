@@ -158,7 +158,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -291,7 +291,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -425,7 +425,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -591,7 +591,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -703,7 +703,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -847,7 +847,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -1028,7 +1028,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -1208,7 +1208,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -1366,7 +1366,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -1500,7 +1500,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -1672,7 +1672,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -1827,7 +1827,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -1961,7 +1961,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -2078,7 +2078,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -2195,7 +2195,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -2314,7 +2314,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -2458,7 +2458,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {
@@ -2626,7 +2626,7 @@ fn resolve_both() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            require_hashes: false,
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
             concurrency: Concurrency {

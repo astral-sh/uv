@@ -19,9 +19,9 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple,
-    Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
+    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
+    TargetTriple, Upgrade,
 };
 use uv_distribution::pyproject::DependencyType;
 use uv_normalize::PackageName;
@@ -849,6 +849,8 @@ impl PipSyncSettings {
             refresh,
             require_hashes,
             no_require_hashes,
+            verify_hashes,
+            no_verify_hashes,
             python,
             system,
             no_system,
@@ -890,6 +892,7 @@ impl PipSyncSettings {
                     target,
                     prefix,
                     require_hashes: flag(require_hashes, no_require_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
@@ -946,6 +949,8 @@ impl PipInstallSettings {
             require_hashes,
             no_require_hashes,
             installer,
+            verify_hashes,
+            no_verify_hashes,
             python,
             system,
             no_system,
@@ -1017,6 +1022,7 @@ impl PipInstallSettings {
                     python_version,
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
@@ -1659,7 +1665,7 @@ pub(crate) struct PipSettings {
     pub(crate) annotation_style: AnnotationStyle,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
-    pub(crate) require_hashes: bool,
+    pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
     pub(crate) concurrency: Concurrency,
@@ -1718,6 +1724,7 @@ impl PipSettings {
             link_mode,
             compile_bytecode,
             require_hashes,
+            verify_hashes,
             upgrade,
             upgrade_package,
             reinstall,
@@ -1869,10 +1876,14 @@ impl PipSettings {
                 .combine(emit_index_annotation)
                 .unwrap_or_default(),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
-            require_hashes: args
-                .require_hashes
-                .combine(require_hashes)
-                .unwrap_or_default(),
+            hash_checking: HashCheckingMode::from_args(
+                args.require_hashes
+                    .combine(require_hashes)
+                    .unwrap_or_default(),
+                args.verify_hashes
+                    .combine(verify_hashes)
+                    .unwrap_or_default(),
+            ),
             python: args.python.combine(python),
             system: args.system.combine(system).unwrap_or_default(),
             break_system_packages: args
