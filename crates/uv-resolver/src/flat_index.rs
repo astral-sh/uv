@@ -124,7 +124,9 @@ impl FlatIndex {
         }
 
         // Check if hashes line up
-        let hash = if let HashPolicy::Validate(required) = hasher.get_package(&filename.name) {
+        let hash = if let HashPolicy::Validate(required) =
+            hasher.get_package(&filename.name, &filename.version)
+        {
             if hashes.is_empty() {
                 HashComparison::Missing
             } else if required.iter().any(|hash| hashes.contains(hash)) {
@@ -163,7 +165,9 @@ impl FlatIndex {
         };
 
         // Check if hashes line up.
-        let hash = if let HashPolicy::Validate(required) = hasher.get_package(&filename.name) {
+        let hash = if let HashPolicy::Validate(required) =
+            hasher.get_package(&filename.name, &filename.version)
+        {
             if hashes.is_empty() {
                 HashComparison::Missing
             } else if required.iter().any(|hash| hashes.contains(hash)) {

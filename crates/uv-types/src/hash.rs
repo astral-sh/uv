@@ -1,9 +1,10 @@
-use std::str::FromStr;
-
 use rustc_hash::FxHashMap;
+use std::str::FromStr;
+use std::sync::Arc;
 use url::Url;
 
-use distribution_types::{DistributionMetadata, HashPolicy, PackageId, UnresolvedRequirement};
+use distribution_types::{DistributionMetadata, HashPolicy, UnresolvedRequirement, VersionId};
+use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{HashDigest, HashError, Requirement, RequirementSource};
 use uv_configuration::HashCheckingMode;
@@ -19,11 +20,11 @@ pub enum HashStrategy {
     /// Hashes should be validated, if present, but ignored if absent.
     ///
     /// If necessary, hashes should be generated to ensure that the archive is valid.
-    Verify(FxHashMap<PackageId, Vec<HashDigest>>),
+    Verify(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
     /// Hashes should be validated against a pre-defined list of hashes.
     ///
     /// If necessary, hashes should be generated to ensure that the archive is valid.
-    Require(FxHashMap<PackageId, Vec<HashDigest>>),
+    Require(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
 }
 
 impl HashStrategy {
@@ -33,7 +34,7 @@ impl HashStrategy {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
             Self::Verify(hashes) => {
-                if let Some(hashes) = hashes.get(&distribution.package_id()) {
+                if let Some(hashes) = hashes.get(&distribution.version_id()) {
                     HashPolicy::Validate(hashes.as_slice())
                 } else {
                     HashPolicy::None
@@ -41,7 +42,7 @@ impl HashStrategy {
             }
             Self::Require(hashes) => HashPolicy::Validate(
                 hashes
-                    .get(&distribution.package_id())
+                    .get(&distribution.version_id())
                     .map(Vec::as_slice)
                     .unwrap_or_default(),
             ),
@@ -49,12 +50,14 @@ impl HashStrategy {
     }
 
     /// Return the [`HashPolicy`] for the given registry-based package.
-    pub fn get_package(&self, name: &PackageName) -> HashPolicy {
+    pub fn get_package(&self, name: &PackageName, version: &Version) -> HashPolicy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
             Self::Verify(hashes) => {
-                if let Some(hashes) = hashes.get(&PackageId::from_registry(name.clone())) {
+                if let Some(hashes) =
+                    hashes.get(&VersionId::from_registry(name.clone(), version.clone()))
+                {
                     HashPolicy::Validate(hashes.as_slice())
                 } else {
                     HashPolicy::None
@@ -62,7 +65,7 @@ impl HashStrategy {
             }
             Self::Require(hashes) => HashPolicy::Validate(
                 hashes
-                    .get(&PackageId::from_registry(name.clone()))
+                    .get(&VersionId::from_registry(name.clone(), version.clone()))
                     .map(Vec::as_slice)
                     .unwrap_or_default(),
             ),
@@ -75,7 +78,7 @@ impl HashStrategy {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
             Self::Verify(hashes) => {
-                if let Some(hashes) = hashes.get(&PackageId::from_url(url)) {
+                if let Some(hashes) = hashes.get(&VersionId::from_url(url)) {
                     HashPolicy::Validate(hashes.as_slice())
                 } else {
                     HashPolicy::None
@@ -83,7 +86,7 @@ impl HashStrategy {
             }
             Self::Require(hashes) => HashPolicy::Validate(
                 hashes
-                    .get(&PackageId::from_url(url))
+                    .get(&VersionId::from_url(url))
                     .map(Vec::as_slice)
                     .unwrap_or_default(),
             ),
@@ -91,12 +94,14 @@ impl HashStrategy {
     }
 
     /// Returns `true` if the given registry-based package is allowed.
-    pub fn allows_package(&self, name: &PackageName) -> bool {
+    pub fn allows_package(&self, name: &PackageName, version: &Version) -> bool {
         match self {
             Self::None => true,
             Self::Generate => true,
             Self::Verify(_) => true,
-            Self::Require(hashes) => hashes.contains_key(&PackageId::from_registry(name.clone())),
+            Self::Require(hashes) => {
+                hashes.contains_key(&VersionId::from_registry(name.clone(), version.clone()))
+            }
         }
     }
 
@@ -106,7 +111,7 @@ impl HashStrategy {
             Self::None => true,
             Self::Generate => true,
             Self::Verify(_) => true,
-            Self::Require(hashes) => hashes.contains_key(&PackageId::from_url(url)),
+            Self::Require(hashes) => hashes.contains_key(&VersionId::from_url(url)),
         }
     }
 
@@ -121,7 +126,7 @@ impl HashStrategy {
         markers: Option<&MarkerEnvironment>,
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
-        let mut hashes = FxHashMap::<PackageId, Vec<HashDigest>>::default();
+        let mut hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
 
         // For each requirement, map from name to allowed hashes. We use the last entry for each
         // package.
@@ -139,7 +144,7 @@ impl HashStrategy {
                 }
                 UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
-                    PackageId::from_url(&requirement.url.verbatim)
+                    VersionId::from_url(&requirement.url.verbatim)
                 }
             };
 
@@ -163,6 +168,7 @@ impl HashStrategy {
             hashes.insert(id, digests);
         }
 
+        let hashes = Arc::new(hashes);
         match mode {
             HashCheckingMode::Verify => Ok(Self::Verify(hashes)),
             HashCheckingMode::Require => Ok(Self::Require(hashes)),
@@ -170,7 +176,7 @@ impl HashStrategy {
     }
 
     /// Pin a [`Requirement`] to a [`PackageId`], if possible.
-    fn pin(requirement: &Requirement) -> Option<PackageId> {
+    fn pin(requirement: &Requirement) -> Option<VersionId> {
         match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
                 // Must be a single specifier.
@@ -183,12 +189,15 @@ impl HashStrategy {
                     return None;
                 }
 
-                Some(PackageId::from_registry(requirement.name.clone()))
+                Some(VersionId::from_registry(
+                    requirement.name.clone(),
+                    specifier.version().clone(),
+                ))
             }
             RequirementSource::Url { url, .. }
             | RequirementSource::Git { url, .. }
             | RequirementSource::Path { url, .. }
-            | RequirementSource::Directory { url, .. } => Some(PackageId::from_url(url)),
+            | RequirementSource::Directory { url, .. } => Some(VersionId::from_url(url)),
         }
     }
 }

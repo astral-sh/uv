@@ -2,7 +2,6 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
-use rustc_hash::FxHashSet;
 use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
@@ -94,11 +93,6 @@ impl VersionMap {
                 },
             }
         }
-        let allowed_yanks = allowed_yanks
-            .allowed_versions(package_name)
-            .cloned()
-            .unwrap_or_default();
-        let required_hashes = hasher.get_package(package_name).digests().to_vec();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
@@ -107,10 +101,10 @@ impl VersionMap {
                 no_build: build_options.no_build_package(package_name),
                 index: index.clone(),
                 tags: tags.cloned(),
+                allowed_yanks: allowed_yanks.clone(),
+                hasher: hasher.clone(),
                 requires_python: requires_python.cloned(),
                 exclude_newer: exclude_newer.copied(),
-                allowed_yanks,
-                required_hashes,
             }),
         }
     }
@@ -288,9 +282,9 @@ struct VersionMapLazy {
     /// Whether files newer than this timestamp should be excluded or not.
     exclude_newer: Option<ExcludeNewer>,
     /// Which yanked versions are allowed
-    allowed_yanks: FxHashSet<Version>,
+    allowed_yanks: AllowedYanks,
     /// The hashes of allowed distributions.
-    required_hashes: Vec<HashDigest>,
+    hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: Option<RequiresPython>,
 }
@@ -366,14 +360,14 @@ impl VersionMapLazy {
                 };
 
                 // Prioritize amongst all available files.
-                let version = filename.version().clone();
                 let yanked = file.yanked.clone();
                 let hashes = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
-                            &version,
+                            &filename.name,
+                            &filename.version,
                             &hashes,
                             yanked,
                             excluded,
@@ -388,7 +382,8 @@ impl VersionMapLazy {
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
-                            &version,
+                            &filename.name,
+                            &filename.version,
                             &hashes,
                             yanked,
                             excluded,
@@ -416,6 +411,7 @@ impl VersionMapLazy {
 
     fn source_dist_compatibility(
         &self,
+        name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
         yanked: Option<Yanked>,
@@ -436,21 +432,20 @@ impl VersionMapLazy {
 
         // Check if yanked
         if let Some(yanked) = yanked {
-            if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
+            if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
                 return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(yanked));
             }
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash = if self.required_hashes.is_empty() {
+        let hash_policy = self.hasher.get_package(name, version);
+        let required_hashes = hash_policy.digests();
+        let hash = if required_hashes.is_empty() {
             HashComparison::Matched
         } else {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hashes
-                .iter()
-                .any(|hash| self.required_hashes.contains(hash))
-            {
+            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
@@ -463,6 +458,7 @@ impl VersionMapLazy {
     fn wheel_compatibility(
         &self,
         filename: &WheelFilename,
+        name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
         yanked: Option<Yanked>,
@@ -481,7 +477,7 @@ impl VersionMapLazy {
 
         // Check if yanked
         if let Some(yanked) = yanked {
-            if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
+            if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked));
             }
         }
@@ -498,15 +494,14 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash = if self.required_hashes.is_empty() {
+        let hash_policy = self.hasher.get_package(name, version);
+        let required_hashes = hash_policy.digests();
+        let hash = if required_hashes.is_empty() {
             HashComparison::Matched
         } else {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hashes
-                .iter()
-                .any(|hash| self.required_hashes.contains(hash))
-            {
+            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched

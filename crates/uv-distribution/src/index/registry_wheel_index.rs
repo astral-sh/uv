@@ -114,7 +114,10 @@ impl<'a> RegistryWheelIndex<'a> {
                                 CachedWheel::from_http_pointer(wheel_dir.join(file), cache)
                             {
                                 // Enforce hash-checking based on the built distribution.
-                                if wheel.satisfies(hasher.get_package(package)) {
+                                if wheel.satisfies(
+                                    hasher
+                                        .get_package(&wheel.filename.name, &wheel.filename.version),
+                                ) {
                                     Self::add_wheel(wheel, tags, &mut versions);
                                 }
                             }
@@ -130,7 +133,10 @@ impl<'a> RegistryWheelIndex<'a> {
                                 CachedWheel::from_local_pointer(wheel_dir.join(file), cache)
                             {
                                 // Enforce hash-checking based on the built distribution.
-                                if wheel.satisfies(hasher.get_package(package)) {
+                                if wheel.satisfies(
+                                    hasher
+                                        .get_package(&wheel.filename.name, &wheel.filename.version),
+                                ) {
                                     Self::add_wheel(wheel, tags, &mut versions);
                                 }
                             }
@@ -174,10 +180,12 @@ impl<'a> RegistryWheelIndex<'a> {
                 };
 
                 if let Some(revision) = revision {
-                    // Enforce hash-checking based on the source distribution.
-                    if revision.satisfies(hasher.get_package(package)) {
-                        for wheel_dir in symlinks(cache_shard.join(revision.id())) {
-                            if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
+                    for wheel_dir in symlinks(cache_shard.join(revision.id())) {
+                        if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
+                            // Enforce hash-checking based on the source distribution.
+                            if revision.satisfies(
+                                hasher.get_package(&wheel.filename.name, &wheel.filename.version),
+                            ) {
                                 Self::add_wheel(wheel, tags, &mut versions);
                             }
                         }

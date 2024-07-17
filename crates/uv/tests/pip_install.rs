@@ -5162,7 +5162,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
-        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        "werkzeug==3.0.0 --hash=sha256:cbb2600f7eabe51dbc0502f58be0b3e1b96b893b05695ea2b35b43d4de2d9962",
     )?;
 
     // Install without error when `--require-hashes` is omitted.
@@ -5175,7 +5175,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `idna`
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
     "###
     );
 
