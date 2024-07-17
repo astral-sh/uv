@@ -13,6 +13,7 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// See: <https://packaging.python.org/en/latest/specifications/name-normalization/>
 #[derive(
     Debug,
+    Default,
     Clone,
     PartialEq,
     Eq,
