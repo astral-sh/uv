@@ -382,6 +382,7 @@ impl Lock {
         }
 
         let mut map = BTreeMap::default();
+        let mut hashes = BTreeMap::default();
         while let Some((dist, extra)) = queue.pop_front() {
             let deps =
                 if let Some(extra) = extra {
@@ -406,13 +407,14 @@ impl Lock {
                     }
                 }
             }
-            let name = dist.id.name.clone();
-            let resolved_dist =
-                ResolvedDist::Installable(dist.to_dist(project.workspace().install_path(), tags)?);
-            map.insert(name, resolved_dist);
+            map.insert(
+                dist.id.name.clone(),
+                ResolvedDist::Installable(dist.to_dist(project.workspace().install_path(), tags)?),
+            );
+            hashes.insert(dist.id.name.clone(), dist.hashes());
         }
         let diagnostics = vec![];
-        Ok(Resolution::new(map, diagnostics))
+        Ok(Resolution::new(map, hashes, diagnostics))
     }
 
     /// Returns the TOML representation of this lock file.

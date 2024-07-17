@@ -64,6 +64,9 @@ pub(crate) enum ProjectError {
     Virtualenv(#[from] uv_virtualenv::Error),
 
     #[error(transparent)]
+    HashStrategy(#[from] uv_types::HashStrategyError),
+
+    #[error(transparent)]
     Tags(#[from] platform_tags::TagsError),
 
     #[error(transparent)]
