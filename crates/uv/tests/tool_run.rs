@@ -148,8 +148,8 @@ fn tool_run_at_version() {
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable pytest@8.0.0 was not found.
-    However, the following executables are available:
+    The executable `pytest@8.0.0` was not found.
+    The following executables are provided by `pytest`:
     - py.test
     - pytest
 
@@ -162,6 +162,7 @@ fn tool_run_at_version() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
+    warning: A `pytest@8.0.0` executable is not provided by package `pytest`.
     "###);
 }
 
@@ -210,8 +211,8 @@ fn tool_run_suggest_valid_commands() {
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable orange was not found.
-    However, the following executables are available:
+    The executable `orange` was not found.
+    The following executables are provided by `black`:
     - black
     - blackd
 
@@ -226,6 +227,7 @@ fn tool_run_suggest_valid_commands() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
+    warning: A `orange` executable is not provided by package `black`.
     "###);
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -235,7 +237,7 @@ fn tool_run_suggest_valid_commands() {
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable fastapi-cli was not found.
+    The executable `fastapi-cli` was not found.
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning.
@@ -245,6 +247,72 @@ fn tool_run_suggest_valid_commands() {
      + fastapi-cli==0.0.1
      + importlib-metadata==1.7.0
      + zipp==3.18.1
+    warning: A `fastapi-cli` executable is not provided by package `fastapi-cli`.
+    "###);
+}
+
+#[test]
+fn tool_run_warn_executable_not_in_from() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let mut filters = context.filters();
+    filters.push(("\\+ uvloop(.+)\n ", ""));
+    // Strip off the `fastapi` command output.
+    filters.push(("(?s)fastapi` instead.*", "fastapi` instead."));
+
+    uv_snapshot!(filters, context.tool_run()
+    .arg("--from")
+    .arg("fastapi")
+    .arg("fastapi")
+    .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
+    // (FastAPI 0.111 is only available from this date onwards)
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning.
+    Resolved 35 packages in [TIME]
+    Prepared 35 packages in [TIME]
+    Installed 35 packages in [TIME]
+     + annotated-types==0.6.0
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + click==8.1.7
+     + dnspython==2.6.1
+     + email-validator==2.1.1
+     + fastapi==0.111.0
+     + fastapi-cli==0.0.2
+     + h11==0.14.0
+     + httpcore==1.0.5
+     + httptools==0.6.1
+     + httpx==0.27.0
+     + idna==3.7
+     + jinja2==3.1.3
+     + markdown-it-py==3.0.0
+     + markupsafe==2.1.5
+     + mdurl==0.1.2
+     + orjson==3.10.3
+     + pydantic==2.7.1
+     + pydantic-core==2.18.2
+     + pygments==2.17.2
+     + python-dotenv==1.0.1
+     + python-multipart==0.0.9
+     + pyyaml==6.0.1
+     + rich==13.7.1
+     + shellingham==1.5.4
+     + sniffio==1.3.1
+     + starlette==0.37.2
+     + typer==0.12.3
+     + typing-extensions==4.11.0
+     + ujson==5.9.0
+     + uvicorn==0.29.0
+     + watchfiles==0.21.0
+     + websockets==12.0
+    warning: A `fastapi` executable is not provided by package `fastapi` but is available via the dependency `fastapi-cli`. Consider using `uv tool run --from fastapi-cli fastapi` instead.
     "###);
 }
 

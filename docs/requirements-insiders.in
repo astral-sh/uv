@@ -1,0 +1,2 @@
+-r requirements.in
+mkdocs-material @ git+ssh://git@github.com/astral-sh/mkdocs-material-insiders.git@38c0b8187325c3bab386b666daf3518ac036f2f4

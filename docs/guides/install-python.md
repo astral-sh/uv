@@ -36,7 +36,7 @@ To view available and installed Python versions:
 $ uv python list
 ```
 
-See the [`python list`](../python-versions.html#viewing-available-python-versions) documentation for more details.
+See the [`python list`](../python-versions.md#viewing-available-python-versions) documentation for more details.
 
 <!--TODO(zanieb): The above should probably link to a CLI reference and that content should be moved out of that file -->
 
@@ -62,4 +62,4 @@ uv will also use an existing Python installation if already present on the syste
 
 To force uv to use the system Python, provide the `--python-preference only-system` option.
 
-See the [Python version preference](../python-versions.html#adjusting-python-version-preferences) documentation for more details.
+See the [Python version preference](../python-versions.md#adjusting-python-version-preferences) documentation for more details.

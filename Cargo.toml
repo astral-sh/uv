@@ -41,6 +41,7 @@ uv-git = { path = "crates/uv-git" }
 uv-installer = { path = "crates/uv-installer" }
 uv-macros = { path = "crates/uv-macros" }
 uv-normalize = { path = "crates/uv-normalize" }
+uv-options-metadata = { path = "crates/uv-options-metadata" }
 uv-python = { path = "crates/uv-python" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
@@ -107,6 +108,7 @@ path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
+proc-macro2 = { version = "1.0.86" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "3f0ba760951ab0deeac874b98bb18fc90103fcf7" }
 pyo3 = { version = "0.21.0" }
 pyo3-log = { version = "0.10.0" }

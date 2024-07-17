@@ -2670,9 +2670,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.85"
+version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22244ce15aa966053a896d1accb3a6e68469b97c7f33f284b99f0d576879fc23"
+checksum = "5e719e8df665df0d1c8fbfd238015744736151d4445ec0836b8e628aae103b77"
 dependencies = [
  "unicode-ident",
 ]
@@ -4428,7 +4428,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.2.24"
+version = "0.2.25"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4683,6 +4683,7 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "install-wheel-rs",
+ "itertools 0.13.0",
  "mimalloc",
  "owo-colors",
  "pep508_rs",
@@ -4695,6 +4696,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tagu",
+ "textwrap",
  "tikv-jemallocator",
  "tokio",
  "tracing",
@@ -4708,6 +4710,8 @@ dependencies = [
  "uv-distribution",
  "uv-git",
  "uv-installer",
+ "uv-macros",
+ "uv-options-metadata",
  "uv-python",
  "uv-resolver",
  "uv-settings",
@@ -4781,7 +4785,9 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-git",
+ "uv-macros",
  "uv-normalize",
+ "uv-options-metadata",
  "uv-types",
  "uv-warnings",
  "zip",
@@ -4798,6 +4804,7 @@ dependencies = [
  "md-5",
  "pypi-types",
  "rayon",
+ "reqwest",
  "rustc-hash 2.0.0",
  "sha2",
  "thiserror",
@@ -4890,8 +4897,10 @@ dependencies = [
 name = "uv-macros"
 version = "0.0.1"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn 2.0.71",
+ "textwrap",
 ]
 
 [[package]]
@@ -4900,6 +4909,13 @@ version = "0.0.1"
 dependencies = [
  "rkyv",
  "schemars",
+ "serde",
+]
+
+[[package]]
+name = "uv-options-metadata"
+version = "0.0.1"
+dependencies = [
  "serde",
 ]
 
@@ -5069,6 +5085,7 @@ dependencies = [
  "uv-fs",
  "uv-macros",
  "uv-normalize",
+ "uv-options-metadata",
  "uv-python",
  "uv-resolver",
  "uv-warnings",
@@ -5143,7 +5160,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.24"
+version = "0.2.25"
 
 [[package]]
 name = "uv-virtualenv"

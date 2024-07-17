@@ -24,9 +24,9 @@ pub struct VirtualEnvironment {
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
 pub struct PyVenvConfiguration {
-    /// If the `virtualenv` package was used to create the virtual environment.
+    /// If the virtualenv package was used to create the virtual environment.
     pub(crate) virtualenv: bool,
-    /// If the `uv` package was used to create the virtual environment.
+    /// If the uv package was used to create the virtual environment.
     pub(crate) uv: bool,
 }
 
@@ -165,7 +165,7 @@ impl PyVenvConfiguration {
         self.virtualenv
     }
 
-    /// Returns true if the virtual environment was created with the `uv` package.
+    /// Returns true if the virtual environment was created with the uv package.
     pub fn is_uv(&self) -> bool {
         self.uv
     }

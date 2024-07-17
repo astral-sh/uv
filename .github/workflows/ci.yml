@@ -531,7 +531,7 @@ jobs:
           echo "$CONDA_PREFIX"
           ./uv pip install anyio
 
-  integration-test-pypy:
+  integration-test-pypy-linux:
     needs: build-binary-linux
     name: "integration test | pypy on ubuntu"
     runs-on: ubuntu-latest
@@ -571,13 +571,13 @@ jobs:
               fi
           }
 
-          executables=("python")
+          executables=("pypy" "pypy3" "python")
 
           all_found=true
           for executable_name in "${executables[@]}"; do
               check_in_bin "$executable_name" "$folder_path"
               result=$?
-            
+
               if [[ $result -ne 0 ]]; then
                   all_found=false
               fi
@@ -590,11 +590,80 @@ jobs:
 
       - name: "Check version"
         run: |
+          .venv/bin/pypy --version
+          .venv/bin/pypy3 --version
           .venv/bin/python --version
 
       - name: "Check install"
         run: |
           ./uv pip install anyio
+
+  integration-test-pypy-windows:
+    needs: build-binary-windows
+    name: "integration test | pypy on windows"
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "pypy3.9"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: PyPy info
+        run: Get-Command pypy
+
+      - name: "Create a virtual environment"
+        run: |
+          $pypy = (Get-Command pypy).source
+          .\uv.exe venv -p $pypy
+
+      - name: "Check for executables"
+        shell: python
+        run: |
+          import sys
+          from pathlib import Path
+
+          def binary_exist(binary):
+            binaries_path = Path(".venv\\Scripts")
+            if (binaries_path / binary).exists():
+              return True
+            print(f"Executable '{binary}' not found in folder '{binaries_path}'.")
+
+          all_found = True
+          expected_binaries = [
+              "pypy3.9.exe",
+              "pypy3.9w.exe",
+              "pypy3.exe",
+              "pypyw.exe",
+              "python.exe",
+              "python3.9.exe",
+              "python3.exe",
+              "pythonw.exe",
+          ]
+          for binary in expected_binaries:
+            if not binary_exist(binary):
+              all_found = False
+
+          if not all_found:
+            print("One or more expected executables were not found.")
+            sys.exit(1)
+
+      - name: "Check version"
+        run: |
+          & .venv\Scripts\pypy3.9.exe --version
+          & .venv\Scripts\pypy3.exe --version
+          & .venv\Scripts\python.exe --version
+
+      - name: "Check install"
+        env:
+          # Avoid debug build stack overflows.
+          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+        run: |
+          .\uv.exe pip install anyio
 
   integration-test-github-actions:
     needs: build-binary-linux

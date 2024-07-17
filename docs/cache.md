@@ -17,12 +17,12 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
   the local `.whl` or `.tar.gz` file). For directories, uv caches based on the last-modified time of
   the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
 
-It's safe to run multiple `uv` commands concurrently, even against the same virtual environment.
+It's safe to run multiple uv commands concurrently, even against the same virtual environment.
 uv's cache is designed to be thread-safe and append-only, and thus robust to multiple concurrent
 readers and writers. uv applies a file-based lock to the target virtual environment when installing,
 to avoid concurrent modifications across processes.
 
-Note that it's _not_ safe to modify the uv cache directly (e.g., `uv cache clean`) while other `uv`
+Note that it's _not_ safe to modify the uv cache directly (e.g., `uv cache clean`) while other uv
 commands are running, and _never_ safe to modify the cache directly (e.g., by removing a file or
 directory).
 
