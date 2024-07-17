@@ -78,4 +78,4 @@ See our guide on [using uv in Docker](./guides/docker.md) for more details.
 
 uv artifacts can be downloaded directly from [GitHub Releases](https://github.com/astral-sh/uv/releases).
 
-Each release page includes binaries for all support platforms as well as instructions for using the standalone installer via `github.com` instead of `astral.sh`.
+Each release page includes binaries for all supported platforms as well as instructions for using the standalone installer via `github.com` instead of `astral.sh`.
