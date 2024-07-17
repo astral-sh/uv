@@ -1105,6 +1105,9 @@ impl MarkerTree {
     /// already, then `tree` is added to it instead of creating a new
     /// conjunction.
     pub fn and(&mut self, tree: MarkerTree) {
+        if self == &tree {
+            return;
+        }
         match *self {
             MarkerTree::Expression(_) | MarkerTree::Or(_) => {
                 let this = std::mem::replace(self, MarkerTree::And(vec![]));
@@ -1118,6 +1121,9 @@ impl MarkerTree {
             } else {
                 exprs.push(tree);
             }
+            if exprs.len() == 1 {
+                *self = exprs.pop().unwrap();
+            }
         }
     }
 
@@ -1127,6 +1133,9 @@ impl MarkerTree {
     /// already, then `tree` is added to it instead of creating a new
     /// disjunction.
     pub fn or(&mut self, tree: MarkerTree) {
+        if self == &tree {
+            return;
+        }
         match *self {
             MarkerTree::Expression(_) | MarkerTree::And(_) => {
                 let this = std::mem::replace(self, MarkerTree::And(vec![]));
@@ -1139,6 +1148,9 @@ impl MarkerTree {
                 exprs.extend(tree);
             } else {
                 exprs.push(tree);
+            }
+            if exprs.len() == 1 {
+                *self = exprs.pop().unwrap();
             }
         }
     }
