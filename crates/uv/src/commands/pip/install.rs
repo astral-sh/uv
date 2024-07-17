@@ -25,7 +25,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PreReleaseMode, PythonRequirement,
-    ResolutionMode,
+    ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
@@ -326,7 +326,7 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         Some(&tags),
-        Some(&markers),
+        ResolverMarkers::SpecificEnvironment((*markers).clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -342,8 +342,7 @@ pub(crate) async fn pip_install(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}"))
-                .context("No solution found when resolving dependencies:");
+            let report = miette::Report::msg(format!("{err}")).context(err.header());
             eprint!("{report:?}");
             return Ok(ExitStatus::Failure);
         }

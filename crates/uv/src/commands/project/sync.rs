@@ -92,8 +92,7 @@ pub(crate) async fn sync(
             Err(ProjectError::Operation(pip::operations::Error::Resolve(
                 uv_resolver::ResolveError::NoSolution(err),
             ))) => {
-                let report = miette::Report::msg(format!("{err}"))
-                    .context("No solution found when resolving dependencies:");
+                let report = miette::Report::msg(format!("{err}")).context(err.header());
                 anstream::eprint!("{report:?}");
                 return Ok(ExitStatus::Failure);
             }
@@ -133,8 +132,7 @@ pub(crate) async fn sync(
             Err(ProjectError::Operation(pip::operations::Error::Resolve(
                 uv_resolver::ResolveError::NoSolution(err),
             ))) => {
-                let report = miette::Report::msg(format!("{err}"))
-                    .context("No solution found when resolving dependencies:");
+                let report = miette::Report::msg(format!("{err}")).context(err.header());
                 anstream::eprint!("{report:?}");
                 return Ok(ExitStatus::Failure);
             }

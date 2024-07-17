@@ -15,7 +15,7 @@ pub use resolution::{AnnotationStyle, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
     BuildId, DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
-    Reporter as ResolverReporter, Resolver, ResolverProvider, VersionsResponse,
+    Reporter as ResolverReporter, Resolver, ResolverMarkers, ResolverProvider, VersionsResponse,
     WheelMetadataResult,
 };
 pub use version_map::VersionMap;

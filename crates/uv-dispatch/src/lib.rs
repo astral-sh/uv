@@ -26,6 +26,7 @@ use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
     ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
+    ResolverMarkers,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -146,7 +147,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .index_strategy(self.index_strategy)
                 .build(),
             &python_requirement,
-            Some(markers),
+            ResolverMarkers::SpecificEnvironment(markers.clone()),
             Some(tags),
             self.flat_index,
             self.index,

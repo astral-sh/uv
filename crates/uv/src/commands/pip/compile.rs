@@ -33,7 +33,7 @@ use uv_requirements::{
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
     InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, RequiresPython,
-    ResolutionMode,
+    ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -230,11 +230,14 @@ pub(crate) async fn pip_compile(
 
     // Determine the environment for the resolution.
     let (tags, markers) = if universal {
-        (None, None)
+        (None, ResolverMarkers::Universal)
     } else {
         let (tags, markers) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (Some(tags), Some(markers))
+        (
+            Some(tags),
+            ResolverMarkers::SpecificEnvironment((*markers).clone()),
+        )
     };
 
     // Generate, but don't enforce hashes for the requirements.
@@ -335,7 +338,7 @@ pub(crate) async fn pip_compile(
         &Reinstall::None,
         &upgrade,
         tags.as_deref(),
-        markers.as_deref(),
+        markers.clone(),
         python_requirement,
         &client,
         &flat_index,
@@ -351,8 +354,7 @@ pub(crate) async fn pip_compile(
     {
         Ok(resolution) => resolution,
         Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            let report = miette::Report::msg(format!("{err}"))
-                .context("No solution found when resolving dependencies:");
+            let report = miette::Report::msg(format!("{err}")).context(err.header());
             eprint!("{report:?}");
             return Ok(ExitStatus::Failure);
         }
@@ -384,7 +386,7 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        if let Some(markers) = markers.as_deref() {
+        if let ResolverMarkers::SpecificEnvironment(markers) = &markers {
             let relevant_markers = resolution.marker_tree(&top_level_index, markers)?;
             writeln!(
                 writer,
@@ -457,7 +459,7 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
-            markers.as_deref(),
+            &markers,
             &no_emit_packages,
             generate_hashes,
             include_extras,

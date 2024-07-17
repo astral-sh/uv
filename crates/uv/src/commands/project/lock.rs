@@ -17,7 +17,9 @@ use uv_git::ResolvedRepositoryReference;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
-use uv_resolver::{FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython};
+use uv_resolver::{
+    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverMarkers,
+};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -88,8 +90,7 @@ pub(crate) async fn lock(
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report = miette::Report::msg(format!("{err}"))
-                .context("No solution found when resolving dependencies:");
+            let report = miette::Report::msg(format!("{err}")).context(err.header());
             eprint!("{report:?}");
             Ok(ExitStatus::Failure)
         }
@@ -274,7 +275,7 @@ pub(super) async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                None,
+                ResolverMarkers::Universal,
                 python_requirement.clone(),
                 &client,
                 &flat_index,
@@ -350,7 +351,7 @@ pub(super) async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                None,
+                ResolverMarkers::Universal,
                 python_requirement,
                 &client,
                 &flat_index,
