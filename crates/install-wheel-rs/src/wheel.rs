@@ -474,8 +474,19 @@ fn install_script(
         let start = format_shebang(&layout.sys_executable, &layout.os_name)
             .as_bytes()
             .to_vec();
-        let mut target = File::create(&script_absolute)?;
+
+        let mut target = tempfile::NamedTempFile::new_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
+        target.persist(&script_absolute).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Failed to persist temporary file to {}: {}",
+                    path.user_display(),
+                    err.error
+                ),
+            )
+        })?;
         fs::remove_file(&path)?;
         Some(size_and_encoded_hash)
     } else {
@@ -604,7 +615,8 @@ pub(crate) fn write_file_recorded(
         relative_path.display()
     );
 
-    File::create(site_packages.join(relative_path))?.write_all(content.as_ref())?;
+    uv_fs::write_atomic_sync(site_packages.join(relative_path), content.as_ref())?;
+
     let hash = Sha256::new().chain_update(content.as_ref()).finalize();
     let encoded_hash = format!("sha256={}", BASE64URL_NOPAD.encode(&hash));
     record.push(RecordEntry {
