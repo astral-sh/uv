@@ -722,11 +722,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 request_sink.blocking_send(Request::Dist(dist))?;
             }
         } else {
-            // Verify that the package is allowed under the hash-checking policy.
-            if !self.hasher.allows_package(name) {
-                return Err(ResolveError::UnhashedPackage(name.clone()));
-            }
-
             // Emit a request to fetch the metadata for this package.
             if self.index.packages().register(name.clone()) {
                 request_sink.blocking_send(Request::Package(name.clone()))?;
@@ -1077,6 +1072,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Emit a request to fetch the metadata for this version.
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
             if self.index.distributions().register(candidate.version_id()) {
+                // Verify that the package is allowed under the hash-checking policy.
+                if !self
+                    .hasher
+                    .allows_package(candidate.name(), candidate.version())
+                {
+                    return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
+                }
+
                 let request = Request::from(dist.for_resolution());
                 request_sink.blocking_send(request)?;
             }
@@ -1801,6 +1804,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
+                    // Verify that the package is allowed under the hash-checking policy.
+                    if !self
+                        .hasher
+                        .allows_package(candidate.name(), candidate.version())
+                    {
+                        return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
+                    }
+
                     let dist = dist.for_resolution().to_owned();
 
                     let response = match dist {
