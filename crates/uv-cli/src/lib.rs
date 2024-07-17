@@ -700,10 +700,13 @@ pub struct PipCompileArgs {
     /// In universal mode, the current Python version (or user-provided `--python-version`) will be
     /// treated as a lower bound. For example, `--universal --python-version 3.7` would produce a
     /// universal resolution for Python 3.7 and later.
+    ///
+    /// Implies `--no-strip-markers`.
     #[arg(
         long,
         overrides_with("no_universal"),
-        conflicts_with("python_platform")
+        conflicts_with("python_platform"),
+        conflicts_with("strip_markers")
     )]
     pub universal: bool,
 
