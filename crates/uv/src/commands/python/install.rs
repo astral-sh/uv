@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
-use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
+use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{
     requests_from_version_file, PythonRequest, PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
@@ -67,8 +67,12 @@ pub(crate) async fn install(
 
     let download_requests = requests
         .iter()
-        .map(PythonDownloadRequest::from_request)
-        .collect::<Result<Vec<_>, downloads::Error>>()?;
+        .map(|request| {
+            PythonDownloadRequest::from_request(request).ok_or_else(|| {
+                anyhow::anyhow!("Cannot download managed Python for request: {request}")
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut unfilled_requests = Vec::new();
