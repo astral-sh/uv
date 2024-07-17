@@ -66,6 +66,6 @@ Note that when an automatic Python installation occurs, the `python` command wil
 
 ## Using an existing Python installation
 
-uv will also use an existing Python installation if already present on the system. There's no configuration necessary for this behavior, uv will use the system Python if it satisfies the requirements of the command invocation. See the [Python discovery](../python-versions.md#discovery-order) documentation for details.
+uv will also use an existing Python installation if already present on the system. There's no configuration necessary for this behavior: uv will use the system Python if it satisfies the requirements of the command invocation. See the [Python discovery](../python-versions.md#discovery-order) documentation for details.
 
 To force uv to use the system Python, provide the `--python-preference only-system` option. See the [Python version preference](../python-versions.md#adjusting-python-version-preferences) documentation for more details.
