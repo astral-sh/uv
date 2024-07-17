@@ -689,9 +689,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::Dir,
+            command: ToolCommand::Dir(args),
         }) => {
-            commands::tool_dir(globals.preview)?;
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::tool_dir(args.bin, globals.preview)?;
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {
