@@ -671,7 +671,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::tool_list(globals.preview, &cache, printer).await
+            commands::tool_list(args.show_paths, globals.preview, &cache, printer).await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Uninstall(args),

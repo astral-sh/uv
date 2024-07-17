@@ -85,6 +85,11 @@ impl InstalledTools {
         }
     }
 
+    /// Return the expected directory for a tool with the given [`PackageName`].
+    pub fn tool_dir(&self, name: &PackageName) -> PathBuf {
+        self.root.join(name.to_string())
+    }
+
     /// Return the metadata for all installed tools.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
@@ -113,7 +118,7 @@ impl InstalledTools {
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn get_tool_receipt(&self, name: &PackageName) -> Result<Option<Tool>, Error> {
-        let path = self.root.join(name.to_string()).join("uv-receipt.toml");
+        let path = self.tool_dir(name).join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
             Err(Error::IO(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -136,7 +141,7 @@ impl InstalledTools {
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn add_tool_receipt(&self, name: &PackageName, tool: Tool) -> Result<(), Error> {
         let tool_receipt = ToolReceipt::from(tool);
-        let path = self.root.join(name.to_string()).join("uv-receipt.toml");
+        let path = self.tool_dir(name).join("uv-receipt.toml");
 
         debug!(
             "Adding metadata entry for tool `{name}` at {}",
@@ -161,7 +166,7 @@ impl InstalledTools {
     ///
     /// If no such environment exists for the tool.
     pub fn remove_environment(&self, name: &PackageName) -> Result<(), Error> {
-        let environment_path = self.root.join(name.to_string());
+        let environment_path = self.tool_dir(name);
 
         debug!(
             "Deleting environment for tool `{name}` at {}",
@@ -184,7 +189,7 @@ impl InstalledTools {
         name: &PackageName,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, Error> {
-        let environment_path = self.root.join(name.to_string());
+        let environment_path = self.tool_dir(name);
 
         match PythonEnvironment::from_root(&environment_path, cache) {
             Ok(venv) => {
@@ -216,7 +221,7 @@ impl InstalledTools {
         name: &PackageName,
         interpreter: Interpreter,
     ) -> Result<PythonEnvironment, Error> {
-        let environment_path = self.root.join(name.to_string());
+        let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
         match fs_err::remove_dir_all(&environment_path) {
@@ -255,7 +260,7 @@ impl InstalledTools {
     }
 
     pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
-        let environment_path = self.root.join(name.to_string());
+        let environment_path = self.tool_dir(name);
         let environment = PythonEnvironment::from_root(&environment_path, cache)?;
         let site_packages = SitePackages::from_environment(&environment)
             .map_err(|err| Error::EnvironmentRead(environment_path.clone(), err.to_string()))?;

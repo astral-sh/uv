@@ -285,15 +285,17 @@ impl ToolInstallSettings {
 /// The resolved settings to use for a `tool list` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct ToolListSettings;
+pub(crate) struct ToolListSettings {
+    pub(crate) show_paths: bool,
+}
 
 impl ToolListSettings {
     /// Resolve the [`ToolListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let ToolListArgs {} = args;
+        let ToolListArgs { show_paths } = args;
 
-        Self {}
+        Self { show_paths }
     }
 }
 
