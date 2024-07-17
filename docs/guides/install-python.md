@@ -1,6 +1,6 @@
 # Installing Python
 
-If Python is already installed, uv should [detect and use](#using-an-existing-python-installation) it without configuration. However, uv can also install and manage Python versions.
+If Python is already installed, uv will [detect and use](#using-an-existing-python-installation) it without configuration. However, uv can also install and manage Python versions.
 
 To install Python:
 
