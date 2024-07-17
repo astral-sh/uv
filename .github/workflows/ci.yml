@@ -347,6 +347,33 @@ jobs:
       - uses: actions/checkout@v4
       - uses: crate-ci/typos@master
 
+  docs:
+    name: "mkdocs"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - name: "Add SSH key"
+        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY }}
+      - name: "Install Insiders dependencies"
+        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
+        run: pip install -r docs/requirements-insiders.txt
+      - name: "Install dependencies"
+        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
+        run: pip install -r docs/requirements.txt
+      - name: "Build Insiders docs"
+        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
+        run: mkdocs build --strict -f mkdocs.insiders.yml
+      - name: "Build docs"
+        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
+        run: mkdocs build --strict -f mkdocs.public.yml
+
   build-binary-linux:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
