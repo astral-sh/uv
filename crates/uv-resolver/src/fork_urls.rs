@@ -40,10 +40,12 @@ impl ForkUrls {
                     ];
                     conflicting_url.sort();
                     return match fork_markers {
-                        ResolverMarkers::Universal => Err(ResolveError::ConflictingUrlsUniversal(
-                            package_name.clone(),
-                            conflicting_url,
-                        )),
+                        ResolverMarkers::Universal | ResolverMarkers::SpecificEnvironment(_) => {
+                            Err(ResolveError::ConflictingUrlsUniversal(
+                                package_name.clone(),
+                                conflicting_url,
+                            ))
+                        }
                         ResolverMarkers::Fork(fork_markers) => {
                             Err(ResolveError::ConflictingUrlsFork {
                                 package_name: package_name.clone(),

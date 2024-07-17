@@ -7,12 +7,13 @@ use petgraph::Direction;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
-use pep508_rs::MarkerEnvironment;
 use pep508_rs::MarkerTree;
 use uv_normalize::PackageName;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
-use crate::{marker, ResolutionGraph};
+use crate::{marker, ResolutionGraph, ResolverMarkers};
+
+static UNIVERSAL_MARKERS: ResolverMarkers = ResolverMarkers::Universal;
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
@@ -21,7 +22,7 @@ pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
     /// The marker environment, used to determine the markers that apply to each package.
-    marker_env: Option<&'a MarkerEnvironment>,
+    marker_env: &'a ResolverMarkers,
     /// The packages to exclude from the output.
     no_emit_packages: &'a [PackageName],
     /// Whether to include hashes in the output.
@@ -50,7 +51,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
         Self::new(
             resolution,
-            None,
+            &UNIVERSAL_MARKERS,
             &[],
             false,
             false,
@@ -67,7 +68,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolutionGraph,
-        marker_env: Option<&'a MarkerEnvironment>,
+        marker_env: &'a ResolverMarkers,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
@@ -97,12 +98,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         let sources = if self.include_annotations {
             let mut sources = SourceAnnotations::default();
 
-            for requirement in self
-                .resolution
-                .requirements
-                .iter()
-                .filter(|requirement| requirement.evaluate_markers(self.marker_env, &[]))
-            {
+            for requirement in self.resolution.requirements.iter().filter(|requirement| {
+                requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+            }) {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
                         &requirement.name,
@@ -115,7 +113,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .resolution
                 .constraints
                 .requirements()
-                .filter(|requirement| requirement.evaluate_markers(self.marker_env, &[]))
+                .filter(|requirement| {
+                    requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+                })
             {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
@@ -129,7 +129,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .resolution
                 .overrides
                 .requirements()
-                .filter(|requirement| requirement.evaluate_markers(self.marker_env, &[]))
+                .filter(|requirement| {
+                    requirement.evaluate_markers(self.marker_env.marker_environment(), &[])
+                })
             {
                 if let Some(origin) = &requirement.origin {
                     sources.add(

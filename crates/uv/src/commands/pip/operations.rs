@@ -16,7 +16,6 @@ use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::Requirement;
 use uv_cache::Cache;
@@ -37,7 +36,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, ResolutionGraph, Resolver,
+    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverMarkers,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -88,7 +87,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     tags: Option<&Tags>,
-    markers: Option<&MarkerEnvironment>,
+    markers: ResolverMarkers,
     python_requirement: PythonRequirement,
     client: &RegistryClient,
     flat_index: &FlatIndex,
@@ -188,7 +187,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let preferences = Preferences::from_iter(preferences, markers);
+    let preferences = Preferences::from_iter(preferences, markers.marker_environment());
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -203,7 +202,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve(markers)
+            .resolve(&markers)
             .await?
         }
         DependencyMode::Direct => Vec::new(),

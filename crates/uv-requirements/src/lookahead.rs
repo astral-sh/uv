@@ -7,13 +7,12 @@ use thiserror::Error;
 use tracing::trace;
 
 use distribution_types::{BuiltDist, Dist, DistributionMetadata, GitSourceDist, SourceDist};
-use pep508_rs::MarkerEnvironment;
 use pypi_types::{Requirement, RequirementSource};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_git::GitUrl;
 use uv_normalize::GroupName;
-use uv_resolver::{InMemoryIndex, MetadataResponse};
+use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverMarkers};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 #[derive(Debug, Error)]
@@ -98,7 +97,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     /// to "only evaluate marker expressions that reference an extra name.")
     pub async fn resolve(
         self,
-        markers: Option<&MarkerEnvironment>,
+        markers: &ResolverMarkers,
     ) -> Result<Vec<RequestedRequirements>, LookaheadError> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
@@ -108,7 +107,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut queue: VecDeque<_> = self
             .constraints
             .apply(self.overrides.apply(self.requirements))
-            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+            .filter(|requirement| requirement.evaluate_markers(markers.marker_environment(), &[]))
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -127,7 +126,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         .constraints
                         .apply(self.overrides.apply(lookahead.requirements()))
                     {
-                        if requirement.evaluate_markers(markers, lookahead.extras()) {
+                        if requirement
+                            .evaluate_markers(markers.marker_environment(), lookahead.extras())
+                        {
                             queue.push_back((*requirement).clone());
                         }
                     }

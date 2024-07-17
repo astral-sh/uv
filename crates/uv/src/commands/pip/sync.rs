@@ -24,7 +24,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PreReleaseMode, PythonRequirement,
-    ResolutionMode,
+    ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
@@ -281,7 +281,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &upgrade,
         Some(&tags),
-        Some(&markers),
+        ResolverMarkers::SpecificEnvironment((*markers).clone()),
         python_requirement,
         &client,
         &flat_index,

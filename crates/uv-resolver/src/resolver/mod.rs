@@ -28,9 +28,10 @@ use distribution_types::{
 };
 pub(crate) use locals::ForkLocals;
 use pep440_rs::{Version, MIN_VERSION};
-use pep508_rs::{MarkerEnvironment, MarkerTree};
+use pep508_rs::MarkerTree;
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Requirement, VerbatimParsedUrl};
+pub use resolver_markers::ResolverMarkers;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -73,6 +74,7 @@ mod index;
 mod locals;
 mod provider;
 mod reporter;
+mod resolver_markers;
 mod urls;
 
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
@@ -94,8 +96,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     urls: Urls,
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
-    /// When not set, the resolver is in "universal" mode.
-    markers: Option<MarkerEnvironment>,
+    markers: ResolverMarkers,
     python_requirement: PythonRequirement,
     /// This is derived from `PythonRequirement` once at initialization
     /// time. It's used in universal mode to filter our dependencies with
@@ -140,7 +141,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         manifest: Manifest,
         options: Options,
         python_requirement: &'a PythonRequirement,
-        markers: Option<&'a MarkerEnvironment>,
+        markers: ResolverMarkers,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
@@ -156,7 +157,11 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             python_requirement
                 .target()
                 .and_then(|target| target.as_requires_python()),
-            AllowedYanks::from_manifest(&manifest, markers, options.dependency_mode),
+            AllowedYanks::from_manifest(
+                &manifest,
+                markers.marker_environment(),
+                options.dependency_mode,
+            ),
             hasher,
             options.exclude_newer,
             build_context.build_options(),
@@ -184,7 +189,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         manifest: Manifest,
         options: Options,
         hasher: &HashStrategy,
-        markers: Option<&MarkerEnvironment>,
+        markers: ResolverMarkers,
         python_requirement: &PythonRequirement,
         index: &InMemoryIndex,
         git: &GitResolver,
@@ -196,9 +201,18 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             git: git.clone(),
             unavailable_packages: DashMap::default(),
             incomplete_packages: DashMap::default(),
-            selector: CandidateSelector::for_resolution(options, &manifest, markers),
+            selector: CandidateSelector::for_resolution(
+                options,
+                &manifest,
+                markers.marker_environment(),
+            ),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(&manifest, markers, git, options.dependency_mode)?,
+            urls: Urls::from_manifest(
+                &manifest,
+                markers.marker_environment(),
+                git,
+                options.dependency_mode,
+            )?,
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
@@ -207,12 +221,12 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
-            markers: markers.cloned(),
-            requires_python: if markers.is_some() {
+            requires_python: if markers.marker_environment().is_some() {
                 None
             } else {
                 python_requirement.to_marker_tree()
             },
+            markers,
             python_requirement: python_requirement.clone(),
             reporter: None,
             installed_packages,
@@ -296,7 +310,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             fork_locals: ForkLocals::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
-            markers: ResolverMarkers::default(),
+            markers: self.markers.clone(),
             python_requirement: self.python_requirement.clone(),
             requires_python: self.requires_python.clone(),
         };
@@ -1090,13 +1104,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             markers,
             requires_python,
         );
-        if self.markers.is_some() {
-            return result.map(|deps| match deps {
+        match markers {
+            ResolverMarkers::SpecificEnvironment(_) => result.map(|deps| match deps {
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
-            });
+            }),
+            ResolverMarkers::Universal | ResolverMarkers::Fork(_) => Ok(result?.fork()),
         }
-        Ok(result?.fork())
     }
 
     /// Given a candidate package and version, return its dependencies.
@@ -1478,18 +1492,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 match extra {
                     Some(source_extra) => {
                         // Only include requirements that are relevant for the current extra.
-                        if requirement.evaluate_markers(self.markers.as_ref(), &[]) {
+                        if requirement.evaluate_markers(markers.marker_environment(), &[]) {
                             return false;
                         }
                         if !requirement.evaluate_markers(
-                            self.markers.as_ref(),
+                            markers.marker_environment(),
                             std::slice::from_ref(source_extra),
                         ) {
                             return false;
                         }
                     }
                     None => {
-                        if !requirement.evaluate_markers(self.markers.as_ref(), &[]) {
+                        if !requirement.evaluate_markers(markers.marker_environment(), &[]) {
                             return false;
                         }
                     }
@@ -1525,14 +1539,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             match extra {
                                 Some(source_extra) => {
                                     if !constraint.evaluate_markers(
-                                        self.markers.as_ref(),
+                                        markers.marker_environment(),
                                         std::slice::from_ref(source_extra),
                                     ) {
                                         return false;
                                     }
                                 }
                                 None => {
-                                    if !constraint.evaluate_markers(self.markers.as_ref(), &[]) {
+                                    if !constraint.evaluate_markers(markers.marker_environment(), &[]) {
                                         return false;
                                     }
                                 }
@@ -2880,39 +2894,6 @@ impl<'a> PossibleFork<'a> {
                 .map(|&(_, tree)| (*tree).clone())
                 .collect(),
         )
-    }
-}
-
-/// We may either be performing a universal resolution for all environments (but a python version
-/// constraint expressed separately) or we're in a fork solving only for specific markers.
-#[derive(Debug, Default, Clone)]
-pub(crate) enum ResolverMarkers {
-    #[default]
-    Universal,
-    Fork(MarkerTree),
-}
-
-impl ResolverMarkers {
-    /// Add the markers of an initial or subsequent fork to the current markers.
-    pub(crate) fn and(self, other: MarkerTree) -> MarkerTree {
-        match self {
-            ResolverMarkers::Universal => other,
-            ResolverMarkers::Fork(mut current) => {
-                current.and(other);
-                current
-            }
-        }
-    }
-}
-
-impl Display for ResolverMarkers {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResolverMarkers::Universal => f.write_str("universal"),
-            ResolverMarkers::Fork(markers) => {
-                write!(f, "({markers})")
-            }
-        }
     }
 }
 
