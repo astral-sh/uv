@@ -3,6 +3,7 @@ use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -31,7 +32,7 @@ pub struct File {
     pub hashes: Vec<HashDigest>,
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<u64>,
-    // N.B. We don't use a chrono DateTime<Utc> here because it's a little
+    // N.B. We don't use a Jiff timestamp here because it's a little
     // annoying to do so with rkyv. Since we only use this field for doing
     // comparisons in testing, we just store it as a UTC timestamp in
     // milliseconds.
@@ -57,7 +58,7 @@ impl File {
                 .transpose()
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
-            upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
+            upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: match Url::parse(&file.url) {
                 Ok(url) => FileLocation::AbsoluteUrl(url.into()),
                 Err(_) => FileLocation::RelativeUrl(base.to_string(), file.url),

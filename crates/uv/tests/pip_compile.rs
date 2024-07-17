@@ -2559,7 +2559,27 @@ fn compile_exclude_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04+02:00` is neither a valid date (trailing input) nor a valid datetime (input contains invalid characters)
+    error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04+02:00` could not be parsed as a valid date: parsed value '2022-04-04', but unparsed input "+02:00" remains (expected no unparsed input)
+
+    For more information, try '--help'.
+    "###
+    );
+
+    // Check the error message for the case of
+    // an invalid timestamp that still has a
+    // valid date.
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("requirements.in")
+        .arg("--exclude-newer")
+        .arg("2022-04-04T26:00:00+00"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time "26:00:00+00": hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
 
     For more information, try '--help'.
     "###
