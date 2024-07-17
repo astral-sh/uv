@@ -66,3 +66,7 @@ system's trust store.
 
 If client certificate authentication (mTLS) is desired, set the `SSL_CLIENT_CERT` environment
 variable to the path of the PEM formatted file containing the certificate followed by the private key.
+
+## Authentication with commercial package indexes
+
+See the [commercial indexes integration guide](../guides/integration/commercial-indexes.md) for details on authentication with popular commercial Python package indexes.
