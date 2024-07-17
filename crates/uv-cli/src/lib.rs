@@ -2067,7 +2067,7 @@ pub enum ToolCommand {
     #[command(alias = "ensurepath")]
     UpdateShell,
     /// Show the tools directory.
-    Dir,
+    Dir(ToolDirArgs),
 }
 
 #[derive(Args)]
@@ -2167,6 +2167,17 @@ pub struct ToolInstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolListArgs;
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ToolDirArgs {
+    /// Show the directory into which `uv tool` will install executables.
+    ///
+    /// By default, `uv tool dir` shows the directory into which the tool Python environments
+    /// themselves are installed, rather than the directory containing the linked executables.
+    #[arg(long, alias = "executable")]
+    pub bin: bool,
+}
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
