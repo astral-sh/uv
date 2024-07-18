@@ -838,6 +838,8 @@ async fn run_project(
             commands::run(
                 args.command,
                 requirements,
+                args.locked,
+                args.frozen,
                 args.package,
                 args.extras,
                 args.dev,
@@ -891,6 +893,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::lock(
+                args.locked,
+                args.frozen,
                 args.python,
                 args.settings,
                 globals.preview,

@@ -1784,6 +1784,14 @@ impl ExternalCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Install without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
     /// Include optional dependencies from the extra group name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -1909,6 +1917,14 @@ pub struct SyncArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct LockArgs {
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Assert that a `uv.lock` exists, without updating it.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
