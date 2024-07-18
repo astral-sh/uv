@@ -4934,6 +4934,7 @@ dependencies = [
  "install-wheel-rs",
  "itertools 0.13.0",
  "once_cell",
+ "owo-colors",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",

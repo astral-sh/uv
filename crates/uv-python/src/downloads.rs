@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::task::{Context, Poll};
 
 use futures::TryStreamExt;
+use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -30,9 +31,9 @@ pub enum Error {
     IO(#[from] io::Error),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
-    #[error("Invalid python version: {0}")]
+    #[error("Invalid Python version: {0}")]
     InvalidPythonVersion(String),
-    #[error("Invalid request key, too many parts: {0}")]
+    #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
     #[error("Download failed")]
     NetworkError(#[from] WrappedReqwestError),
@@ -48,7 +49,7 @@ pub enum Error {
         expected: String,
         actual: String,
     },
-    #[error("Invalid download url")]
+    #[error("Invalid download URL")]
     InvalidUrl(#[from] url::ParseError),
     #[error("Failed to create download directory")]
     DownloadDirError(#[source] io::Error),
@@ -64,12 +65,9 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to parse managed Python directory name: {0}")]
-    NameError(String),
     #[error("Failed to parse request part")]
     InvalidRequestPlatform(#[from] platform::Error),
-    // TODO(zanieb): Implement display for `PythonDownloadRequest`
-    #[error("No download found for request: {0:?}")]
+    #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
 }
 
