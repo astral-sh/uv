@@ -68,8 +68,6 @@ pub enum Error {
     NameError(String),
     #[error("Failed to parse request part")]
     InvalidRequestPlatform(#[from] platform::Error),
-    #[error("Cannot download managed Python for request: {0}")]
-    InvalidRequestKind(PythonRequest),
     // TODO(zanieb): Implement display for `PythonDownloadRequest`
     #[error("No download found for request: {0:?}")]
     NoDownloadFound(PythonDownloadRequest),
@@ -142,26 +140,23 @@ impl PythonDownloadRequest {
     ///
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
     /// a request for a specific directory or executable name.
-    pub fn try_from_request(request: &PythonRequest) -> Option<Self> {
-        Self::from_request(request).ok()
-    }
-
-    /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`].
-    pub fn from_request(request: &PythonRequest) -> Result<Self, Error> {
+    pub fn from_request(request: &PythonRequest) -> Option<Self> {
         match request {
-            PythonRequest::Version(version) => Ok(Self::default().with_version(version.clone())),
+            PythonRequest::Version(version) => Some(Self::default().with_version(version.clone())),
             PythonRequest::Implementation(implementation) => {
-                Ok(Self::default().with_implementation(*implementation))
+                Some(Self::default().with_implementation(*implementation))
             }
-            PythonRequest::ImplementationVersion(implementation, version) => Ok(Self::default()
-                .with_implementation(*implementation)
-                .with_version(version.clone())),
-            PythonRequest::Key(request) => Ok(request.clone()),
-            PythonRequest::Any => Ok(Self::default()),
+            PythonRequest::ImplementationVersion(implementation, version) => Some(
+                Self::default()
+                    .with_implementation(*implementation)
+                    .with_version(version.clone()),
+            ),
+            PythonRequest::Key(request) => Some(request.clone()),
+            PythonRequest::Any => Some(Self::default()),
             // We can't download a managed installation for these request kinds
             PythonRequest::Directory(_)
             | PythonRequest::ExecutableName(_)
-            | PythonRequest::File(_) => Err(Error::InvalidRequestKind(request.clone())),
+            | PythonRequest::File(_) => None,
         }
     }
 

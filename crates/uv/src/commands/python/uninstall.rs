@@ -7,7 +7,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_configuration::PreviewMode;
-use uv_python::downloads::{self, PythonDownloadRequest};
+use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::PythonRequest;
 use uv_warnings::warn_user_once;
@@ -43,8 +43,12 @@ pub(crate) async fn uninstall(
 
     let download_requests = requests
         .iter()
-        .map(PythonDownloadRequest::from_request)
-        .collect::<Result<Vec<_>, downloads::Error>>()?;
+        .map(|request| {
+            PythonDownloadRequest::from_request(request).ok_or_else(|| {
+                anyhow::anyhow!("Cannot uninstall managed Python for request: {request}")
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut matching_installations = BTreeSet::default();
