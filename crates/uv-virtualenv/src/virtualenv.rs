@@ -1,4 +1,4 @@
-//! Create a bare virtualenv without any packages installed.
+//! Create a virtual environment.
 
 use std::env;
 use std::env::consts::EXE_SUFFIX;
@@ -18,7 +18,7 @@ use uv_version::version;
 
 use crate::{Error, Prompt};
 
-/// The bash activate scripts with the venv dependent paths patches out
+/// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate", include_str!("activator/activate")),
     ("activate.csh", include_str!("activator/activate.csh")),
@@ -43,8 +43,8 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     Ok(())
 }
 
-/// Write all the files that belong to a venv without any packages installed.
-pub fn create_bare_venv(
+/// Create a [`VirtualEnvironment`] at the given location.
+pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
     prompt: Prompt,
@@ -370,15 +370,15 @@ enum WindowsExecutable {
     PythonMajorMinor,
     /// The `pythonw.exe` executable (or `venvwlauncher.exe` launcher shim).
     Pythonw,
-    // The `pypy.exe` executable
+    /// The `pypy.exe` executable.
     PyPy,
-    // The `pypy3.exe` executable
+    /// The `pypy3.exe` executable.
     PyPyMajor,
-    // The `pypy3.<minor>.exe` executable
+    /// The `pypy3.<minor>.exe` executable.
     PyPyMajorMinor,
-    // The `pypyw.exe` executable
+    /// The `pypyw.exe` executable.
     PyPyw,
-    // The `pypy3.<minor>w.exe` executable
+    /// The `pypy3.<minor>w.exe` executable.
     PyPyMajorMinorw,
 }
 
