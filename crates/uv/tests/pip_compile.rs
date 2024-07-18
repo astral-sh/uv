@@ -9520,12 +9520,15 @@ fn compile_index_url_unsafe_highest() -> Result<()> {
 /// In this case, anyio 3.5.0 is hosted on the "extra" index, but older versions are available on
 /// the "primary" index. We should prefer the older version from the "primary" index, despite the
 /// "extra" index being the preferred index.
+///
+/// We also test here that a warning is raised for missing lower bounds on direct dependencies with
+/// `--resolution lowest`.
 #[test]
 fn compile_index_url_unsafe_lowest() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("anyio")?;
+    requirements_in.write_str("anyio<100")?;
 
     uv_snapshot!(context.pip_compile()
         .arg("--resolution")
@@ -9547,6 +9550,7 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
+    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound when using `--resolution-strategy lowest` to avoid using outdated versions.
     Resolved 1 package in [TIME]
     "###
     );

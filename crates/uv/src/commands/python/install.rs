@@ -91,7 +91,7 @@ pub(crate) async fn install(
             .find(|installation| download_request.satisfied_by_key(installation.key()))
         {
             if matches!(request, PythonRequest::Any) {
-                writeln!(printer.stderr(), "Found: {}", installation.key().green(),)?;
+                writeln!(printer.stderr(), "Found: {}", installation.key().green())?;
             } else {
                 writeln!(
                     printer.stderr(),
