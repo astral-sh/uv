@@ -5139,7 +5139,6 @@ dependencies = [
  "uv-python",
  "uv-state",
  "uv-virtualenv",
- "uv-warnings",
 ]
 
 [[package]]

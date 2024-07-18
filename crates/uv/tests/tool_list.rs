@@ -114,8 +114,7 @@ fn tool_list_missing_receipt() {
 
     ----- stderr -----
     warning: `uv tool list` is experimental and may change without warning.
-    warning: Ignoring malformed tool `black`: missing receipt
-    No tools installed
+    warning: Ignoring malformed tool `black` (run `uv tool uninstall black` to remove)
     "###);
 }
 
