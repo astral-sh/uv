@@ -80,8 +80,8 @@ install your project's dependencies.
 `uv.lock` is a cross-platform lockfile that contains exact information about your
 project's dependencies. Unlike the `pyproject.toml` which is used to specify the
 broad requirements of your project, the lockfile contains the exact resolved versions
-that are installed in the virtual environment. This allows for consistent and
-reproducible installations across machines.
+that are installed in the virtual environment. This file should be checked into version
+control, allowing for consistent and reproducible installations across machines.
 
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be
 edited manually.
