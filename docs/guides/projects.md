@@ -22,10 +22,8 @@ This will create the following directory structure:
 
 ```
 .
-├── .venv
 ├── pyproject.toml
 ├── README.md
-├── uv.lock
 └── src
     └── hello-world
         └── __init__.py
@@ -46,7 +44,9 @@ or a custom format altogether.
 ## Project structure
 
 A project consists of a few important parts that work together and allow uv to
-manage your project.
+manage your project. Along with the files created by `uv init`, uv will create a
+virtual environment and `uv.lock` file in the root of your project the first time you
+run a project command.
 
 ### `pyproject.toml`
 
