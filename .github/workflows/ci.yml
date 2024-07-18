@@ -712,7 +712,9 @@ jobs:
         run: chmod +x ./uv
 
       - name: Graalpy info
-        run: which graalpy
+        run: |
+          which graalpy
+          echo "GRAAL_PYTHONHOME=$(graalpy -c 'print(__graalpython__.home)')" >> $GITHUB_ENV
 
       - name: "Create a virtual environment"
         run: |
