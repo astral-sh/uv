@@ -9550,7 +9550,7 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound.
+    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound when using `--resolution-strategy lowest` to avoid using outdated versions.
     Resolved 1 package in [TIME]
     "###
     );
