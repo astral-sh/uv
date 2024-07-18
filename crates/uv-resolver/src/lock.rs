@@ -1,13 +1,14 @@
 #![allow(clippy::default_trait_access)]
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
 use either::Either;
+use itertools::Itertools;
 use path_slash::PathExt;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -236,31 +237,16 @@ impl Lock {
 
         // Remove any non-existent extras (e.g., extras that were requested but don't exist).
         for dist in &mut distributions {
-            dist.dependencies.retain(|dep| {
-                dep.extra.as_ref().map_or(true, |extra| {
+            for dep in dist
+                .dependencies
+                .iter_mut()
+                .chain(dist.optional_dependencies.values_mut().flatten())
+                .chain(dist.dev_dependencies.values_mut().flatten())
+            {
+                dep.extra.retain(|extra| {
                     extras_by_id
                         .get(&dep.distribution_id)
                         .is_some_and(|extras| extras.contains(extra))
-                })
-            });
-
-            for dependencies in dist.optional_dependencies.values_mut() {
-                dependencies.retain(|dep| {
-                    dep.extra.as_ref().map_or(true, |extra| {
-                        extras_by_id
-                            .get(&dep.distribution_id)
-                            .is_some_and(|extras| extras.contains(extra))
-                    })
-                });
-            }
-
-            for dependencies in dist.dev_dependencies.values_mut() {
-                dependencies.retain(|dep| {
-                    dep.extra.as_ref().map_or(true, |extra| {
-                        extras_by_id
-                            .get(&dep.distribution_id)
-                            .is_some_and(|extras| extras.contains(extra))
-                    })
                 });
             }
         }
@@ -400,10 +386,14 @@ impl Lock {
                     .as_ref()
                     .map_or(true, |marker| marker.evaluate(marker_env, &[]))
                 {
-                    if seen.insert((&dep.distribution_id, dep.extra.as_ref())) {
-                        let dep_dist = self.find_by_id(&dep.distribution_id);
-                        let dep_extra = dep.extra.as_ref();
-                        queue.push_back((dep_dist, dep_extra));
+                    let dep_dist = self.find_by_id(&dep.distribution_id);
+                    if seen.insert((&dep.distribution_id, None)) {
+                        queue.push_back((dep_dist, None));
+                    }
+                    for extra in &dep.extra {
+                        if seen.insert((&dep.distribution_id, Some(extra))) {
+                            queue.push_back((dep_dist, Some(extra)));
+                        }
                     }
                 }
             }
@@ -610,8 +600,16 @@ impl Distribution {
 
     /// Add the [`AnnotatedDist`] as a dependency of the [`Distribution`].
     fn add_dependency(&mut self, annotated_dist: &AnnotatedDist, marker: Option<&MarkerTree>) {
-        self.dependencies
-            .push(Dependency::from_annotated_dist(annotated_dist, marker));
+        let new_dep = Dependency::from_annotated_dist(annotated_dist, marker);
+        for existing_dep in &mut self.dependencies {
+            if existing_dep.distribution_id == new_dep.distribution_id
+                && existing_dep.marker == new_dep.marker
+            {
+                existing_dep.extra.extend(new_dep.extra);
+                return;
+            }
+        }
+        self.dependencies.push(new_dep);
     }
 
     /// Add the [`AnnotatedDist`] as an optional dependency of the [`Distribution`].
@@ -2030,7 +2028,7 @@ impl TryFrom<WheelWire> for Wheel {
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 struct Dependency {
     distribution_id: DistributionId,
-    extra: Option<ExtraName>,
+    extra: BTreeSet<ExtraName>,
     marker: Option<MarkerTree>,
 }
 
@@ -2040,7 +2038,7 @@ impl Dependency {
         marker: Option<&MarkerTree>,
     ) -> Dependency {
         let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
-        let extra = annotated_dist.extra.clone();
+        let extra = annotated_dist.extra.iter().cloned().collect();
         let marker = marker.cloned();
         Dependency {
             distribution_id,
@@ -2056,13 +2054,11 @@ impl Dependency {
         extras: &mut FxHashMap<PackageName, Vec<ExtraName>>,
     ) -> Result<Option<Requirement>, LockError> {
         // Keep track of extras, these will be denormalized later.
-        if let Some(ref extra) = self.extra {
+        if !self.extra.is_empty() {
             extras
                 .entry(self.distribution_id.name.clone())
                 .or_default()
-                .push(extra.clone());
-
-            return Ok(None);
+                .extend(self.extra.iter().cloned());
         }
 
         // Reconstruct the `RequirementSource` from the `Source`.
@@ -2129,8 +2125,13 @@ impl Dependency {
         let mut table = Table::new();
         self.distribution_id
             .to_toml(Some(dist_count_by_name), &mut table);
-        if let Some(ref extra) = self.extra {
-            table.insert("extra", value(extra.to_string()));
+        if !self.extra.is_empty() {
+            let extra_array = self
+                .extra
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Array>();
+            table.insert("extra", value(extra_array));
         }
         if let Some(ref marker) = self.marker {
             table.insert("marker", value(marker.to_string()));
@@ -2142,20 +2143,20 @@ impl Dependency {
 
 impl std::fmt::Display for Dependency {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(ref extra) = self.extra {
+        if self.extra.is_empty() {
             write!(
                 f,
-                "{}[{}]=={} @ {}",
+                "{}=={} @ {}",
                 self.distribution_id.name,
-                extra,
                 self.distribution_id.version,
                 self.distribution_id.source
             )
         } else {
             write!(
                 f,
-                "{}=={} @ {}",
+                "{}[{}]=={} @ {}",
                 self.distribution_id.name,
+                self.extra.iter().join(","),
                 self.distribution_id.version,
                 self.distribution_id.source
             )
@@ -2168,9 +2169,8 @@ impl std::fmt::Display for Dependency {
 struct DependencyWire {
     #[serde(flatten)]
     distribution_id: DistributionIdForDependency,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    extra: Option<ExtraName>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    extra: BTreeSet<ExtraName>,
     marker: Option<MarkerTree>,
 }
 
