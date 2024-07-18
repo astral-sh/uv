@@ -151,6 +151,8 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) command: ExternalCommand,
@@ -166,6 +168,8 @@ impl RunSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let RunArgs {
+            locked,
+            frozen,
             extra,
             all_extras,
             no_all_extras,
@@ -181,6 +185,8 @@ impl RunSettings {
         } = args;
 
         Self {
+            locked,
+            frozen,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
@@ -517,6 +523,8 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
@@ -527,6 +535,8 @@ impl LockSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
+            locked,
+            frozen,
             resolver,
             build,
             refresh,
@@ -534,6 +544,8 @@ impl LockSettings {
         } = args;
 
         Self {
+            locked,
+            frozen,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),

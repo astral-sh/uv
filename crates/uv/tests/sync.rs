@@ -59,7 +59,7 @@ fn locked() -> Result<()> {
     )?;
 
     // Running with `--locked` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

@@ -28,15 +28,19 @@ use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::project::ProjectError;
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
+    locked: bool,
+    frozen: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: bool,
@@ -180,14 +184,11 @@ pub(crate) async fn run(
             )
             .await?;
 
-            // Read the existing lockfile.
-            let existing = project::lock::read(project.workspace()).await?;
-
-            // Lock and sync the environment.
-            let lock = project::lock::do_lock(
+            let lock = match project::lock::do_safe_lock(
+                locked,
+                frozen,
                 project.workspace(),
                 venv.interpreter(),
-                existing.as_ref(),
                 settings.as_ref().into(),
                 &state,
                 preview,
@@ -197,11 +198,18 @@ pub(crate) async fn run(
                 cache,
                 printer,
             )
-            .await?;
-
-            if !existing.is_some_and(|existing| existing == lock) {
-                project::lock::commit(&lock, project.workspace()).await?;
-            }
+            .await
+            {
+                Ok(lock) => lock,
+                Err(ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                ))) => {
+                    let report = miette::Report::msg(format!("{err}")).context(err.header());
+                    anstream::eprint!("{report:?}");
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(err) => return Err(err.into()),
+            };
 
             project::sync::do_sync(
                 &project,
