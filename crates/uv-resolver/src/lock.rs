@@ -24,7 +24,7 @@ use distribution_types::{
     RemoteSource, Resolution, ResolvedDist, SourceDistCompatibility, ToUrlError, UrlString,
     VersionId, WheelCompatibility,
 };
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{
     ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, VerbatimUrl, VerbatimUrlError,
 };
@@ -2068,7 +2068,12 @@ impl Dependency {
         // Reconstruct the `RequirementSource` from the `Source`.
         let source = match &self.distribution_id.source {
             Source::Registry(_) => RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
+                // We don't store the version specifier that was originally used for resolution in
+                // the lockfile, so this might be too restrictive. However, this is the only version
+                // we have the metadata for, so if resolution fails we will need to fallback to a
+                // clean resolve.
+                specifier: VersionSpecifier::equals_version(self.distribution_id.version.clone())
+                    .into(),
                 index: None,
             },
             Source::Git(repository, git) => {
