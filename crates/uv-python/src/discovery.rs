@@ -1,6 +1,5 @@
 use itertools::{Either, Itertools};
 use regex::Regex;
-use rustix::path::Arg;
 use same_file::is_same_file;
 use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
@@ -449,7 +448,7 @@ fn find_all_minor(
                     let Some(filename) = path.file_name() else {
                         return false;
                     };
-                    let Some(filename) = filename.as_str().ok() else {
+                    let Some(filename) = filename.to_str() else {
                         return false;
                     };
                     let Some(captures) = regex.captures(filename) else {

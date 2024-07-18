@@ -4,7 +4,8 @@ use std::path::Path;
 ///
 /// Derived from `which`'s `Checker`.
 pub(crate) fn is_executable(path: &Path) -> bool {
-    if cfg!(any(unix, target_os = "wasi", target_os = "redox")) {
+    #[cfg(any(unix, target_os = "wasi", target_os = "redox"))]
+    {
         if rustix::fs::access(path, rustix::fs::Access::EXEC_OK).is_err() {
             return false;
         }
@@ -12,13 +13,11 @@ pub(crate) fn is_executable(path: &Path) -> bool {
 
     #[cfg(target_os = "windows")]
     {
-        if !fs_err::symlink_metadata(path)
-            .map(|metadata| {
-                let file_type = metadata.file_type();
-                file_type.is_file() || file_type.is_symlink()
-            })
-            .unwrap_or(false)
-        {
+        let Ok(file_type) = fs_err::symlink_metadata(path).map(|metadata| metadata.file_type())
+        else {
+            return false;
+        };
+        if !file_type.is_file() && !file_type.is_symlink() {
             return false;
         }
         if path.extension().is_none()
