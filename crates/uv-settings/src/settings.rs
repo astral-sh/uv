@@ -129,7 +129,7 @@ pub struct GlobalOptions {
         default = "\"automatic\"",
         value_type = "str",
         example = r#"
-            python-fetch = \"automatic\"
+            python-fetch = "manual"
         "#,
         possible_values = true
     )]
@@ -203,7 +203,7 @@ pub struct ResolverInstallerOptions {
         default = "\"https://pypi.org/simple\"",
         value_type = "str",
         example = r#"
-            index-url = "https://pypi.org/simple"
+            index-url = "https://test.pypi.org/simple"
         "#
     )]
     pub index_url: Option<IndexUrl>,
@@ -536,7 +536,7 @@ pub struct PipOptions {
         default = "\"https://pypi.org/simple\"",
         value_type = "str",
         example = r#"
-            index-url = "https://pypi.org/simple"
+            index-url = "https://test.pypi.org/simple"
         "#
     )]
     pub index_url: Option<IndexUrl>,
@@ -826,7 +826,7 @@ pub struct PipOptions {
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[option(
-        default = "None",
+        default = "false",
         value_type = "bool",
         example = r#"
             legacy-setup-py = true
@@ -876,7 +876,7 @@ pub struct PipOptions {
     /// treated as a lower bound. For example, `--universal --python-version 3.7` would produce a
     /// universal resolution for Python 3.7 and later.
     #[option(
-        default = "None",
+        default = "false",
         value_type = "bool",
         example = r#"
             universal = true
@@ -928,7 +928,7 @@ pub struct PipOptions {
         default = "false",
         value_type = "bool",
         example = r#"
-            emit-binary = true
+            emit-build-options = true
         "#
     )]
     pub emit_build_options: Option<bool>,
