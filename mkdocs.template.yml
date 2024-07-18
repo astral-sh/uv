@@ -90,9 +90,10 @@ nav:
       - Environment variables: configuration/environment.md
       - Settings: settings.md
   - Integration guides:
-      - Using in Docker: guides/docker.md
-      - Using in GitHub Actions: guides/github.md
-      - Using in pre-commit: guides/pre-commit.md
+      - Docker: guides/integration/docker.md
+      - GitHub Actions: guides/integration/github.md
+      - Pre-commit: guides/integration/pre-commit.md
+      - Commercial indexes: guides/integration/commercial-indexes.md
   - Low-level operations:
       - Using environments: pip/environments.md
       - Managing packages: pip/packages.md

@@ -74,7 +74,7 @@ brew install uv
 
 uv provides a Docker image at [`ghcr.io/astral-sh/uv`](https://github.com/astral-sh/uv/pkgs/container/uv).
 
-See our guide on [using uv in Docker](./guides/docker.md) for more details.
+See our guide on [using uv in Docker](./guides/integration/docker.md) for more details.
 
 ## GitHub Releases
 
