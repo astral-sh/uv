@@ -2185,6 +2185,8 @@ pub enum ToolCommand {
     Uvx(ToolRunArgs),
     /// Install a tool.
     Install(ToolInstallArgs),
+    /// Upgrade a tool.
+    Upgrade(ToolUpgradeArgs),
     /// List installed tools.
     List(ToolListArgs),
     /// Uninstall a tool.
@@ -2327,6 +2329,27 @@ pub struct ToolUninstallArgs {
     /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]
     pub all: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ToolUpgradeArgs {
+    /// The name of the tool to upgrade.
+    #[arg(required = true)]
+    pub name: Option<PackageName>,
+
+    /// Upgrade all tools.
+    #[arg(long, conflicts_with("name"))]
+    pub all: bool,
+
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
 }
 
 #[derive(Args)]

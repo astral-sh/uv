@@ -9,7 +9,10 @@ use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{ExtraName, RequirementOrigin};
 use pypi_types::Requirement;
 use uv_cache::{CacheArgs, Refresh};
-use uv_cli::options::{flag, resolver_installer_options, resolver_options};
+use uv_cli::{
+    options::{flag, resolver_installer_options, resolver_options},
+    ToolUpgradeArgs,
+};
 use uv_cli::{
     AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs,
     Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
@@ -350,6 +353,42 @@ impl ToolListSettings {
         let ToolListArgs { show_paths } = args;
 
         Self { show_paths }
+    }
+}
+
+/// The resolved settings to use for a `tool upgrade` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolUpgradeSettings {
+    pub(crate) name: Option<PackageName>,
+    pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) refresh: Refresh,
+}
+
+impl ToolUpgradeSettings {
+    /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolUpgradeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let ToolUpgradeArgs {
+            name,
+            all,
+            mut installer,
+            build,
+            refresh,
+        } = args;
+
+        if !installer.upgrade && installer.upgrade_package.is_empty() {
+            installer.upgrade = true;
+        }
+
+        Self {
+            name: name.filter(|_| !all),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
+            refresh: Refresh::from(refresh),
+        }
     }
 }
 

@@ -701,6 +701,28 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::tool_list(args.show_paths, globals.preview, &cache, printer).await
         }
         Commands::Tool(ToolNamespace {
+            command: ToolCommand::Upgrade(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::tool_upgrade(
+                args.name,
+                globals.connectivity,
+                args.settings,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                globals.preview,
+                printer,
+            )
+            .await
+        }
+        Commands::Tool(ToolNamespace {
             command: ToolCommand::Uninstall(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.

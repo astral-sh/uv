@@ -480,6 +480,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv upgrade run` command with options shared across scenarios.
+    pub fn tool_upgrade(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("tool").arg("upgrade");
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv tool install` command with options shared across scenarios.
     pub fn tool_install(&self) -> std::process::Command {
         let mut command = self.tool_install_without_exclude_newer();

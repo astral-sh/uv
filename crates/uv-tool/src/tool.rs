@@ -112,6 +112,10 @@ impl Tool {
     pub fn requirements(&self) -> &[pep508_rs::Requirement<VerbatimParsedUrl>] {
         &self.requirements
     }
+
+    pub fn python(&self) -> &Option<String> {
+        &self.python
+    }
 }
 
 impl ToolEntrypoint {
