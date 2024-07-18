@@ -1,3 +1,4 @@
+use anstream::println;
 use anyhow::Context;
 use owo_colors::OwoColorize;
 
@@ -14,11 +15,11 @@ pub(crate) fn dir(bin: bool, preview: PreviewMode) -> anyhow::Result<()> {
 
     if bin {
         let executable_directory = find_executable_directory()?;
-        anstream::println!("{}", executable_directory.simplified_display().cyan());
+        println!("{}", executable_directory.simplified_display().cyan());
     } else {
         let installed_tools =
             InstalledTools::from_settings().context("Failed to initialize tools settings")?;
-        anstream::println!("{}", installed_tools.root().simplified_display().cyan());
+        println!("{}", installed_tools.root().simplified_display().cyan());
     }
 
     Ok(())

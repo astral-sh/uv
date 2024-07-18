@@ -2215,7 +2215,7 @@ pub struct ToolDirArgs {
     ///
     /// By default, `uv tool dir` shows the directory into which the tool Python environments
     /// themselves are installed, rather than the directory containing the linked executables.
-    #[arg(long, alias = "executable")]
+    #[arg(long)]
     pub bin: bool,
 }
 
