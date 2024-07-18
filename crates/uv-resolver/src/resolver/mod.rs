@@ -1060,12 +1060,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
         };
 
-        debug!(
-            "Selecting: {}=={} ({})",
-            name,
-            candidate.version(),
-            filename,
-        );
+        if candidate.preference() {
+            debug!(
+                "Selecting: {}=={} (preference, {})",
+                name,
+                candidate.version(),
+                filename,
+            );
+        } else {
+            debug!(
+                "Selecting: {}=={} ({})",
+                name,
+                candidate.version(),
+                filename,
+            );
+        }
 
         // We want to return a package pinned to a specific version; but we _also_ want to
         // store the exact file that we selected to satisfy that version.

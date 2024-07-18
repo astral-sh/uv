@@ -132,6 +132,7 @@ impl CandidateSelector {
                                     dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
                                         dist,
                                     )),
+                                    preference: true,
                                 });
                             }
                         }
@@ -148,7 +149,7 @@ impl CandidateSelector {
                     .iter()
                     .find_map(|version_map| version_map.get(version))
                 {
-                    return Some(Candidate::new(package_name, version, file));
+                    return Some(Candidate::new(package_name, version, file, true));
                 }
             }
         }
@@ -167,6 +168,7 @@ impl CandidateSelector {
                             name: package_name,
                             version,
                             dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
+                            preference: true,
                         });
                     }
                 }
@@ -311,7 +313,7 @@ impl CandidateSelector {
                             );
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
-                            Candidate::new(package_name, version, dist)
+                            Candidate::new(package_name, version, dist, false)
                         }
                         AllowPreRelease::IfNecessary => {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
@@ -350,7 +352,7 @@ impl CandidateSelector {
                         steps,
                         version,
                     );
-                    Candidate::new(package_name, version, dist)
+                    Candidate::new(package_name, version, dist, false)
                 } else {
                     continue;
                 }
@@ -385,7 +387,7 @@ impl CandidateSelector {
             None => None,
             Some(PreReleaseCandidate::NotNecessary) => None,
             Some(PreReleaseCandidate::IfNecessary(version, dist)) => {
-                Some(Candidate::new(package_name, version, dist))
+                Some(Candidate::new(package_name, version, dist, false))
             }
         }
     }
@@ -426,14 +428,22 @@ pub(crate) struct Candidate<'a> {
     version: &'a Version,
     /// The distributions to use for resolving and installing the package.
     dist: CandidateDist<'a>,
+    /// Whether this candidate was selected from a preference.
+    preference: bool,
 }
 
 impl<'a> Candidate<'a> {
-    fn new(name: &'a PackageName, version: &'a Version, dist: &'a PrioritizedDist) -> Self {
+    fn new(
+        name: &'a PackageName,
+        version: &'a Version,
+        dist: &'a PrioritizedDist,
+        preference: bool,
+    ) -> Self {
         Self {
             name,
             version,
             dist: CandidateDist::from(dist),
+            preference,
         }
     }
 
@@ -454,6 +464,11 @@ impl<'a> Candidate<'a> {
         } else {
             None
         }
+    }
+
+    /// Return this candidate was selected from a preference.
+    pub(crate) fn preference(&self) -> bool {
+        self.preference
     }
 
     /// Return the distribution for the candidate.
