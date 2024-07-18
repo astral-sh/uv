@@ -1,15 +1,16 @@
-use std::borrow::Cow;
-use std::fmt::{self, Formatter};
-use std::{env, io};
-use std::{path::Path, path::PathBuf, str::FromStr};
-
-use itertools::Itertools;
-use pep440_rs::{Version, VersionSpecifiers};
+use itertools::{Either, Itertools};
+use regex::Regex;
 use same_file::is_same_file;
+use std::borrow::Cow;
+use std::env::consts::EXE_SUFFIX;
+use std::fmt::{self, Formatter};
+use std::{env, io, iter};
+use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use which::{which, which_all};
 
+use pep440_rs::{Version, VersionSpecifiers};
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
@@ -25,6 +26,7 @@ use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
 };
+use crate::which::is_executable;
 use crate::{Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
@@ -360,10 +362,8 @@ fn python_executables_from_search_path<'a>(
     let search_path =
         env::var_os("UV_TEST_PYTHON_PATH").unwrap_or(env::var_os("PATH").unwrap_or_default());
 
-    let possible_names: Vec<_> = version
-        .unwrap_or(&VersionRequest::Any)
-        .possible_names(implementation)
-        .collect();
+    let version_request = version.unwrap_or(&VersionRequest::Any);
+    let possible_names: Vec<_> = version_request.possible_names(implementation).collect();
 
     trace!(
         "Searching PATH for executables: {}",
@@ -371,7 +371,8 @@ fn python_executables_from_search_path<'a>(
     );
 
     // Split and iterate over the paths instead of using `which_all` so we can
-    // check multiple names per directory while respecting the search path order
+    // check multiple names per directory while respecting the search path order and python names
+    // precedence.
     let search_dirs: Vec<_> = env::split_paths(&search_path).collect();
     search_dirs
         .into_iter()
@@ -391,8 +392,11 @@ fn python_executables_from_search_path<'a>(
                     which::which_in_global(&*name, Some(&dir))
                         .into_iter()
                         .flatten()
+                        // We have to collect since `which` requires that the regex outlives its
+                        // parameters, and the dir is local while we return the iterator.
                         .collect::<Vec<_>>()
                 })
+                .chain(find_all_minor(implementation, version_request, &dir_clone))
                 .filter(|path| !is_windows_store_shim(path))
                 .inspect(|path| trace!("Found possible Python executable: {}", path.display()))
                 .chain(
@@ -408,6 +412,71 @@ fn python_executables_from_search_path<'a>(
                         .flatten(),
                 )
         })
+}
+
+/// Find all acceptable `python3.x` minor versions.
+///
+/// For example, let's say `python` and `python3` are Python 3.10. When a user requests `>= 3.11`,
+/// we still need to find a `python3.12` in PATH.
+fn find_all_minor(
+    implementation: Option<&ImplementationName>,
+    version_request: &VersionRequest,
+    dir: &Path,
+) -> impl Iterator<Item = PathBuf> {
+    match version_request {
+        VersionRequest::Any | VersionRequest::Major(_) | VersionRequest::Range(_) => {
+            let regex = if let Some(implementation) = implementation {
+                Regex::new(&format!(
+                    r"^({}|python3)\.(?<minor>\d\d?){}$",
+                    regex::escape(&implementation.to_string()),
+                    regex::escape(EXE_SUFFIX)
+                ))
+                .unwrap()
+            } else {
+                Regex::new(&format!(
+                    r"^python3\.(?<minor>\d\d?){}$",
+                    regex::escape(EXE_SUFFIX)
+                ))
+                .unwrap()
+            };
+            let all_minors = fs_err::read_dir(dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(move |path| {
+                    let Some(filename) = path.file_name() else {
+                        return false;
+                    };
+                    let Some(filename) = filename.to_str() else {
+                        return false;
+                    };
+                    let Some(captures) = regex.captures(filename) else {
+                        return false;
+                    };
+
+                    // Filter out interpreter we already know have a too low minor version.
+                    let minor = captures["minor"].parse().ok();
+                    if let Some(minor) = minor {
+                        // Optimization: Skip generally unsupported Python versions without querying.
+                        if minor < 7 {
+                            return false;
+                        }
+                        // Optimization 2: Skip excluded Python (minor) versions without querying.
+                        if !version_request.matches_major_minor(3, minor) {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .filter(|path| is_executable(path))
+                .collect::<Vec<_>>();
+            Either::Left(all_minors.into_iter())
+        }
+        VersionRequest::MajorMinor(_, _) | VersionRequest::MajorMinorPatch(_, _, _) => {
+            Either::Right(iter::empty())
+        }
+    }
 }
 
 /// Lazily iterate over all discoverable Python interpreters.
@@ -1596,11 +1665,12 @@ mod tests {
     use assert_fs::{prelude::*, TempDir};
     use test_log::test;
 
-    use super::Error;
     use crate::{
         discovery::{PythonRequest, VersionRequest},
         implementation::ImplementationName,
     };
+
+    use super::Error;
 
     #[test]
     fn interpreter_request_from_str() {
