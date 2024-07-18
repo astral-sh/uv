@@ -23,7 +23,7 @@ These commands are intended for managing development of a Python project. In the
 - `uv sync`
 - `uv lock`
 
-See the documentation on [projects](./projects.md) for more details on getting started.
+See the [project guide](./guides/projects.md) for more details on getting started.
 
 ### Toolchain management
 
