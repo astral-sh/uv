@@ -6,9 +6,7 @@ use thiserror::Error;
 use platform_tags::PlatformError;
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use crate::bare::create_bare_venv;
-
-mod bare;
+mod virtualenv;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -56,7 +54,7 @@ pub fn create_venv(
     allow_existing: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
-    let virtualenv = create_bare_venv(
+    let virtualenv = virtualenv::create(
         location,
         &interpreter,
         prompt,
