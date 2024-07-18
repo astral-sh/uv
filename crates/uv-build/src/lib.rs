@@ -87,7 +87,7 @@ static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
     #[error("Invalid source distribution: {0}")]
     InvalidSourceDist(String),
     #[error("Invalid `pyproject.toml`")]

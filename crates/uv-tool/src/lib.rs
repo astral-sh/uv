@@ -30,7 +30,7 @@ mod tool;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
     #[error("Failed to update `uv-receipt.toml` at {0}")]
     ReceiptWrite(PathBuf, #[source] Box<toml::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
@@ -121,7 +121,7 @@ impl InstalledTools {
         let path = self.tool_dir(name).join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
-            Err(Error::IO(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err),
         }
     }

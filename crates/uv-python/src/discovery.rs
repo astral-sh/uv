@@ -149,7 +149,7 @@ pub enum PythonSource {
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
 
     /// An error was encountering when retrieving interpreter information.
     #[error(transparent)]

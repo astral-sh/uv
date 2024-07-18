@@ -169,7 +169,7 @@ impl RequirementsTxt {
                 {
                     return Err(RequirementsTxtFileError {
                         file: requirements_txt.to_path_buf(),
-                        error: RequirementsTxtParserError::IO(io::Error::new(
+                        error: RequirementsTxtParserError::Io(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             "Remote file not supported without `http` feature",
                         )),
@@ -182,7 +182,7 @@ impl RequirementsTxt {
                     if client_builder.is_offline() {
                         return Err(RequirementsTxtFileError {
                             file: requirements_txt.to_path_buf(),
-                            error: RequirementsTxtParserError::IO(io::Error::new(
+                            error: RequirementsTxtParserError::Io(io::Error::new(
                                 io::ErrorKind::InvalidInput,
                                 format!("Network connectivity is disabled, but a remote requirements file was requested: {}", requirements_txt.display()),
                             )),
@@ -196,7 +196,7 @@ impl RequirementsTxt {
                 // Ex) `file:///home/ferris/project/requirements.txt`
                 uv_fs::read_to_string_transcode(&requirements_txt)
                     .await
-                    .map_err(RequirementsTxtParserError::IO)
+                    .map_err(RequirementsTxtParserError::Io)
             }
             .map_err(|err| RequirementsTxtFileError {
                 file: requirements_txt.to_path_buf(),
@@ -800,7 +800,7 @@ pub struct RequirementsTxtFileError {
 /// Error parsing requirements.txt, error disambiguation
 #[derive(Debug)]
 pub enum RequirementsTxtParserError {
-    IO(io::Error),
+    Io(io::Error),
     Url {
         source: url::ParseError,
         url: String,
@@ -877,7 +877,7 @@ pub enum RequirementsTxtParserError {
 impl Display for RequirementsTxtParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::IO(err) => err.fmt(f),
+            Self::Io(err) => err.fmt(f),
             Self::Url { url, start, .. } => {
                 write!(f, "Invalid URL at position {start}: `{url}`")
             }
@@ -945,7 +945,7 @@ impl Display for RequirementsTxtParserError {
 impl std::error::Error for RequirementsTxtParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self {
-            Self::IO(err) => err.source(),
+            Self::Io(err) => err.source(),
             Self::Url { source, .. } => Some(source),
             Self::FileUrl { .. } => None,
             Self::VerbatimUrl { source, .. } => Some(source),
@@ -971,7 +971,7 @@ impl std::error::Error for RequirementsTxtParserError {
 impl Display for RequirementsTxtFileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.error {
-            RequirementsTxtParserError::IO(err) => err.fmt(f),
+            RequirementsTxtParserError::Io(err) => err.fmt(f),
             RequirementsTxtParserError::Url { url, start, .. } => {
                 write!(
                     f,
@@ -1108,7 +1108,7 @@ impl std::error::Error for RequirementsTxtFileError {
 
 impl From<io::Error> for RequirementsTxtParserError {
     fn from(err: io::Error) -> Self {
-        Self::IO(err)
+        Self::Io(err)
     }
 }
 

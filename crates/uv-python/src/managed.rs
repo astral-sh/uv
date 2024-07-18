@@ -24,7 +24,7 @@ use uv_fs::{LockedFile, Simplified};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
     #[error(transparent)]
     Download(#[from] DownloadError),
     #[error(transparent)]

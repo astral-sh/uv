@@ -13,7 +13,7 @@ mod bare;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
     #[error("Failed to determine Python interpreter to use")]
     Discovery(#[from] uv_python::DiscoveryError),
     #[error("Failed to determine Python interpreter to use")]

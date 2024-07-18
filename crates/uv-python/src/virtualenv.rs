@@ -32,12 +32,12 @@ pub struct PyVenvConfiguration {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
     #[error("Broken virtualenv `{0}`: `pyvenv.cfg` is missing")]
     MissingPyVenvCfg(PathBuf),
     #[error("Broken virtualenv `{0}`: `pyvenv.cfg` could not be parsed")]
     ParsePyVenvCfg(PathBuf, #[source] io::Error),
-    #[error(transparent)]
-    IO(#[from] io::Error),
 }
 
 /// Locate an active virtual environment by inspecting environment variables.
