@@ -776,8 +776,7 @@ fn lock_dependency_extra() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "flask" },
-                { name = "flask", extra = "dotenv" },
+                { name = "flask", extra = ["dotenv"] },
             ]
 
             [[distribution]]
@@ -989,7 +988,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
             source = { editable = "." }
             dependencies = [
                 { name = "requests" },
-                { name = "requests", extra = "socks", marker = "python_version < '3.10'" },
+                { name = "requests", extra = ["socks"], marker = "python_version < '3.10'" },
             ]
 
             [[distribution]]
@@ -3872,8 +3871,7 @@ fn lock_new_extras() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "requests" },
-                { name = "requests", extra = "socks" },
+                { name = "requests", extra = ["socks"] },
             ]
 
             [[distribution]]
