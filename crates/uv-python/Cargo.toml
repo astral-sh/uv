@@ -38,6 +38,7 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
+rustix = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
@@ -53,6 +54,7 @@ which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { workspace = true }
+winsafe = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }

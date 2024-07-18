@@ -1,0 +1,41 @@
+use std::path::Path;
+
+/// Check whether a path in PATH is a valid executable.
+///
+/// Derived from `which`'s `Checker`.
+pub(crate) fn is_executable(path: &Path) -> bool {
+    if cfg!(any(unix, target_os = "wasi", target_os = "redox")) {
+        if rustix::fs::access(path, rustix::fs::Access::EXEC_OK).is_err() {
+            return false;
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if !fs_err::symlink_metadata(path)
+            .map(|metadata| {
+                let file_type = metadata.file_type();
+                file_type.is_file() || file_type.is_symlink()
+            })
+            .unwrap_or(false)
+        {
+            return false;
+        }
+        if path.extension().is_none()
+            && winsafe::GetBinaryType(&path.display().to_string()).is_err()
+        {
+            return false;
+        }
+    }
+
+    if cfg!(not(target_os = "windows")) {
+        if !fs_err::metadata(path)
+            .map(|metadata| metadata.is_file())
+            .unwrap_or(false)
+        {
+            return false;
+        }
+    }
+
+    true
+}

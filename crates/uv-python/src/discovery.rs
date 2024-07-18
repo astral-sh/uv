@@ -1,5 +1,6 @@
 use itertools::{Either, Itertools};
 use regex::Regex;
+use rustix::path::Arg;
 use same_file::is_same_file;
 use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
@@ -26,6 +27,7 @@ use crate::virtualenv::{
     conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable,
 };
+use crate::which::is_executable;
 use crate::{Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
@@ -420,37 +422,42 @@ fn python_executables_from_search_path<'a>(
 fn find_all_minor(
     implementation: Option<&ImplementationName>,
     version_request: &VersionRequest,
-    dir_clone: &Path,
+    dir: &Path,
 ) -> impl Iterator<Item = PathBuf> {
     match version_request {
         VersionRequest::Any | VersionRequest::Major(_) | VersionRequest::Range(_) => {
             let regex = if let Some(implementation) = implementation {
                 Regex::new(&format!(
-                    r"^({}|python3)\.\d\d?{}$",
+                    r"^({}|python3)\.(?<minor>\d\d?){}$",
                     regex::escape(&implementation.to_string()),
                     regex::escape(EXE_SUFFIX)
                 ))
                 .unwrap()
             } else {
-                Regex::new(&format!(r"^python3\.\d\d?{}$", regex::escape(EXE_SUFFIX))).unwrap()
+                Regex::new(&format!(
+                    r"^python3\.(?<minor>\d\d?){}$",
+                    regex::escape(EXE_SUFFIX)
+                ))
+                .unwrap()
             };
-            let all_minors = which::which_re_in(&regex, Some(&dir_clone))
+            let all_minors = fs_err::read_dir(dir)
                 .into_iter()
                 .flatten()
+                .flatten()
+                .map(|entry| entry.path())
                 .filter(move |path| {
+                    let Some(filename) = path.file_name() else {
+                        return false;
+                    };
+                    let Some(filename) = filename.as_str().ok() else {
+                        return false;
+                    };
+                    let Some(captures) = regex.captures(filename) else {
+                        return false;
+                    };
+
                     // Filter out interpreter we already know have a too low minor version.
-                    let minor = path
-                        .file_name()
-                        .and_then(|filename| filename.to_str())
-                        .and_then(|filename| {
-                            if EXE_SUFFIX.is_empty() {
-                                Some(filename)
-                            } else {
-                                filename.strip_suffix(EXE_SUFFIX)
-                            }
-                        })
-                        .and_then(|stem| stem.strip_prefix("python3."))
-                        .and_then(|minor| minor.parse().ok());
+                    let minor = captures["minor"].parse().ok();
                     if let Some(minor) = minor {
                         // Optimization: Skip generally unsupported Python versions without querying.
                         if minor < 7 {
@@ -463,6 +470,7 @@ fn find_all_minor(
                     }
                     true
                 })
+                .filter(|path| is_executable(path))
                 .collect::<Vec<_>>();
             Either::Left(all_minors.into_iter())
         }

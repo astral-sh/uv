@@ -123,6 +123,7 @@ rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }
 rust-netrc = { version = "0.1.1" }
 rustc-hash = { version = "2.0.0" }
+rustix = { version = "0.38.34", default-features = false, features = ["fs", "std"] }
 same-file = { version = "1.0.6" }
 schemars = { version = "0.8.16", features = ["url"] }
 seahash = { version = "4.1.0" }
@@ -154,6 +155,7 @@ walkdir = { version = "2.5.0" }
 which = { version = "6.0.0", features = ["regex"] }
 winapi = { version = "0.3.9", features = ["fileapi", "handleapi", "ioapiset", "winbase", "winioctl", "winnt"] }
 winreg = { version = "0.52.0" }
+winsafe = { version = "0.0.21", features = ["kernel"] }
 wiremock = { version = "0.6.0" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
