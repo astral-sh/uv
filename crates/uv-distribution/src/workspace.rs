@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use either::Either;
 use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use pep508_rs::{RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource};
@@ -833,7 +833,7 @@ async fn find_workspace(
             Ok(None)
         } else {
             // We require that a `project.toml` file either declares a workspace or a project.
-            warn_user!(
+            warn!(
                 "pyproject.toml does not contain `project` table: `{}`",
                 pyproject_path.simplified_display()
             );
@@ -863,10 +863,9 @@ fn check_nested_workspaces(inner_workspace_root: &Path, stop_discovery_at: Optio
         let contents = match fs_err::read_to_string(&pyproject_toml_path) {
             Ok(contents) => contents,
             Err(err) => {
-                warn_user!(
-                    "Unreadable pyproject.toml `{}`: {}",
-                    pyproject_toml_path.user_display(),
-                    err
+                warn!(
+                    "Unreadable pyproject.toml `{}`: {err}",
+                    pyproject_toml_path.simplified_display()
                 );
                 return;
             }
@@ -874,10 +873,9 @@ fn check_nested_workspaces(inner_workspace_root: &Path, stop_discovery_at: Optio
         let pyproject_toml: PyProjectToml = match toml::from_str(&contents) {
             Ok(contents) => contents,
             Err(err) => {
-                warn_user!(
-                    "Invalid pyproject.toml `{}`: {}",
-                    pyproject_toml_path.user_display(),
-                    err
+                warn!(
+                    "Invalid pyproject.toml `{}`: {err}",
+                    pyproject_toml_path.simplified_display()
                 );
                 return;
             }
@@ -896,18 +894,17 @@ fn check_nested_workspaces(inner_workspace_root: &Path, stop_discovery_at: Optio
             ) {
                 Ok(contents) => contents,
                 Err(err) => {
-                    warn_user!(
-                        "Invalid pyproject.toml `{}`: {}",
-                        pyproject_toml_path.user_display(),
-                        err
+                    warn!(
+                        "Invalid pyproject.toml `{}`: {err}",
+                        pyproject_toml_path.simplified_display()
                     );
                     return;
                 }
             };
             if !is_excluded {
                 warn_user!(
-                    "Outer workspace including existing workspace, nested workspaces are not supported: `{}`",
-                    pyproject_toml_path.user_display(),
+                    "Nested workspaces are not supported, but outer workspace includes existing workspace: `{}`",
+                    pyproject_toml_path.user_display().cyan(),
                 );
             }
         }
