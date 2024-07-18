@@ -86,7 +86,7 @@ pub(crate) fn create(
     match location.metadata() {
         Ok(metadata) => {
             if metadata.is_file() {
-                return Err(Error::IO(io::Error::new(
+                return Err(Error::Io(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!("File exists at `{}`", location.user_display()),
                 )));
@@ -103,7 +103,7 @@ pub(crate) fn create(
                 {
                     info!("Ignoring empty directory");
                 } else {
-                    return Err(Error::IO(io::Error::new(
+                    return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
                         format!(
                             "The directory `{}` exists, but it's not a virtualenv",
@@ -116,7 +116,7 @@ pub(crate) fn create(
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             fs::create_dir_all(location)?;
         }
-        Err(err) => return Err(Error::IO(err)),
+        Err(err) => return Err(Error::Io(err)),
     }
 
     let location = location.canonicalize()?;
