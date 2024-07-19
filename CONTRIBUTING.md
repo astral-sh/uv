@@ -127,9 +127,19 @@ To preview any changes to the documentation locally:
 
     # For contributors.
     uv pip install -r docs/requirements.txt
-   
+
     # Or, for members of the Astral org, which has access to MkDocs Insiders via sponsorship.
     uv pip install -r docs/requirements-insiders.txt
+    ```
+
+1. Activate the virtual environment with:
+
+    ```shell
+    # On macOS and Linux.
+    source .venv/bin/activate
+
+    # On Windows.
+    .venv\Scripts\activate
     ```
 
 1. Run the development server with:
