@@ -6,19 +6,19 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use distribution_filename::WheelFilename;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
+use pep440_rs::Version;
+use pypi_types::DirectUrl;
 use reflink_copy as reflink;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
-use walkdir::WalkDir;
-use distribution_filename::WheelFilename;
-use pep440_rs::Version;
-use pypi_types::DirectUrl;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
+use walkdir::WalkDir;
 
 use crate::script::{scripts_from_ini, Script};
 use crate::wheel::{
@@ -228,7 +228,7 @@ pub enum LinkMode {
     /// Hard link packages from the wheel into the site packages.
     Hardlink,
     /// Symbolically link packages from the wheel into the site packages
-    Symlink
+    Symlink,
 }
 
 impl Default for LinkMode {
@@ -254,7 +254,7 @@ impl LinkMode {
             Self::Clone => clone_wheel_files(site_packages, wheel, locks),
             Self::Copy => copy_wheel_files(site_packages, wheel, locks),
             Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks),
-            Self::Symlink => symlink_wheel_files(site_packages, wheel, locks)
+            Self::Symlink => symlink_wheel_files(site_packages, wheel, locks),
         }
     }
 }
@@ -669,8 +669,6 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
 
     Ok(())
 }
-
-
 
 #[cfg(unix)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
