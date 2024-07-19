@@ -41,7 +41,7 @@ These commands are used to manage command-line tools written in Python.
 
 - `uv tool run`
 
-See the documentation on [tools](./preview/tools.md) for more details on getting started.
+See the documentation on [tools](./tools.md) for more details on getting started.
 
 ### Low-level plumbing commands
 

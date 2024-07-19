@@ -78,7 +78,7 @@ nav:
       - Working on projects: guides/projects.md
   - Concepts:
       - Projects: projects.md
-      - Command-line tools: preview/tools.md
+      - Tools: tools.md
       - Python versions: python-versions.md
       - Workspaces: preview/workspaces.md
       - Dependency sources: preview/dependencies.md
