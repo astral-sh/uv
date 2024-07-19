@@ -30,7 +30,7 @@ fn sync() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -59,13 +59,13 @@ fn locked() -> Result<()> {
     )?;
 
     // Running with `--locked` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -92,7 +92,7 @@ fn locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -127,7 +127,7 @@ fn frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -151,7 +151,7 @@ fn frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0

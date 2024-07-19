@@ -1,5 +1,4 @@
 use fs_err as fs;
-use std::{io, path::PathBuf};
 use tracing::debug;
 
 use crate::PythonRequest;
@@ -14,7 +13,7 @@ pub static PYTHON_VERSIONS_FILENAME: &str = ".python-versions";
 ///
 /// Prefers `.python-versions` then `.python-version`.
 /// If only one Python version is desired, use [`request_from_version_files`] which prefers the `.python-version` file.
-pub async fn requests_from_version_file() -> Result<Option<Vec<PythonRequest>>, io::Error> {
+pub async fn requests_from_version_file() -> Result<Option<Vec<PythonRequest>>, std::io::Error> {
     if let Some(versions) = read_versions_file().await? {
         Ok(Some(
             versions
@@ -33,49 +32,44 @@ pub async fn requests_from_version_file() -> Result<Option<Vec<PythonRequest>>, 
 ///
 /// Prefers `.python-version` then the first entry of `.python-versions`.
 /// If multiple Python versions are desired, use [`requests_from_version_files`] instead.
-pub async fn request_from_version_file() -> Result<Option<PythonRequest>, io::Error> {
+pub async fn request_from_version_file() -> Result<Option<PythonRequest>, std::io::Error> {
     if let Some(version) = read_version_file().await? {
         Ok(Some(PythonRequest::parse(&version)))
     } else if let Some(versions) = read_versions_file().await? {
         Ok(versions
             .into_iter()
             .next()
-            .inspect(|_| debug!("Using the first version from `.python-versions`"))
+            .inspect(|_| debug!("Using the first version from `{PYTHON_VERSIONS_FILENAME}`"))
             .map(|version| PythonRequest::parse(&version)))
     } else {
         Ok(None)
     }
 }
 
-pub fn versions_file_exists() -> Result<bool, io::Error> {
-    PathBuf::from(PYTHON_VERSIONS_FILENAME).try_exists()
+/// Write a version to a .`python-version` file.
+pub async fn write_version_file(version: &str) -> Result<(), std::io::Error> {
+    debug!("Writing Python version `{version}` to `{PYTHON_VERSION_FILENAME}`");
+    fs::tokio::write(PYTHON_VERSION_FILENAME, format!("{version}\n")).await
 }
 
-async fn read_versions_file() -> Result<Option<Vec<String>>, io::Error> {
-    if !versions_file_exists()? {
-        return Ok(None);
+async fn read_versions_file() -> Result<Option<Vec<String>>, std::io::Error> {
+    match fs::tokio::read_to_string(PYTHON_VERSIONS_FILENAME).await {
+        Ok(content) => {
+            debug!("Reading requests from `{PYTHON_VERSIONS_FILENAME}`");
+            Ok(Some(content.lines().map(ToString::to_string).collect()))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
     }
-    debug!("Reading requests from `{PYTHON_VERSIONS_FILENAME}`");
-    let lines: Vec<String> = fs::tokio::read_to_string(PYTHON_VERSIONS_FILENAME)
-        .await?
-        .lines()
-        .map(ToString::to_string)
-        .collect();
-    Ok(Some(lines))
 }
 
-pub fn version_file_exists() -> Result<bool, io::Error> {
-    PathBuf::from(PYTHON_VERSION_FILENAME).try_exists()
-}
-
-async fn read_version_file() -> Result<Option<String>, io::Error> {
-    if !version_file_exists()? {
-        return Ok(None);
+async fn read_version_file() -> Result<Option<String>, std::io::Error> {
+    match fs::tokio::read_to_string(PYTHON_VERSION_FILENAME).await {
+        Ok(content) => {
+            debug!("Reading requests from `{PYTHON_VERSION_FILENAME}`");
+            Ok(content.lines().next().map(ToString::to_string))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
     }
-    debug!("Reading requests from `{PYTHON_VERSION_FILENAME}`");
-    Ok(fs::tokio::read_to_string(PYTHON_VERSION_FILENAME)
-        .await?
-        .lines()
-        .next()
-        .map(ToString::to_string))
 }

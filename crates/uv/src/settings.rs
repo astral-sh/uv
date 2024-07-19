@@ -11,8 +11,8 @@ use pypi_types::Requirement;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::options::{flag, resolver_installer_options, resolver_options};
 use uv_cli::{
-    AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, ListFormat, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
+    AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs,
+    Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
@@ -147,10 +147,39 @@ impl CacheSettings {
     }
 }
 
+/// The resolved settings to use for a `init` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct InitSettings {
+    pub(crate) path: Option<String>,
+    pub(crate) name: Option<PackageName>,
+    pub(crate) no_readme: bool,
+}
+
+impl InitSettings {
+    /// Resolve the [`InitSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: InitArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let InitArgs {
+            path,
+            name,
+            no_readme,
+        } = args;
+
+        Self {
+            path,
+            name,
+            no_readme,
+        }
+    }
+}
+
 /// The resolved settings to use for a `run` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) command: ExternalCommand,
@@ -166,6 +195,8 @@ impl RunSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let RunArgs {
+            locked,
+            frozen,
             extra,
             all_extras,
             no_all_extras,
@@ -181,6 +212,8 @@ impl RunSettings {
         } = args;
 
         Self {
+            locked,
+            frozen,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
@@ -517,6 +550,8 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
@@ -527,6 +562,8 @@ impl LockSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
+            locked,
+            frozen,
             resolver,
             build,
             refresh,
@@ -534,6 +571,8 @@ impl LockSettings {
         } = args;
 
         Self {
+            locked,
+            frozen,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
@@ -545,6 +584,8 @@ impl LockSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) requirements: Vec<RequirementsSource>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
@@ -573,6 +614,8 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            locked,
+            frozen,
             installer,
             build,
             refresh,
@@ -594,6 +637,8 @@ impl AddSettings {
         };
 
         Self {
+            locked,
+            frozen,
             requirements,
             dependency_type,
             editable,
@@ -617,6 +662,8 @@ impl AddSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) requirements: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) package: Option<PackageName>,
@@ -633,6 +680,8 @@ impl RemoveSettings {
             dev,
             optional,
             requirements,
+            locked,
+            frozen,
             installer,
             build,
             refresh,
@@ -649,6 +698,8 @@ impl RemoveSettings {
         };
 
         Self {
+            locked,
+            frozen,
             requirements,
             dependency_type,
             package,
@@ -666,6 +717,8 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) package: Vec<PackageName>,
@@ -680,18 +733,22 @@ impl TreeSettings {
     pub(crate) fn resolve(args: TreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let TreeArgs {
             tree,
+            locked,
+            frozen,
             build,
             resolver,
             python,
         } = args;
 
         Self {
-            python,
+            locked,
+            frozen,
             depth: tree.depth,
             prune: tree.prune,
             package: tree.package,
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
+            python,
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
     }

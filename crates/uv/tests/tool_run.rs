@@ -39,7 +39,7 @@ fn tool_run_args() {
     pytest 8.1.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -62,7 +62,7 @@ fn tool_run_args() {
     pytest 8.1.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     "###);
 }
@@ -84,7 +84,7 @@ fn tool_run_at_version() {
     pytest 8.0.0
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -105,7 +105,7 @@ fn tool_run_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     error: Failed to parse: `pytest@`
       Caused by: Expected URL
     pytest@
@@ -123,7 +123,7 @@ fn tool_run_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     error: Distribution not found at: file://[TEMP_DIR]/invalid
     "###);
 
@@ -154,7 +154,7 @@ fn tool_run_at_version() {
     - pytest
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
@@ -185,7 +185,7 @@ fn tool_run_from_version() {
     pytest 8.0.0
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -217,7 +217,7 @@ fn tool_run_suggest_valid_commands() {
     - blackd
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -240,7 +240,7 @@ fn tool_run_suggest_valid_commands() {
     The executable `fastapi-cli` was not found.
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -274,7 +274,7 @@ fn tool_run_warn_executable_not_in_from() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 35 packages in [TIME]
     Prepared 35 packages in [TIME]
     Installed 35 packages in [TIME]
@@ -344,7 +344,7 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     "###);
 
     // Verify that `--isolated` uses an isolated environment.
@@ -361,7 +361,7 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 6 packages in [TIME]
@@ -386,7 +386,7 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 6 packages in [TIME]
@@ -415,7 +415,7 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 7 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 7 packages in [TIME]
@@ -443,7 +443,7 @@ fn tool_run_from_install() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 6 packages in [TIME]
@@ -477,7 +477,7 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -504,7 +504,7 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     "###);
 
@@ -523,7 +523,7 @@ fn tool_run_cache() {
     Python (CPython) 3.11.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -550,7 +550,7 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     "###);
 
@@ -571,7 +571,7 @@ fn tool_run_cache() {
     Python (CPython) 3.12.[X]
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -606,7 +606,7 @@ fn tool_run_url() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning.
+    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]

@@ -52,8 +52,12 @@ tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
 
+[target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
+rustix = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { workspace = true }
+winsafe = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }

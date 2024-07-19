@@ -1,6 +1,7 @@
 use core::fmt;
 use fs_err as fs;
 use itertools::Itertools;
+use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -150,14 +151,14 @@ impl ManagedPythonInstallations {
                         },
                         Err(err) => Some(Err(err)),
                     })
-                    .collect::<Result<_, std::io::Error>>()
+                    .collect::<Result<_, io::Error>>()
                     .map_err(|err| Error::ReadError {
                         dir: self.root.clone(),
                         err,
                     })?;
                 directories
             }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => vec![],
+            Err(err) if err.kind() == io::ErrorKind::NotFound => vec![],
             Err(err) => {
                 return Err(Error::ReadError {
                     dir: self.root.clone(),
@@ -174,7 +175,7 @@ impl ManagedPythonInstallations {
                     })
                     .ok()
             })
-            .sorted_unstable_by_key(|installation| installation.key().clone()))
+            .sorted_unstable_by_key(|installation| Reverse(installation.key().clone())))
     }
 
     /// Iterate over Python installations that support the current platform.

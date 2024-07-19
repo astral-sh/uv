@@ -129,7 +129,7 @@ pub struct GlobalOptions {
         default = "\"automatic\"",
         value_type = "str",
         example = r#"
-            python-fetch = \"automatic\"
+            python-fetch = "manual"
         "#,
         possible_values = true
     )]
@@ -194,8 +194,8 @@ pub struct ResolverOptions {
 pub struct ResolverInstallerOptions {
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
-    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
-    /// directory laid out in the same format.
+    /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
+    /// (the simple repository API), or a local directory laid out in the same format.
     ///
     /// The index provided by this setting is given lower priority than any indexes specified via
     /// [`extra_index_url`](#extra-index-url).
@@ -203,14 +203,14 @@ pub struct ResolverInstallerOptions {
         default = "\"https://pypi.org/simple\"",
         value_type = "str",
         example = r#"
-            index-url = "https://pypi.org/simple"
+            index-url = "https://test.pypi.org/simple"
         "#
     )]
     pub index_url: Option<IndexUrl>,
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
-    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
-    /// directory laid out in the same format.
+    /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
+    /// (the simple repository API), or a local directory laid out in the same format.
     ///
     /// All indexes provided via this flag take priority over the index specified by
     /// [`index_url`](#index-url). When multiple indexes are provided, earlier values take priority.
@@ -305,7 +305,8 @@ pub struct ResolverInstallerOptions {
         possible_values = true
     )]
     pub prerelease: Option<PreReleaseMode>,
-    /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
+    /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
+    /// specified as `KEY=VALUE` pairs.
     #[option(
         default = "{}",
         value_type = "dict",
@@ -316,8 +317,8 @@ pub struct ResolverInstallerOptions {
     pub config_settings: Option<ConfigSettings>,
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
+    /// `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).
     #[option(
         default = "None",
         value_type = "str",
@@ -527,8 +528,8 @@ pub struct PipOptions {
     pub prefix: Option<PathBuf>,
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
-    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
-    /// directory laid out in the same format.
+    /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
+    /// (the simple repository API), or a local directory laid out in the same format.
     ///
     /// The index provided by this setting is given lower priority than any indexes specified via
     /// [`extra_index_url`](#extra-index-url).
@@ -536,14 +537,14 @@ pub struct PipOptions {
         default = "\"https://pypi.org/simple\"",
         value_type = "str",
         example = r#"
-            index-url = "https://pypi.org/simple"
+            index-url = "https://test.pypi.org/simple"
         "#
     )]
     pub index_url: Option<IndexUrl>,
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
-    /// Accepts either a repository compliant with PEP 503 (the simple repository API), or a local
-    /// directory laid out in the same format.
+    /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
+    /// (the simple repository API), or a local directory laid out in the same format.
     ///
     /// All indexes provided via this flag take priority over the index specified by
     /// [`index_url`](#index-url). When multiple indexes are provided, earlier values take priority.
@@ -659,7 +660,8 @@ pub struct PipOptions {
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
     /// Disable isolation when building source distributions.
     ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// are already installed.
     #[option(
         default = "false",
         value_type = "bool",
@@ -826,14 +828,15 @@ pub struct PipOptions {
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[option(
-        default = "None",
+        default = "false",
         value_type = "bool",
         example = r#"
             legacy-setup-py = true
         "#
     )]
     pub legacy_setup_py: Option<bool>,
-    /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
+    /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
+    /// specified as `KEY=VALUE` pairs.
     #[option(
         default = "{}",
         value_type = "dict",
@@ -876,7 +879,7 @@ pub struct PipOptions {
     /// treated as a lower bound. For example, `--universal --python-version 3.7` would produce a
     /// universal resolution for Python 3.7 and later.
     #[option(
-        default = "None",
+        default = "false",
         value_type = "bool",
         example = r#"
             universal = true
@@ -885,8 +888,8 @@ pub struct PipOptions {
     pub universal: Option<bool>,
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
+    /// `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).
     #[option(
         default = "None",
         value_type = "str",
@@ -928,7 +931,7 @@ pub struct PipOptions {
         default = "false",
         value_type = "bool",
         example = r#"
-            emit-binary = true
+            emit-build-options = true
         "#
     )]
     pub emit_build_options: Option<bool>,

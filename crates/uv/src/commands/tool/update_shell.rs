@@ -19,7 +19,7 @@ use crate::printer::Printer;
 /// Ensure that the executable directory is in PATH.
 pub(crate) async fn update_shell(preview: PreviewMode, printer: Printer) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tool update-shell` is experimental and may change without warning.");
+        warn_user_once!("`uv tool update-shell` is experimental and may change without warning");
     }
 
     let executable_directory = find_executable_directory()?;
@@ -36,7 +36,7 @@ pub(crate) async fn update_shell(preview: PreviewMode, printer: Printer) -> Resu
                 "Updated PATH to include executable directory {}",
                 executable_directory.simplified_display().cyan()
             )?;
-            writeln!(printer.stderr(), "Restart your shell to apply changes.")?;
+            writeln!(printer.stderr(), "Restart your shell to apply changes")?;
         } else {
             writeln!(
                 printer.stderr(),
@@ -58,18 +58,18 @@ pub(crate) async fn update_shell(preview: PreviewMode, printer: Printer) -> Resu
     } else {
         // Determine the current shell.
         let Some(shell) = Shell::from_env() else {
-            return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the current shell could not be determined.", executable_directory.simplified_display().cyan()));
+            return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the current shell could not be determined", executable_directory.simplified_display().cyan()));
         };
 
         // Look up the configuration files (e.g., `.bashrc`, `.zshrc`) for the shell.
         let files = shell.configuration_files();
         if files.is_empty() {
-            return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but updating {shell} is currently unsupported.", executable_directory.simplified_display().cyan()));
+            return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but updating {shell} is currently unsupported", executable_directory.simplified_display().cyan()));
         }
 
         // Prepare the command (e.g., `export PATH="$HOME/.cargo/bin:$PATH"`).
         let Some(command) = shell.prepend_path(&executable_directory) else {
-            return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the necessary command to update {shell} could not be determined.", executable_directory.simplified_display().cyan()));
+            return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the necessary command to update {shell} could not be determined", executable_directory.simplified_display().cyan()));
         };
 
         // Update each file, as necessary.
@@ -133,10 +133,10 @@ pub(crate) async fn update_shell(preview: PreviewMode, printer: Printer) -> Resu
         }
 
         if updated {
-            writeln!(printer.stderr(), "Restart your shell to apply changes.")?;
+            writeln!(printer.stderr(), "Restart your shell to apply changes")?;
             Ok(ExitStatus::Success)
         } else {
-            Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the {shell} configuration files are already up-to-date.", executable_directory.simplified_display().cyan()))
+            Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the {shell} configuration files are already up-to-date", executable_directory.simplified_display().cyan()))
         }
     }
 }

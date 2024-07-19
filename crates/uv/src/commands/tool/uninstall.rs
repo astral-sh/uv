@@ -21,7 +21,7 @@ pub(crate) async fn uninstall(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tool uninstall` is experimental and may change without warning.");
+        warn_user_once!("`uv tool uninstall` is experimental and may change without warning");
     }
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
@@ -61,6 +61,25 @@ pub(crate) async fn uninstall(
     } else {
         let mut entrypoints = vec![];
         for (name, receipt) in installed_tools.tools()? {
+            let Ok(receipt) = receipt else {
+                // If the tool is not installed properly, attempt to remove the environment anyway.
+                match installed_tools.remove_environment(&name) {
+                    Ok(()) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed dangling environment for `{name}`"
+                        )?;
+                        continue;
+                    }
+                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                        bail!("`{name}` is not installed");
+                    }
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                }
+            };
+
             entrypoints.extend(uninstall_tool(&name, &receipt, &installed_tools).await?);
         }
         entrypoints

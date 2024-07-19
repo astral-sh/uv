@@ -1,6 +1,6 @@
 # Using tools
 
-Many Python packages provide command-line tools. uv has specialized support for invoking tools provided by these packages without installing them into your environment.
+Many Python packages provide command-line interfaces which are useful as standalone tools. uv has specialized support for easily invoking and installing tools.
 
 ## Using `uvx`
 
@@ -18,7 +18,7 @@ Note this is exactly equivalent to:
 $ uv tool run ruff
 ```
 
-Arguments can be passed to the tools:
+Arguments can be passed afted the tool name:
 
 ```console
 $ uvx pycowsay hello from uv
@@ -52,13 +52,19 @@ To run a tool at a specific version, use `command@<version>`:
 $ uvx ruff@0.3.0 check
 ```
 
-The `--from` option can also be used to specify package versions:
+The `--from` option can also be used to specify package versions, as above:
 
-To constrain to a range of versions:
+```console
+$ uvx --from 'ruff==0.3.0' ruff check
+```
+
+Or, to constrain to a range of versions:
 
 ```console
 $ uvx --from 'ruff>0.2.0,<0.3.0' ruff check
 ```
+
+Note the `@` syntax cannot be used for anything other than an exact version.
 
 ## Requesting different sources
 

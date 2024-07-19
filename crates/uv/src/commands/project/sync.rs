@@ -15,7 +15,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::do_lock;
+use crate::commands::project::lock::do_safe_lock;
 use crate::commands::project::{ProjectError, SharedState};
 use crate::commands::{pip, project, ExitStatus};
 use crate::printer::Printer;
@@ -41,7 +41,7 @@ pub(crate) async fn sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv sync` is experimental and may change without warning.");
+        warn_user_once!("`uv sync` is experimental and may change without warning");
     }
 
     // Identify the project
@@ -63,83 +63,31 @@ pub(crate) async fn sync(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    let lock = if frozen {
-        // Read the existing lockfile.
-        project::lock::read(project.workspace())
-            .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)?
-    } else if locked {
-        // Read the existing lockfile.
-        let existing = project::lock::read(project.workspace())
-            .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)?;
-
-        // Perform the lock operation, but don't write the lockfile to disk.
-        let lock = match do_lock(
-            project.workspace(),
-            venv.interpreter(),
-            Some(&existing),
-            settings.as_ref().into(),
-            &state,
-            preview,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await
-        {
-            Ok(lock) => lock,
-            Err(ProjectError::Operation(pip::operations::Error::Resolve(
-                uv_resolver::ResolveError::NoSolution(err),
-            ))) => {
-                let report = miette::Report::msg(format!("{err}")).context(err.header());
-                anstream::eprint!("{report:?}");
-                return Ok(ExitStatus::Failure);
-            }
-            Err(err) => return Err(err.into()),
-        };
-
-        // If the locks disagree, return an error.
-        if lock != existing {
-            return Err(ProjectError::LockMismatch.into());
+    let lock = match do_safe_lock(
+        locked,
+        frozen,
+        project.workspace(),
+        venv.interpreter(),
+        settings.as_ref().into(),
+        &state,
+        preview,
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await
+    {
+        Ok(lock) => lock,
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::NoSolution(err),
+        ))) => {
+            let report = miette::Report::msg(format!("{err}")).context(err.header());
+            anstream::eprint!("{report:?}");
+            return Ok(ExitStatus::Failure);
         }
-
-        lock
-    } else {
-        // Read the existing lockfile.
-        let existing = project::lock::read(project.workspace()).await?;
-
-        // Perform the lock operation.
-        match do_lock(
-            project.workspace(),
-            venv.interpreter(),
-            existing.as_ref(),
-            settings.as_ref().into(),
-            &state,
-            preview,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await
-        {
-            Ok(lock) => {
-                project::lock::commit(&lock, project.workspace()).await?;
-                lock
-            }
-            Err(ProjectError::Operation(pip::operations::Error::Resolve(
-                uv_resolver::ResolveError::NoSolution(err),
-            ))) => {
-                let report = miette::Report::msg(format!("{err}")).context(err.header());
-                anstream::eprint!("{report:?}");
-                return Ok(ExitStatus::Failure);
-            }
-            Err(err) => return Err(err.into()),
-        }
+        Err(err) => return Err(err.into()),
     };
 
     // Perform the sync operation.

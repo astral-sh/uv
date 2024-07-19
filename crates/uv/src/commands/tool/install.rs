@@ -55,7 +55,7 @@ pub(crate) async fn install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tool install` is experimental and may change without warning.");
+        warn_user_once!("`uv tool install` is experimental and may change without warning");
     }
 
     let client_builder = BaseClientBuilder::new()

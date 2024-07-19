@@ -22,7 +22,6 @@ use uv_fs::{LockedFile, Simplified};
 use uv_installer::SitePackages;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
-use uv_warnings::warn_user_once;
 
 mod receipt;
 mod tool;
@@ -92,29 +91,41 @@ impl InstalledTools {
 
     /// Return the metadata for all installed tools.
     ///
+    /// If a tool is present, but is missing a receipt or the receipt is invalid, the tool will be
+    /// included with an error.
+    ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    pub fn tools(&self) -> Result<Vec<(PackageName, Tool)>, Error> {
+    #[allow(clippy::type_complexity)]
+    pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root()) {
             let name = directory.file_name().unwrap().to_string_lossy().to_string();
+            let name = PackageName::from_str(&name)?;
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    warn_user_once!("Ignoring malformed tool `{name}`: missing receipt");
+                    let err = Error::MissingToolReceipt(name.to_string(), path);
+                    tools.push((name, Err(err)));
                     continue;
                 }
                 Err(err) => return Err(err.into()),
             };
-            let tool_receipt = ToolReceipt::from_string(contents)
-                .map_err(|err| Error::ReceiptRead(path, Box::new(err)))?;
-            let name = PackageName::from_str(&name)?;
-            tools.push((name, tool_receipt.tool));
+            match ToolReceipt::from_string(contents) {
+                Ok(tool_receipt) => tools.push((name, Ok(tool_receipt.tool))),
+                Err(err) => {
+                    let err = Error::ReceiptRead(path, Box::new(err));
+                    tools.push((name, Err(err)));
+                }
+            }
         }
         Ok(tools)
     }
 
     /// Get the receipt for the given tool.
+    ///
+    /// If the tool is not installed, returns `Ok(None)`. If the receipt is invalid, returns an
+    /// error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn get_tool_receipt(&self, name: &PackageName) -> Result<Option<Tool>, Error> {

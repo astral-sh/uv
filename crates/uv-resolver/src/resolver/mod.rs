@@ -406,7 +406,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .pubgrub
                     .partial_solution
                     .term_intersection_for_package(&state.next)
-                    .expect("a package was chosen but we don't have a term.");
+                    .expect("a package was chosen but we don't have a term");
                 let decision = self.choose_version(
                     &state.next,
                     term_intersection.unwrap_positive(),
@@ -427,7 +427,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .pubgrub
                             .partial_solution
                             .term_intersection_for_package(&state.next)
-                            .expect("a package was chosen but we don't have a term.");
+                            .expect("a package was chosen but we don't have a term");
 
                         // Check if the decision was due to the package being unavailable
                         if let PubGrubPackageInner::Package { ref name, .. } = &*state.next {
@@ -1061,9 +1061,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         debug!(
-            "Selecting: {}=={} ({})",
+            "Selecting: {}=={} [{}] ({})",
             name,
             candidate.version(),
+            candidate.choice_kind(),
             filename,
         );
 

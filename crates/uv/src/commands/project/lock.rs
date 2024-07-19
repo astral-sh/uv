@@ -30,6 +30,8 @@ use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
 /// Resolve the project requirements into a lockfile.
 pub(crate) async fn lock(
+    locked: bool,
+    frozen: bool,
     python: Option<String>,
     settings: ResolverSettings,
     preview: PreviewMode,
@@ -42,7 +44,7 @@ pub(crate) async fn lock(
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv lock` is experimental and may change without warning.");
+        warn_user_once!("`uv lock` is experimental and may change without warning");
     }
 
     // Find the project requirements.
@@ -62,14 +64,12 @@ pub(crate) async fn lock(
     .await?
     .into_interpreter();
 
-    // Read the existing lockfile.
-    let existing = read(&workspace).await?;
-
     // Perform the lock operation.
-    match do_lock(
+    match do_safe_lock(
+        locked,
+        frozen,
         &workspace,
         &interpreter,
-        existing.as_ref(),
         settings.as_ref(),
         &SharedState::default(),
         preview,
@@ -81,12 +81,7 @@ pub(crate) async fn lock(
     )
     .await
     {
-        Ok(lock) => {
-            if !existing.is_some_and(|existing| existing == lock) {
-                commit(&lock, &workspace).await?;
-            }
-            Ok(ExitStatus::Success)
-        }
+        Ok(_) => Ok(ExitStatus::Success),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -95,6 +90,82 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Failure)
         }
         Err(err) => Err(err.into()),
+    }
+}
+
+/// Perform a lock operation, respecting the `--locked` and `--frozen` parameters.
+pub(super) async fn do_safe_lock(
+    locked: bool,
+    frozen: bool,
+    workspace: &Workspace,
+    interpreter: &Interpreter,
+    settings: ResolverSettingsRef<'_>,
+    state: &SharedState,
+    preview: PreviewMode,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<Lock, ProjectError> {
+    if frozen {
+        // Read the existing lockfile, but don't attempt to lock the project.
+        read(workspace)
+            .await?
+            .ok_or_else(|| ProjectError::MissingLockfile)
+    } else if locked {
+        // Read the existing lockfile.
+        let existing = read(workspace)
+            .await?
+            .ok_or_else(|| ProjectError::MissingLockfile)?;
+
+        // Perform the lock operation, but don't write the lockfile to disk.
+        let lock = do_lock(
+            workspace,
+            interpreter,
+            Some(&existing),
+            settings,
+            state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+
+        // If the locks disagree, return an error.
+        if lock != existing {
+            return Err(ProjectError::LockMismatch);
+        }
+
+        Ok(lock)
+    } else {
+        // Read the existing lockfile.
+        let existing = read(workspace).await?;
+
+        // Perform the lock operation.
+        let lock = do_lock(
+            workspace,
+            interpreter,
+            existing.as_ref(),
+            settings,
+            state,
+            preview,
+            connectivity,
+            concurrency,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+
+        if !existing.is_some_and(|existing| existing == lock) {
+            commit(&lock, workspace).await?;
+        }
+
+        Ok(lock)
     }
 }
 
@@ -313,7 +384,7 @@ pub(super) async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         None => {
-            debug!("Starting clean resolution.");
+            debug!("Starting clean resolution");
 
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(

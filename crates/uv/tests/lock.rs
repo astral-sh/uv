@@ -52,7 +52,7 @@ fn lock_wheel_registry() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 4 packages in [TIME]
         "###);
 
@@ -116,7 +116,7 @@ fn lock_wheel_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -151,7 +151,7 @@ fn lock_sdist_registry() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
         "###);
 
@@ -190,7 +190,7 @@ fn lock_sdist_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -223,7 +223,7 @@ fn lock_sdist_git() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
         "###);
 
@@ -261,7 +261,7 @@ fn lock_sdist_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -294,7 +294,7 @@ fn lock_wheel_url() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 4 packages in [TIME]
         "###);
 
@@ -357,7 +357,7 @@ fn lock_wheel_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
@@ -392,7 +392,7 @@ fn lock_sdist_url() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 4 packages in [TIME]
         "###);
 
@@ -453,7 +453,7 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
@@ -491,7 +491,7 @@ fn lock_project_extra() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 5 packages in [TIME]
         "###);
 
@@ -569,7 +569,7 @@ fn lock_project_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -585,7 +585,7 @@ fn lock_project_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
@@ -618,7 +618,7 @@ fn lock_project_with_overrides() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Resolved 9 packages in [TIME]
     "###);
 
@@ -629,7 +629,7 @@ fn lock_project_with_overrides() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + blinker==1.7.0
@@ -667,7 +667,7 @@ fn lock_dependency_extra() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 10 packages in [TIME]
         "###);
 
@@ -776,8 +776,7 @@ fn lock_dependency_extra() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "flask" },
-                { name = "flask", extra = "dotenv" },
+                { name = "flask", extra = ["dotenv"] },
             ]
 
             [[distribution]]
@@ -812,7 +811,7 @@ fn lock_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + blinker==1.7.0
@@ -854,7 +853,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 7 packages in [TIME]
         "###);
 
@@ -989,7 +988,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
             source = { editable = "." }
             dependencies = [
                 { name = "requests" },
-                { name = "requests", extra = "socks", marker = "python_version < '3.10'" },
+                { name = "requests", extra = ["socks"], marker = "python_version < '3.10'" },
             ]
 
             [[distribution]]
@@ -1041,7 +1040,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
@@ -1065,7 +1064,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + certifi==2024.2.2
@@ -1103,9 +1102,9 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 9 packages in [TIME]
-        warning: The package `flask==3.0.2` does not have an extra named `foo`.
+        warning: The package `flask==3.0.2` does not have an extra named `foo`
         "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1234,7 +1233,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + blinker==1.7.0
@@ -1273,7 +1272,7 @@ fn lock_upgrade_log() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 9 packages in [TIME]
         "###);
 
@@ -1403,7 +1402,7 @@ fn lock_upgrade_log() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Resolved 9 packages in [TIME]
     "###);
 
@@ -1425,7 +1424,7 @@ fn lock_upgrade_log() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Resolved 9 packages in [TIME]
     Updating flask v2.3.3 -> v3.0.2
     "###);
@@ -1575,7 +1574,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 10 packages in [TIME]
         "###);
 
@@ -1722,7 +1721,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Resolved 10 packages in [TIME]
     "###);
 
@@ -1744,7 +1743,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Resolved 9 packages in [TIME]
     Updating flask v2.3.3, 3.0.0 -> v3.0.2
     "###);
@@ -1893,7 +1892,7 @@ fn lock_preference() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
         "###);
 
@@ -1948,7 +1947,7 @@ fn lock_preference() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -1994,7 +1993,7 @@ fn lock_preference() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
         "###);
 
@@ -2057,7 +2056,7 @@ fn lock_git_sha() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
         "###);
 
@@ -2110,7 +2109,7 @@ fn lock_git_sha() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     "###);
 
@@ -2150,7 +2149,7 @@ fn lock_git_sha() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
         "###);
 
@@ -2212,7 +2211,7 @@ fn lock_requires_python() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
           × No solution found when resolving dependencies:
           ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and the requested Python version (>=3.7) does not satisfy Python>=3.7.9,<3.8, we can conclude that Python>=3.7.9 is incompatible.
               And because pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4 and only pygls<=1.3.0 is available, we can conclude that any of:
@@ -2250,7 +2249,7 @@ fn lock_requires_python() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 10 packages in [TIME]
         "###);
 
@@ -2398,7 +2397,7 @@ fn lock_requires_python() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 9 packages in [TIME]
         "###);
 
@@ -2536,7 +2535,7 @@ fn lock_requires_python() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 5 packages in [TIME]
         "###);
 
@@ -2631,7 +2630,7 @@ fn lock_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     error: No interpreter found for Python >=3.12 in system path
     "###);
 
@@ -2664,7 +2663,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
         Resolved 2 packages in [TIME]
         "###);
@@ -2733,7 +2732,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
         Resolved 2 packages in [TIME]
         "###);
@@ -2813,7 +2812,7 @@ fn lock_requires_python_star() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 6 packages in [TIME]
         "###);
 
@@ -2922,7 +2921,7 @@ fn lock_requires_python_pre() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 6 packages in [TIME]
         "###);
 
@@ -3029,7 +3028,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         warning: The workspace `requires-python` field does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
         Resolved 2 packages in [TIME]
         "###);
@@ -3106,7 +3105,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 4 packages in [TIME]
         "###);
 
@@ -3190,7 +3189,7 @@ fn lock_dev() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 3 packages in [TIME]
         "###);
 
@@ -3245,7 +3244,7 @@ fn lock_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
@@ -3259,7 +3258,7 @@ fn lock_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Installed 1 package in [TIME]
      + typing-extensions==4.12.2 (from https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl)
     "###);
@@ -3290,7 +3289,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
         "###);
 
@@ -3351,7 +3350,7 @@ fn lock_multiple_markers() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
         "###);
 
@@ -3515,7 +3514,7 @@ fn lock_cycles() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning.
+        warning: `uv lock` is experimental and may change without warning
         Resolved 11 packages in [TIME]
         "###);
 
@@ -3661,7 +3660,7 @@ fn lock_cycles() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     Prepared 11 packages in [TIME]
     Installed 11 packages in [TIME]
      + argparse==1.4.0
@@ -3872,8 +3871,7 @@ fn lock_new_extras() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "requests" },
-                { name = "requests", extra = "socks" },
+                { name = "requests", extra = ["socks"] },
             ]
 
             [[distribution]]
@@ -3991,7 +3989,7 @@ fn lock_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning.
+    warning: `uv sync` is experimental and may change without warning
     error: Failed to prepare distributions
       Caused by: Failed to fetch wheel: idna==3.6
       Caused by: Hash mismatch for `idna==3.6`

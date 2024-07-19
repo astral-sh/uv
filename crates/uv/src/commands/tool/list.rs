@@ -7,7 +7,7 @@ use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_tool::InstalledTools;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -20,7 +20,7 @@ pub(crate) async fn list(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tool list` is experimental and may change without warning.");
+        warn_user_once!("`uv tool list` is experimental and may change without warning");
     }
 
     let installed_tools = InstalledTools::from_settings()?;
@@ -42,6 +42,15 @@ pub(crate) async fn list(
     }
 
     for (name, tool) in tools {
+        // Skip invalid tools
+        let Ok(tool) = tool else {
+            warn_user!(
+                "Ignoring malformed tool `{name}` (run `{}` to remove)",
+                format!("uv tool uninstall {name}").green()
+            );
+            continue;
+        };
+
         // Output tool name and version
         let version = match installed_tools.version(&name, cache) {
             Ok(version) => version,

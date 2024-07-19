@@ -99,16 +99,16 @@ impl Diagnostic for ResolutionDiagnostic {
     fn message(&self) -> String {
         match self {
             Self::MissingExtra { dist, extra } => {
-                format!("The package `{dist}` does not have an extra named `{extra}`.")
+                format!("The package `{dist}` does not have an extra named `{extra}`")
             }
             Self::MissingDev { dist, dev } => {
-                format!("The package `{dist}` does not have a development dependency group named `{dev}`.")
+                format!("The package `{dist}` does not have a development dependency group named `{dev}`")
             }
             Self::YankedVersion { dist, reason } => {
                 if let Some(reason) = reason {
-                    format!("`{dist}` is yanked (reason: \"{reason}\").")
+                    format!("`{dist}` is yanked (reason: \"{reason}\")")
                 } else {
-                    format!("`{dist}` is yanked.")
+                    format!("`{dist}` is yanked")
                 }
             }
         }

@@ -822,6 +822,20 @@ async fn run_project(
     }
 
     match *project_command {
+        ProjectCommand::Init(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::InitSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::init(
+                args.path,
+                args.name,
+                args.no_readme,
+                globals.preview,
+                printer,
+            )
+            .await
+        }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::RunSettings::resolve(args, filesystem);
@@ -839,6 +853,8 @@ async fn run_project(
             commands::run(
                 args.command,
                 requirements,
+                args.locked,
+                args.frozen,
                 args.package,
                 args.extras,
                 args.dev,
@@ -892,6 +908,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::lock(
+                args.locked,
+                args.frozen,
                 args.python,
                 args.settings,
                 globals.preview,
@@ -914,6 +932,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::add(
+                args.locked,
+                args.frozen,
                 args.requirements,
                 args.editable,
                 args.dependency_type,
@@ -945,6 +965,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::remove(
+                args.locked,
+                args.frozen,
                 args.requirements,
                 args.dependency_type,
                 args.package,
@@ -970,6 +992,8 @@ async fn run_project(
             let cache = cache.init()?;
 
             commands::tree(
+                args.locked,
+                args.frozen,
                 args.depth,
                 args.prune,
                 args.package,

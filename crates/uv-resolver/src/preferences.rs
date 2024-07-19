@@ -35,17 +35,17 @@ impl Preference {
 
         let Some(VersionOrUrl::VersionSpecifier(specifier)) = requirement.version_or_url.as_ref()
         else {
-            trace!("Excluding {requirement} from preferences due to non-version specifier.");
+            trace!("Excluding {requirement} from preferences due to non-version specifier");
             return Ok(None);
         };
 
         let [specifier] = specifier.as_ref() else {
-            trace!("Excluding {requirement} from preferences due to multiple version specifiers.");
+            trace!("Excluding {requirement} from preferences due to multiple version specifiers");
             return Ok(None);
         };
 
         if *specifier.operator() != Operator::Equal {
-            trace!("Excluding {requirement} from preferences due to inexact version specifier.");
+            trace!("Excluding {requirement} from preferences due to inexact version specifier");
             return Ok(None);
         }
 
@@ -128,7 +128,7 @@ impl Preferences {
                         },
                     ))
                 } else {
-                    trace!("Excluding {preference} from preferences due to unmatched markers.");
+                    trace!("Excluding {preference} from preferences due to unmatched markers");
                     None
                 }
             })

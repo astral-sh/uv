@@ -69,7 +69,7 @@ pub(crate) async fn run(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`{invocation_source}` is experimental and may change without warning.");
+        warn_user_once!("`{invocation_source}` is experimental and may change without warning");
     }
 
     let (target, args) = command.split();

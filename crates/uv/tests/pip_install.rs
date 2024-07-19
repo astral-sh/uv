@@ -761,7 +761,7 @@ fn allow_incompatibilities() -> Result<()> {
     Installed 1 package in [TIME]
      - jinja2==3.1.3
      + jinja2==2.11.3
-    warning: The package `flask` requires `jinja2>=3.1.2`, but `2.11.3` is installed.
+    warning: The package `flask` requires `jinja2>=3.1.2`, but `2.11.3` is installed
     "###
     );
 
@@ -2262,11 +2262,11 @@ fn no_deps() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flask==3.0.2
-    warning: The package `flask` requires `werkzeug>=3.0.0`, but it's not installed.
-    warning: The package `flask` requires `jinja2>=3.1.2`, but it's not installed.
-    warning: The package `flask` requires `itsdangerous>=2.1.2`, but it's not installed.
-    warning: The package `flask` requires `click>=8.1.3`, but it's not installed.
-    warning: The package `flask` requires `blinker>=1.6.2`, but it's not installed.
+    warning: The package `flask` requires `werkzeug>=3.0.0`, but it's not installed
+    warning: The package `flask` requires `jinja2>=3.1.2`, but it's not installed
+    warning: The package `flask` requires `itsdangerous>=2.1.2`, but it's not installed
+    warning: The package `flask` requires `click>=8.1.3`, but it's not installed
+    warning: The package `flask` requires `blinker>=1.6.2`, but it's not installed
     "###
     );
 
@@ -5727,7 +5727,7 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv.sources` is experimental and may change without warning.
+    warning: `uv.sources` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
