@@ -454,6 +454,13 @@
           "enum": [
             "hardlink"
           ]
+        },
+        {
+          "description": "Symbolically link packages from the wheel into the site packages",
+          "type": "string",
+          "enum": [
+            "symlink"
+          ]
         }
       ]
     },
