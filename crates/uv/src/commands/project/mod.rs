@@ -17,11 +17,13 @@ use uv_distribution::{DistributionDatabase, Workspace};
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
-    PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    request_from_version_file_in, EnvironmentPreference, Interpreter, PythonEnvironment,
+    PythonFetch, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
-use uv_resolver::{FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph};
+use uv_resolver::{
+    FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
+};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
 
@@ -33,6 +35,7 @@ use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverS
 
 pub(crate) mod add;
 pub(crate) mod environment;
+pub(crate) mod init;
 pub(crate) mod lock;
 pub(crate) mod remove;
 pub(crate) mod run;
@@ -60,6 +63,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Virtualenv(#[from] uv_virtualenv::Error),
+
+    #[error(transparent)]
+    HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
     Tags(#[from] platform_tags::TagsError),
@@ -151,10 +157,11 @@ impl FoundInterpreter {
         // (1) Explicit request from user
         let python_request = if let Some(request) = python_request {
             Some(request)
-            // (2) Request from `.python-version`
-        } else if let Some(request) = request_from_version_file().await? {
+        // (2) Request from `.python-version`
+        } else if let Some(request) = request_from_version_file_in(workspace.install_path()).await?
+        {
             Some(request)
-            // (3) `Requires-Python` in `pyproject.toml`
+        // (3) `Requires-Python` in `pyproject.toml`
         } else {
             requires_python
                 .as_ref()
@@ -485,7 +492,7 @@ pub(crate) async fn resolve_environment<'a>(
         &reinstall,
         &upgrade,
         Some(tags),
-        Some(markers),
+        ResolverMarkers::SpecificEnvironment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -737,7 +744,7 @@ pub(crate) async fn update_environment(
         reinstall,
         upgrade,
         Some(tags),
-        Some(markers),
+        ResolverMarkers::SpecificEnvironment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,

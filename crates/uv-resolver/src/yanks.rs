@@ -1,5 +1,6 @@
 use pypi_types::RequirementSource;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::Arc;
 
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -10,7 +11,7 @@ use crate::{DependencyMode, Manifest};
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
 #[derive(Debug, Default, Clone)]
-pub struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
+pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
 
 impl AllowedYanks {
     pub fn from_manifest(
@@ -47,7 +48,14 @@ impl AllowedYanks {
                 .insert(version.clone());
         }
 
-        Self(allowed_yanks)
+        Self(Arc::new(allowed_yanks))
+    }
+
+    /// Returns `true` if the package-version is allowed, even if it's marked as yanked.
+    pub fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
+        self.0
+            .get(package_name)
+            .map_or(false, |versions| versions.contains(version))
     }
 
     /// Returns versions for the given package which are allowed even if marked as yanked by the

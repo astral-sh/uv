@@ -2,16 +2,18 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
+use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_configuration::PreviewMode;
-use uv_python::downloads::{self, PythonDownloadRequest};
+use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::PythonRequest;
 use uv_warnings::warn_user_once;
 
+use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
@@ -23,7 +25,7 @@ pub(crate) async fn uninstall(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv python uninstall` is experimental and may change without warning.");
+        warn_user_once!("`uv python uninstall` is experimental and may change without warning");
     }
 
     let start = std::time::Instant::now();
@@ -43,8 +45,12 @@ pub(crate) async fn uninstall(
 
     let download_requests = requests
         .iter()
-        .map(PythonDownloadRequest::from_request)
-        .collect::<Result<Vec<_>, downloads::Error>>()?;
+        .map(|request| {
+            PythonDownloadRequest::from_request(request).ok_or_else(|| {
+                anyhow::anyhow!("Cannot uninstall managed Python for request: {request}")
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut matching_installations = BTreeSet::default();
@@ -64,18 +70,7 @@ pub(crate) async fn uninstall(
             .filter(|installation| download_request.satisfied_by_key(installation.key()))
         {
             found = true;
-            if matching_installations.insert(installation.clone()) {
-                if matches!(requests.as_slice(), [PythonRequest::Any]) {
-                    writeln!(printer.stderr(), "Found: {}", installation.key().green(),)?;
-                } else {
-                    writeln!(
-                        printer.stderr(),
-                        "Found existing installation for {}: {}",
-                        request.cyan(),
-                        installation.key().green(),
-                    )?;
-                }
-            }
+            matching_installations.insert(installation.clone());
         }
         if !found {
             if matches!(requests.as_slice(), [PythonRequest::Any]) {
@@ -99,52 +94,84 @@ pub(crate) async fn uninstall(
         return Ok(ExitStatus::Failure);
     }
 
-    let tasks = futures::stream::iter(matching_installations.iter())
-        .map(|installation| async {
+    let mut tasks = FuturesUnordered::new();
+    for installation in &matching_installations {
+        tasks.push(async {
             (
                 installation.key(),
                 fs_err::tokio::remove_dir_all(installation.path()).await,
             )
-        })
-        .buffered(4);
+        });
+    }
 
-    let results = tasks.collect::<Vec<_>>().await;
-    let mut failed = false;
-    for (key, result) in results.iter().sorted_by_key(|(key, _)| key) {
+    let mut uninstalled = vec![];
+    let mut errors = vec![];
+    while let Some((key, result)) = tasks.next().await {
         if let Err(err) = result {
-            failed = true;
-            writeln!(
-                printer.stderr(),
-                "Failed to uninstall {}: {err}",
-                key.green()
-            )?;
+            errors.push((key.clone(), err));
         } else {
-            writeln!(printer.stderr(), "Uninstalled: {}", key.green())?;
+            uninstalled.push(key.clone());
         }
     }
 
-    if failed {
-        if matching_installations.len() > 1 {
-            writeln!(printer.stderr(), "Failed to uninstall some Python versions")?;
+    if !uninstalled.is_empty() {
+        if let [uninstalled] = uninstalled.as_slice() {
+            // Ex) "Uninstalled Python 3.9.7 in 1.68s"
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Uninstalled {} {}",
+                    format!("Python {}", uninstalled.version()).bold(),
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+                .dimmed()
+            )?;
+        } else {
+            // Ex) "Uninstalled 2 versions in 1.68s"
+            let s = if uninstalled.len() == 1 { "" } else { "s" };
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Uninstalled {} {}",
+                    format!("{} version{s}", uninstalled.len()).bold(),
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+                .dimmed()
+            )?;
+        }
+
+        for event in uninstalled
+            .into_iter()
+            .map(|key| ChangeEvent {
+                key,
+                kind: ChangeEventKind::Removed,
+            })
+            .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
+        {
+            match event.kind {
+                ChangeEventKind::Added => {
+                    writeln!(printer.stderr(), " {} {}", "+".green(), event.key.bold())?;
+                }
+                ChangeEventKind::Removed => {
+                    writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold())?;
+                }
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        for (key, err) in errors {
+            writeln!(
+                printer.stderr(),
+                "Failed to uninstall {}: {}",
+                key.green(),
+                err
+            )?;
         }
         return Ok(ExitStatus::Failure);
     }
-
-    let s = if matching_installations.len() == 1 {
-        ""
-    } else {
-        "s"
-    };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Uninstalled {} {}",
-            format!("{} version{s}", matching_installations.len()).bold(),
-            format!("in {}", elapsed(start.elapsed())).dimmed()
-        )
-        .dimmed()
-    )?;
 
     Ok(ExitStatus::Success)
 }

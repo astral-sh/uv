@@ -99,7 +99,7 @@ impl RequirementsTxtDist {
 
         if self.extras.is_empty() || !include_extras {
             if let Some(markers) = self.markers.as_ref().filter(|_| include_markers) {
-                Cow::Owned(format!("{} ; {}", self.dist.verbatim(), markers,))
+                Cow::Owned(format!("{} ; {}", self.dist.verbatim(), markers))
             } else {
                 self.dist.verbatim()
             }

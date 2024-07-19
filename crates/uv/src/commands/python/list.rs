@@ -38,30 +38,43 @@ pub(crate) async fn list(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv python list` is experimental and may change without warning.");
+        warn_user_once!("`uv python list` is experimental and may change without warning");
     }
 
-    let download_request = match kinds {
-        PythonListKinds::Installed => None,
-        PythonListKinds::Default => {
-            if python_fetch.is_automatic() {
-                Some(if all_platforms {
-                    PythonDownloadRequest::default()
+    let mut output = BTreeSet::new();
+    if python_preference != PythonPreference::OnlySystem {
+        let download_request = match kinds {
+            PythonListKinds::Installed => None,
+            PythonListKinds::Default => {
+                if python_fetch.is_automatic() {
+                    Some(if all_platforms {
+                        PythonDownloadRequest::default()
+                    } else {
+                        PythonDownloadRequest::from_env()?
+                    })
                 } else {
-                    PythonDownloadRequest::from_env()?
-                })
-            } else {
-                // If fetching is not automatic, then don't show downloads as available by default
-                None
+                    // If fetching is not automatic, then don't show downloads as available by default
+                    None
+                }
             }
+        };
+
+        let downloads = download_request
+            .as_ref()
+            .map(uv_python::downloads::PythonDownloadRequest::iter_downloads)
+            .into_iter()
+            .flatten();
+
+        for download in downloads {
+            output.insert((
+                download.python_version().version().clone(),
+                download.os().to_string(),
+                download.key().clone(),
+                Kind::Download,
+                None,
+            ));
         }
     };
-
-    let downloads = download_request
-        .as_ref()
-        .map(uv_python::downloads::PythonDownloadRequest::iter_downloads)
-        .into_iter()
-        .flatten();
 
     let installed = find_python_installations(
         &PythonRequest::Any,
@@ -81,7 +94,6 @@ pub(crate) async fn list(
     // Drop any "missing" installations
     .filter_map(Result::ok);
 
-    let mut output = BTreeSet::new();
     for installation in installed {
         let kind = if matches!(installation.source(), PythonSource::Managed) {
             Kind::Managed
@@ -96,15 +108,6 @@ pub(crate) async fn list(
             Some(installation.interpreter().sys_executable().to_path_buf()),
         ));
     }
-    for download in downloads {
-        output.insert((
-            download.python_version().version().clone(),
-            download.os().to_string(),
-            download.key().clone(),
-            Kind::Download,
-            None,
-        ));
-    }
 
     let mut seen_minor = HashSet::new();
     let mut seen_patch = HashSet::new();
@@ -113,14 +116,15 @@ pub(crate) async fn list(
         // Only show the latest patch version for each download unless all were requested
         if !matches!(kind, Kind::System) {
             if let [major, minor, ..] = version.release() {
-                if !seen_minor.insert((os.clone(), *major, *minor)) {
+                if !seen_minor.insert((os.clone(), *major, *minor, *key.arch(), *key.libc())) {
                     if matches!(kind, Kind::Download) && !all_versions {
                         continue;
                     }
                 }
             }
             if let [major, minor, patch] = version.release() {
-                if !seen_patch.insert((os.clone(), *major, *minor, *patch)) {
+                if !seen_patch.insert((os.clone(), *major, *minor, *patch, *key.arch(), key.libc()))
+                {
                     if matches!(kind, Kind::Download) {
                         continue;
                     }

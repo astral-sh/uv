@@ -80,7 +80,7 @@ to model, and are a frequent source of bugs in other packaging tools. uv's pre-r
 is _intentionally_ limited and _intentionally_ requires user opt-in for pre-releases, to ensure
 correctness.
 
-For more, see ["Pre-release compatibility"](./PIP_COMPATIBILITY.md#pre-release-compatibility)
+For more, see ["Pre-release compatibility"](./pip/compatibility.md#pre-release-compatibility)
 
 ## Dependency overrides
 

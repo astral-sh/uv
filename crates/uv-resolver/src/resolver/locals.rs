@@ -1,46 +1,26 @@
-use std::iter;
 use std::str::FromStr;
-
-use rustc_hash::FxHashMap;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::RemoteSource;
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::PackageName;
 use pypi_types::RequirementSource;
-use uv_normalize::PackageName;
+use rustc_hash::FxHashMap;
 
-use crate::{DependencyMode, Manifest};
+/// A map of package names to their associated, required local versions in a given fork.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct ForkLocals(FxHashMap<PackageName, Version>);
 
-#[derive(Debug, Default)]
-pub(crate) struct Locals {
-    /// A map of package names to their associated, required local versions.
-    required: FxHashMap<PackageName, Version>,
-}
-
-impl Locals {
-    /// Determine the set of permitted local versions in the [`Manifest`].
-    pub(crate) fn from_manifest(
-        manifest: &Manifest,
-        markers: Option<&MarkerEnvironment>,
-        dependencies: DependencyMode,
-    ) -> Self {
-        let mut required: FxHashMap<PackageName, Version> = FxHashMap::default();
-
-        // Add all direct requirements and constraints. There's no need to look for conflicts,
-        // since conflicts will be enforced by the solver.
-        for requirement in manifest.requirements(markers, dependencies) {
-            for local in iter_locals(&requirement.source) {
-                required.insert(requirement.name.clone(), local);
-            }
-        }
-
-        Self { required }
+impl ForkLocals {
+    /// Insert the local [`Version`] to which a package is pinned for this fork.
+    pub(crate) fn insert(&mut self, package_name: PackageName, local: Version) {
+        assert!(local.is_local());
+        self.0.insert(package_name, local);
     }
 
-    /// Return the local [`Version`] to which a package is pinned, if any.
-    pub(crate) fn get(&self, package: &PackageName) -> Option<&Version> {
-        self.required.get(package)
+    /// Return the local [`Version`] to which a package is pinned in this fork, if any.
+    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&Version> {
+        self.0.get(package_name)
     }
 
     /// Given a specifier that may include the version _without_ a local segment, return a specifier
@@ -140,63 +120,61 @@ fn is_compatible(expected: &Version, provided: &Version) -> bool {
     }
 }
 
-/// If a [`VersionSpecifier`] contains exact equality specifiers for a local version, returns an
-/// iterator over the local versions.
-fn iter_locals(source: &RequirementSource) -> Box<dyn Iterator<Item = Version> + '_> {
+/// If a [`VersionSpecifier`] contains an exact equality specifier for a local version,
+/// returns the local version.
+pub(crate) fn from_source(source: &RequirementSource) -> Option<Version> {
     match source {
         // Extract all local versions from specifiers that require an exact version (e.g.,
         // `==1.0.0+local`).
         RequirementSource::Registry {
             specifier: version, ..
-        } => Box::new(
-            version
-                .iter()
-                .filter(|specifier| {
-                    matches!(specifier.operator(), Operator::Equal | Operator::ExactEqual)
-                })
-                .filter(|specifier| !specifier.version().local().is_empty())
-                .map(|specifier| specifier.version().clone()),
-        ),
+        } => version
+            .iter()
+            .filter(|specifier| {
+                matches!(specifier.operator(), Operator::Equal | Operator::ExactEqual)
+            })
+            .filter(|specifier| !specifier.version().local().is_empty())
+            .map(|specifier| specifier.version().clone())
+            // It's technically possible for there to be multiple local segments here.
+            // For example, `a==1.0+foo,==1.0+bar`. However, in that case resolution
+            // will fail later.
+            .next(),
         // Exact a local version from a URL, if it includes a fully-qualified filename (e.g.,
         // `torch-2.2.1%2Bcu118-cp311-cp311-linux_x86_64.whl`).
-        RequirementSource::Url { url, .. } => Box::new(
-            url.filename()
-                .ok()
-                .and_then(|filename| {
-                    if let Ok(filename) = WheelFilename::from_str(&filename) {
-                        Some(filename.version)
-                    } else if let Ok(filename) =
-                        SourceDistFilename::parsed_normalized_filename(&filename)
-                    {
-                        Some(filename.version)
-                    } else {
-                        None
-                    }
-                })
-                .into_iter()
-                .filter(pep440_rs::Version::is_local),
-        ),
-        RequirementSource::Git { .. } => Box::new(iter::empty()),
+        RequirementSource::Url { url, .. } => url
+            .filename()
+            .ok()
+            .and_then(|filename| {
+                if let Ok(filename) = WheelFilename::from_str(&filename) {
+                    Some(filename.version)
+                } else if let Ok(filename) =
+                    SourceDistFilename::parsed_normalized_filename(&filename)
+                {
+                    Some(filename.version)
+                } else {
+                    None
+                }
+            })
+            .filter(pep440_rs::Version::is_local),
+        RequirementSource::Git { .. } => None,
         RequirementSource::Path {
             install_path: path, ..
-        } => Box::new(
-            path.file_name()
-                .and_then(|filename| {
-                    let filename = filename.to_string_lossy();
-                    if let Ok(filename) = WheelFilename::from_str(&filename) {
-                        Some(filename.version)
-                    } else if let Ok(filename) =
-                        SourceDistFilename::parsed_normalized_filename(&filename)
-                    {
-                        Some(filename.version)
-                    } else {
-                        None
-                    }
-                })
-                .into_iter()
-                .filter(pep440_rs::Version::is_local),
-        ),
-        RequirementSource::Directory { .. } => Box::new(iter::empty()),
+        } => path
+            .file_name()
+            .and_then(|filename| {
+                let filename = filename.to_string_lossy();
+                if let Ok(filename) = WheelFilename::from_str(&filename) {
+                    Some(filename.version)
+                } else if let Ok(filename) =
+                    SourceDistFilename::parsed_normalized_filename(&filename)
+                {
+                    Some(filename.version)
+                } else {
+                    None
+                }
+            })
+            .filter(pep440_rs::Version::is_local),
+        RequirementSource::Directory { .. } => None,
     }
 }
 
@@ -212,7 +190,7 @@ mod tests {
     use pypi_types::ParsedUrl;
     use pypi_types::RequirementSource;
 
-    use crate::resolver::locals::{iter_locals, Locals};
+    use super::{from_source, ForkLocals};
 
     #[test]
     fn extract_locals() -> Result<()> {
@@ -220,7 +198,7 @@ mod tests {
         let url = VerbatimUrl::from_url(Url::parse("https://example.com/foo-1.0.0+local.tar.gz")?);
         let source =
             RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
-        let locals: Vec<_> = iter_locals(&source).collect();
+        let locals: Vec<_> = from_source(&source).into_iter().collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Extract from a wheel in a URL.
@@ -229,14 +207,14 @@ mod tests {
         )?);
         let source =
             RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
-        let locals: Vec<_> = iter_locals(&source).collect();
+        let locals: Vec<_> = from_source(&source).into_iter().collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Don't extract anything if the URL is opaque.
         let url = VerbatimUrl::from_url(Url::parse("git+https://example.com/foo/bar")?);
         let source =
             RequirementSource::from_parsed_url(ParsedUrl::try_from(url.to_url()).unwrap(), url);
-        let locals: Vec<_> = iter_locals(&source).collect();
+        let locals: Vec<_> = from_source(&source).into_iter().collect();
         assert!(locals.is_empty());
 
         // Extract from `==` specifiers.
@@ -248,7 +226,7 @@ mod tests {
             specifier: version,
             index: None,
         };
-        let locals: Vec<_> = iter_locals(&source).collect();
+        let locals: Vec<_> = from_source(&source).into_iter().collect();
         assert_eq!(locals, vec![Version::from_str("1.0.0+local")?]);
 
         // Ignore other specifiers.
@@ -260,7 +238,7 @@ mod tests {
             specifier: version,
             index: None,
         };
-        let locals: Vec<_> = iter_locals(&source).collect();
+        let locals: Vec<_> = from_source(&source).into_iter().collect();
         assert!(locals.is_empty());
 
         Ok(())
@@ -273,7 +251,7 @@ mod tests {
         let specifier =
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0")?)?;
         assert_eq!(
-            Locals::map(&local, &specifier)?,
+            ForkLocals::map(&local, &specifier)?,
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?
         );
 
@@ -282,7 +260,7 @@ mod tests {
         let specifier =
             VersionSpecifier::from_version(Operator::NotEqual, Version::from_str("1.0.0")?)?;
         assert_eq!(
-            Locals::map(&local, &specifier)?,
+            ForkLocals::map(&local, &specifier)?,
             VersionSpecifier::from_version(Operator::NotEqual, Version::from_str("1.0.0+local")?)?
         );
 
@@ -291,7 +269,7 @@ mod tests {
         let specifier =
             VersionSpecifier::from_version(Operator::LessThanEqual, Version::from_str("1.0.0")?)?;
         assert_eq!(
-            Locals::map(&local, &specifier)?,
+            ForkLocals::map(&local, &specifier)?,
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?
         );
 
@@ -300,7 +278,7 @@ mod tests {
         let specifier =
             VersionSpecifier::from_version(Operator::GreaterThan, Version::from_str("1.0.0")?)?;
         assert_eq!(
-            Locals::map(&local, &specifier)?,
+            ForkLocals::map(&local, &specifier)?,
             VersionSpecifier::from_version(Operator::GreaterThan, Version::from_str("1.0.0")?)?
         );
 
@@ -309,7 +287,7 @@ mod tests {
         let specifier =
             VersionSpecifier::from_version(Operator::ExactEqual, Version::from_str("1.0.0")?)?;
         assert_eq!(
-            Locals::map(&local, &specifier)?,
+            ForkLocals::map(&local, &specifier)?,
             VersionSpecifier::from_version(Operator::ExactEqual, Version::from_str("1.0.0")?)?
         );
 
@@ -318,7 +296,7 @@ mod tests {
         let specifier =
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?;
         assert_eq!(
-            Locals::map(&local, &specifier)?,
+            ForkLocals::map(&local, &specifier)?,
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?
         );
 
@@ -327,7 +305,7 @@ mod tests {
         let specifier =
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+other")?)?;
         assert_eq!(
-            Locals::map(&local, &specifier)?,
+            ForkLocals::map(&local, &specifier)?,
             VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+other")?)?
         );
 

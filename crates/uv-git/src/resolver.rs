@@ -108,16 +108,7 @@ impl GitResolver {
             }
         }
 
-        // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
-        // commit, etc.).
-        let source = if let Some(reporter) = reporter {
-            GitSource::new(url.clone(), client, cache).with_reporter(reporter)
-        } else {
-            GitSource::new(url.clone(), client, cache)
-        };
-        let fetch = tokio::task::spawn_blocking(move || source.fetch())
-            .await?
-            .map_err(GitResolverError::Git)?;
+        let fetch = self.fetch(url, client, cache, reporter).await?;
         let git = fetch.into_git();
 
         // Insert the resolved URL into the in-memory cache.

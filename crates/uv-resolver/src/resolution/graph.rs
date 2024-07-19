@@ -489,6 +489,10 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
                 .dists()
                 .map(|node| (node.name().clone(), node.dist.clone()))
                 .collect(),
+            graph
+                .dists()
+                .map(|node| (node.name().clone(), node.hashes.clone()))
+                .collect(),
             graph.diagnostics,
         )
     }

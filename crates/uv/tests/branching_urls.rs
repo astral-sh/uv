@@ -1,35 +1,12 @@
 use std::env;
-use std::path::Path;
 
 use anyhow::Result;
-use indoc::{formatdoc, indoc};
+use indoc::indoc;
 use insta::assert_snapshot;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{make_project, uv_snapshot, TestContext};
 
 mod common;
-
-/// Create a stub package `name` in `dir` with the given `pyproject.toml` body.
-fn make_project(dir: &Path, name: &str, body: &str) -> Result<()> {
-    let pyproject_toml = formatdoc! {r#"
-        [project]
-        name = "{name}"
-        version = "0.1.0"
-        description = "Test package for direct URLs in branches"
-        requires-python = ">=3.11,<3.13"
-        {body}
-
-        [build-system]
-        requires = ["flit_core>=3.8,<4"]
-        build-backend = "flit_core.buildapi"
-        "#
-    };
-    fs_err::create_dir_all(dir)?;
-    fs_err::write(dir.join("pyproject.toml"), pyproject_toml)?;
-    fs_err::create_dir(dir.join(name))?;
-    fs_err::write(dir.join(name).join("__init__.py"), "")?;
-    Ok(())
-}
 
 /// The root package has diverging URLs for disjoint markers:
 /// ```toml

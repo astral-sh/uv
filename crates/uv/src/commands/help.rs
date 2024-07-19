@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::{fmt::Display, fmt::Write};
 
 use anstream::{stream::IsTerminal, ColorChoice};
@@ -68,13 +69,18 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
 
     let is_terminal = std::io::stdout().is_terminal();
     let should_page = !no_pager && !is_root && is_terminal;
-    if should_page && which("less").is_ok() {
-        // When using less, we use the command name as the file name and can support colors
-        let prompt = format!("help: uv {}", query.join(" "));
-        spawn_pager("less", &["-R", "-P", &prompt], &help_ansi)?;
-    } else if should_page && which("more").is_ok() {
-        // When using more, we skip the ANSI color codes
-        spawn_pager("more", &[], &help)?;
+
+    if should_page {
+        if let Ok(less) = which("less") {
+            // When using less, we use the command name as the file name and can support colors
+            let prompt = format!("help: uv {}", query.join(" "));
+            spawn_pager(less, &["-R", "-P", &prompt], &help_ansi)?;
+        } else if let Ok(more) = which("more") {
+            // When using more, we skip the ANSI color codes
+            spawn_pager(more, &[], &help)?;
+        } else {
+            writeln!(printer.stdout(), "{help_ansi}")?;
+        }
     } else {
         writeln!(printer.stdout(), "{help_ansi}")?;
     }
@@ -98,7 +104,7 @@ fn find_command<'a>(
 }
 
 /// Spawn a paging command to display contents.
-fn spawn_pager(command: &str, args: &[&str], contents: impl Display) -> Result<()> {
+fn spawn_pager(command: impl AsRef<OsStr>, args: &[&str], contents: impl Display) -> Result<()> {
     use std::io::Write;
 
     let mut child = std::process::Command::new(command)

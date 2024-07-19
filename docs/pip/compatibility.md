@@ -183,7 +183,7 @@ In other words, uv inverts the default, requiring explicit opt-in to installing 
 Python, which can lead to breakages and other complications, and should only be done in limited
 circumstances.
 
-For more, see ["Installing into arbitrary Python environments"](./README.md#installing-into-arbitrary-python-environments).
+For more, see ["Using arbitrary Python environments"](./environments.md#using-arbitrary-python-environments).
 
 ## Resolution strategy
 

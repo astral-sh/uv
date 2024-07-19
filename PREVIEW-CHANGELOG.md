@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.2.26
+
+### Preview features
+
+- Indicate that `uv lock --upgrade` has updated the lock file ([#5110](https://github.com/astral-sh/uv/pull/5110))
+- Sort managed Python installations by version ([#5140](https://github.com/astral-sh/uv/pull/5140))
+- Support workspace to workspace path dependencies ([#4833](https://github.com/astral-sh/uv/pull/4833))
+- Allow conflicting locals when forking ([#5104](https://github.com/astral-sh/uv/pull/5104))
+- Rework `pyproject.toml` reformatting to respect original indentation ([#5075](https://github.com/astral-sh/uv/pull/5075))
+
+### Documentation
+
+- Add stubs for the project documentation ([#5135](https://github.com/astral-sh/uv/pull/5135))
+- Add `settings.md` to docs ([#5091](https://github.com/astral-sh/uv/pull/5091))
+- Add contributor documentation for the docs ([#5108](https://github.com/astral-sh/uv/pull/5108))
+- Add reference documentation for global settings ([#5123](https://github.com/astral-sh/uv/pull/5123))
+- Add reference documentation for pip settings ([#5125](https://github.com/astral-sh/uv/pull/5125))
+- Add reference documentation for resolver settings ([#5122](https://github.com/astral-sh/uv/pull/5122))
+- Add uv to docs Pull Request titles ([#5115](https://github.com/astral-sh/uv/pull/5115))
+- Auto-merge docs PRs on release ([#5101](https://github.com/astral-sh/uv/pull/5101))
+- Autogenerate possible values for enums in reference documentation ([#5137](https://github.com/astral-sh/uv/pull/5137))
+
+## 0.2.25
+
+### Preview features
+
+- Add documentation for running scripts ([#4968](https://github.com/astral-sh/uv/pull/4968))
+- Add guide for tools ([#4982](https://github.com/astral-sh/uv/pull/4982))
+- Allow URL dependencies in tool run `--from` ([#5002](https://github.com/astral-sh/uv/pull/5002))
+- Add guide for authenticating to Azure Artifacts ([#4857](https://github.com/astral-sh/uv/pull/4857))
+- Improve rc file detection based on rustup ([#5026](https://github.com/astral-sh/uv/pull/5026))
+- Rename `python install --force` parameter to `--reinstall` ([#4999](https://github.com/astral-sh/uv/pull/4999))
+- Use lockfile to prefill resolver index ([#4495](https://github.com/astral-sh/uv/pull/4495))
+- `uv tool install` hint the correct when the executable is available ([#5019](https://github.com/astral-sh/uv/pull/5019))
+- `uv tool run` error messages references `uvx` when appropriate ([#5014](https://github.com/astral-sh/uv/pull/5014))
+- `uvx` warns when requested executable is not provided by the package [#5071](https://github.com/astral-sh/uv/pull/5071))
+- Exit with zero when `uv tool install` request is already satisfied ([#4986](https://github.com/astral-sh/uv/pull/4986))
+- Respect the libc of the execution environment with `uv python list` ([#5036](https://github.com/astral-sh/uv/pull/5036))
+- Update standalone Pythons to include 3.12.4 ([#5042](https://github.com/astral-sh/uv/pull/5042))
+- `uv tool run` suggest valid commands when command is not found ([#4997](https://github.com/astral-sh/uv/pull/4997))
+- Add Windows path updates for `uv tool` ([#5029](https://github.com/astral-sh/uv/pull/5029))
+- Add a command to append uv's binary directory to PATH ([#4975](https://github.com/astral-sh/uv/pull/4975))
+
 ## 0.2.24
 
 ### Preview features

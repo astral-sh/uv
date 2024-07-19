@@ -1,0 +1,106 @@
+site_name: uv
+theme:
+  name: material
+  favicon: assets/favicon.ico
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.expand
+    - navigation.tracking
+    - content.code.annotate
+    - toc.follow
+    - navigation.path
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    # Note: Using the system theme works with the insiders version
+    # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#automatic-light-dark-mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: astral-light
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: astral-dark
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  custom_dir: docs/.overrides
+repo_url: https://github.com/astral-sh/uv
+repo_name: uv
+site_author: charliermarsh
+site_url: https://docs.astral.sh/uv/
+site_dir: site/uv
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - toc:
+      permalink: "#"
+  - pymdownx.snippets:
+  - pymdownx.magiclink:
+  - attr_list:
+  - md_in_html:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite:
+  - pymdownx.superfences:
+  - markdown.extensions.attr_list:
+  - pymdownx.keys:
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+plugins:
+  - search
+  - typeset
+extra_css:
+  - stylesheets/extra.css
+extra:
+  analytics:
+    provider: fathom
+nav:
+  - Introduction: index.md
+  - Getting started:
+      - Installation: installation.md
+      - First steps: first-steps.md
+  - Guides:
+      - Installing Python: guides/install-python.md
+      - Running scripts: guides/scripts.md
+      - Using tools: guides/tools.md
+      - Working on projects: guides/projects.md
+  - Concepts:
+      - Projects: projects.md
+      - Command-line tools: preview/tools.md
+      - Python versions: python-versions.md
+      - Workspaces: preview/workspaces.md
+      - Dependency sources: preview/dependencies.md
+      - Resolution: resolution.md
+      - Caching: cache.md
+      - Authentication: configuration/authentication.md
+  - Configuration:
+      - Configuration files: configuration/files.md
+      - Environment variables: configuration/environment.md
+      - Settings: settings.md
+  - Integration guides:
+      - Docker: guides/integration/docker.md
+      - GitHub Actions: guides/integration/github.md
+      - Pre-commit: guides/integration/pre-commit.md
+      - Commercial indexes: guides/integration/commercial-indexes.md
+  - Low-level operations:
+      - Using environments: pip/environments.md
+      - Managing packages: pip/packages.md
+      - Inspecting packages: pip/inspection.md
+      - Declaring dependencies: pip/dependencies.md
+      - Locking environments: pip/compile.md
+  - Policies:
+      - Versioning: versioning.md
+      - Platform support: platforms.md
+      - Compatibility with pip: pip/compatibility.md

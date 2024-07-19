@@ -12,6 +12,7 @@ use thiserror::Error;
 use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
 use pypi_types::Requirement;
+use tracing::warn;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -20,15 +21,16 @@ use uv_configuration::{
     NoBuild, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution::VirtualProject;
 use uv_fs::Simplified;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, PythonFetch, PythonInstallation,
-    PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 
+use crate::commands::python_request_from_version_file;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{pip, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -51,6 +53,7 @@ pub(crate) async fn venv(
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
+    isolated: bool,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -72,6 +75,7 @@ pub(crate) async fn venv(
         allow_existing,
         exclude_newer,
         native_tls,
+        isolated,
         cache,
         printer,
     )
@@ -123,6 +127,7 @@ async fn venv_impl(
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
+    isolated: bool,
     cache: &Cache,
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
@@ -136,7 +141,17 @@ async fn venv_impl(
 
     let mut interpreter_request = python_request.map(PythonRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {
-        interpreter_request = request_from_version_file().await.into_diagnostic()?;
+        let project = if isolated {
+            None
+        } else {
+            VirtualProject::discover(&std::env::current_dir().into_diagnostic()?, None)
+                .await
+                .inspect_err(|err| warn!("Failed to discover project: {err}"))
+                .ok()
+        };
+        interpreter_request = python_request_from_version_file(project.as_ref())
+            .await
+            .into_diagnostic()?;
     }
 
     // Locate the Python interpreter to use in the environment

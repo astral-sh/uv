@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use pypi_types::{Requirement, RequirementSource};
+use pypi_types::{HashDigest, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
@@ -9,6 +9,7 @@ use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
 #[derive(Debug, Default, Clone)]
 pub struct Resolution {
     packages: BTreeMap<PackageName, ResolvedDist>,
+    hashes: BTreeMap<PackageName, Vec<HashDigest>>,
     diagnostics: Vec<ResolutionDiagnostic>,
 }
 
@@ -16,10 +17,12 @@ impl Resolution {
     /// Create a new resolution from the given pinned packages.
     pub fn new(
         packages: BTreeMap<PackageName, ResolvedDist>,
+        hashes: BTreeMap<PackageName, Vec<HashDigest>>,
         diagnostics: Vec<ResolutionDiagnostic>,
     ) -> Self {
         Self {
             packages,
+            hashes,
             diagnostics,
         }
     }
@@ -30,6 +33,11 @@ impl Resolution {
             ResolvedDist::Installable(dist) => Some(dist),
             ResolvedDist::Installed(_) => None,
         }
+    }
+
+    /// Return the hashes for the given package name, if they exist.
+    pub fn get_hashes(&self, package_name: &PackageName) -> &[HashDigest] {
+        self.hashes.get(package_name).map_or(&[], Vec::as_slice)
     }
 
     /// Iterate over the [`PackageName`] entities in this resolution.
@@ -91,16 +99,16 @@ impl Diagnostic for ResolutionDiagnostic {
     fn message(&self) -> String {
         match self {
             Self::MissingExtra { dist, extra } => {
-                format!("The package `{dist}` does not have an extra named `{extra}`.")
+                format!("The package `{dist}` does not have an extra named `{extra}`")
             }
             Self::MissingDev { dist, dev } => {
-                format!("The package `{dist}` does not have a development dependency group named `{dev}`.")
+                format!("The package `{dist}` does not have a development dependency group named `{dev}`")
             }
             Self::YankedVersion { dist, reason } => {
                 if let Some(reason) = reason {
-                    format!("`{dist}` is yanked (reason: \"{reason}\").")
+                    format!("`{dist}` is yanked (reason: \"{reason}\")")
                 } else {
-                    format!("`{dist}` is yanked.")
+                    format!("`{dist}` is yanked")
                 }
             }
         }

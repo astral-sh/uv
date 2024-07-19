@@ -1,6 +1,7 @@
 use core::fmt;
 use fs_err as fs;
-use std::collections::BTreeSet;
+use itertools::Itertools;
+use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -24,7 +25,7 @@ use uv_fs::{LockedFile, Simplified};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
     #[error(transparent)]
     Download(#[from] DownloadError),
     #[error(transparent)]
@@ -134,17 +135,15 @@ impl ManagedPythonInstallations {
 
     /// Iterate over each Python installation in this directory.
     ///
-    /// Pythons are sorted descending by name, such that we get deterministic
-    /// ordering across platforms. This also results in newer Python versions coming first,
-    /// but should not be relied on — instead the installations should be sorted later by
-    /// the parsed Python version.
+    /// Pythons are sorted by [`PythonInstallationKey`], for the same implementation name, the newest versions come first.
+    /// This ensures a consistent ordering across all platforms.
     pub fn find_all(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(installation_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
-                let directories: BTreeSet<_> = installation_dirs
+                let directories: Vec<_> = installation_dirs
                     .filter_map(|read_dir| match read_dir {
                         Ok(entry) => match entry.file_type() {
                             Ok(file_type) => file_type.is_dir().then_some(Ok(entry.path())),
@@ -152,14 +151,14 @@ impl ManagedPythonInstallations {
                         },
                         Err(err) => Some(Err(err)),
                     })
-                    .collect::<Result<_, std::io::Error>>()
+                    .collect::<Result<_, io::Error>>()
                     .map_err(|err| Error::ReadError {
                         dir: self.root.clone(),
                         err,
                     })?;
                 directories
             }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => BTreeSet::default(),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => vec![],
             Err(err) => {
                 return Err(Error::ReadError {
                     dir: self.root.clone(),
@@ -176,7 +175,7 @@ impl ManagedPythonInstallations {
                     })
                     .ok()
             })
-            .rev())
+            .sorted_unstable_by_key(|installation| Reverse(installation.key().clone())))
     }
 
     /// Iterate over Python installations that support the current platform.

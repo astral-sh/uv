@@ -12,7 +12,6 @@ use toml_edit::Value;
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
     /// The requirements requested by the user during installation.
     requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,

@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.29/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.30/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.29/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.29/vendor/links.html");
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.30/vendor/links.html");
     context.add_shared_args(&mut command);
     command.env_remove("UV_EXCLUDE_NEWER");
     command
@@ -701,7 +701,7 @@ fn missing_extra() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
-    warning: The package `package-a==1.0.0` does not have an extra named `extra`.
+    warning: The package `package-a==1.0.0` does not have an extra named `extra`
     "###);
 
     // Missing extras are ignored during resolution.
@@ -1074,7 +1074,7 @@ fn extra_does_not_exist_backtrack() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==3.0.0
-    warning: The package `package-a==3.0.0` does not have an extra named `extra`.
+    warning: The package `package-a==3.0.0` does not have an extra named `extra`
     "###);
 
     // The resolver should not backtrack to `a==1.0.0` because missing extras are
@@ -4769,7 +4769,7 @@ fn transitive_package_only_yanked_in_range_opt_in() {
     Installed 2 packages in [TIME]
      + package-a==0.1.0
      + package-b==1.0.0
-    warning: `package-b==1.0.0` is yanked (reason: "Yanked for testing").
+    warning: `package-b==1.0.0` is yanked (reason: "Yanked for testing")
     "###);
 
     // Since the user included a dependency on `b` with an exact specifier, the yanked
@@ -4901,7 +4901,7 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
      + package-a==1.0.0
      + package-b==1.0.0
      + package-c==2.0.0
-    warning: `package-c==2.0.0` is yanked (reason: "Yanked for testing").
+    warning: `package-c==2.0.0` is yanked (reason: "Yanked for testing")
     "###);
 
     // Since the user explicitly selected the yanked version of `c`, it can be

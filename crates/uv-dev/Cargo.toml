@@ -29,9 +29,11 @@ uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true, features = ["schemars"] }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
+uv-macros = { workspace = true }
+uv-options-metadata = { workspace = true }
+uv-python = { workspace = true }
 uv-resolver = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
-uv-python = { workspace = true }
 uv-types = { workspace = true }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
@@ -40,6 +42,7 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
+itertools = { workspace = true }
 owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.0" }
@@ -49,6 +52,7 @@ schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tagu = { version = "0.1.6", optional = true }
+textwrap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
@@ -59,7 +63,7 @@ walkdir = { workspace = true }
 mimalloc = { version = "0.1.39" }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
-tikv-jemallocator = { version = "0.5.4" }
+tikv-jemallocator = { version = "0.6.0" }
 
 [features]
 default = []

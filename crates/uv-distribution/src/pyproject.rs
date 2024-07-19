@@ -17,6 +17,7 @@ use url::Url;
 use pep440_rs::VersionSpecifiers;
 use pypi_types::{RequirementSource, VerbatimParsedUrl};
 use uv_git::GitReference;
+use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, PackageName};
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -69,21 +70,29 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
     pub sources: Option<BTreeMap<PackageName, Source>>,
     /// The workspace definition for the project, if any.
+    #[option_group]
     pub workspace: Option<ToolUvWorkspace>,
-    /// Whether the project is managed by `uv`. If `false`, `uv` will ignore the project when
+    /// Whether the project is managed by uv. If `false`, uv will ignore the project when
     /// `uv run` is invoked.
+    #[option(
+        default = r#"true"#,
+        value_type = "bool",
+        example = r#"
+            managed = false
+        "#
+    )]
     pub managed: Option<bool>,
     #[cfg_attr(
         feature = "schemars",
         schemars(
             with = "Option<Vec<String>>",
-            description = "PEP 508-style requirements, e.g., `flask==3.0.0`, or `black @ https://...`."
+            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
         )
     )]
     pub dev_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
@@ -91,16 +100,41 @@ pub struct ToolUv {
         feature = "schemars",
         schemars(
             with = "Option<Vec<String>>",
-            description = "PEP 508 style requirements, e.g. `flask==3.0.0`, or `black @ https://...`."
+            description = "PEP 508 style requirements, e.g. `ruff==0.5.0`, or `ruff @ https://...`."
         )
     )]
     pub override_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvWorkspace {
+    /// Packages to include as workspace members.
+    ///
+    /// Supports both globs and explicit paths.
+    ///
+    /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[str]",
+        example = r#"
+            members = ["member1", "path/to/member2", "libs/*"]
+        "#
+    )]
     pub members: Option<Vec<SerdePattern>>,
+    /// Packages to exclude as workspace members. If a package matches both `members` and
+    /// `exclude`, it will be excluded.
+    ///
+    /// Supports both globs and explicit paths.
+    ///
+    /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[str]",
+        example = r#"
+            exclude = ["member1", "path/to/member2", "libs/*"]
+        "#
+    )]
     pub exclude: Option<Vec<SerdePattern>>,
 }
 

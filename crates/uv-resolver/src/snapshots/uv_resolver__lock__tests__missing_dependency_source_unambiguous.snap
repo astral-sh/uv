@@ -48,11 +48,13 @@ Ok(
                             fragment: None,
                         },
                         metadata: SourceDistMetadata {
-                            hash: Hash(
-                                HashDigest {
-                                    algorithm: Sha256,
-                                    digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
-                                },
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
                             ),
                             size: Some(
                                 0,
@@ -107,11 +109,13 @@ Ok(
                             fragment: None,
                         },
                         metadata: SourceDistMetadata {
-                            hash: Hash(
-                                HashDigest {
-                                    algorithm: Sha256,
-                                    digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
-                                },
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
                             ),
                             size: Some(
                                 0,
@@ -145,7 +149,7 @@ Ok(
                                 },
                             ),
                         },
-                        extra: None,
+                        extra: {},
                         marker: None,
                     },
                 ],

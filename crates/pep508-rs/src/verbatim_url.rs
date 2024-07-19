@@ -8,7 +8,7 @@ use regex::Regex;
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_fs::{normalize_path, normalize_url_path};
+use uv_fs::{normalize_absolute_path, normalize_url_path};
 
 use crate::Pep508Url;
 
@@ -42,7 +42,7 @@ impl VerbatimUrl {
         let path = path.as_ref();
 
         // Normalize the path.
-        let path = normalize_path(path)
+        let path = normalize_absolute_path(path)
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Extract the fragment, if it exists.
@@ -83,7 +83,7 @@ impl VerbatimUrl {
         };
 
         // Normalize the path.
-        let path = normalize_path(&path)
+        let path = normalize_absolute_path(&path)
             .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?;
 
         // Extract the fragment, if it exists.
@@ -113,7 +113,7 @@ impl VerbatimUrl {
         };
 
         // Normalize the path.
-        let Ok(path) = normalize_path(&path) else {
+        let Ok(path) = normalize_absolute_path(&path) else {
             return Err(VerbatimUrlError::WorkingDirectory(path));
         };
 

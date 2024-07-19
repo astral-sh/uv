@@ -1631,7 +1631,7 @@ impl Display for MarkerExpression {
                 {
                     return write!(f, "{key} {op} '{version}.*'");
                 }
-                write!(f, "{key} {op} '{version}'",)
+                write!(f, "{key} {op} '{version}'")
             }
             MarkerExpression::VersionInverted {
                 version,
@@ -2514,6 +2514,12 @@ mod test {
         assert_eq!(
             neg("os_name == 'bar' or os_name == 'foo'"),
             "os_name != 'bar' and os_name != 'foo'"
+        );
+
+        // Always true negates to always false!
+        assert_eq!(
+            neg("python_version >= '3.6' or python_version < '3.6'"),
+            "python_version < '3.6' and python_version >= '3.6'"
         );
     }
 

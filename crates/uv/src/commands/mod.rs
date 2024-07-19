@@ -19,6 +19,7 @@ pub(crate) use pip::sync::pip_sync;
 pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::add::add;
+pub(crate) use project::init::init;
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
 pub(crate) use project::run::run;
@@ -40,6 +41,7 @@ pub(crate) use tool::run::ToolRunCommand;
 pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 use uv_cache::Cache;
+use uv_distribution::VirtualProject;
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_installer::compile_tree;
@@ -159,6 +161,21 @@ pub(super) async fn compile_bytecode(
         .dimmed()
     )?;
     Ok(())
+}
+
+pub(crate) async fn python_request_from_version_file(
+    project: Option<&VirtualProject>,
+) -> Result<Option<uv_python::PythonRequest>, std::io::Error> {
+    let target_dir = if let Some(project) = project {
+        match project {
+            VirtualProject::Project(project) => project.workspace().install_path().to_owned(),
+            VirtualProject::Virtual(workspace) => workspace.install_path().to_owned(),
+        }
+    } else {
+        std::env::current_dir()?
+    };
+
+    uv_python::request_from_version_file_in(&target_dir).await
 }
 
 /// Formats a number of bytes into a human readable SI-prefixed size.

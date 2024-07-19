@@ -112,6 +112,59 @@ You can enable `trace` level logging using the `RUST_LOG` environment variable, 
 RUST_LOG=trace uv
 ```
 
+## Documentation
+
+To preview any changes to the documentation locally:
+
+1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install).
+
+1. Run `cargo dev generate-all`, to update any auto-generated documentation.
+
+1. Install MkDocs and Material for MkDocs with:
+
+    ```shell
+    uv venv
+
+    # For contributors.
+    uv pip install -r docs/requirements.txt
+
+    # Or, for members of the Astral org, which has access to MkDocs Insiders via sponsorship.
+    uv pip install -r docs/requirements-insiders.txt
+    ```
+
+1. Activate the virtual environment with:
+
+    ```shell
+    # On macOS and Linux.
+    source .venv/bin/activate
+
+    # On Windows.
+    .venv\Scripts\activate
+    ```
+
+1. Run the development server with:
+
+    ```shell
+    # For contributors.
+    mkdocs serve -f mkdocs.public.yml
+
+    # For members of the Astral org, which has access to MkDocs Insiders via sponsorship.
+    mkdocs serve -f mkdocs.insiders.yml
+    ```
+
+The documentation should then be available locally at
+[http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
+
+To update the documentation dependencies, edit `docs/requirements.in` and `docs/requirements-insiders.in`, then run:
+
+```shell
+uv pip compile docs/requirements.in -o docs/requirements.txt --universal -p 3.12
+uv pip compile docs/requirements-insiders.in -o docs/requirements-insiders.txt --universal -p 3.12
+```
+
+Documentation is deployed automatically on release by publishing to the [Astral documentation](https://github.com/astral-sh/docs)
+repository, which itself deploys via Cloudflare Pages.
+
 ## Releases
 
 Releases can only be performed by Astral team members.

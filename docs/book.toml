@@ -1,9 +1,0 @@
-[book]
-language = "en"
-multilingual = false
-src = "."
-title = "uv"
-
-[output.html]
-no-section-label = true
-additional-css = ["style.css"]

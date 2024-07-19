@@ -1,6 +1,8 @@
+use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
+use path_slash::PathExt;
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 
@@ -26,7 +28,9 @@ pub enum Error {
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
     MalformedSources,
-    #[error("Cannot perform ambiguous update; multiple entries with matching package names.")]
+    #[error("Workspace in `pyproject.toml` is malformed")]
+    MalformedWorkspace,
+    #[error("Cannot perform ambiguous update; found multiple entries with matching package names")]
     Ambiguous,
 }
 
@@ -36,6 +40,35 @@ impl PyProjectTomlMut {
         Ok(Self {
             doc: pyproject.raw.parse().map_err(Box::new)?,
         })
+    }
+
+    /// Adds a project to the workspace.
+    pub fn add_workspace(&mut self, path: impl AsRef<Path>) -> Result<(), Error> {
+        // Get or create `tool.uv.workspace.members`.
+        let members = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedWorkspace)?
+            .entry("uv")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedWorkspace)?
+            .entry("workspace")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedWorkspace)?
+            .entry("members")
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedWorkspace)?;
+
+        // Add the path to the workspace.
+        // Use cross-platform slashes so the toml string type does not change
+        members.push(path.as_ref().to_slash_lossy().to_string());
+
+        Ok(())
     }
 
     /// Adds a dependency to `project.dependencies`.
@@ -424,14 +457,36 @@ fn reformat_array_multiline(deps: &mut Array) {
             })
     }
 
+    let mut indentation_prefix = None;
+
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
+        // calculating the indentation prefix as the indentation of the first dependency entry
+        if indentation_prefix.is_none() {
+            let decor_prefix = decor
+                .prefix()
+                .and_then(|s| s.as_str())
+                .map(|s| s.split('#').next().unwrap_or("").to_string())
+                .unwrap_or(String::new())
+                .trim_start_matches('\n')
+                .to_string();
+
+            // if there is no indentation then apply a default one
+            indentation_prefix = Some(if decor_prefix.is_empty() {
+                "    ".to_string()
+            } else {
+                decor_prefix
+            });
+        }
+
+        let indentation_prefix_str = format!("\n{}", indentation_prefix.as_ref().unwrap());
+
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
-            prefix.push_str("\n    ");
+            prefix.push_str(&indentation_prefix_str);
             prefix.push_str(comment);
         }
-        prefix.push_str("\n    ");
+        prefix.push_str(&indentation_prefix_str);
         decor.set_prefix(prefix);
         decor.set_suffix("");
     }

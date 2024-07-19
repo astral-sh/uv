@@ -761,7 +761,7 @@ fn allow_incompatibilities() -> Result<()> {
     Installed 1 package in [TIME]
      - jinja2==3.1.3
      + jinja2==2.11.3
-    warning: The package `flask` requires `jinja2>=3.1.2`, but `2.11.3` is installed.
+    warning: The package `flask` requires `jinja2>=3.1.2`, but `2.11.3` is installed
     "###
     );
 
@@ -1282,14 +1282,14 @@ fn install_no_index_version() {
 
 /// Install a package via --extra-index-url.
 ///
-/// This is a regression test where previously `uv` would consult test.pypi.org
-/// first, and if the package was found there, `uv` would not look at any other
+/// This is a regression test where previously uv would consult test.pypi.org
+/// first, and if the package was found there, uv would not look at any other
 /// indexes. We fixed this by flipping the priority order of indexes so that
 /// test.pypi.org becomes the fallback (in this example) and the extra indexes
 /// (regular PyPI) are checked first.
 ///
 /// (Neither approach matches `pip`'s behavior, which considers versions of
-/// each package from all indexes. `uv` stops at the first index it finds a
+/// each package from all indexes. uv stops at the first index it finds a
 /// package in.)
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/1600>
@@ -1308,7 +1308,7 @@ fn install_extra_index_url_has_priority() {
         // `black==24.2.0` is on pypi.org and NOT test.pypi.org. So
         // this would previously check for `black` on test.pypi.org,
         // find it, but then not find a compatible version. After
-        // the fix, `uv` will check pypi.org first since it is given
+        // the fix, uv will check pypi.org first since it is given
         // priority via --extra-index-url.
         .arg("black==24.2.0")
         .arg("--no-deps")
@@ -2262,11 +2262,11 @@ fn no_deps() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flask==3.0.2
-    warning: The package `flask` requires `werkzeug>=3.0.0`, but it's not installed.
-    warning: The package `flask` requires `jinja2>=3.1.2`, but it's not installed.
-    warning: The package `flask` requires `itsdangerous>=2.1.2`, but it's not installed.
-    warning: The package `flask` requires `click>=8.1.3`, but it's not installed.
-    warning: The package `flask` requires `blinker>=1.6.2`, but it's not installed.
+    warning: The package `flask` requires `werkzeug>=3.0.0`, but it's not installed
+    warning: The package `flask` requires `jinja2>=3.1.2`, but it's not installed
+    warning: The package `flask` requires `itsdangerous>=2.1.2`, but it's not installed
+    warning: The package `flask` requires `click>=8.1.3`, but it's not installed
+    warning: The package `flask` requires `blinker>=1.6.2`, but it's not installed
     "###
     );
 
@@ -3520,7 +3520,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     Ok(())
 }
 
-/// This tests that `uv` can read UTF-16LE encoded requirements.txt files.
+/// This tests that uv can read UTF-16LE encoded requirements.txt files.
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/2276>
 #[test]
@@ -3547,7 +3547,7 @@ fn install_utf16le_requirements() -> Result<()> {
     Ok(())
 }
 
-/// This tests that `uv` can read UTF-16BE encoded requirements.txt files.
+/// This tests that uv can read UTF-16BE encoded requirements.txt files.
 ///
 /// Ref: <https://github.com/astral-sh/uv/issues/2276>
 #[test]
@@ -5113,9 +5113,19 @@ fn require_hashes_mismatch() -> Result<()> {
 
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(
-        "anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
-    )?;
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio==4.0.0 \
+            --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+            --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        idna==3.6 \
+            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+            # via anyio
+        sniffio==1.3.1 \
+            --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+            --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+            # via anyio
+    "})?;
 
     // Raise an error.
     uv_snapshot!(context.pip_install()
@@ -5127,7 +5137,17 @@ fn require_hashes_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `idna`
+    Resolved 3 packages in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Hash mismatch for `anyio==4.0.0`
+
+    Expected:
+      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+
+    Computed:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -5142,7 +5162,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
-        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        "werkzeug==3.0.0 --hash=sha256:cbb2600f7eabe51dbc0502f58be0b3e1b96b893b05695ea2b35b43d4de2d9962",
     )?;
 
     // Install without error when `--require-hashes` is omitted.
@@ -5155,7 +5175,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `idna`
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `markupsafe`
     "###
     );
 
@@ -5390,6 +5410,206 @@ fn require_hashes_override() -> Result<()> {
     Ok(())
 }
 
+/// Provide valid hashes for all dependencies with `--require-hashes`.
+#[test]
+fn verify_hashes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio==4.0.0 \
+            --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+            --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        idna==3.6 \
+            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+            # via anyio
+        sniffio==1.3.1 \
+            --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+            --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+            # via anyio
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--verify-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Omit a pinned version with `--verify-hashes`.
+#[test]
+fn verify_hashes_missing_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio \
+            --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+            --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        idna==3.6 \
+            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+            # via anyio
+        sniffio==1.3.1 \
+            --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+            --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+            # via anyio
+    "})?;
+
+    // Raise an error.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--verify-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--verify-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}
+
+/// Provide the wrong hash with `--verify-hashes`.
+#[test]
+fn verify_hashes_mismatch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio==4.0.0 \
+            --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+            --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        idna==3.6 \
+            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+            # via anyio
+        sniffio==1.3.1 \
+            --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+            --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+            # via anyio
+    "})?;
+
+    // Raise an error.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--verify-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Hash mismatch for `anyio==4.0.0`
+
+    Expected:
+      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+
+    Computed:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    "###
+    );
+
+    Ok(())
+}
+
+/// Omit a transitive dependency in `--verify-hashes`. This is allowed.
+#[test]
+fn verify_hashes_omit_dependency() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    // Install without error when `--require-hashes` is omitted.
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--verify-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// We allow `--verify-hashes` for editable dependencies.
+#[test]
+fn verify_hashes_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        -e file://{workspace_root}/scripts/packages/black_editable[d]
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--verify-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + aiohttp==3.9.3
+     + aiosignal==1.3.1
+     + attrs==23.2.0
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + frozenlist==1.4.1
+     + idna==3.6
+     + multidict==6.0.5
+     + yarl==1.9.4
+    "###
+    );
+
+    Ok(())
+}
+
 #[test]
 fn tool_uv_sources() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -5507,7 +5727,7 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv.sources` is experimental and may change without warning.
+    warning: `uv.sources` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

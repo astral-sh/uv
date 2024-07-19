@@ -167,10 +167,10 @@ impl Credentials {
         let mut buf = String::new();
         decoder
             .read_to_string(&mut buf)
-            .expect("HTTP Basic Authentication should be base64 encoded.");
+            .expect("HTTP Basic Authentication should be base64 encoded");
         let (username, password) = buf
             .split_once(':')
-            .expect("HTTP Basic Authentication should include a `:` separator.");
+            .expect("HTTP Basic Authentication should include a `:` separator");
         let username = if username.is_empty() {
             None
         } else {

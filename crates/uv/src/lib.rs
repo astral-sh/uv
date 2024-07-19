@@ -109,6 +109,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Printer::Quiet
     } else if globals.verbose > 0 {
         Printer::Verbose
+    } else if globals.no_progress {
+        Printer::NoProgress
     } else {
         Printer::Default
     };
@@ -277,7 +279,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
-                args.settings.require_hashes,
+                args.settings.hash_checking,
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.keyring_provider,
@@ -359,7 +361,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
-                args.settings.require_hashes,
+                args.settings.hash_checking,
                 args.settings.setup_py,
                 globals.connectivity,
                 &args.settings.config_setting,
@@ -575,6 +577,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.allow_existing,
                 args.settings.exclude_newer,
                 globals.native_tls,
+                globals.isolated,
                 globals.preview,
                 &cache,
                 printer,
@@ -669,7 +672,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::tool_list(globals.preview, &cache, printer).await
+            commands::tool_list(args.show_paths, globals.preview, &cache, printer).await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Uninstall(args),
@@ -687,9 +690,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
-            command: ToolCommand::Dir,
+            command: ToolCommand::Dir(args),
         }) => {
-            commands::tool_dir(globals.preview)?;
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::tool_dir(args.bin, globals.preview)?;
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {
@@ -816,6 +823,20 @@ async fn run_project(
     }
 
     match *project_command {
+        ProjectCommand::Init(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::InitSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::init(
+                args.path,
+                args.name,
+                args.no_readme,
+                globals.preview,
+                printer,
+            )
+            .await
+        }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::RunSettings::resolve(args, filesystem);
@@ -833,6 +854,8 @@ async fn run_project(
             commands::run(
                 args.command,
                 requirements,
+                args.locked,
+                args.frozen,
                 args.package,
                 args.extras,
                 args.dev,
@@ -886,6 +909,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::lock(
+                args.locked,
+                args.frozen,
                 args.python,
                 args.settings,
                 globals.preview,
@@ -908,6 +933,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::add(
+                args.locked,
+                args.frozen,
                 args.requirements,
                 args.editable,
                 args.dependency_type,
@@ -939,6 +966,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::remove(
+                args.locked,
+                args.frozen,
                 args.requirements,
                 args.dependency_type,
                 args.package,
@@ -964,6 +993,8 @@ async fn run_project(
             let cache = cache.init()?;
 
             commands::tree(
+                args.locked,
+                args.frozen,
                 args.depth,
                 args.prune,
                 args.package,
@@ -988,7 +1019,7 @@ async fn run_project(
 /// The main entry point for a uv invocation.
 ///
 /// WARNING: This entry point is not recommended for external consumption, the
-/// `uv` binary interface is the official public API. When using this entry
+/// uv binary interface is the official public API. When using this entry
 /// point, uv assumes it is running in a process it controls and that the
 /// entire process lifetime is managed by uv. Unexpected behavior may be
 /// encountered if this entry pointis called multiple times in a single process.
