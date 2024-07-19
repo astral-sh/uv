@@ -25,6 +25,7 @@ Just uv, please.
 
 1. Use periods at the end of all sentences, including lists unless they enumerate single items.
 1. Avoid language that patronizes the reader, e.g., "simply do this".
+1. Only refer to "the user" in internal or contributor documentation.
 
 ### Sections
 
@@ -36,7 +37,7 @@ The documentation is divided into:
 
 #### Guides
 
-1. Should assume no previous knowledge.
+1. Should assume no previous knowledge about uv.
 1. Should refer to relevant concept documentation.
 1. Should have a clear flow.
 1. Should be followed by a clear call to action.
@@ -45,7 +46,8 @@ The documentation is divided into:
 1. Should not enumerate all possibilities.
 1. Should avoid linking to reference documentation unless not covered in a concept document.
 1. May generally ignore platform-specific behavior.
-1. May be written from second-person point of view, though we prefer third-person at this time.
+1. Should be written from second-person point of view.
+1. Should use the imperative voice.
 
 #### Concepts
 
@@ -55,12 +57,14 @@ The documentation is divided into:
 1. Should refer to the relevant reference documentation.
 1. Should discuss platform-specific behavior.
 1. Should be written from the third-person point of view, not second-person (i.e., avoid "you").
+1. Should not use the imperative voice.
 
 #### Reference documentation
 
 1. Should enumerate all options.
 1. Should generally be generated from documentation in the code.
 1. Should be written from the third-person point of view, not second-person (i.e., avoid "you").
+1. Should not use the imperative voice.
 
 ### Code blocks
 
