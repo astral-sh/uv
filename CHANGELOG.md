@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.27
+
+### Enhancements
+
+- Add GraalPy support ([#5141](https://github.com/astral-sh/uv/pull/5141))
+- Add a `--verify-hashes` hash-checking mode ([#4007](https://github.com/astral-sh/uv/pull/4007))
+- Discover all `python3.x` executables in the `PATH` ([#5148](https://github.com/astral-sh/uv/pull/5148))
+- Support  `--link-mode=symlink` ([#5208](https://github.com/astral-sh/uv/pull/5208))
+- Warn about unconstrained direct deps in lowest resolution ([#5142](https://github.com/astral-sh/uv/pull/5142))
+- Log origin of version selection ([#5186](https://github.com/astral-sh/uv/pull/5186))
+- Key hash policy on version, rather than package ([#5169](https://github.com/astral-sh/uv/pull/5169))
+
+### CLI
+
+- Make missing project table a tracing warning ([#5194](https://github.com/astral-sh/uv/pull/5194))
+- Remove trailing period from user-facing messages ([#5218](https://github.com/astral-sh/uv/pull/5218))
+
+### Bug fixes
+
+- Make entrypoint writes atomic to avoid overwriting symlinks ([#5165](https://github.com/astral-sh/uv/pull/5165))
+- Use `which`-retrieved path directly when spawning pager ([#5198](https://github.com/astral-sh/uv/pull/5198))
+- Don't apply irrelevant constraints when validating site-packages ([#5321](https://github.com/astral-sh/uv/pull/5321))
+- Respect local versions for all user requirements ([#5232](https://github.com/astral-sh/uv/pull/5232))
+
 ## 0.2.26
 
 ### CLI

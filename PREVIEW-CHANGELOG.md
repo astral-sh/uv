@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.2.27
+
+### Preview features
+
+- Add `--frozen` to `uv add`, `uv remove`, and `uv tree` ([#5214](https://github.com/astral-sh/uv/pull/5214))
+- Add `--locked` and `--frozen` to `uv run` CLI ([#5196](https://github.com/astral-sh/uv/pull/5196))
+- Add `uv tool dir --bin` to show executable directory ([#5160](https://github.com/astral-sh/uv/pull/5160))
+- Add `uv tool list --show-paths` to show install paths ([#5164](https://github.com/astral-sh/uv/pull/5164))
+- Add color to `python pin` CLI ([#5215](https://github.com/astral-sh/uv/pull/5215))
+- Added a way to inspect installation scripts on Powershell(Windows) ([#5157](https://github.com/astral-sh/uv/pull/5157))
+- Avoid TOCTOU errors in `.python-version` reads ([#5223](https://github.com/astral-sh/uv/pull/5223))
+- Only show the Python installed on the system if `--python-preference only-system` is specified ([#5219](https://github.com/astral-sh/uv/pull/5219))
+- Check `python pin` compatibility with `Requires-Python` ([#4989](https://github.com/astral-sh/uv/pull/4989))
+- Enforce hashes in lockfile install ([#5170](https://github.com/astral-sh/uv/pull/5170))
+- Fix reference to `uv run` in `uv tree` CLI ([#5216](https://github.com/astral-sh/uv/pull/5216))
+- Handle universal vs. fork markers with `ResolverMarkers` ([#5099](https://github.com/astral-sh/uv/pull/5099))
+- Implement `uv init` ([#4791](https://github.com/astral-sh/uv/pull/4791))
+- Make Python install robust to individual failures ([#5199](https://github.com/astral-sh/uv/pull/5199))
+- Make registry hashes optional in the lockfile ([#5166](https://github.com/astral-sh/uv/pull/5166))
+- Merge extras in lockfile ([#5181](https://github.com/astral-sh/uv/pull/5181))
+- Move integration guide docs and edit Azure integration guide ([#5117](https://github.com/astral-sh/uv/pull/5117))
+- Process completed Python installs and uninstalls as a stream ([#5203](https://github.com/astral-sh/uv/pull/5203))
+- Skip invalid tools in `uv tool list` ([#5156](https://github.com/astral-sh/uv/pull/5156))
+- Touch-ups to tools guide ([#5202](https://github.com/astral-sh/uv/pull/5202))
+- Use +- install output for Python versions ([#5201](https://github.com/astral-sh/uv/pull/5201))
+- Use display representation for download error ([#5173](https://github.com/astral-sh/uv/pull/5173))
+- Use specialized error message for invalid Python install / uninstall requests ([#5171](https://github.com/astral-sh/uv/pull/5171))
+- Use the strongest hash in the lockfile ([#5167](https://github.com/astral-sh/uv/pull/5167))
+- Write project guide ([#5195](https://github.com/astral-sh/uv/pull/5195))
+- Write tools concept document ([#5207](https://github.com/astral-sh/uv/pull/5207))
+- Fix reference to `projects.md` ([#5154](https://github.com/astral-sh/uv/pull/5154))
+- Fixes to the settings documentation ([#5177](https://github.com/astral-sh/uv/pull/5177))
+- Set exact version specifiers when resolving from lockfile ([#5193](https://github.com/astral-sh/uv/pull/5193))
+
+
 ## 0.2.26
 
 ### Preview features

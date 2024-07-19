@@ -53,8 +53,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # For a specific version.
-curl -LsSf https://astral.sh/uv/0.2.26/install.sh | sh
-powershell -c "irm https://astral.sh/uv/0.2.26/install.ps1 | iex"
+curl -LsSf https://astral.sh/uv/0.2.27/install.sh | sh
+powershell -c "irm https://astral.sh/uv/0.2.27/install.ps1 | iex"
 
 # With pip.
 pip install uv
