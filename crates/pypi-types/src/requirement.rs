@@ -392,6 +392,19 @@ impl RequirementSource {
         }
     }
 
+    pub fn to_version_specifier_str(&self) -> String {
+        match self {
+            Self::Registry { specifier, .. } => {
+                if specifier.len() == 0 {
+                    "*".to_string()
+                } else {
+                    specifier.to_string()
+                }
+            }
+            _ => self.to_verbatim_parsed_url().unwrap().verbatim.to_string(),
+        }
+    }
+
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Directory { editable: true, .. })

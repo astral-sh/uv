@@ -29,6 +29,7 @@ pub(crate) fn pip_tree(
     package: Vec<PackageName>,
     no_dedupe: bool,
     invert: bool,
+    emit_version_specifier: bool,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -66,6 +67,7 @@ pub(crate) fn pip_tree(
         package,
         no_dedupe,
         invert,
+        emit_version_specifier,
         environment.interpreter().markers(),
         packages,
     )
@@ -114,6 +116,8 @@ pub(crate) struct DisplayDependencyGraph {
     ///
     /// If `--invert` is given the map is inverted.
     requirements: HashMap<PackageName, Vec<PackageName>>,
+
+    version_specifiers: HashMap<(PackageName, PackageName), String>,
 }
 
 impl DisplayDependencyGraph {
@@ -124,10 +128,12 @@ impl DisplayDependencyGraph {
         package: Vec<PackageName>,
         no_dedupe: bool,
         invert: bool,
+        emit_version_specifier: bool,
         markers: &MarkerEnvironment,
         packages: IndexMap<PackageName, Vec<Metadata>>,
     ) -> Self {
         let mut requirements: HashMap<_, Vec<_>> = HashMap::new();
+        let mut version_specifiers: HashMap<(PackageName, PackageName), _> = HashMap::new();
 
         // Add all transitive requirements.
         for metadata in packages.values().flatten() {
@@ -138,20 +144,28 @@ impl DisplayDependencyGraph {
                     .as_ref()
                     .map_or(true, |m| m.evaluate(markers, &[]))
             }) {
-                if invert {
-                    requirements
-                        .entry(required.name.clone())
-                        .or_default()
-                        .push(metadata.name.clone());
+                let (parent, child, version_specifier_prefix) = if invert {
+                    (&required.name, &metadata.name, "requires")
                 } else {
-                    requirements
-                        .entry(metadata.name.clone())
-                        .or_default()
-                        .push(required.name.clone());
+                    (&metadata.name, &required.name, "required")
+                };
+                requirements
+                    .entry(parent.clone())
+                    .or_default()
+                    .push(child.clone());
+
+                if emit_version_specifier {
+                    version_specifiers.insert(
+                        (parent.clone(), child.clone()),
+                        format!(
+                            "[{}: {}]",
+                            version_specifier_prefix,
+                            required.source.to_version_specifier_str()
+                        ),
+                    );
                 }
             }
         }
-
         Self {
             packages,
             depth,
@@ -159,6 +173,7 @@ impl DisplayDependencyGraph {
             package,
             no_dedupe,
             requirements,
+            version_specifiers,
         }
     }
 
@@ -175,7 +190,16 @@ impl DisplayDependencyGraph {
         }
 
         let package_name = &metadata.name;
-        let line = format!("{} v{}", package_name, metadata.version);
+        let mut line = format!("{} v{}", package_name, metadata.version,);
+
+        if self.version_specifiers.len() > 0 && path.len() > 0 {
+            line.push_str(" ");
+            line.push_str(
+                self.version_specifiers
+                    .get(&((**path.last().unwrap()).clone(), metadata.name.clone()))
+                    .unwrap(),
+            )
+        }
 
         // Skip the traversal if:
         // 1. The package is in the current traversal path (i.e., a dependency cycle).

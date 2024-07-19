@@ -110,7 +110,6 @@ fn single_package() {
     "###
     );
 }
-
 // `pandas` requires `numpy` with markers on Python version.
 #[test]
 #[cfg(not(windows))]
@@ -1495,6 +1494,251 @@ fn package_flag() {
     └── numpy v1.26.4
 
     joblib v1.3.2
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn emit_version_specifier_simple() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==2.31.0").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--emit-version-specifier"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    requests v2.31.0
+    ├── charset-normalizer v3.3.2 [required: <4, >=2]
+    ├── idna v3.6 [required: <4, >=2.5]
+    ├── urllib3 v2.2.1 [required: <3, >=1.21.1]
+    └── certifi v2024.2.2 [required: >=2017.4.17]
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn emit_version_specifier_complex() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("packse").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 32 packages in [TIME]
+    Prepared 32 packages in [TIME]
+    Installed 32 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + chevron-blue==0.2.1
+     + docutils==0.20.1
+     + hatchling==1.22.4
+     + idna==3.6
+     + importlib-metadata==7.1.0
+     + jaraco-classes==3.3.1
+     + jaraco-context==4.3.0
+     + jaraco-functools==4.0.0
+     + keyring==25.0.0
+     + markdown-it-py==3.0.0
+     + mdurl==0.1.2
+     + more-itertools==10.2.0
+     + msgspec==0.18.6
+     + nh3==0.2.15
+     + packaging==24.0
+     + packse==0.3.12
+     + pathspec==0.12.1
+     + pkginfo==1.10.0
+     + pluggy==1.4.0
+     + pygments==2.17.2
+     + readme-renderer==43.0
+     + requests==2.31.0
+     + requests-toolbelt==1.0.0
+     + rfc3986==2.0.0
+     + rich==13.7.1
+     + setuptools==69.2.0
+     + trove-classifiers==2024.3.3
+     + twine==4.0.2
+     + urllib3==2.2.1
+     + zipp==3.18.1
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--emit-version-specifier"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    packse v0.3.12
+    ├── chevron-blue v0.2.1 [required: >=0.2.1, <0.3.0]
+    ├── hatchling v1.22.4 [required: >=1.20.0, <2.0.0]
+    │   ├── packaging v24.0 [required: >=21.3]
+    │   ├── pathspec v0.12.1 [required: >=0.10.1]
+    │   ├── pluggy v1.4.0 [required: >=1.0.0]
+    │   └── trove-classifiers v2024.3.3 [required: *]
+    ├── msgspec v0.18.6 [required: >=0.18.4, <0.19.0]
+    ├── setuptools v69.2.0 [required: >=69.1.1, <70.0.0]
+    └── twine v4.0.2 [required: >=4.0.2, <5.0.0]
+        ├── pkginfo v1.10.0 [required: >=1.8.1]
+        ├── readme-renderer v43.0 [required: >=35.0]
+        │   ├── nh3 v0.2.15 [required: >=0.2.14]
+        │   ├── docutils v0.20.1 [required: >=0.13.1]
+        │   └── pygments v2.17.2 [required: >=2.5.1]
+        ├── requests v2.31.0 [required: >=2.20]
+        │   ├── charset-normalizer v3.3.2 [required: <4, >=2]
+        │   ├── idna v3.6 [required: <4, >=2.5]
+        │   ├── urllib3 v2.2.1 [required: <3, >=1.21.1]
+        │   └── certifi v2024.2.2 [required: >=2017.4.17]
+        ├── requests-toolbelt v1.0.0 [required: !=0.9.0, >=0.8.0]
+        │   └── requests v2.31.0 [required: <3.0.0, >=2.0.1] (*)
+        ├── urllib3 v2.2.1 [required: >=1.26.0]
+        ├── importlib-metadata v7.1.0 [required: >=3.6]
+        │   └── zipp v3.18.1 [required: >=0.5]
+        ├── keyring v25.0.0 [required: >=15.1]
+        │   ├── jaraco-classes v3.3.1 [required: *]
+        │   │   └── more-itertools v10.2.0 [required: *]
+        │   ├── jaraco-functools v4.0.0 [required: *]
+        │   │   └── more-itertools v10.2.0 [required: *]
+        │   └── jaraco-context v4.3.0 [required: *]
+        ├── rfc3986 v2.0.0 [required: >=1.4.0]
+        └── rich v13.7.1 [required: >=12.0.0]
+            ├── markdown-it-py v3.0.0 [required: >=2.2.0]
+            │   └── mdurl v0.1.2 [required: ~=0.1]
+            └── pygments v2.17.2 [required: >=2.13.0, <3.0.0]
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn emit_version_specifier_with_invert() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("scikit-learn==1.4.1.post1")
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + joblib==1.3.2
+     + numpy==1.26.4
+     + scikit-learn==1.4.1.post1
+     + scipy==1.12.0
+     + threadpoolctl==3.4.0
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree()
+        .arg("--emit-version-specifier")
+        .arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    joblib v1.3.2
+    └── scikit-learn v1.4.1.post1 [requires: >=1.2.0]
+    numpy v1.26.4
+    ├── scikit-learn v1.4.1.post1 [requires: <2.0, >=1.19.5]
+    └── scipy v1.12.0 [requires: <1.29.0, >=1.22.4]
+        └── scikit-learn v1.4.1.post1 [requires: >=1.6.0]
+    threadpoolctl v3.4.0
+    └── scikit-learn v1.4.1.post1 [requires: >=2.0.0]
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn emit_version_specifier_with_package() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("scikit-learn==1.4.1.post1")
+        .unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + joblib==1.3.2
+     + numpy==1.26.4
+     + scikit-learn==1.4.1.post1
+     + scipy==1.12.0
+     + threadpoolctl==3.4.0
+    "###
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context.pip_tree()
+        .arg("--emit-version-specifier")
+        .arg("--package")
+        .arg("scipy"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    scipy v1.12.0
+    └── numpy v1.26.4 [required: <1.29.0, >=1.22.4]
 
     ----- stderr -----
     "###
