@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use assert_fs::fixture::{FileWriteStr as _, PathChild as _};
 use common::{uv_snapshot, TestContext};
 use insta::assert_snapshot;
 use uv_python::{
@@ -227,6 +228,186 @@ fn python_pin_no_python() {
     ----- stderr -----
     warning: No interpreter found for Python 3.12 in system path
     "###);
+}
+
+#[test]
+fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.10"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested Python version `3.10` is incompatible with the project `Requires-Python` requirement of `>=3.11`.
+    "###);
+
+    // Request a implementation version that is incompatible
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.10"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested Python version `cpython@3.10` is incompatible with the project `Requires-Python` requirement of `>=3.11`.
+    "###);
+
+    // Request a complex version range that resolves to an incompatible version
+    uv_snapshot!(context.filters(), context.python_pin().arg(">3.8,<3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `>3.8, <3.11`
+
+    ----- stderr -----
+    warning: The requested Python version `>3.8, <3.11` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.11`.
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `>3.8, <3.11` -> `3.11`
+
+    ----- stderr -----
+    "###);
+
+    // Request a implementation version that is compatible
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `3.11` -> `cpython@3.11`
+
+    ----- stderr -----
+    "###);
+
+    let python_version =
+        fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(python_version, @r###"
+        cpython@3.11
+        "###);
+    });
+
+    // Updating `requires-python` should affect `uv python pin` compatibilities.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython@3.11
+
+    ----- stderr -----
+    warning: The pinned Python version `cpython@3.11` is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    // Request a implementation that resolves to a compatible version
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `cpython@3.11` -> `cpython`
+
+    ----- stderr -----
+    warning: The requested Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython
+
+    ----- stderr -----
+    warning: The pinned Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    // Request a complex version range that resolves to a compatible version
+    uv_snapshot!(context.filters(), context.python_pin().arg(">3.8,<3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `cpython` -> `>3.8, <3.12`
+
+    ----- stderr -----
+    warning: The requested Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    >3.8, <3.12
+
+    ----- stderr -----
+    warning: The pinned Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn warning_pinned_python_version_not_installed() -> anyhow::Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    let python_version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version_file.write_str(r"3.12")?;
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.python_pin(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        3.12
+
+        ----- stderr -----
+        warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in system path or `py` launcher
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), context.python_pin(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        3.12
+
+        ----- stderr -----
+        warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in system path
+        "###);
+    }
+
+    Ok(())
 }
 
 /// We do need a Python interpreter for `--resolved` pins
