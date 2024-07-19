@@ -77,9 +77,16 @@ The documentation is divided into:
 ### Colors and style
 
 1. All CLI output should be interpretable and understandable _without_ the use of color and other styling. (For example: even if a command is rendered in green, wrap it in backticks.)
-1. In general, we use: green for success, red for error, yellow for warning, and cyan for hints; cyan for file paths, cyan for salient user-facing values (e.g., a package name in a message), and green for commands. 
 1. `NO_COLOR` must be respected when using any colors or styling.
 1. `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
+1. In general, we use:
+    - Green for success.
+    - Red for error.
+    - Yellow for warning.
+    - Cyan for hints.
+    - Cyan for file paths.
+    - Cyan for important user-facing literals (e.g., a package name in a message).
+    - Green for commands. 
 
 ### Logging
 
