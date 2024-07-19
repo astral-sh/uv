@@ -11,7 +11,7 @@ use reflink_copy as reflink;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
-
+use walkdir::WalkDir;
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use pypi_types::DirectUrl;
@@ -221,6 +221,8 @@ pub enum LinkMode {
     Copy,
     /// Hard link packages from the wheel into the site packages.
     Hardlink,
+    /// Symbolically link packages from the wheel into the site packages
+    Symlink
 }
 
 impl Default for LinkMode {
@@ -245,6 +247,7 @@ impl LinkMode {
             Self::Clone => clone_wheel_files(site_packages, wheel),
             Self::Copy => copy_wheel_files(site_packages, wheel),
             Self::Hardlink => hardlink_wheel_files(site_packages, wheel),
+            Self::Symlink => symlink_wheel_files(site_packages, wheel)
         }
     }
 }
@@ -535,4 +538,63 @@ fn hardlink_wheel_files(
     }
 
     Ok(count)
+}
+
+
+/// Extract a wheel by symbolically-linking all of its files into site packages.
+fn symlink_wheel_files(
+    site_packages: impl AsRef<Path>,
+    wheel: impl AsRef<Path>,
+) -> Result<usize, Error> {
+    let mut count = 0usize;
+
+    // Walk over the directory.
+    for entry in WalkDir::new(&wheel) {
+        let entry = entry?;
+        let path = entry.path();
+
+        let relative = path.strip_prefix(&wheel).unwrap();
+        let out_path = site_packages.as_ref().join(relative);
+
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&out_path)?;
+            continue;
+        }
+
+        // The `RECORD` file is modified during installation, so we copy it instead of symlinking.
+        if path.ends_with("RECORD") {
+            fs::copy(path, &out_path)?;
+            count += 1;
+            continue;
+        }
+
+        // Try to create a symlink, fallback to copying if it fails.
+        if let Err(err) = create_symlink(path, &out_path) {
+            if err.kind() == std::io::ErrorKind::AlreadyExists {
+                fs::remove_file(&out_path)?;
+                create_symlink(path, &out_path)?;
+            } else {
+                fs::copy(path, &out_path)?;
+                warn_user_once!("Failed to symlink files; falling back to full copy. This may lead to degraded performance. If this is intentional, use `--link-mode=copy` to suppress this warning.\n\nhint: If the cache and target directories are on different filesystems, symlinking may not be supported.");
+            }
+        }
+
+        count += 1;
+    }
+
+    Ok(count)
+}
+
+#[cfg(unix)]
+fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(original, link)
+}
+
+#[cfg(windows)]
+fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+    if original.as_ref().is_dir() {
+        std::os::windows::fs::symlink_dir(original, link)
+    } else {
+        std::os::windows::fs::symlink_file(original, link)
+    }
 }
