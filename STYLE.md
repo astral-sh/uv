@@ -26,6 +26,7 @@ Just uv, please.
 1. Use periods at the end of all sentences, including lists unless they enumerate single items.
 1. Avoid language that patronizes the reader, e.g., "simply do this".
 1. Only refer to "the user" in internal or contributor documentation.
+1. Avoid "we" in favor of "uv" or imperative language.
 
 ### Sections
 
@@ -38,6 +39,7 @@ The documentation is divided into:
 #### Guides
 
 1. Should assume no previous knowledge about uv.
+1. May assume basic knowledge of the domain.
 1. Should refer to relevant concept documentation.
 1. Should have a clear flow.
 1. Should be followed by a clear call to action.
@@ -80,10 +82,10 @@ The documentation is divided into:
 
 ### Colors and style
 
-1. All CLI output should be interpretable and understandable _without_ the use of color and other styling. (For example: even if a command is rendered in green, wrap it in backticks.)
+1. All CLI output must be interpretable and understandable _without_ the use of color and other styling. (For example: even if a command is rendered in green, wrap it in backticks.)
 1. `NO_COLOR` must be respected when using any colors or styling.
 1. `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
-1. In general, we use:
+1. In general, use:
     - Green for success.
     - Red for error.
     - Yellow for warning.
@@ -95,6 +97,22 @@ The documentation is divided into:
 ### Logging
 
 1. `warn`, `info`, `debug`, and `trace` logs are all shown with the `--verbose` flag.
-1. `warn_user` and `warn_user_once` are shown without the `--verbose `flag.
+    - Note that the displayed level is controlled with `RUST_LOG`.
 1. All logging should be to stderr.
-1. Text can be written to stdout if they are "data" that could be piped to another program.
+
+### Output
+
+1. Text can be written to stdout if it is "data" that could be piped to another program.
+
+### Warnings
+
+1. `warn_user` and `warn_user_once` are shown without the `--verbose `flag.
+    - These methods should be preferred over tracing warnings when the warning is actionable.
+    - Deprecation warnings should use these methods.
+1. Deprecation warnings must be actionable.
+
+### Hints
+
+1. Errors may be followed by hints suggesting a solution.
+1. Hints should be separated from errors by a blank newline.
+1. Hints should be stylized as `hint: <content>`.
