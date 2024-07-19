@@ -110,7 +110,7 @@ pub(crate) async fn init(
         // Add the package to the workspace.
         let mut pyproject =
             PyProjectTomlMut::from_toml(workspace.current_project().pyproject_toml())?;
-        pyproject.add_workspace(path.to_string_lossy().to_string())?;
+        pyproject.add_workspace(&path)?;
 
         // Save the modified `pyproject.toml`.
         fs_err::write(

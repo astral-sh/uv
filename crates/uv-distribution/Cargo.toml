@@ -40,6 +40,7 @@ glob = { workspace = true }
 nanoid = { workspace = true }
 once_cell = { workspace = true }
 path-absolutize = { workspace = true }
+path-slash = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }

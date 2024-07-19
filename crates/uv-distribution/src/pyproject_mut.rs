@@ -1,6 +1,8 @@
+use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
+use path_slash::PathExt;
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 
@@ -41,7 +43,7 @@ impl PyProjectTomlMut {
     }
 
     /// Adds a project to the workspace.
-    pub fn add_workspace(&mut self, path: String) -> Result<(), Error> {
+    pub fn add_workspace(&mut self, path: impl AsRef<Path>) -> Result<(), Error> {
         // Get or create `tool.uv.workspace.members`.
         let members = self
             .doc
@@ -63,7 +65,8 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedWorkspace)?;
 
         // Add the path to the workspace.
-        members.push(path);
+        // Use cross-platform slashes so the toml string type does not change
+        members.push(path.as_ref().to_slash_lossy().to_string());
 
         Ok(())
     }
