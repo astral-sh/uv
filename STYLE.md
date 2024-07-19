@@ -1,0 +1,87 @@
+# Style guide
+
+_The following is a work-in-progress style guide for our user-facing messaging in the CLI output and documentation_.
+
+## General
+
+1. Use of "e.g." and "i.e." should always be wrapped in commas, e.g., as shown here.
+1. Em-dashes are okay, but not recommended when using monospace fonts. Use "—", not "--" or "-".
+1. Always wrap em-dashes in spaces, e.g., "hello — world" not "hello—world".
+1. Hyphenate compound words, e.g., use "platform-specific" not "platform specific".
+1. Use backticks to escape: commands, code expressions, package names, and file paths.
+1. Use less than and greater than symbols to wrap bare URLs, e.g., <https://astral.sh>, unless it is an example then use backticks.
+1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.
+
+## Styling uv
+
+Just uv, please.
+
+1. Do not escape with backticks, e.g., `uv`, unless referring specifically to the `uv` executable.
+1. Do not capitalize, e.g., "Uv".
+1. Do not uppercase, e.g., "UV".
+
+## Documentation
+
+1. Use periods at the end of all sentences, including lists unless they enumerate single items.
+1. Avoid language that patronizers the reader, e.g., "simply do this".
+
+### Sections
+
+The documentation is divided into:
+
+1. Guides
+2. Concepts
+3. Reference documentation
+
+#### Guides
+
+1. Should assume no previous knowledge.
+1. Should refer to relevant concept documentation.
+1. Should have a clear flow.
+1. Should be followed by a clear call to action.
+1. Should cover the basic behavior needed to get started.
+1. Should not cover behavior in detail.
+1. Should not enumerate all possibilities.
+1. Should avoid linking to reference documentation unless not covered in a concept document.
+1. May generally ignore platform-specific behavior
+1. May be written from second-person point of view, though we prefer third-person at this time.
+
+#### Concepts
+
+1. Should cover behavior in detail.
+1. Should not enumerate all possibilities.
+1. Should cover most common configuration.
+1. Should refer to the relevant reference documentation.
+1. Should discuss platform-specific behavior.
+1. Should be written from the third-person point of view, not second-person (i.e., avoid "you").
+
+#### Reference documentation
+
+1. Should enumerate all options.
+1. Should generally be generated from documentation in the code.
+1. Should be written from the third-person point of view, not second-person (i.e., avoid "you").
+
+### Code blocks
+
+1. All code blocks should have a language marker.
+1. When using `console` syntax, use `$` to indicate commands — everything else is output.
+1. Do not use the `bash` syntax when displaying command output.
+1. Command output should rarely be included — it's hard to keep up to date.
+
+## CLI
+
+1. Do not use periods at the end of sentences :), unless the message spans more than a single sentence.
+1. May use the second-person point of view, e.g., "Did you mean...?".
+
+### Colors and style
+
+1. When instructing the user to execute a command, it should be bolded. 
+1. `NO_COLOR` must be respected when using any colors or styling.
+1. `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
+
+### Logging
+
+1. `warn`, `info`, `debug`, and `trace` logs are all shown with the `--verbose` flag.
+1. `warn_user` and `warn_user_once` are shown without the `--verbose `flag.
+1. All logging should be to stderr.
+1. Text can be written to stdout if they are "data" that could be piped to another program.
