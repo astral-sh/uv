@@ -557,6 +557,8 @@ impl LockSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) requirements: Vec<RequirementsSource>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
@@ -585,6 +587,8 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            locked,
+            frozen,
             installer,
             build,
             refresh,
@@ -606,6 +610,8 @@ impl AddSettings {
         };
 
         Self {
+            locked,
+            frozen,
             requirements,
             dependency_type,
             editable,
@@ -629,6 +635,8 @@ impl AddSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) requirements: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) package: Option<PackageName>,
@@ -645,6 +653,8 @@ impl RemoveSettings {
             dev,
             optional,
             requirements,
+            locked,
+            frozen,
             installer,
             build,
             refresh,
@@ -661,6 +671,8 @@ impl RemoveSettings {
         };
 
         Self {
+            locked,
+            frozen,
             requirements,
             dependency_type,
             package,
@@ -678,6 +690,8 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) package: Vec<PackageName>,
@@ -692,18 +706,22 @@ impl TreeSettings {
     pub(crate) fn resolve(args: TreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let TreeArgs {
             tree,
+            locked,
+            frozen,
             build,
             resolver,
             python,
         } = args;
 
         Self {
-            python,
+            locked,
+            frozen,
             depth: tree.depth,
             prune: tree.prune,
             package: tree.package,
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
+            python,
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
     }

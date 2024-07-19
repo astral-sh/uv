@@ -22,7 +22,10 @@ use crate::settings::ResolverSettings;
 use super::SharedState;
 
 /// Run a command.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
+    locked: bool,
+    frozen: bool,
     depth: u8,
     prune: Vec<PackageName>,
     package: Vec<PackageName>,
@@ -60,14 +63,12 @@ pub(crate) async fn tree(
     .await?
     .into_interpreter();
 
-    // Read the existing lockfile.
-    let existing = project::lock::read(&workspace).await?;
-
     // Update the lock file, if necessary.
-    let lock = project::lock::do_lock(
+    let lock = project::lock::do_safe_lock(
+        locked,
+        frozen,
         &workspace,
         &interpreter,
-        existing.as_ref(),
         settings.as_ref(),
         &SharedState::default(),
         preview,
@@ -78,9 +79,6 @@ pub(crate) async fn tree(
         printer,
     )
     .await?;
-    if !existing.is_some_and(|existing| existing == lock) {
-        project::lock::commit(&lock, &workspace).await?;
-    }
 
     // Read packages from the lockfile.
     let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();
