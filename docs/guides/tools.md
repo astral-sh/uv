@@ -84,21 +84,6 @@ Additional dependencies can be included, e.g., to include `mkdocs-material` when
 $ uvx --with mkdocs-material mkdocs --help
 ```
 
-## Relationship to `uv run`
-
-The invocation `uv tool run ruff` is nearly equivalent to:
-
-```console
-$ uv run --isolated --with ruff -- ruff
-```
-
-However, there are a couple notable differences when using uv's tool interface:
-
-- The `--with` option is not needed — the required package is inferred from the command name.
-- The temporary environment is cached in a dedicated location.
-- The `--isolated` flag is not needed — tools are always run isolated from the project.
-- If a tool is already installed, `uv tool run` will use the installed version but `uv run` will not.
-
 ## Installing tools
 
 If a tool is used often, it can be useful to install it to a persistent environment instead of invoking `uvx` repeatedly.
@@ -109,7 +94,7 @@ To install `ruff`:
 $ uv tool install ruff
 ```
 
-When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows the tool to be run without uv (if it's not on the `PATH`, we'll warn you).
+When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and `uv tool update-shell` can be used to add it to the `PATH`.
 
 After installing `ruff`, it should be available:
 
@@ -139,8 +124,18 @@ Additionally, package versions can be included without `--from`:
 $ uv tool install 'httpie>0.1.0'
 ```
 
-And similarly for package sources:
+And, similarly, for package sources:
 
 ```console
 $ uv tool install git+https://github.com/httpie/cli
 ```
+
+As with `uvx`, installations can include additional packages:
+
+```console
+$ uv tool install mkdocs --with mkdocs-material
+```
+
+## Next steps
+
+See the [tools concept](../tools.md) documentation for more details on how tools are managed.
