@@ -46,7 +46,7 @@ pub(crate) async fn pin(
             for pin in pins {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
-                    check_request_requires_python_compatibility(
+                    warn_if_existing_pin_incompatible_with_project(
                         &pin,
                         virtual_project,
                         python_preference,
@@ -76,19 +76,26 @@ pub(crate) async fn pin(
     };
 
     if let Some(virtual_project) = &virtual_project {
-        // Error if the request is incompatible with the Python requirement
-        if let PythonRequest::Version(version) = &request {
-            if let Ok(python_version) = pep440_rs::Version::from_str(&version.to_string()) {
-                assert_python_compatibility(
-                    &PythonVersionCompatibility::Requested(&python_version),
-                    virtual_project,
-                )?;
-            }
+        if let Some(request_version) = pep440_version_from_request(&request) {
+            assert_pin_compatible_with_project(
+                &Pin {
+                    request: &request,
+                    version: &request_version,
+                    resolved: false,
+                    existing: false,
+                },
+                virtual_project,
+            )?;
         } else {
             if let Some(python) = &python {
                 // Warn if the resolved Python is incompatible with the Python requirement unless --resolved is used
-                if let Err(err) = assert_python_compatibility(
-                    &PythonVersionCompatibility::Resolved(python.python_version()),
+                if let Err(err) = assert_pin_compatible_with_project(
+                    &Pin {
+                        request: &request,
+                        version: python.python_version(),
+                        resolved: true,
+                        existing: false,
+                    },
                     virtual_project,
                 ) {
                     if resolved {
@@ -127,33 +134,47 @@ pub(crate) async fn pin(
     Ok(ExitStatus::Success)
 }
 
+fn pep440_version_from_request(request: &PythonRequest) -> Option<pep440_rs::Version> {
+    let version_request = match request {
+        PythonRequest::Version(ref version)
+        | PythonRequest::ImplementationVersion(_, ref version) => version,
+        PythonRequest::Key(download_request) => download_request.version()?,
+        _ => {
+            return None;
+        }
+    };
+
+    if matches!(version_request, uv_python::VersionRequest::Range(_)) {
+        return None;
+    }
+
+    // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed if not a `Range`.
+    Some(pep440_rs::Version::from_str(&version_request.to_string()).unwrap())
+}
+
 /// Check if pinned request is compatible with the workspace/project's `Requires-Python`.
-fn check_request_requires_python_compatibility(
+fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
     cache: &Cache,
 ) {
-    let request_version = match pin {
-        PythonRequest::Version(ref version)
-        | PythonRequest::ImplementationVersion(_, ref version) => Some(version),
-        PythonRequest::Key(download_request) => download_request.version(),
-        _ => None,
-    };
-
     // Check if the requested version is compatible with the project.
     // If the compatibility check fails, exit early.
-    if let Some(request_version) = request_version {
-        if !matches!(request_version, uv_python::VersionRequest::Range(_)) {
-            // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed
-            let version = pep440_rs::Version::from_str(&request_version.to_string()).unwrap();
-            if let Err(err) = assert_python_compatibility(
-                &PythonVersionCompatibility::Requested(&version),
-                virtual_project,
-            ) {
-                warn_user_once!("{}", err);
-                return;
-            }
+    if let Some(request_version) = pep440_version_from_request(pin) {
+        // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed
+        let version = pep440_rs::Version::from_str(&request_version.to_string()).unwrap();
+        if let Err(err) = assert_pin_compatible_with_project(
+            &Pin {
+                request: pin,
+                version: &version,
+                resolved: false,
+                existing: true,
+            },
+            virtual_project,
+        ) {
+            warn_user_once!("{}", err);
+            return;
         }
     }
 
@@ -167,11 +188,16 @@ fn check_request_requires_python_compatibility(
         Ok(python) => {
             let python_version = python.python_version();
             debug!(
-                "The pinned Python version {} resolves to {}",
+                "The pinned Python version `{}` resolves to `{}`",
                 pin, python_version
             );
-            if let Err(err) = assert_python_compatibility(
-                &PythonVersionCompatibility::Resolved(python_version),
+            if let Err(err) = assert_pin_compatible_with_project(
+                &Pin {
+                    request: pin,
+                    version: python_version,
+                    resolved: true,
+                    existing: true,
+                },
                 virtual_project,
             ) {
                 warn_user_once!("{}", err);
@@ -187,15 +213,15 @@ fn check_request_requires_python_compatibility(
     }
 }
 
-enum PythonVersionCompatibility<'a> {
-    Requested(&'a pep440_rs::Version),
-    Resolved(&'a pep440_rs::Version),
+struct Pin<'a> {
+    request: &'a PythonRequest,
+    version: &'a pep440_rs::Version,
+    resolved: bool,
+    existing: bool,
 }
+
 /// Checks if the pinned Python version is compatible with the workspace/project's `Requires-Python`.
-fn assert_python_compatibility(
-    python_version: &PythonVersionCompatibility,
-    virtual_project: &VirtualProject,
-) -> Result<()> {
+fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProject) -> Result<()> {
     let (requires_python, project_type) = match virtual_project {
         VirtualProject::Project(project_workspace) => {
             debug!(
@@ -217,27 +243,19 @@ fn assert_python_compatibility(
     };
 
     if let Some(requires_python) = requires_python {
-        match python_version {
-            PythonVersionCompatibility::Resolved(resolved_version) => {
-                if !requires_python.contains(resolved_version) {
-                    anyhow::bail!(
-                        "The pinned resolved Python version `{}` is incompatible with the {}'s `Requires-Python` of `{}`.",
-                        resolved_version,
-                        project_type,
-                        requires_python
-                    );
-                }
-            }
-            PythonVersionCompatibility::Requested(requested_version) => {
-                if !requires_python.contains(requested_version) {
-                    anyhow::bail!(
-                        "The pinned requested Python version `{}` is incompatible with the {}'s `Requires-Python` of `{}`.",
-                        requested_version,
-                        project_type,
-                        requires_python
-                    );
-                }
-            }
+        if !requires_python.contains(pin.version) {
+            let given = if pin.existing { "pinned" } else { "requested" };
+            let resolved = if pin.resolved {
+                format!(" resolves to `{}` which ", pin.version)
+            } else {
+                String::new()
+            };
+            anyhow::bail!(
+                    "The {given} Python version `{}`{resolved} is incompatible with the {} `Requires-Python` requirement of `{}`.",
+                    pin.request.to_canonical_string(),
+                    project_type,
+                    requires_python
+                );
         }
     }
     Ok(())

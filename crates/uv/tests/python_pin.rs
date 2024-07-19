@@ -250,17 +250,48 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The pinned requested Python version `3.10` is incompatible with the project's `Requires-Python` of `>=3.11`.
+    error: The requested Python version `3.10` is incompatible with the project `Requires-Python` requirement of `>=3.11`.
+    "###);
+
+    // Request a implementation version that is incompatible
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.10"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested Python version `cpython@3.10` is incompatible with the project `Requires-Python` requirement of `>=3.11`.
+    "###);
+
+    // Request a complex version range that resolves to an incompatible version
+    uv_snapshot!(context.filters(), context.python_pin().arg(">3.8,<3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned to `>3.8, <3.11`
+
+    ----- stderr -----
+    warning: The requested Python version `>3.8, <3.11` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.11`.
     "###);
 
     uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-        Pinned to `3.11`
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Replaced existing pin with `3.11`
 
-        ----- stderr -----
-        "###);
+    ----- stderr -----
+    "###);
+
+    // Request a implementation version that is compatible
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Replaced existing pin with `cpython@3.11`
+
+    ----- stderr -----
+    "###);
 
     let python_version =
         fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
@@ -268,7 +299,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(python_version, @r###"
-        3.11
+        cpython@3.11
         "###);
     });
 
@@ -287,10 +318,52 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    3.11
+    cpython@3.11
 
     ----- stderr -----
-    warning: The pinned requested Python version `3.11` is incompatible with the project's `Requires-Python` of `>=3.12`.
+    warning: The pinned Python version `cpython@3.11` is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    // Request a implementation that resolves to a compatible version
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Replaced existing pin with `cpython`
+
+    ----- stderr -----
+    warning: The requested Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython
+
+    ----- stderr -----
+    warning: The pinned Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    // Request a complex version range that resolves to a compatible version
+    uv_snapshot!(context.filters(), context.python_pin().arg(">3.8,<3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Replaced existing pin with `>3.8, <3.12`
+
+    ----- stderr -----
+    warning: The requested Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    >3.8, <3.12
+
+    ----- stderr -----
+    warning: The pinned Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
     "###);
 
     Ok(())
