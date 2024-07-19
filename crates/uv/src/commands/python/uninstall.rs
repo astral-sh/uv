@@ -103,16 +103,17 @@ pub(crate) async fn uninstall(
         return Ok(ExitStatus::Failure);
     }
 
-    let tasks = futures::stream::iter(matching_installations.iter())
+    let results = futures::stream::iter(matching_installations.iter())
         .map(|installation| async {
             (
                 installation.key(),
                 fs_err::tokio::remove_dir_all(installation.path()).await,
             )
         })
-        .buffered(4);
+        .buffered(4)
+        .collect::<Vec<_>>()
+        .await;
 
-    let results = tasks.collect::<Vec<_>>().await;
     let mut failed = false;
     for (key, result) in results.iter().sorted_by_key(|(key, _)| key) {
         if let Err(err) = result {
