@@ -917,6 +917,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::add(
+                args.locked,
+                args.frozen,
                 args.requirements,
                 args.editable,
                 args.dependency_type,
@@ -948,6 +950,8 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::remove(
+                args.locked,
+                args.frozen,
                 args.requirements,
                 args.dependency_type,
                 args.package,
@@ -973,6 +977,8 @@ async fn run_project(
             let cache = cache.init()?;
 
             commands::tree(
+                args.locked,
+                args.frozen,
                 args.depth,
                 args.prune,
                 args.package,

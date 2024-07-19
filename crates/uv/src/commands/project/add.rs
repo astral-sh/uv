@@ -18,7 +18,6 @@ use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
-use crate::commands::project::lock::commit;
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -27,6 +26,8 @@ use crate::settings::ResolverInstallerSettings;
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
+    locked: bool,
+    frozen: bool,
     requirements: Vec<RequirementsSource>,
     editable: Option<bool>,
     dependency_type: DependencyType,
@@ -203,17 +204,21 @@ pub(crate) async fn add(
         pyproject.to_string(),
     )?;
 
+    // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
+    // to exist at all.
+    if frozen {
+        return Ok(ExitStatus::Success);
+    }
+
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // Read the existing lockfile.
-    let existing = project::lock::read(project.workspace()).await?;
-
     // Lock and sync the environment, if necessary.
-    let lock = project::lock::do_lock(
+    let lock = project::lock::do_safe_lock(
+        locked,
+        frozen,
         project.workspace(),
         venv.interpreter(),
-        existing.as_ref(),
         settings.as_ref().into(),
         &state,
         preview,
@@ -224,9 +229,6 @@ pub(crate) async fn add(
         printer,
     )
     .await?;
-    if !existing.is_some_and(|existing| existing == lock) {
-        commit(&lock, project.workspace()).await?;
-    }
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?

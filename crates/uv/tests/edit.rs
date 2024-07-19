@@ -1822,3 +1822,51 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
     });
     Ok(())
 }
+
+/// Add a requirement without updating the lockfile.
+#[test]
+fn add_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning.
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio==3.7.0",
+        ]
+        "###
+        );
+    });
+
+    assert!(!context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
