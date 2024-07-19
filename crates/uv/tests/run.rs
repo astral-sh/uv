@@ -171,7 +171,7 @@ fn run_args() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -186,7 +186,7 @@ fn run_args() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -324,7 +324,7 @@ fn run_managed_false() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     "###);
 
     Ok(())
@@ -357,7 +357,7 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -378,7 +378,7 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     "###);
@@ -390,7 +390,7 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
@@ -424,7 +424,7 @@ fn run_locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -451,7 +451,7 @@ fn run_locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -472,7 +472,7 @@ fn run_locked() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -505,7 +505,7 @@ fn run_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -530,7 +530,7 @@ fn run_frozen() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning.
+    warning: `uv run` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0

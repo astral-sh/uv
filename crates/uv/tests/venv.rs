@@ -553,7 +553,7 @@ fn virtualenv_compatibility() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
+    warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment)
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate

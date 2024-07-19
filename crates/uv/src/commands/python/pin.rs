@@ -26,7 +26,7 @@ pub(crate) async fn pin(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv python pin` is experimental and may change without warning.");
+        warn_user_once!("`uv python pin` is experimental and may change without warning");
     }
 
     let Some(request) = request else {
@@ -37,7 +37,7 @@ pub(crate) async fn pin(
             }
             return Ok(ExitStatus::Success);
         }
-        bail!("No pinned Python version found.")
+        bail!("No pinned Python version found")
     };
     let request = PythonRequest::parse(&request);
 

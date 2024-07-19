@@ -1802,14 +1802,6 @@ pub struct InitArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
-    /// Assert that the `uv.lock` will remain unchanged.
-    #[arg(long, conflicts_with = "frozen")]
-    pub locked: bool,
-
-    /// Install without updating the `uv.lock` file.
-    #[arg(long, conflicts_with = "locked")]
-    pub frozen: bool,
-
     /// Include optional dependencies from the extra group name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -1840,6 +1832,14 @@ pub struct RunArgs {
     /// Run with the given packages installed.
     #[arg(long)]
     pub with: Vec<String>,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Install without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -1872,14 +1872,6 @@ pub struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
-    /// Assert that the `uv.lock` will remain unchanged.
-    #[arg(long, conflicts_with = "frozen")]
-    pub locked: bool,
-
-    /// Install without updating the `uv.lock` file.
-    #[arg(long, conflicts_with = "locked")]
-    pub frozen: bool,
-
     /// Include optional dependencies from the extra group name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -1904,9 +1896,18 @@ pub struct SyncArgs {
     pub no_dev: bool,
 
     /// Does not clean the environment.
-    /// Without this flag any extraneous installations will be removed.
+    ///
+    /// When omitted, any extraneous installations will be removed.
     #[arg(long)]
     pub no_clean: bool,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Install without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -2008,6 +2009,14 @@ pub struct AddArgs {
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Add the requirements without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -2052,6 +2061,14 @@ pub struct RemoveArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Remove the requirements without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -2086,6 +2103,14 @@ pub struct RemoveArgs {
 pub struct TreeArgs {
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    #[arg(long, conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Display the requirements without updating the `uv.lock` file.
+    #[arg(long, conflicts_with = "locked")]
+    pub frozen: bool,
 
     #[command(flatten)]
     pub build: BuildArgs,

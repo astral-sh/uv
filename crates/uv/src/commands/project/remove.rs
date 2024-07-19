@@ -11,13 +11,14 @@ use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::commit;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Remove one or more packages from the project requirements.
 pub(crate) async fn remove(
+    locked: bool,
+    frozen: bool,
     requirements: Vec<PackageName>,
     dependency_type: DependencyType,
     package: Option<PackageName>,
@@ -33,7 +34,7 @@ pub(crate) async fn remove(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv remove` is experimental and may change without warning.");
+        warn_user_once!("`uv remove` is experimental and may change without warning");
     }
 
     // Find the project in the workspace.
@@ -83,6 +84,12 @@ pub(crate) async fn remove(
         pyproject.to_string(),
     )?;
 
+    // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
+    // to exist at all.
+    if frozen {
+        return Ok(ExitStatus::Success);
+    }
+
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
         project.workspace(),
@@ -99,14 +106,12 @@ pub(crate) async fn remove(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // Read the existing lockfile.
-    let existing = project::lock::read(project.workspace()).await?;
-
     // Lock and sync the environment, if necessary.
-    let lock = project::lock::do_lock(
+    let lock = project::lock::do_safe_lock(
+        locked,
+        frozen,
         project.workspace(),
         venv.interpreter(),
-        existing.as_ref(),
         settings.as_ref().into(),
         &state,
         preview,
@@ -117,9 +122,6 @@ pub(crate) async fn remove(
         printer,
     )
     .await?;
-    if !existing.is_some_and(|existing| existing == lock) {
-        commit(&lock, project.workspace()).await?;
-    }
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?

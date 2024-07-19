@@ -20,7 +20,7 @@ pub(crate) async fn find(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv python find` is experimental and may change without warning.");
+        warn_user_once!("`uv python find` is experimental and may change without warning");
     }
 
     let request = match request {

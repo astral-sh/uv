@@ -57,7 +57,7 @@ pub(crate) async fn run(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv run` is experimental and may change without warning.");
+        warn_user_once!("`uv run` is experimental and may change without warning");
     }
 
     // Parse the input command.

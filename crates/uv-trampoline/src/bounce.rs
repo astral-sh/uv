@@ -75,7 +75,7 @@ fn make_child_cmdline() -> CString {
     // );
 
     CString::from_vec_with_nul(child_cmdline).unwrap_or_else(|_| {
-        eprintln!("Child command line is not correctly null terminated.");
+        eprintln!("Child command line is not correctly null terminated");
         exit_with_status(1)
     })
 }
@@ -128,7 +128,7 @@ fn executable_filename() -> CString {
     }
 
     CString::from_vec_with_nul(buffer).unwrap_or_else(|_| {
-        eprintln!("Executable name is not correctly null terminated.");
+        eprintln!("Executable name is not correctly null terminated");
         exit_with_status(1)
     })
 }
@@ -191,13 +191,13 @@ fn find_python_exe(executable_name: &CStr) -> CString {
         }
         .is_err()
         {
-            print_last_error_and_exit("Failed to set the file pointer to the end of the file.");
+            print_last_error_and_exit("Failed to set the file pointer to the end of the file");
         }
 
         let mut read_bytes = bytes_to_read;
         if unsafe { ReadFile(file_handle, Some(&mut buffer), Some(&mut read_bytes), None) }.is_err()
         {
-            print_last_error_and_exit("Failed to read the executable file.");
+            print_last_error_and_exit("Failed to read the executable file");
         }
 
         // Truncate the buffer to the actual number of bytes read.
@@ -240,7 +240,7 @@ fn find_python_exe(executable_name: &CStr) -> CString {
             buffer.push(b'\0');
 
             break CString::from_vec_with_nul(buffer).unwrap_or_else(|_| {
-                eprintln!("Python executable path is not correctly null terminated.");
+                eprintln!("Python executable path is not correctly null terminated");
                 exit_with_status(1)
             });
         } else {
@@ -249,14 +249,14 @@ fn find_python_exe(executable_name: &CStr) -> CString {
             bytes_to_read = (path_len + MAGIC_NUMBER.len() + PATH_LEN_SIZE) as u32;
 
             if i64::from(bytes_to_read) > file_size {
-                eprintln!("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian.");
+                eprintln!("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian");
                 exit_with_status(1);
             }
         }
     };
 
     if unsafe { CloseHandle(file_handle) }.is_err() {
-        print_last_error_and_exit("Failed to close file handle.");
+        print_last_error_and_exit("Failed to close file handle");
     }
 
     if is_absolute(&path) {
@@ -269,13 +269,13 @@ fn find_python_exe(executable_name: &CStr) -> CString {
         {
             Some(parent_dir) => parent_dir,
             None => {
-                eprintln!("Script path has unknown separator characters.");
+                eprintln!("Script path has unknown separator characters");
                 exit_with_status(1)
             }
         };
         let final_path = [parent_dir, b"\\", path.as_bytes()].concat();
         CString::new(final_path).unwrap_or_else(|_| {
-            eprintln!("Could not construct the absolute path to the Python executable.");
+            eprintln!("Could not construct the absolute path to the Python executable");
             exit_with_status(1)
         })
     }
@@ -334,7 +334,7 @@ fn skip_one_argument(arguments: &[u8]) -> &[u8] {
 
 fn make_job_object() -> HANDLE {
     let job = unsafe { CreateJobObjectW(None, None) }
-        .unwrap_or_else(|_| print_last_error_and_exit("Job creation failed."));
+        .unwrap_or_else(|_| print_last_error_and_exit("Job creation failed"));
     let mut job_info = MaybeUninit::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>::uninit();
     let mut retlen = 0u32;
     if unsafe {
@@ -348,7 +348,7 @@ fn make_job_object() -> HANDLE {
     }
     .is_err()
     {
-        print_last_error_and_exit("Job information querying failed.");
+        print_last_error_and_exit("Job information querying failed");
     }
     let mut job_info = unsafe { job_info.assume_init() };
     job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -363,7 +363,7 @@ fn make_job_object() -> HANDLE {
     }
     .is_err()
     {
-        print_last_error_and_exit("Job information setting failed.");
+        print_last_error_and_exit("Job information setting failed");
     }
     job
 }
@@ -373,11 +373,11 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
     if (si.dwFlags & STARTF_USESTDHANDLES).0 != 0 {
         // ignore errors, if the handles are not inheritable/valid, then nothing we can do
         unsafe { SetHandleInformation(si.hStdInput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stdin inheritable failed."));
+            .unwrap_or_else(|_| eprintln!("Making stdin inheritable failed"));
         unsafe { SetHandleInformation(si.hStdOutput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stdout inheritable failed."));
+            .unwrap_or_else(|_| eprintln!("Making stdout inheritable failed"));
         unsafe { SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stderr inheritable failed."));
+            .unwrap_or_else(|_| eprintln!("Making stderr inheritable failed"));
     }
     let mut child_process_info = MaybeUninit::<PROCESS_INFORMATION>::uninit();
     unsafe {
@@ -397,11 +397,11 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
         )
     }
     .unwrap_or_else(|_| {
-        print_last_error_and_exit("Failed to spawn the python child process.");
+        print_last_error_and_exit("Failed to spawn the python child process");
     });
     let child_process_info = unsafe { child_process_info.assume_init() };
     unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
-        print_last_error_and_exit("Failed to close handle to python child process main thread.");
+        print_last_error_and_exit("Failed to close handle to python child process main thread");
     });
     // Return handle to child process.
     child_process_info.hProcess
@@ -464,14 +464,14 @@ fn clear_app_starting_state(child_handle: HANDLE) {
     unsafe {
         // End the launcher's "app starting" cursor state.
         PostMessageA(None, 0, None, None).unwrap_or_else(|_| {
-            eprintln!("Failed to post a message to specified window.");
+            eprintln!("Failed to post a message to specified window");
         });
         if GetMessageA(msg.as_mut_ptr(), None, 0, 0) != TRUE {
-            eprintln!("Failed to retrieve posted window message.");
+            eprintln!("Failed to retrieve posted window message");
         }
         // Proxy the child's input idle event.
         if WaitForInputIdle(child_handle, INFINITE) != 0 {
-            eprintln!("Failed to wait for input from window.");
+            eprintln!("Failed to wait for input from window");
         }
         // Signal the process input idle event by creating a window and pumping
         // sent messages. The window class isn't important, so just use the
@@ -493,7 +493,7 @@ fn clear_app_starting_state(child_handle: HANDLE) {
         // Process all sent messages and signal input idle.
         _ = PeekMessageA(msg.as_mut_ptr(), hwnd, 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
         DestroyWindow(hwnd).unwrap_or_else(|_| {
-            print_last_error_and_exit("Failed to destroy temporary window.");
+            print_last_error_and_exit("Failed to destroy temporary window");
         });
     }
 }
@@ -509,7 +509,7 @@ pub fn bounce(is_gui: bool) -> ! {
     let job = make_job_object();
 
     if unsafe { AssignProcessToJobObject(job, child_handle) }.is_err() {
-        print_last_error_and_exit("Failed to assign child process to the job.")
+        print_last_error_and_exit("Failed to assign child process to the job")
     }
 
     // (best effort) Close all the handles that we can
@@ -518,7 +518,7 @@ pub fn bounce(is_gui: bool) -> ! {
     // (best effort) Switch to some innocuous directory, so we don't hold the original cwd open.
     // See distlib/PC/launcher.c::switch_working_directory
     if std::env::set_current_dir(std::env::temp_dir()).is_err() {
-        eprintln!("Failed to set cwd to temp dir.");
+        eprintln!("Failed to set cwd to temp dir");
     }
 
     // We want to ignore control-C/control-Break/logout/etc.; the same event will
@@ -528,7 +528,7 @@ pub fn bounce(is_gui: bool) -> ! {
     }
     // See distlib/PC/launcher.c::control_key_handler
     unsafe { SetConsoleCtrlHandler(Some(control_key_handler), true) }.unwrap_or_else(|_| {
-        print_last_error_and_exit("Control handler setting failed.");
+        print_last_error_and_exit("Control handler setting failed");
     });
 
     if is_gui {
@@ -538,7 +538,7 @@ pub fn bounce(is_gui: bool) -> ! {
     _ = unsafe { WaitForSingleObject(child_handle, INFINITE) };
     let mut exit_code = 0u32;
     if unsafe { GetExitCodeProcess(child_handle, &mut exit_code) }.is_err() {
-        print_last_error_and_exit("Failed to get exit code of child process.");
+        print_last_error_and_exit("Failed to get exit code of child process");
     }
     exit_with_status(exit_code);
 }

@@ -44,7 +44,7 @@ pub(crate) async fn lock(
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv lock` is experimental and may change without warning.");
+        warn_user_once!("`uv lock` is experimental and may change without warning");
     }
 
     // Find the project requirements.
@@ -384,7 +384,7 @@ pub(super) async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         None => {
-            debug!("Starting clean resolution.");
+            debug!("Starting clean resolution");
 
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(

@@ -30,7 +30,7 @@ pub enum Error {
     MalformedSources,
     #[error("Workspace in `pyproject.toml` is malformed")]
     MalformedWorkspace,
-    #[error("Cannot perform ambiguous update; multiple entries with matching package names.")]
+    #[error("Cannot perform ambiguous update; found multiple entries with matching package names")]
     Ambiguous,
 }
 

@@ -10,7 +10,7 @@ use uv_warnings::warn_user_once;
 /// Show the tool directory.
 pub(crate) fn dir(bin: bool, preview: PreviewMode) -> anyhow::Result<()> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tool dir` is experimental and may change without warning.");
+        warn_user_once!("`uv tool dir` is experimental and may change without warning");
     }
 
     if bin {
