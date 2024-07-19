@@ -1,14 +1,14 @@
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 
 use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
+use uv_distribution::Workspace;
 use uv_fs::Simplified;
 use uv_python::{
-    requests_from_version_file, EnvironmentPreference, PythonInstallation, PythonPreference,
+    requests_from_version_file_in, EnvironmentPreference, PythonInstallation, PythonPreference,
     PythonRequest, PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
@@ -22,6 +22,7 @@ pub(crate) async fn pin(
     resolved: bool,
     python_preference: PythonPreference,
     preview: PreviewMode,
+    isolated: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -29,9 +30,17 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning");
     }
 
+    let target_dir = if isolated {
+        std::env::current_dir()?
+    } else if let Ok(workspace) = Workspace::discover(&std::env::current_dir()?, None).await {
+        workspace.install_path().to_owned()
+    } else {
+        std::env::current_dir()?
+    };
+
     let Some(request) = request else {
         // Display the current pinned Python version
-        if let Some(pins) = requests_from_version_file().await? {
+        if let Some(pins) = requests_from_version_file_in(&target_dir).await? {
             for pin in pins {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
             }
@@ -69,16 +78,24 @@ pub(crate) async fn pin(
     };
 
     debug!("Using pin `{}`", output);
-    let version_file = PathBuf::from(PYTHON_VERSION_FILENAME);
+    let version_file = target_dir.join(PYTHON_VERSION_FILENAME);
     let exists = version_file.exists();
 
     debug!("Writing pin to {}", version_file.user_display());
     fs_err::write(&version_file, format!("{output}\n"))?;
-    if exists {
-        writeln!(printer.stdout(), "Replaced existing pin with `{output}`")?;
+    let mut message = if exists {
+        format!("Replaced existing pin with `{output}`")
     } else {
-        writeln!(printer.stdout(), "Pinned to `{output}`")?;
-    }
+        format!("Pinned to `{output}`")
+    };
+
+    if target_dir != std::env::current_dir()? {
+        // Print the version file use to pin only
+        // if it's not in the current working directory
+        message = format!("{message} in `{}`", version_file.display());
+    };
+
+    writeln!(printer.stdout(), "{message}")?;
 
     Ok(ExitStatus::Success)
 }
