@@ -176,7 +176,7 @@ fn current_dir() -> Result<()> {
 }
 
 #[test]
-fn workspace() -> Result<()> {
+fn init_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -251,7 +251,7 @@ fn workspace() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [tool.uv.workspace]
-        members = ["[TEMP_DIR]/foo"]
+        members = ["foo"]
         "###
         );
     });
