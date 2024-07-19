@@ -311,9 +311,7 @@ impl SitePackages {
                         distribution,
                         entry.requirement.source().as_ref(),
                     )? {
-                        RequirementSatisfaction::Mismatch
-                        | RequirementSatisfaction::OutOfDate
-                        | RequirementSatisfaction::Dynamic => {
+                        RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
                             return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))
                         }
                         RequirementSatisfaction::Satisfied => {}
@@ -323,8 +321,7 @@ impl SitePackages {
                     for constraint in constraints.get(&distribution.name()).into_iter().flatten() {
                         match RequirementSatisfaction::check(distribution, &constraint.source)? {
                             RequirementSatisfaction::Mismatch
-                            | RequirementSatisfaction::OutOfDate
-                            | RequirementSatisfaction::Dynamic => {
+                            | RequirementSatisfaction::OutOfDate => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     entry.requirement.to_string(),
                                 ))
