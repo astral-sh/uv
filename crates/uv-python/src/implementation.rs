@@ -12,16 +12,16 @@ pub enum Error {
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord, Hash)]
 pub enum ImplementationName {
+    GraalPy,
+    PyPy,
     #[default]
     CPython,
-    PyPy,
-    GraalPy,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd, Hash)]
 pub enum LenientImplementationName {
-    Known(ImplementationName),
     Unknown(String),
+    Known(ImplementationName),
 }
 
 impl ImplementationName {
