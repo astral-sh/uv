@@ -1,15 +1,15 @@
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anyhow::{bail, Result};
+use owo_colors::OwoColorize;
 
-use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::{
-    requests_from_version_file, EnvironmentPreference, PythonInstallation, PythonPreference,
-    PythonRequest, PYTHON_VERSION_FILENAME,
+    request_from_version_file, requests_from_version_file, write_version_file,
+    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest,
+    PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
 
@@ -50,7 +50,7 @@ pub(crate) async fn pin(
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
         Err(uv_python::Error::MissingPython(err)) if !resolved => {
-            warn_user_once!("{}", err);
+            warn_user_once!("{err}");
             None
         }
         Err(err) => return Err(err.into()),
@@ -68,16 +68,27 @@ pub(crate) async fn pin(
         request.to_canonical_string()
     };
 
-    debug!("Using pin `{}`", output);
-    let version_file = PathBuf::from(PYTHON_VERSION_FILENAME);
-    let exists = version_file.exists();
+    let existing = request_from_version_file().await.ok().flatten();
+    write_version_file(&output).await?;
 
-    debug!("Writing pin to {}", version_file.user_display());
-    fs_err::write(&version_file, format!("{output}\n"))?;
-    if exists {
-        writeln!(printer.stdout(), "Replaced existing pin with `{output}`")?;
+    if let Some(existing) = existing
+        .map(|existing| existing.to_canonical_string())
+        .filter(|existing| existing != &output)
+    {
+        writeln!(
+            printer.stdout(),
+            "Updated `{}` from `{}` -> `{}`",
+            PYTHON_VERSION_FILENAME.cyan(),
+            existing.green(),
+            output.green()
+        )?;
     } else {
-        writeln!(printer.stdout(), "Pinned to `{output}`")?;
+        writeln!(
+            printer.stdout(),
+            "Pinned `{}` to `{}`",
+            PYTHON_VERSION_FILENAME.cyan(),
+            output.green()
+        )?;
     }
 
     Ok(ExitStatus::Success)

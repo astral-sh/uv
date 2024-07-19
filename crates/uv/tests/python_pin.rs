@@ -28,7 +28,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned to `any`
+    Pinned `.python-version` to `any`
 
     ----- stderr -----
     "###);
@@ -57,7 +57,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `3.12`
+    Updated `.python-version` from `any` -> `3.12`
 
     ----- stderr -----
     "###);
@@ -73,7 +73,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `3.11`
+    Updated `.python-version` from `3.12` -> `3.11`
 
     ----- stderr -----
     "###);
@@ -89,7 +89,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `cpython`
+    Updated `.python-version` from `3.11` -> `cpython`
 
     ----- stderr -----
     "###);
@@ -105,7 +105,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `cpython@3.12`
+    Updated `.python-version` from `cpython` -> `cpython@3.12`
 
     ----- stderr -----
     "###);
@@ -121,7 +121,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `cpython@3.12`
+    Pinned `.python-version` to `cpython@3.12`
 
     ----- stderr -----
     "###);
@@ -137,7 +137,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `cpython-3.12-any-any-any`
+    Updated `.python-version` from `cpython@3.12` -> `cpython-3.12-any-any-any`
 
     ----- stderr -----
     "###);
@@ -153,7 +153,7 @@ fn python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.11]`
+    Updated `.python-version` from `cpython-3.12-any-any-any` -> `[PYTHON-3.11]`
 
     ----- stderr -----
     "###);
@@ -176,7 +176,7 @@ fn python_pin() {
         success: true
         exit_code: 0
         ----- stdout -----
-        Replaced existing pin with `pypy`
+        Updated `.python-version` from `[PYTHON-3.11]` -> `pypy`
 
         ----- stderr -----
         warning: No interpreter found for PyPy in system path
@@ -194,14 +194,14 @@ fn python_pin() {
     #[cfg(unix)]
     {
         uv_snapshot!(context.filters(), context.python_pin().arg("3.7"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Replaced existing pin with `3.7`
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        Updated `.python-version` from `pypy` -> `3.7`
 
-    ----- stderr -----
-    warning: No interpreter found for Python 3.7 in system path
-    "###);
+        ----- stderr -----
+        warning: No interpreter found for Python 3.7 in system path
+        "###);
 
         let python_version =
             fs_err::read_to_string(context.temp_dir.join(PYTHON_VERSION_FILENAME)).unwrap();
@@ -222,7 +222,7 @@ fn python_pin_no_python() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned to `3.12`
+    Pinned `.python-version` to `3.12`
 
     ----- stderr -----
     warning: No interpreter found for Python 3.12 in system path
@@ -264,7 +264,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned to `[PYTHON-3.11]`
+    Pinned `.python-version` to `[PYTHON-3.11]`
 
     ----- stderr -----
     "###);
@@ -284,7 +284,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.12]`
+    Updated `.python-version` from `[PYTHON-3.11]` -> `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
@@ -304,7 +304,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.11]`
+    Updated `.python-version` from `[PYTHON-3.12]` -> `[PYTHON-3.11]`
 
     ----- stderr -----
     "###);
@@ -324,7 +324,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.11]`
+    Pinned `.python-version` to `[PYTHON-3.11]`
 
     ----- stderr -----
     "###);
@@ -344,7 +344,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.12]`
+    Updated `.python-version` from `[PYTHON-3.11]` -> `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
@@ -364,7 +364,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.12]`
+    Pinned `.python-version` to `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);
@@ -389,7 +389,7 @@ fn python_pin_resolve() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `[PYTHON-3.12]`
+    Pinned `.python-version` to `[PYTHON-3.12]`
 
     ----- stderr -----
     "###);

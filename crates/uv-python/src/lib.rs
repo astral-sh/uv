@@ -14,10 +14,11 @@ pub use crate::prefix::Prefix;
 pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
 pub use crate::version_files::{
-    request_from_version_file, requests_from_version_file, PYTHON_VERSIONS_FILENAME,
-    PYTHON_VERSION_FILENAME,
+    request_from_version_file, requests_from_version_file, write_version_file,
+    PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
+
 mod discovery;
 pub mod downloads;
 mod environment;
@@ -83,19 +84,19 @@ pub enum Error {
 // TODO(zanieb): We should write a mock interpreter script that works on Windows
 #[cfg(all(test, unix))]
 mod tests {
-    use anyhow::Result;
-    use indoc::{formatdoc, indoc};
-
     use std::{
         env,
         ffi::{OsStr, OsString},
         path::{Path, PathBuf},
         str::FromStr,
     };
+
+    use anyhow::Result;
+    use assert_fs::{fixture::ChildPath, prelude::*, TempDir};
+    use indoc::{formatdoc, indoc};
     use temp_env::with_vars;
     use test_log::test;
 
-    use assert_fs::{fixture::ChildPath, prelude::*, TempDir};
     use uv_cache::Cache;
 
     use crate::{
