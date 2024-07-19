@@ -327,7 +327,7 @@ impl Implementation {
                 } else if gil_disabled {
                     // https://peps.python.org/pep-0703/#build-configuration-changes
                     // Python 3.13+ only, but it makes more sense to just rely on the sysconfig var.
-                    format!("cp{}{}t", python_version.0, python_version.1,)
+                    format!("cp{}{}t", python_version.0, python_version.1)
                 } else {
                     format!(
                         "cp{}{}{}",
