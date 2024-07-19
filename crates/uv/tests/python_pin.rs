@@ -268,7 +268,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned to `>3.8, <3.11`
+    Pinned `.python-version` to `>3.8, <3.11`
 
     ----- stderr -----
     warning: The requested Python version `>3.8, <3.11` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.11`.
@@ -278,7 +278,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `3.11`
+    Updated `.python-version` from `>3.8, <3.11` -> `3.11`
 
     ----- stderr -----
     "###);
@@ -288,7 +288,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `cpython@3.11`
+    Updated `.python-version` from `3.11` -> `cpython@3.11`
 
     ----- stderr -----
     "###);
@@ -329,7 +329,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `cpython`
+    Updated `.python-version` from `cpython@3.11` -> `cpython`
 
     ----- stderr -----
     warning: The requested Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
@@ -350,7 +350,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Replaced existing pin with `>3.8, <3.12`
+    Updated `.python-version` from `cpython` -> `>3.8, <3.12`
 
     ----- stderr -----
     warning: The requested Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.

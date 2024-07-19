@@ -1,10 +1,10 @@
 use std::fmt::Write;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
 use owo_colors::OwoColorize;
 
+use tracing::debug;
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_distribution::VirtualProject;
