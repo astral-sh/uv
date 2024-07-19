@@ -9,8 +9,9 @@ _The following is a work-in-progress style guide for our user-facing messaging i
 1. Always wrap em-dashes in spaces, e.g., "hello — world" not "hello—world".
 1. Hyphenate compound words, e.g., use "platform-specific" not "platform specific".
 1. Use backticks to escape: commands, code expressions, package names, and file paths.
-1. Use less than and greater than symbols to wrap bare URLs, e.g., <https://astral.sh>, unless it is an example then use backticks.
+1. Use less than and greater than symbols to wrap bare URLs, e.g., <https://astral.sh> (unless it is an example; then, use backticks).
 1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.
+1. If a message ends with a single relevant value, precede it with a colon, e.g., `This is the value: value`. If the value is a literal, wrap it in backticks.
 
 ## Styling uv
 
@@ -23,7 +24,7 @@ Just uv, please.
 ## Documentation
 
 1. Use periods at the end of all sentences, including lists unless they enumerate single items.
-1. Avoid language that patronizers the reader, e.g., "simply do this".
+1. Avoid language that patronizes the reader, e.g., "simply do this".
 
 ### Sections
 
@@ -43,7 +44,7 @@ The documentation is divided into:
 1. Should not cover behavior in detail.
 1. Should not enumerate all possibilities.
 1. Should avoid linking to reference documentation unless not covered in a concept document.
-1. May generally ignore platform-specific behavior
+1. May generally ignore platform-specific behavior.
 1. May be written from second-person point of view, though we prefer third-person at this time.
 
 #### Concepts
@@ -75,7 +76,8 @@ The documentation is divided into:
 
 ### Colors and style
 
-1. When instructing the user to execute a command, it should be bolded. 
+1. All CLI output should be interpretable and understandable _without_ the use of color and other styling. (For example: even if a command is rendered in green, wrap it in backticks.)
+1. In general, we use: green for success, red for error, yellow for warning, and cyan for hints; cyan for file paths, cyan for salient user-facing values (e.g., a package name in a message), and green for commands. 
 1. `NO_COLOR` must be respected when using any colors or styling.
 1. `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
 
