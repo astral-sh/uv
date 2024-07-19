@@ -4760,6 +4760,7 @@ dependencies = [
  "nanoid",
  "once_cell",
  "path-absolutize",
+ "path-slash",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",

@@ -1,6 +1,8 @@
+use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
+use path_slash::PathExt;
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 
@@ -26,6 +28,8 @@ pub enum Error {
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
     MalformedSources,
+    #[error("Workspace in `pyproject.toml` is malformed")]
+    MalformedWorkspace,
     #[error("Cannot perform ambiguous update; found multiple entries with matching package names")]
     Ambiguous,
 }
@@ -36,6 +40,35 @@ impl PyProjectTomlMut {
         Ok(Self {
             doc: pyproject.raw.parse().map_err(Box::new)?,
         })
+    }
+
+    /// Adds a project to the workspace.
+    pub fn add_workspace(&mut self, path: impl AsRef<Path>) -> Result<(), Error> {
+        // Get or create `tool.uv.workspace.members`.
+        let members = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedWorkspace)?
+            .entry("uv")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedWorkspace)?
+            .entry("workspace")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedWorkspace)?
+            .entry("members")
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedWorkspace)?;
+
+        // Add the path to the workspace.
+        // Use cross-platform slashes so the toml string type does not change
+        members.push(path.as_ref().to_slash_lossy().to_string());
+
+        Ok(())
     }
 
     /// Adds a dependency to `project.dependencies`.
