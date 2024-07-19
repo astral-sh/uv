@@ -15,6 +15,7 @@ pub enum ImplementationName {
     #[default]
     CPython,
     PyPy,
+    GraalPy,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Ord, PartialOrd, Hash)]
@@ -25,13 +26,14 @@ pub enum LenientImplementationName {
 
 impl ImplementationName {
     pub(crate) fn possible_names() -> impl Iterator<Item = &'static str> {
-        ["cpython", "pypy", "cp", "pp"].into_iter()
+        ["cpython", "pypy", "graalpy", "cp", "pp", "gp"].into_iter()
     }
 
     pub fn pretty(self) -> &'static str {
         match self {
             Self::CPython => "CPython",
             Self::PyPy => "PyPy",
+            Self::GraalPy => "GraalPy",
         }
     }
 }
@@ -50,6 +52,7 @@ impl From<&ImplementationName> for &'static str {
         match v {
             ImplementationName::CPython => "cpython",
             ImplementationName::PyPy => "pypy",
+            ImplementationName::GraalPy => "graalpy",
         }
     }
 }
@@ -73,6 +76,7 @@ impl FromStr for ImplementationName {
         match s.to_ascii_lowercase().as_str() {
             "cpython" | "cp" => Ok(Self::CPython),
             "pypy" | "pp" => Ok(Self::PyPy),
+            "graalpy" | "gp" => Ok(Self::GraalPy),
             _ => Err(Error::UnknownImplementation(s.to_string())),
         }
     }

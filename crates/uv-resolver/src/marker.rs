@@ -1,10 +1,10 @@
 #![allow(clippy::enum_glob_use, clippy::single_match_else)]
 
-use std::collections::HashMap;
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
 
 use pubgrub::range::{Range as PubGrubRange, Range};
+use rustc_hash::FxHashMap;
 
 use pep440_rs::{Operator, Version, VersionSpecifier};
 use pep508_rs::{
@@ -14,6 +14,47 @@ use pep508_rs::{
 
 use crate::pubgrub::PubGrubSpecifier;
 use crate::RequiresPythonBound;
+
+/// Returns true when it can be proven that the given marker expression
+/// evaluates to true for precisely zero marker environments.
+///
+/// When this returns false, it *may* be the case that is evaluates to
+/// true for precisely zero marker environments. That is, this routine
+/// never has false positives but may have false negatives.
+pub(crate) fn is_definitively_empty_set(tree: &MarkerTree) -> bool {
+    match *tree {
+        // A conjunction is definitively empty when it is known that
+        // *any* two of its conjuncts are disjoint. Since this would
+        // imply that the entire conjunction could never be true.
+        MarkerTree::And(ref trees) => {
+            // Since this is quadratic in the case where the
+            // expression is *not* empty, we limit ourselves
+            // to a small number of conjuncts. In practice,
+            // this should hopefully cover most cases.
+            if trees.len() > 10 {
+                return false;
+            }
+            for (i, tree1) in trees.iter().enumerate() {
+                for tree2 in &trees[i..] {
+                    if is_disjoint(tree1, tree2) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        // A disjunction is definitively empty when all of its
+        // disjuncts are definitively empty.
+        MarkerTree::Or(ref trees) => trees.iter().all(is_definitively_empty_set),
+        // An "arbitrary" expression is always false, so we
+        // at least know it is definitively empty.
+        MarkerTree::Expression(MarkerExpression::Arbitrary { .. }) => true,
+        // Can't really do much with a single expression. There are maybe
+        // trivial cases we could check (like `python_version < '0'`), but I'm
+        // not sure it's worth doing?
+        MarkerTree::Expression(_) => false,
+    }
+}
 
 /// Returns `true` if there is no environment in which both marker trees can both apply, i.e.
 /// the expression `first and second` is always false.
@@ -49,7 +90,47 @@ pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
 fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool {
     use MarkerOperator::*;
 
-    let (key, operator, value) = extract_string_expression(this).unwrap();
+    // The `in` and `not in` operators are not reversible, so we have to ensure the expressions
+    // match exactly. Notably, `'a' in env` and `env not in 'a'` are not disjoint given `env == 'ab'`.
+    match (this, other) {
+        (
+            MarkerExpression::String {
+                key,
+                operator,
+                value,
+            },
+            MarkerExpression::String {
+                key: key2,
+                operator: operator2,
+                value: value2,
+            },
+        )
+        | (
+            MarkerExpression::StringInverted {
+                key,
+                operator,
+                value,
+            },
+            MarkerExpression::StringInverted {
+                key: key2,
+                operator: operator2,
+                value: value2,
+            },
+        ) if key == key2 => match (operator, operator2) {
+            // The only disjoint expressions involving these operators are `key in value`
+            // and `key not in value`, or reversed.
+            (In, NotIn) | (NotIn, In) => return value == value2,
+            // Anything else cannot be disjoint.
+            (In | NotIn, _) | (_, In | NotIn) => return false,
+            _ => {}
+        },
+        _ => {}
+    }
+
+    // Extract the normalized string expressions.
+    let Some((key, operator, value)) = extract_string_expression(this) else {
+        return false;
+    };
     let Some((key2, operator2, value2)) = extract_string_expression(other) else {
         return false;
     };
@@ -63,9 +144,6 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
         // The only disjoint expressions involving strict inequality are `key != value` and `key == value`.
         (NotEqual, Equal) | (Equal, NotEqual) => return value == value2,
         (NotEqual, _) | (_, NotEqual) => return false,
-        // Similarly for `in` and `not in`.
-        (In, NotIn) | (NotIn, In) => return value == value2,
-        (In | NotIn, _) | (_, In | NotIn) => return false,
         _ => {}
     }
 
@@ -168,7 +246,7 @@ pub(crate) fn normalize_all(
     match tree {
         MarkerTree::And(trees) => {
             let mut reduced = Vec::new();
-            let mut versions: HashMap<_, Vec<_>> = HashMap::new();
+            let mut versions: FxHashMap<_, Vec<_>> = FxHashMap::default();
 
             for subtree in trees {
                 // Normalize nested expressions as much as possible first.
@@ -214,7 +292,7 @@ pub(crate) fn normalize_all(
 
         MarkerTree::Or(trees) => {
             let mut reduced = Vec::new();
-            let mut versions: HashMap<_, Vec<_>> = HashMap::new();
+            let mut versions: FxHashMap<_, Vec<_>> = FxHashMap::default();
 
             for subtree in trees {
                 // Normalize nested expressions as much as possible first.
@@ -263,6 +341,12 @@ pub(crate) fn normalize_all(
 
             reduced.sort();
             reduced.dedup();
+
+            // If the reduced trees contain complementary terms (e.g., `sys_platform == 'linux' or sys_platform != 'linux'`),
+            // the expression is always true and can be removed.
+            if contains_complements(&reduced) {
+                return None;
+            }
 
             match reduced.len() {
                 0 => None,
@@ -514,7 +598,7 @@ fn filter_conjunctions(tree: &mut MarkerTree, disjunct: &MarkerExpression) -> bo
 /// Simplify version expressions.
 fn simplify_ranges(
     reduced: &mut Vec<MarkerTree>,
-    versions: HashMap<MarkerValueVersion, Vec<PubGrubRange<Version>>>,
+    versions: FxHashMap<MarkerValueVersion, Vec<PubGrubRange<Version>>>,
     combine: impl Fn(&Vec<PubGrubRange<Version>>) -> PubGrubRange<Version>,
 ) {
     for (key, ranges) in versions {
@@ -560,8 +644,8 @@ fn extract_string_expression(
             operator,
             key,
         } => {
-            // if the expression was inverted, we have to reverse the operator
-            Some((key, reverse_marker_operator(*operator), value))
+            // If the expression was inverted, we have to reverse the marker operator.
+            reverse_marker_operator(*operator).map(|operator| (key, operator, value.as_str()))
         }
         _ => None,
     }
@@ -629,6 +713,42 @@ fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> boo
     range.is_disjoint(&range2)
 }
 
+/// Return `true` if the tree contains complementary terms (e.g., `sys_platform == 'linux' or sys_platform != 'linux'`).
+fn contains_complements(trees: &[MarkerTree]) -> bool {
+    let mut terms = FxHashMap::default();
+    for tree in trees {
+        let MarkerTree::Expression(
+            MarkerExpression::String {
+                key,
+                operator,
+                value,
+            }
+            | MarkerExpression::StringInverted {
+                value,
+                operator,
+                key,
+            },
+        ) = tree
+        else {
+            continue;
+        };
+        match operator {
+            MarkerOperator::Equal => {
+                if let Some(MarkerOperator::NotEqual) = terms.insert((key, value), operator) {
+                    return true;
+                }
+            }
+            MarkerOperator::NotEqual => {
+                if let Some(MarkerOperator::Equal) = terms.insert((key, value), operator) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
 /// Returns the key and version range for a version expression.
 fn keyed_range(expr: &MarkerExpression) -> Option<(&MarkerValueVersion, PubGrubRange<Version>)> {
     let (key, specifier) = match expr {
@@ -675,6 +795,7 @@ fn keyed_range(expr: &MarkerExpression) -> Option<(&MarkerValueVersion, PubGrubR
 /// Reverses a binary operator.
 fn reverse_operator(operator: Operator) -> Operator {
     use Operator::*;
+
     match operator {
         LessThan => GreaterThan,
         LessThanEqual => GreaterThanEqual,
@@ -684,16 +805,21 @@ fn reverse_operator(operator: Operator) -> Operator {
     }
 }
 
-/// Reverses a marker operator.
-fn reverse_marker_operator(operator: MarkerOperator) -> MarkerOperator {
+/// Reverses a marker operator, if possible.
+fn reverse_marker_operator(operator: MarkerOperator) -> Option<MarkerOperator> {
     use MarkerOperator::*;
-    match operator {
+
+    Some(match operator {
         LessThan => GreaterThan,
         LessEqual => GreaterEqual,
         GreaterThan => LessThan,
         GreaterEqual => LessEqual,
-        _ => operator,
-    }
+        Equal => Equal,
+        NotEqual => NotEqual,
+        TildeEqual => TildeEqual,
+        // The `in` and `not in` operators are not reversible.
+        In | NotIn => return None,
+    })
 }
 
 #[cfg(test)]
@@ -849,6 +975,20 @@ mod tests {
             "python_version != '3.8' and python_version != '3.9'",
             "(python_version < '3.8' or python_version > '3.8') and (python_version < '3.9' or python_version > '3.9')",
         );
+
+        // normalize out redundant expressions
+        assert_normalizes_out("sys_platform == 'win32' or sys_platform != 'win32'");
+
+        assert_normalizes_out("'win32' == sys_platform or sys_platform != 'win32'");
+
+        assert_normalizes_out(
+            "sys_platform == 'win32' or sys_platform == 'win32' or sys_platform != 'win32'",
+        );
+
+        assert_normalizes_to(
+            "sys_platform == 'win32' and sys_platform != 'win32'",
+            "sys_platform == 'win32' and sys_platform != 'win32'",
+        );
     }
 
     #[test]
@@ -936,7 +1076,14 @@ mod tests {
             "os_name in 'Windows'",
             "os_name not in 'Windows'"
         ));
-        assert!(is_disjoint("'Linux' in os_name", "os_name not in 'Linux'"));
+        assert!(is_disjoint(
+            "'Windows' in os_name",
+            "'Windows' not in os_name"
+        ));
+
+        assert!(!is_disjoint("'Windows' in os_name", "'Windows' in os_name"));
+        assert!(!is_disjoint("'Linux' in os_name", "os_name not in 'Linux'"));
+        assert!(!is_disjoint("'Linux' not in os_name", "os_name in 'Linux'"));
     }
 
     #[test]
@@ -970,6 +1117,27 @@ mod tests {
         assert!(is_disjoint(
             "sys_platform == 'bar' or implementation_name == 'foo'",
             "sys_platform == 'darwin' and implementation_name == 'pypy'",
+        ));
+    }
+
+    #[test]
+    fn is_definitively_empty_set() {
+        assert!(is_empty("'wat' == 'wat'"));
+        assert!(is_empty(
+            "python_version < '3.10' and python_version >= '3.10'"
+        ));
+        assert!(is_empty(
+            "(python_version < '3.10' and python_version >= '3.10') \
+             or (python_version < '3.9' and python_version >= '3.9')",
+        ));
+
+        assert!(!is_empty("python_version < '3.10'"));
+        assert!(!is_empty("python_version < '0'"));
+        assert!(!is_empty(
+            "python_version < '3.10' and python_version >= '3.9'"
+        ));
+        assert!(!is_empty(
+            "python_version < '3.10' or python_version >= '3.11'"
         ));
     }
 
@@ -1017,6 +1185,11 @@ mod tests {
             format!("{version} == '3.7.0'"),
             format!("{version} != '3.7.0'")
         ));
+    }
+
+    fn is_empty(tree: &str) -> bool {
+        let tree = MarkerTree::parse_reporter(tree, &mut TracingReporter).unwrap();
+        super::is_definitively_empty_set(&tree)
     }
 
     fn is_disjoint(one: impl AsRef<str>, two: impl AsRef<str>) -> bool {

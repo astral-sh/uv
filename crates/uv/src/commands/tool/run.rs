@@ -1,14 +1,17 @@
-use std::borrow::Cow;
 use std::ffi::OsString;
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{borrow::Cow, fmt::Display};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
+use pypi_types::Requirement;
 use tokio::process::Command;
-use tracing::debug;
+use tracing::{debug, warn};
 
-use distribution_types::UnresolvedRequirementSpecification;
+use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
@@ -20,15 +23,32 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
     PythonRequest,
 };
-use uv_tool::InstalledTools;
-use uv_warnings::warn_user_once;
+use uv_tool::{entrypoint_paths, InstalledTools};
+use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
+use crate::commands::{project::environment::CachedEnvironment, tool::common::matching_packages};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
+
+/// The user-facing command used to invoke a tool run.
+pub(crate) enum ToolRunCommand {
+    /// via the `uvx` alias
+    Uvx,
+    /// via `uv tool run`
+    ToolRun,
+}
+
+impl Display for ToolRunCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToolRunCommand::Uvx => write!(f, "uvx"),
+            ToolRunCommand::ToolRun => write!(f, "uv tool run"),
+        }
+    }
+}
 
 /// Run a command.
 pub(crate) async fn run(
@@ -37,6 +57,7 @@ pub(crate) async fn run(
     with: Vec<String>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
+    invocation_source: ToolRunCommand,
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
@@ -48,7 +69,7 @@ pub(crate) async fn run(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tool run` is experimental and may change without warning.");
+        warn_user_once!("`{invocation_source}` is experimental and may change without warning.");
     }
 
     let (target, args) = command.split();
@@ -63,7 +84,7 @@ pub(crate) async fn run(
     };
 
     // Get or create a compatible environment in which to execute the tool.
-    let environment = get_or_create_environment(
+    let (from, environment) = get_or_create_environment(
         &from,
         &with,
         python.as_deref(),
@@ -80,11 +101,11 @@ pub(crate) async fn run(
     )
     .await?;
 
-    // TODO(zanieb): Determine the command via the package entry points
-    let command = target;
+    // TODO(zanieb): Determine the executable command via the package entry points
+    let executable = target;
 
     // Construct the command
-    let mut process = Command::new(command.as_ref());
+    let mut process = Command::new(executable.as_ref());
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -115,12 +136,51 @@ pub(crate) async fn run(
     let space = if args.is_empty() { "" } else { " " };
     debug!(
         "Running `{}{space}{}`",
-        command.to_string_lossy(),
+        executable.to_string_lossy(),
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
-    let mut handle = process
-        .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.to_string_lossy()))?;
+
+    // We check if the provided command is not part of the executables for the `from` package.
+    // If the command is found in other packages, we warn the user about the correct package to use.
+    warn_executable_not_provided_by_package(
+        &executable.to_string_lossy(),
+        &from.name,
+        &environment,
+        &invocation_source,
+    );
+
+    let mut handle = match process.spawn() {
+        Ok(handle) => Ok(handle),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            match get_entrypoints(&from.name, &environment) {
+                Ok(entrypoints) => {
+                    writeln!(
+                        printer.stdout(),
+                        "The executable `{}` was not found.",
+                        executable.to_string_lossy().red(),
+                    )?;
+                    if !entrypoints.is_empty() {
+                        writeln!(
+                            printer.stdout(),
+                            "The following executables are provided by `{}`:",
+                            &from.name.green()
+                        )?;
+                        for (name, _) in entrypoints {
+                            writeln!(printer.stdout(), "- {}", name.cyan())?;
+                        }
+                    }
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(err) => {
+                    warn!("Failed to get entrypoints for `{from}`: {err}");
+                }
+            }
+            Err(err)
+        }
+        Err(err) => Err(err),
+    }
+    .with_context(|| format!("Failed to spawn: `{}`", executable.to_string_lossy()))?;
+
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
@@ -129,6 +189,81 @@ pub(crate) async fn run(
         Ok(ExitStatus::Success)
     } else {
         Ok(ExitStatus::Failure)
+    }
+}
+
+/// Return the entry points for the specified package.
+fn get_entrypoints(
+    from: &PackageName,
+    environment: &PythonEnvironment,
+) -> Result<Vec<(String, PathBuf)>> {
+    let site_packages = SitePackages::from_environment(environment)?;
+
+    let installed = site_packages.get_packages(from);
+    let Some(installed_dist) = installed.first().copied() else {
+        bail!("Expected at least one requirement")
+    };
+
+    Ok(entrypoint_paths(
+        environment,
+        installed_dist.name(),
+        installed_dist.version(),
+    )?)
+}
+
+/// Display a warning if an executable is not provided by package.
+///
+/// If found in a dependency of the requested package instead of the requested package itself, we will hint to use that instead.
+fn warn_executable_not_provided_by_package(
+    executable: &str,
+    from_package: &PackageName,
+    environment: &PythonEnvironment,
+    invocation_source: &ToolRunCommand,
+) {
+    if let Ok(packages) = matching_packages(executable, environment) {
+        if !packages
+            .iter()
+            .any(|package| package.name() == from_package)
+        {
+            match packages.as_slice() {
+                [] => {
+                    warn_user!(
+                        "A `{}` executable is not provided by package `{}`.",
+                        executable.green(),
+                        from_package.red()
+                    );
+                }
+                [package] => {
+                    let suggested_command = format!(
+                        "{invocation_source} --from {} {}",
+                        package.name(),
+                        executable
+                    );
+                    warn_user!(
+                        "A `{}` executable is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
+                        executable.green(),
+                        from_package.red(),
+                        package.name().green(),
+                        suggested_command.cyan()
+                    );
+                }
+                packages => {
+                    let suggested_command = format!("{invocation_source} --from PKG {executable}");
+                    let provided_by = packages
+                        .iter()
+                        .map(distribution_types::Name::name)
+                        .map(|name| format!("- {}", name.cyan()))
+                        .join("\n");
+                    warn_user!(
+                        "A `{}` executable is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
+                        executable.green(),
+                        from_package.red(),
+                        provided_by,
+                        suggested_command.cyan(),
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -150,7 +285,7 @@ async fn get_or_create_environment(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<PythonEnvironment> {
+) -> Result<(Requirement, PythonEnvironment)> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -245,7 +380,7 @@ async fn get_or_create_environment(
                 Ok(SatisfiesResult::Fresh { .. })
             ) {
                 debug!("Using existing tool `{}`", from.name);
-                return Ok(environment);
+                return Ok((from, environment));
             }
         }
     }
@@ -267,7 +402,7 @@ async fn get_or_create_environment(
     )
     .await?;
 
-    Ok(environment.into())
+    Ok((from, environment.into()))
 }
 
 /// Parse a target into a command name and a requirement.
@@ -276,7 +411,7 @@ fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
         return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
     };
 
-    // e.g. `uv`, no special handling
+    // e.g. uv, no special handling
     let Some((name, version)) = target_str.split_once('@') else {
         return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
     };

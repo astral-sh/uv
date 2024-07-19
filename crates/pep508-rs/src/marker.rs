@@ -251,6 +251,24 @@ impl MarkerOperator {
             Self::NotIn => None,
         }
     }
+
+    /// Negates this marker operator.
+    ///
+    /// If a negation doesn't exist, which is only the case for ~=, then this
+    /// returns `None`.
+    fn negate(self) -> Option<MarkerOperator> {
+        Some(match self {
+            Self::Equal => Self::NotEqual,
+            Self::NotEqual => Self::Equal,
+            Self::TildeEqual => return None,
+            Self::LessThan => Self::GreaterEqual,
+            Self::LessEqual => Self::GreaterThan,
+            Self::GreaterThan => Self::LessEqual,
+            Self::GreaterEqual => Self::LessThan,
+            Self::In => Self::NotIn,
+            Self::NotIn => Self::In,
+        })
+    }
 }
 
 impl FromStr for MarkerOperator {
@@ -968,6 +986,13 @@ impl ExtraOperator {
             _ => None,
         }
     }
+
+    fn negate(&self) -> ExtraOperator {
+        match *self {
+            ExtraOperator::Equal => ExtraOperator::NotEqual,
+            ExtraOperator::NotEqual => ExtraOperator::Equal,
+        }
+    }
 }
 
 impl Display for ExtraOperator {
@@ -1285,6 +1310,118 @@ impl MarkerExpression {
         }
     }
 
+    /// Negates this marker expression.
+    ///
+    /// In most cases, this returns a `MarkerTree::Expression`, but in some
+    /// cases it can be more complicated than that. For example, the negation
+    /// of a compatible version constraint is a disjunction.
+    ///
+    /// Additionally, in some cases, the negation reflects the "spirit" of what
+    /// the marker expression is. For example, the negation of an "arbitrary"
+    /// expression will still result in an expression that is always false.
+    fn negate(&self) -> MarkerTree {
+        match *self {
+            MarkerExpression::Version {
+                ref key,
+                ref specifier,
+            } => {
+                let (op, version) = (specifier.operator(), specifier.version().clone());
+                match op.negate() {
+                    None => negate_compatible_version(key.clone(), version),
+                    Some(op) => {
+                        // OK because this can only fail with either local versions,
+                        // which we avoid by construction, or if the op is ~=, which
+                        // is never the result of negating an op.
+                        let specifier =
+                            VersionSpecifier::from_version(op, version.without_local()).unwrap();
+                        let expr = MarkerExpression::Version {
+                            key: key.clone(),
+                            specifier,
+                        };
+                        MarkerTree::Expression(expr)
+                    }
+                }
+            }
+            MarkerExpression::VersionInverted {
+                ref version,
+                ref operator,
+                ref key,
+            } => {
+                let version = version.clone();
+                match operator.negate() {
+                    None => negate_compatible_version(key.clone(), version),
+                    Some(op) => {
+                        let expr = MarkerExpression::VersionInverted {
+                            version: version.without_local(),
+                            operator: op,
+                            key: key.clone(),
+                        };
+                        MarkerTree::Expression(expr)
+                    }
+                }
+            }
+            MarkerExpression::String {
+                ref key,
+                ref operator,
+                ref value,
+            } => {
+                let expr = MarkerExpression::String {
+                    key: key.clone(),
+                    // negating ~= doesn't make sense in this context, but
+                    // I believe it is technically allowed, so we just leave
+                    // it as-is.
+                    operator: operator.negate().unwrap_or(MarkerOperator::TildeEqual),
+                    value: value.clone(),
+                };
+                MarkerTree::Expression(expr)
+            }
+            MarkerExpression::StringInverted {
+                ref value,
+                ref operator,
+                ref key,
+            } => {
+                let expr = MarkerExpression::StringInverted {
+                    value: value.clone(),
+                    // negating ~= doesn't make sense in this context, but
+                    // I believe it is technically allowed, so we just leave
+                    // it as-is.
+                    operator: operator.negate().unwrap_or(MarkerOperator::TildeEqual),
+                    key: key.clone(),
+                };
+                MarkerTree::Expression(expr)
+            }
+            MarkerExpression::Extra {
+                ref operator,
+                ref name,
+            } => {
+                let expr = MarkerExpression::Extra {
+                    operator: operator.negate(),
+                    name: name.clone(),
+                };
+                MarkerTree::Expression(expr)
+            }
+            // "arbitrary" expressions always return false, and while the
+            // negation logically implies they should always return true, we do
+            // not do that here because it violates the spirit of a meaningly
+            // or "arbitrary" marker. We flip the operator but do nothing else.
+            MarkerExpression::Arbitrary {
+                ref l_value,
+                ref operator,
+                ref r_value,
+            } => {
+                let expr = MarkerExpression::Arbitrary {
+                    l_value: l_value.clone(),
+                    // negating ~= doesn't make sense in this context, but
+                    // I believe it is technically allowed, so we just leave
+                    // it as-is.
+                    operator: operator.negate().unwrap_or(MarkerOperator::TildeEqual),
+                    r_value: r_value.clone(),
+                };
+                MarkerTree::Expression(expr)
+            }
+        }
+    }
+
     /// Evaluate a <`marker_value`> <`marker_op`> <`marker_value`> expression
     ///
     /// When `env` is `None`, all expressions that reference the environment
@@ -1489,19 +1626,23 @@ impl Display for MarkerExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MarkerExpression::Version { key, specifier } => {
-                write!(
-                    f,
-                    "{key} {} '{}'",
-                    specifier.operator(),
-                    specifier.version()
-                )
+                let (op, version) = (specifier.operator(), specifier.version());
+                if op == &pep440_rs::Operator::EqualStar || op == &pep440_rs::Operator::NotEqualStar
+                {
+                    return write!(f, "{key} {op} '{version}.*'");
+                }
+                write!(f, "{key} {op} '{version}'",)
             }
             MarkerExpression::VersionInverted {
                 version,
-                operator,
+                operator: op,
                 key,
             } => {
-                write!(f, "'{version}' {operator} {key}")
+                if op == &pep440_rs::Operator::EqualStar || op == &pep440_rs::Operator::NotEqualStar
+                {
+                    return write!(f, "'{version}.*' {op} {key}");
+                }
+                write!(f, "'{version}' {op} {key}")
             }
             MarkerExpression::String {
                 key,
@@ -1854,6 +1995,28 @@ impl MarkerTree {
         }
     }
 
+    /// Returns a new marker tree that is the negation of this one.
+    #[must_use]
+    pub fn negate(&self) -> MarkerTree {
+        match *self {
+            MarkerTree::Expression(ref expr) => expr.negate(),
+            MarkerTree::And(ref trees) => {
+                let mut negated = MarkerTree::Or(Vec::with_capacity(trees.len()));
+                for tree in trees {
+                    negated.or(tree.negate());
+                }
+                negated
+            }
+            MarkerTree::Or(ref trees) => {
+                let mut negated = MarkerTree::And(Vec::with_capacity(trees.len()));
+                for tree in trees {
+                    negated.and(tree.negate());
+                }
+                negated
+            }
+        }
+    }
+
     /// Combine this marker tree with the one given via a conjunction.
     ///
     /// This does some shallow flattening. That is, if `self` is a conjunction
@@ -1948,6 +2111,43 @@ impl Display for MarkerTree {
             ),
         }
     }
+}
+
+/// Negates a compatible version marker expression, from its component parts.
+///
+/// Here, we consider `key ~= V.N` to be equivalent to
+/// `key >= V.N and key == V.*`. So the negation returned is
+/// `key < V.N or key != V.*`.
+fn negate_compatible_version(key: MarkerValueVersion, version: Version) -> MarkerTree {
+    assert!(
+        version.release().len() > 1,
+        "~= requires more than 1 release version number"
+    );
+    // I believe we're already guaranteed that this is true,
+    // because we're only here if this version was combined
+    // with ~=, which cannot be used with local versions anyway.
+    // But this ensures correctness and should be pretty cheap.
+    let version = version.without_local();
+    let pattern = VersionPattern::wildcard(Version::new(
+        &version.release()[..version.release().len() - 1],
+    ));
+    // OK because this can only fail for local versions or when using
+    // ~=, but neither is the case here.
+    let disjunct1 = VersionSpecifier::from_version(pep440_rs::Operator::LessThan, version).unwrap();
+    // And this is OK because it only fails if the above would fail
+    // (which we know it doesn't) or if the operator is not compatible
+    // with wildcards, but != is.
+    let disjunct2 = VersionSpecifier::from_pattern(pep440_rs::Operator::NotEqual, pattern).unwrap();
+    MarkerTree::Or(vec![
+        MarkerTree::Expression(MarkerExpression::Version {
+            key: key.clone(),
+            specifier: disjunct1,
+        }),
+        MarkerTree::Expression(MarkerExpression::Version {
+            key,
+            specifier: disjunct2,
+        }),
+    ])
 }
 
 /// ```text
@@ -2259,6 +2459,68 @@ mod test {
                 "{a} {b}"
             );
         }
+    }
+
+    #[test]
+    fn test_marker_negation() {
+        let neg = |marker_string: &str| -> String {
+            let tree: MarkerTree = marker_string.parse().unwrap();
+            tree.negate().to_string()
+        };
+
+        assert_eq!(neg("python_version > '3.6'"), "python_version <= '3.6'");
+        assert_eq!(neg("'3.6' < python_version"), "'3.6' >= python_version");
+
+        assert_eq!(
+            neg("python_version == '3.6.*'"),
+            "python_version != '3.6.*'"
+        );
+        assert_eq!(
+            neg("python_version != '3.6.*'"),
+            "python_version == '3.6.*'"
+        );
+
+        assert_eq!(
+            neg("python_version ~= '3.6'"),
+            "python_version < '3.6' or python_version != '3.*'"
+        );
+        assert_eq!(
+            neg("'3.6' ~= python_version"),
+            "python_version < '3.6' or python_version != '3.*'"
+        );
+        assert_eq!(
+            neg("python_version ~= '3.6.2'"),
+            "python_version < '3.6.2' or python_version != '3.6.*'"
+        );
+
+        assert_eq!(neg("sys_platform == 'linux'"), "sys_platform != 'linux'");
+        assert_eq!(neg("'linux' == sys_platform"), "'linux' != sys_platform");
+
+        // ~= is nonsense on string markers. Evaluation always returns false
+        // in this case, so technically negation would be an expression that
+        // always returns true. But, as we do with "arbitrary" markers, we
+        // don't let the negation of nonsense become sensible.
+        assert_eq!(neg("sys_platform ~= 'linux'"), "sys_platform ~= 'linux'");
+
+        // As above, arbitrary exprs remain arbitrary.
+        assert_eq!(neg("'foo' == 'bar'"), "'foo' != 'bar'");
+
+        // Conjunctions
+        assert_eq!(
+            neg("os_name == 'bar' and os_name == 'foo'"),
+            "os_name != 'bar' or os_name != 'foo'"
+        );
+        // Disjunctions
+        assert_eq!(
+            neg("os_name == 'bar' or os_name == 'foo'"),
+            "os_name != 'bar' and os_name != 'foo'"
+        );
+
+        // Always true negates to always false!
+        assert_eq!(
+            neg("python_version >= '3.6' or python_version < '3.6'"),
+            "python_version < '3.6' and python_version >= '3.6'"
+        );
     }
 
     #[test]

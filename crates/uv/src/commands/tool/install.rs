@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use distribution_types::Name;
 use pypi_types::Requirement;
@@ -19,19 +19,23 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
+use uv_shell::Shell;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::project::{resolve_environment, sync_environment, update_environment};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
+use crate::commands::{
+    project::{resolve_environment, sync_environment, update_environment},
+    tool::common::matching_packages,
+};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
-use crate::shell::Shell;
 
 /// Install a tool.
 pub(crate) async fn install(
@@ -190,7 +194,7 @@ pub(crate) async fn install(
                 if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
                     // We're done.
                     writeln!(printer.stderr(), "`{from}` is already installed")?;
-                    return Ok(ExitStatus::Failure);
+                    return Ok(ExitStatus::Success);
                 }
             }
         }
@@ -265,7 +269,6 @@ pub(crate) async fn install(
     };
 
     // Find a suitable path to install into
-    // TODO(zanieb): Warn if this directory is not on the PATH
     let executable_directory = find_executable_directory()?;
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
@@ -297,10 +300,17 @@ pub(crate) async fn install(
         .collect::<BTreeSet<_>>();
 
     if target_entry_points.is_empty() {
+        writeln!(
+            printer.stdout(),
+            "No executables are provided by package `{}`.",
+            from.name.red()
+        )?;
+
+        hint_executable_from_dependency(&from, &environment, printer)?;
+
         // Clean up the environment we just created
         installed_tools.remove_environment(&from.name)?;
-
-        bail!("No executables found for `{}`", from.name);
+        return Ok(ExitStatus::Failure);
     }
 
     // Check if they exist, before installing
@@ -375,45 +385,33 @@ pub(crate) async fn install(
     installed_tools.add_tool_receipt(&from.name, tool)?;
 
     // If the executable directory isn't on the user's PATH, warn.
-    if !std::env::var_os("PATH")
-        .as_ref()
-        .iter()
-        .flat_map(std::env::split_paths)
-        .any(|path| same_file::is_same_file(&executable_directory, path).unwrap_or(false))
-    {
-        let dir = executable_directory.simplified_display();
-        let export = match Shell::from_env() {
-            None => None,
-            Some(Shell::Nushell) => None,
-            Some(Shell::Bash | Shell::Zsh) => Some(format!(
-                "export PATH=\"{}:$PATH\"",
-                backslash_escape(&dir.to_string()),
-            )),
-            Some(Shell::Fish) => Some(format!(
-                "fish_add_path \"{}\"",
-                backslash_escape(&dir.to_string()),
-            )),
-            Some(Shell::Csh) => Some(format!(
-                "setenv PATH \"{}:$PATH\"",
-                backslash_escape(&dir.to_string()),
-            )),
-            Some(Shell::Powershell) => Some(format!(
-                "$env:PATH = \"{};$env:PATH\"",
-                backtick_escape(&dir.to_string()),
-            )),
-            Some(Shell::Cmd) => Some(format!(
-                "set PATH=\"{};%PATH%\"",
-                backslash_escape(&dir.to_string()),
-            )),
-        };
-        if let Some(export) = export {
-            warn_user!(
-                "`{dir}` is not on your PATH. To use installed tools, run:\n  {}",
-                export.green()
-            );
+    if !Shell::contains_path(&executable_directory) {
+        if let Some(shell) = Shell::from_env() {
+            if let Some(command) = shell.prepend_path(&executable_directory) {
+                if shell.configuration_files().is_empty() {
+                    warn_user!(
+                        "{} is not on your PATH. To use installed tools, run {}.",
+                        executable_directory.simplified_display().cyan(),
+                        command.green()
+                    );
+                } else {
+                    warn_user!(
+                        "{} is not on your PATH. To use installed tools, run {} or {}.",
+                        executable_directory.simplified_display().cyan(),
+                        command.green(),
+                        "uv tool update-shell".green()
+                    );
+                }
+            } else {
+                warn_user!(
+                    "{} is not on your PATH. To use installed tools, add the directory to your PATH.",
+                    executable_directory.simplified_display().cyan(),
+                );
+            }
         } else {
             warn_user!(
-                "`{dir}` is not on your PATH. To use installed tools, add the directory to your PATH",
+                "{} is not on your PATH. To use installed tools, add the directory to your PATH.",
+                executable_directory.simplified_display().cyan(),
             );
         }
     }
@@ -421,28 +419,45 @@ pub(crate) async fn install(
     Ok(ExitStatus::Success)
 }
 
-/// Escape a string for use in a shell command by inserting backslashes.
-fn backslash_escape(s: &str) -> String {
-    let mut escaped = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' | '"' => escaped.push('\\'),
-            _ => {}
-        }
-        escaped.push(c);
-    }
-    escaped
-}
+/// Displays a hint if an executable matching the package name can be found in a dependency of the package.
+fn hint_executable_from_dependency(
+    from: &Requirement,
+    environment: &PythonEnvironment,
+    printer: Printer,
+) -> Result<()> {
+    match matching_packages(from.name.as_ref(), environment) {
+        Ok(packages) => match packages.as_slice() {
+            [] => {}
+            [package] => {
+                let command = format!("uv tool install {}", package.name());
+                writeln!(
+                        printer.stdout(),
+                        "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
+                        from.name.green(),
+                        package.name().green(),
+                        command.bold(),
+                    )?;
+            }
+            packages => {
+                writeln!(
+                    printer.stdout(),
+                    "However, an executable with the name `{}` is available via the following dependencies::",
+                    from.name.green(),
+                )?;
 
-/// Escape a string for use in a `PowerShell` command by inserting backticks.
-fn backtick_escape(s: &str) -> String {
-    let mut escaped = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' | '"' | '$' => escaped.push('`'),
-            _ => {}
+                for package in packages {
+                    writeln!(printer.stdout(), "- {}", package.name().cyan())?;
+                }
+                writeln!(
+                    printer.stdout(),
+                    "Did you mean to install one of them instead?"
+                )?;
+            }
+        },
+        Err(err) => {
+            warn!("Failed to determine executables for packages: {err}");
         }
-        escaped.push(c);
     }
-    escaped
+
+    Ok(())
 }

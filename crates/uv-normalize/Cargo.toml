@@ -2,7 +2,7 @@
 name = "uv-normalize"
 version = "0.0.1"
 edition = "2021"
-description = "Normalization for distribution, package and extra anmes"
+description = "Normalization for distribution, package and extra names."
 
 [lints]
 workspace = true

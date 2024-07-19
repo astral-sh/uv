@@ -1,13 +1,15 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use reflink_copy as reflink;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
@@ -25,6 +27,9 @@ use crate::wheel::{
 };
 use crate::{Error, Layout};
 
+#[derive(Debug, Default)]
+pub struct Locks(Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>);
+
 /// Install the given wheel to the given venv
 ///
 /// The caller must ensure that the wheel is compatible to the environment.
@@ -40,6 +45,7 @@ pub fn install_wheel(
     direct_url: Option<&DirectUrl>,
     installer: Option<&str>,
     link_mode: LinkMode,
+    locks: &Locks,
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
@@ -75,7 +81,7 @@ pub fn install_wheel(
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel)?;
+    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks)?;
     debug!(name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
@@ -242,11 +248,12 @@ impl LinkMode {
         self,
         site_packages: impl AsRef<Path>,
         wheel: impl AsRef<Path>,
+        locks: &Locks,
     ) -> Result<usize, Error> {
         match self {
-            Self::Clone => clone_wheel_files(site_packages, wheel),
-            Self::Copy => copy_wheel_files(site_packages, wheel),
-            Self::Hardlink => hardlink_wheel_files(site_packages, wheel),
+            Self::Clone => clone_wheel_files(site_packages, wheel, locks),
+            Self::Copy => copy_wheel_files(site_packages, wheel, locks),
+            Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks),
             Self::Symlink => symlink_wheel_files(site_packages, wheel)
         }
     }
@@ -260,6 +267,7 @@ impl LinkMode {
 fn clone_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
+    locks: &Locks,
 ) -> Result<usize, Error> {
     let mut count = 0usize;
     let mut attempt = Attempt::default();
@@ -272,6 +280,7 @@ fn clone_wheel_files(
         clone_recursive(
             site_packages.as_ref(),
             wheel.as_ref(),
+            locks,
             &entry?,
             &mut attempt,
         )?;
@@ -322,6 +331,7 @@ enum Attempt {
 fn clone_recursive(
     site_packages: &Path,
     wheel: &Path,
+    locks: &Locks,
     entry: &DirEntry,
     attempt: &mut Attempt,
 ) -> Result<(), Error> {
@@ -335,7 +345,7 @@ fn clone_recursive(
         // On Windows, reflinking directories is not supported, so we copy each file instead.
         fs::create_dir_all(&to)?;
         for entry in fs::read_dir(from)? {
-            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+            clone_recursive(site_packages, wheel, locks, &entry?, attempt)?;
         }
         return Ok(());
     }
@@ -347,7 +357,7 @@ fn clone_recursive(
                     // If cloning/copying fails and the directory exists already, it must be merged recursively.
                     if entry.file_type()?.is_dir() {
                         for entry in fs::read_dir(from)? {
-                            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+                            clone_recursive(site_packages, wheel, locks, &entry?, attempt)?;
                         }
                     } else {
                         // If file already exists, overwrite it.
@@ -362,7 +372,7 @@ fn clone_recursive(
                                 tempfile.display(),
                             );
                             *attempt = Attempt::UseCopyFallback;
-                            fs::copy(&from, &to)?;
+                            synchronized_copy(&from, &to, locks)?;
                         }
                     }
                 } else {
@@ -373,7 +383,7 @@ fn clone_recursive(
                     );
                     // switch to copy fallback
                     *attempt = Attempt::UseCopyFallback;
-                    clone_recursive(site_packages, wheel, entry, attempt)?;
+                    clone_recursive(site_packages, wheel, locks, entry, attempt)?;
                 }
             }
         }
@@ -383,7 +393,7 @@ fn clone_recursive(
                     // If cloning/copying fails and the directory exists already, it must be merged recursively.
                     if entry.file_type()?.is_dir() {
                         for entry in fs::read_dir(from)? {
-                            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+                            clone_recursive(site_packages, wheel, locks, &entry?, attempt)?;
                         }
                     } else {
                         // If file already exists, overwrite it.
@@ -401,10 +411,10 @@ fn clone_recursive(
             if entry.file_type()?.is_dir() {
                 fs::create_dir_all(&to)?;
                 for entry in fs::read_dir(from)? {
-                    clone_recursive(site_packages, wheel, &entry?, attempt)?;
+                    clone_recursive(site_packages, wheel, locks, &entry?, attempt)?;
                 }
             } else {
-                fs::copy(&from, &to)?;
+                synchronized_copy(&from, &to, locks)?;
             }
             warn_user_once!("Failed to clone files; falling back to full copy. This may lead to degraded performance. If this is intentional, use `--link-mode=copy` to suppress this warning.\n\nhint: If the cache and target directories are on different filesystems, reflinking may not be supported.");
         }
@@ -420,6 +430,7 @@ fn clone_recursive(
 fn copy_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
+    locks: &Locks,
 ) -> Result<usize, Error> {
     let mut count = 0usize;
 
@@ -436,8 +447,7 @@ fn copy_wheel_files(
             continue;
         }
 
-        // Copy the file, which will also set its permissions.
-        fs::copy(path, &out_path)?;
+        synchronized_copy(path, &out_path, locks)?;
 
         count += 1;
     }
@@ -449,6 +459,7 @@ fn copy_wheel_files(
 fn hardlink_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
+    locks: &Locks,
 ) -> Result<usize, Error> {
     let mut attempt = Attempt::default();
     let mut count = 0usize;
@@ -468,7 +479,7 @@ fn hardlink_wheel_files(
 
         // The `RECORD` file is modified during installation, so we copy it instead of hard-linking.
         if path.ends_with("RECORD") {
-            fs::copy(path, &out_path)?;
+            synchronized_copy(path, &out_path, locks)?;
             count += 1;
             continue;
         }
@@ -496,7 +507,7 @@ fn hardlink_wheel_files(
                                 out_path.display(),
                                 path.display()
                             );
-                            fs::copy(path, &out_path)?;
+                            synchronized_copy(path, &out_path, locks)?;
                             attempt = Attempt::UseCopyFallback;
                         }
                     } else {
@@ -505,7 +516,7 @@ fn hardlink_wheel_files(
                             out_path.display(),
                             path.display()
                         );
-                        fs::copy(path, &out_path)?;
+                        synchronized_copy(path, &out_path, locks)?;
                         attempt = Attempt::UseCopyFallback;
                     }
                 }
@@ -529,7 +540,7 @@ fn hardlink_wheel_files(
                 }
             }
             Attempt::UseCopyFallback => {
-                fs::copy(path, &out_path)?;
+                synchronized_copy(path, &out_path, locks)?;
                 warn_user_once!("Failed to hardlink files; falling back to full copy. This may lead to degraded performance. If this is intentional, use `--link-mode=copy` to suppress this warning.\n\nhint: If the cache and target directories are on different filesystems, hardlinking may not be supported.");
             }
         }
@@ -539,7 +550,6 @@ fn hardlink_wheel_files(
 
     Ok(count)
 }
-
 
 /// Extract a wheel by symbolically-linking all of its files into site packages.
 fn symlink_wheel_files(
@@ -584,6 +594,31 @@ fn symlink_wheel_files(
 
     Ok(count)
 }
+
+/// Copy from `from` to `to`, ensuring that the parent directory is locked. Avoids simultaneous
+/// writes to the same file, which can lead to corruption.
+///
+/// See: <https://github.com/astral-sh/uv/issues/4831>
+fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<()> {
+    // Ensure we have a lock for the directory.
+    let dir_lock = {
+        let mut locks_guard = locks.0.lock().unwrap();
+        locks_guard
+            .entry(to.parent().unwrap().to_path_buf())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    };
+
+    // Acquire a lock on the directory.
+    let _dir_guard = dir_lock.lock().unwrap();
+
+    // Copy the file, which will also set its permissions.
+    fs::copy(from, to)?;
+
+    Ok(())
+}
+
+
 
 #[cfg(unix)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {

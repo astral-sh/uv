@@ -1,7 +1,8 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
@@ -15,7 +16,6 @@ use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
 use pypi_types::Requirement;
 use uv_cache::Cache;
@@ -36,7 +36,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, ResolutionGraph, Resolver,
+    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverMarkers,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -87,7 +87,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     tags: Option<&Tags>,
-    markers: Option<&MarkerEnvironment>,
+    markers: ResolverMarkers,
     python_requirement: PythonRequirement,
     client: &RegistryClient,
     flat_index: &FlatIndex,
@@ -97,8 +97,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     options: Options,
     printer: Printer,
     preview: PreviewMode,
+    quiet: bool,
 ) -> Result<ResolutionGraph, Error> {
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     // Resolve the requirements from the provided sources.
     let requirements = {
@@ -186,7 +187,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let preferences = Preferences::from_iter(preferences, markers);
+    let preferences = Preferences::from_iter(preferences, markers.marker_environment());
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -201,7 +202,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve(markers)
+            .resolve(&markers)
             .await?
         }
         DependencyMode::Direct => Vec::new(),
@@ -250,7 +251,21 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         resolver.resolve().await?
     };
 
+    if !quiet {
+        resolution_success(&resolution, start, printer)?;
+    }
+
+    Ok(resolution)
+}
+
+// Prints a success message after completing resolution.
+pub(crate) fn resolution_success(
+    resolution: &ResolutionGraph,
+    start: Instant,
+    printer: Printer,
+) -> fmt::Result {
     let s = if resolution.len() == 1 { "" } else { "s" };
+
     writeln!(
         printer.stderr(),
         "{}",
@@ -260,9 +275,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
-    )?;
-
-    Ok(resolution)
+    )
 }
 
 #[derive(Debug, Clone, Copy)]

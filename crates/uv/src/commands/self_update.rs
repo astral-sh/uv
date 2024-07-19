@@ -10,24 +10,24 @@ use uv_client::WrappedReqwestError;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
-/// Attempt to update the `uv` binary.
+/// Attempt to update the uv binary.
 pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("uv");
     updater.disable_installer_output();
 
     // Load the "install receipt" for the current binary. If the receipt is not found, then
-    // `uv` was likely installed via a package manager.
+    // uv was likely installed via a package manager.
     let Ok(updater) = updater.load_receipt() else {
-        debug!("no receipt found; assuming `uv` was installed via a package manager");
+        debug!("no receipt found; assuming uv was installed via a package manager");
         writeln!(
             printer.stderr(),
             "{}",
             format_args!(
                 concat!(
-                    "{}{} Self-update is only available for `uv` binaries installed via the standalone installation scripts.",
+                    "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
                     "\n",
                     "\n",
-                    "If you installed `uv` with `pip`, `brew`, or another package manager, update `uv` with `pip install --upgrade`, `brew upgrade`, or similar."
+                    "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
                 ),
                 "warning".yellow().bold(),
                 ":".bold()
@@ -37,21 +37,21 @@ pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
     };
 
     // Ensure the receipt is for the current binary. If it's not, then the user likely has multiple
-    // `uv` binaries installed, and the current binary was _not_ installed via the standalone
+    // uv binaries installed, and the current binary was _not_ installed via the standalone
     // installation scripts.
     if !updater.check_receipt_is_for_this_executable()? {
         debug!(
-            "receipt is not for this executable; assuming `uv` was installed via a package manager"
+            "receipt is not for this executable; assuming uv was installed via a package manager"
         );
         writeln!(
             printer.stderr(),
             "{}",
             format_args!(
                 concat!(
-                    "{}{} Self-update is only available for `uv` binaries installed via the standalone installation scripts.",
+                    "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
                     "\n",
                     "\n",
-                    "If you installed `uv` with `pip`, `brew`, or another package manager, update `uv` with `pip install --upgrade`, `brew upgrade`, or similar."
+                    "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
                 ),
                 "warning".yellow().bold(),
                 ":".bold()
@@ -71,14 +71,14 @@ pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
     )?;
 
     // Run the updater. This involves a network request, since we need to determine the latest
-    // available version of `uv`.
+    // available version of uv.
     match updater.run().await {
         Ok(Some(result)) => {
             writeln!(
                 printer.stderr(),
                 "{}",
                 format_args!(
-                    "{}{} Upgraded `uv` to {}! {}",
+                    "{}{} Upgraded uv to {}! {}",
                     "success".green().bold(),
                     ":".bold(),
                     format!("v{}", result.new_version).bold().white(),
@@ -95,7 +95,7 @@ pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
                 printer.stderr(),
                 "{}",
                 format_args!(
-                    "{}{} You're on the latest version of `uv` ({}).",
+                    "{}{} You're on the latest version of uv ({}).",
                     "success".green().bold(),
                     ":".bold(),
                     format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()

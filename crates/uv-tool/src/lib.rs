@@ -22,7 +22,6 @@ use uv_fs::{LockedFile, Simplified};
 use uv_installer::SitePackages;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
-use uv_warnings::warn_user_once;
 
 mod receipt;
 mod tool;
@@ -30,7 +29,7 @@ mod tool;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
     #[error("Failed to update `uv-receipt.toml` at {0}")]
     ReceiptWrite(PathBuf, #[source] Box<toml::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
@@ -85,38 +84,55 @@ impl InstalledTools {
         }
     }
 
+    /// Return the expected directory for a tool with the given [`PackageName`].
+    pub fn tool_dir(&self, name: &PackageName) -> PathBuf {
+        self.root.join(name.to_string())
+    }
+
     /// Return the metadata for all installed tools.
     ///
+    /// If a tool is present, but is missing a receipt or the receipt is invalid, the tool will be
+    /// included with an error.
+    ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    pub fn tools(&self) -> Result<Vec<(PackageName, Tool)>, Error> {
+    #[allow(clippy::type_complexity)]
+    pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root()) {
             let name = directory.file_name().unwrap().to_string_lossy().to_string();
+            let name = PackageName::from_str(&name)?;
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    warn_user_once!("Ignoring malformed tool `{name}`: missing receipt");
+                    let err = Error::MissingToolReceipt(name.to_string(), path);
+                    tools.push((name, Err(err)));
                     continue;
                 }
                 Err(err) => return Err(err.into()),
             };
-            let tool_receipt = ToolReceipt::from_string(contents)
-                .map_err(|err| Error::ReceiptRead(path, Box::new(err)))?;
-            let name = PackageName::from_str(&name)?;
-            tools.push((name, tool_receipt.tool));
+            match ToolReceipt::from_string(contents) {
+                Ok(tool_receipt) => tools.push((name, Ok(tool_receipt.tool))),
+                Err(err) => {
+                    let err = Error::ReceiptRead(path, Box::new(err));
+                    tools.push((name, Err(err)));
+                }
+            }
         }
         Ok(tools)
     }
 
     /// Get the receipt for the given tool.
     ///
+    /// If the tool is not installed, returns `Ok(None)`. If the receipt is invalid, returns an
+    /// error.
+    ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn get_tool_receipt(&self, name: &PackageName) -> Result<Option<Tool>, Error> {
-        let path = self.root.join(name.to_string()).join("uv-receipt.toml");
+        let path = self.tool_dir(name).join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
-            Err(Error::IO(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err),
         }
     }
@@ -136,7 +152,7 @@ impl InstalledTools {
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn add_tool_receipt(&self, name: &PackageName, tool: Tool) -> Result<(), Error> {
         let tool_receipt = ToolReceipt::from(tool);
-        let path = self.root.join(name.to_string()).join("uv-receipt.toml");
+        let path = self.tool_dir(name).join("uv-receipt.toml");
 
         debug!(
             "Adding metadata entry for tool `{name}` at {}",
@@ -161,7 +177,7 @@ impl InstalledTools {
     ///
     /// If no such environment exists for the tool.
     pub fn remove_environment(&self, name: &PackageName) -> Result<(), Error> {
-        let environment_path = self.root.join(name.to_string());
+        let environment_path = self.tool_dir(name);
 
         debug!(
             "Deleting environment for tool `{name}` at {}",
@@ -184,7 +200,7 @@ impl InstalledTools {
         name: &PackageName,
         cache: &Cache,
     ) -> Result<Option<PythonEnvironment>, Error> {
-        let environment_path = self.root.join(name.to_string());
+        let environment_path = self.tool_dir(name);
 
         match PythonEnvironment::from_root(&environment_path, cache) {
             Ok(venv) => {
@@ -216,7 +232,7 @@ impl InstalledTools {
         name: &PackageName,
         interpreter: Interpreter,
     ) -> Result<PythonEnvironment, Error> {
-        let environment_path = self.root.join(name.to_string());
+        let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
         match fs_err::remove_dir_all(&environment_path) {
@@ -255,7 +271,7 @@ impl InstalledTools {
     }
 
     pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
-        let environment_path = self.root.join(name.to_string());
+        let environment_path = self.tool_dir(name);
         let environment = PythonEnvironment::from_root(&environment_path, cache)?;
         let site_packages = SitePackages::from_environment(&environment)
             .map_err(|err| Error::EnvironmentRead(environment_path.clone(), err.to_string()))?;

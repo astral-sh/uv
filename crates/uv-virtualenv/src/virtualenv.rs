@@ -1,4 +1,4 @@
-//! Create a bare virtualenv without any packages installed.
+//! Create a virtual environment.
 
 use std::env;
 use std::env::consts::EXE_SUFFIX;
@@ -18,7 +18,7 @@ use uv_version::version;
 
 use crate::{Error, Prompt};
 
-/// The bash activate scripts with the venv dependent paths patches out
+/// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate", include_str!("activator/activate")),
     ("activate.csh", include_str!("activator/activate.csh")),
@@ -43,8 +43,8 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     Ok(())
 }
 
-/// Write all the files that belong to a venv without any packages installed.
-pub fn create_bare_venv(
+/// Create a [`VirtualEnvironment`] at the given location.
+pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
     prompt: Prompt,
@@ -86,7 +86,7 @@ pub fn create_bare_venv(
     match location.metadata() {
         Ok(metadata) => {
             if metadata.is_file() {
-                return Err(Error::IO(io::Error::new(
+                return Err(Error::Io(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!("File exists at `{}`", location.user_display()),
                 )));
@@ -103,7 +103,7 @@ pub fn create_bare_venv(
                 {
                     info!("Ignoring empty directory");
                 } else {
-                    return Err(Error::IO(io::Error::new(
+                    return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
                         format!(
                             "The directory `{}` exists, but it's not a virtualenv",
@@ -116,7 +116,7 @@ pub fn create_bare_venv(
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             fs::create_dir_all(location)?;
         }
-        Err(err) => return Err(Error::IO(err)),
+        Err(err) => return Err(Error::Io(err)),
     }
 
     let location = location.canonicalize()?;
@@ -170,6 +170,18 @@ pub fn create_bare_venv(
                 interpreter.python_minor(),
             )),
         )?;
+
+        if interpreter.markers().implementation_name() == "pypy" {
+            uv_fs::replace_symlink(
+                "python",
+                scripts.join(format!("pypy{}", interpreter.python_major())),
+            )?;
+            uv_fs::replace_symlink("python", scripts.join("pypy"))?;
+        }
+
+        if interpreter.markers().implementation_name() == "graalpy" {
+            uv_fs::replace_symlink("python", scripts.join("graalpy"))?;
+        }
     }
 
     // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
@@ -181,13 +193,83 @@ pub fn create_bare_venv(
             &scripts,
             python_home,
         )?;
-        copy_launcher_windows(
-            WindowsExecutable::Pythonw,
-            interpreter,
-            &base_python,
-            &scripts,
-            python_home,
-        )?;
+
+        if interpreter.markers().implementation_name() == "graalpy" {
+            copy_launcher_windows(
+                WindowsExecutable::GraalPy,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PythonMajor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+        } else {
+            copy_launcher_windows(
+                WindowsExecutable::Pythonw,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+        }
+
+        if interpreter.markers().implementation_name() == "pypy" {
+            copy_launcher_windows(
+                WindowsExecutable::PythonMajor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PythonMajorMinor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PyPy,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PyPyMajor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PyPyMajorMinor,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PyPyw,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+            copy_launcher_windows(
+                WindowsExecutable::PyPyMajorMinorw,
+                interpreter,
+                &base_python,
+                &scripts,
+                python_home,
+            )?;
+        }
     }
 
     #[cfg(not(any(unix, windows)))]
@@ -259,6 +341,16 @@ pub fn create_bare_venv(
         pyvenv_cfg_data.push(("prompt".to_string(), prompt));
     }
 
+    if cfg!(windows) && interpreter.markers().implementation_name() == "graalpy" {
+        pyvenv_cfg_data.push((
+            "venvlauncher_command".to_string(),
+            python_home
+                .join("graalpy.exe")
+                .simplified_display()
+                .to_string(),
+        ));
+    }
+
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
     write_cfg(&mut pyvenv_cfg, &pyvenv_cfg_data)?;
     drop(pyvenv_cfg);
@@ -304,16 +396,62 @@ pub fn create_bare_venv(
 enum WindowsExecutable {
     /// The `python.exe` executable (or `venvlauncher.exe` launcher shim).
     Python,
+    /// The `python3.exe` executable (or `venvlauncher.exe` launcher shim).
+    PythonMajor,
+    /// The `python3.<minor>.exe` executable (or `venvlauncher.exe` launcher shim).
+    PythonMajorMinor,
     /// The `pythonw.exe` executable (or `venvwlauncher.exe` launcher shim).
     Pythonw,
+    /// The `pypy.exe` executable.
+    PyPy,
+    /// The `pypy3.exe` executable.
+    PyPyMajor,
+    /// The `pypy3.<minor>.exe` executable.
+    PyPyMajorMinor,
+    /// The `pypyw.exe` executable.
+    PyPyw,
+    /// The `pypy3.<minor>w.exe` executable.
+    PyPyMajorMinorw,
+    // The `graalpy.exe` executable
+    GraalPy,
 }
 
 impl WindowsExecutable {
     /// The name of the Python executable.
-    fn exe(self) -> &'static str {
+    fn exe(self, interpreter: &Interpreter) -> String {
         match self {
-            WindowsExecutable::Python => "python.exe",
-            WindowsExecutable::Pythonw => "pythonw.exe",
+            WindowsExecutable::Python => String::from("python.exe"),
+            WindowsExecutable::PythonMajor => {
+                format!("python{}.exe", interpreter.python_major())
+            }
+            WindowsExecutable::PythonMajorMinor => {
+                format!(
+                    "python{}.{}.exe",
+                    interpreter.python_major(),
+                    interpreter.python_minor()
+                )
+            }
+            WindowsExecutable::Pythonw => String::from("pythonw.exe"),
+            WindowsExecutable::PyPy => String::from("pypy.exe"),
+            WindowsExecutable::PyPyMajor => {
+                format!("pypy{}.exe", interpreter.python_major())
+            }
+            WindowsExecutable::PyPyMajorMinor => {
+                format!(
+                    "pypy{}.{}.exe",
+                    interpreter.python_major(),
+                    interpreter.python_minor()
+                )
+            }
+            WindowsExecutable::PyPyw => String::from("pypyw.exe"),
+            WindowsExecutable::PyPyMajorMinorw => {
+                format!(
+                    "pypy{}.{}w.exe",
+                    interpreter.python_major(),
+                    interpreter.python_minor()
+                )
+            }
+            WindowsExecutable::GraalPy => String::from("graalpy.exe"),
         }
     }
 
@@ -321,7 +459,17 @@ impl WindowsExecutable {
     fn launcher(self) -> &'static str {
         match self {
             WindowsExecutable::Python => "venvlauncher.exe",
+            WindowsExecutable::PythonMajor => "venvlauncher.exe",
+            WindowsExecutable::PythonMajorMinor => "venvlauncher.exe",
             WindowsExecutable::Pythonw => "venvwlauncher.exe",
+            // From 3.13 on these should replace the `python.exe` and `pythonw.exe` shims.
+            // These are not relevant as of now for PyPy as it doesn't yet support Python 3.13.
+            WindowsExecutable::PyPy => "venvlauncher.exe",
+            WindowsExecutable::PyPyMajor => "venvlauncher.exe",
+            WindowsExecutable::PyPyMajorMinor => "venvlauncher.exe",
+            WindowsExecutable::PyPyw => "venvwlauncher.exe",
+            WindowsExecutable::PyPyMajorMinorw => "venvwlauncher.exe",
+            WindowsExecutable::GraalPy => "venvlauncher.exe",
         }
     }
 }
@@ -344,8 +492,8 @@ fn copy_launcher_windows(
         .join("venv")
         .join("scripts")
         .join("nt")
-        .join(executable.exe());
-    match fs_err::copy(shim, scripts.join(executable.exe())) {
+        .join(executable.exe(interpreter));
+    match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => {
@@ -362,7 +510,7 @@ fn copy_launcher_windows(
         .join("scripts")
         .join("nt")
         .join(executable.launcher());
-    match fs_err::copy(shim, scripts.join(executable.exe())) {
+    match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => {
@@ -373,7 +521,7 @@ fn copy_launcher_windows(
     // Third priority: on Conda at least, we can look for the launcher shim next to
     // the Python executable itself.
     let shim = base_python.with_file_name(executable.launcher());
-    match fs_err::copy(shim, scripts.join(executable.exe())) {
+    match fs_err::copy(shim, scripts.join(executable.exe(interpreter))) {
         Ok(_) => return Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => {
@@ -385,8 +533,8 @@ fn copy_launcher_windows(
     // an embedded Python. Copy the Python executable itself, along with
     // the DLLs, `.pyd` files, and `.zip` files in the same directory.
     match fs_err::copy(
-        base_python.with_file_name(executable.exe()),
-        scripts.join(executable.exe()),
+        base_python.with_file_name(executable.exe(interpreter)),
+        scripts.join(executable.exe(interpreter)),
     ) {
         Ok(_) => {
             // Copy `.dll` and `.pyd` files from the top-level, and from the

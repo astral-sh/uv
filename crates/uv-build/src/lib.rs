@@ -63,6 +63,10 @@ static LD_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
 static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
 
+/// e.g. `ModuleNotFoundError: No module named 'torch'`
+static TORCH_NOT_FOUND_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"ModuleNotFoundError: No module named 'torch'").unwrap());
+
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
@@ -83,7 +87,7 @@ static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
     #[error("Invalid source distribution: {0}")]
     InvalidSourceDist(String),
     #[error("Invalid `pyproject.toml`")]
@@ -185,6 +189,8 @@ impl Error {
                 Some(MissingLibrary::Linker(library.to_string()))
             } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::PythonPackage("wheel".to_string()))
+            } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::PythonPackage("torch".to_string()))
             } else {
                 None
             }

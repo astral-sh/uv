@@ -42,15 +42,16 @@ impl RequiresDist {
 
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    pub async fn from_workspace(
+    pub async fn from_project_maybe_workspace(
         metadata: pypi_types::RequiresDist,
-        project_root: &Path,
+        install_path: &Path,
+        lock_path: &Path,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(project_root, None).await?
+            ProjectWorkspace::from_maybe_project_root(install_path, lock_path, None).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -58,7 +59,7 @@ impl RequiresDist {
         Self::from_project_workspace(metadata, &project_workspace, preview_mode)
     }
 
-    pub fn from_project_workspace(
+    fn from_project_workspace(
         metadata: pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
         preview_mode: PreviewMode,
@@ -159,6 +160,7 @@ mod test {
         let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;
         let path = Path::new("pyproject.toml");
         let project_workspace = ProjectWorkspace::from_project(
+            path,
             path,
             pyproject_toml
                 .project

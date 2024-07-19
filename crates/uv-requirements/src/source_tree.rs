@@ -172,7 +172,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {
             url: &url,
-            path: Cow::Borrowed(source_tree),
+            install_path: Cow::Borrowed(source_tree),
+            lock_path: Cow::Borrowed(source_tree),
             editable: false,
         });
 
@@ -181,7 +182,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         let hashes = match self.hasher {
             HashStrategy::None => HashPolicy::None,
             HashStrategy::Generate => HashPolicy::Generate,
-            HashStrategy::Validate { .. } => {
+            HashStrategy::Verify(_) => HashPolicy::Generate,
+            HashStrategy::Require(_) => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",
                     path.user_display()

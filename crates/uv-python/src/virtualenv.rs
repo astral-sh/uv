@@ -24,20 +24,20 @@ pub struct VirtualEnvironment {
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
 pub struct PyVenvConfiguration {
-    /// If the `virtualenv` package was used to create the virtual environment.
+    /// If the virtualenv package was used to create the virtual environment.
     pub(crate) virtualenv: bool,
-    /// If the `uv` package was used to create the virtual environment.
+    /// If the uv package was used to create the virtual environment.
     pub(crate) uv: bool,
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
     #[error("Broken virtualenv `{0}`: `pyvenv.cfg` is missing")]
     MissingPyVenvCfg(PathBuf),
     #[error("Broken virtualenv `{0}`: `pyvenv.cfg` could not be parsed")]
     ParsePyVenvCfg(PathBuf, #[source] io::Error),
-    #[error(transparent)]
-    IO(#[from] io::Error),
 }
 
 /// Locate an active virtual environment by inspecting environment variables.
@@ -165,7 +165,7 @@ impl PyVenvConfiguration {
         self.virtualenv
     }
 
-    /// Returns true if the virtual environment was created with the `uv` package.
+    /// Returns true if the virtual environment was created with the uv package.
     pub fn is_uv(&self) -> bool {
         self.uv
     }

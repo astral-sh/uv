@@ -207,7 +207,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         logging.info(
             f"Updating test file at `{tests.relative_to(PROJECT_ROOT)}`...",
         )
-        with open(tests, "wt") as test_file:
+        with open(tests, "w") as test_file:
             test_file.write(output)
 
         # Format

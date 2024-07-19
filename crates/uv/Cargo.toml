@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.2.24"
+version = "0.2.26"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -32,12 +32,13 @@ uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
+uv-python = { workspace = true, features = ["schemars"]}
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
+uv-shell = { workspace = true }
 uv-tool = { workspace = true }
-uv-python = { workspace = true, features = ["schemars"]}
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
@@ -58,7 +59,6 @@ owo-colors = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
-same-file = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 textwrap = { workspace = true }
@@ -77,7 +77,7 @@ which = { workspace = true }
 mimalloc = { version = "0.1.39" }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
-tikv-jemallocator = { version = "0.5.4" }
+tikv-jemallocator = { version = "0.6.0" }
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.14" }

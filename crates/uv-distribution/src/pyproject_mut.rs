@@ -424,14 +424,36 @@ fn reformat_array_multiline(deps: &mut Array) {
             })
     }
 
+    let mut indentation_prefix = None;
+
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
+        // calculating the indentation prefix as the indentation of the first dependency entry
+        if indentation_prefix.is_none() {
+            let decor_prefix = decor
+                .prefix()
+                .and_then(|s| s.as_str())
+                .map(|s| s.split('#').next().unwrap_or("").to_string())
+                .unwrap_or(String::new())
+                .trim_start_matches('\n')
+                .to_string();
+
+            // if there is no indentation then apply a default one
+            indentation_prefix = Some(if decor_prefix.is_empty() {
+                "    ".to_string()
+            } else {
+                decor_prefix
+            });
+        }
+
+        let indentation_prefix_str = format!("\n{}", indentation_prefix.as_ref().unwrap());
+
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
-            prefix.push_str("\n    ");
+            prefix.push_str(&indentation_prefix_str);
             prefix.push_str(comment);
         }
-        prefix.push_str("\n    ");
+        prefix.push_str(&indentation_prefix_str);
         decor.set_prefix(prefix);
         decor.set_suffix("");
     }

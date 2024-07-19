@@ -90,7 +90,7 @@ impl PythonInstallation {
 
         // Perform a fetch aggressively if managed Python is preferred
         if matches!(preference, PythonPreference::Managed) && python_fetch.is_automatic() {
-            if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
+            if let Some(request) = PythonDownloadRequest::from_request(&request) {
                 return Self::fetch(request.fill(), client_builder, cache, reporter).await;
             }
         }
@@ -104,7 +104,7 @@ impl PythonInstallation {
                     && python_fetch.is_automatic()
                     && client_builder.connectivity.is_online() =>
             {
-                if let Some(request) = PythonDownloadRequest::try_from_request(&request) {
+                if let Some(request) = PythonDownloadRequest::from_request(&request) {
                     debug!("Requested Python not found, checking for available download...");
                     match Self::fetch(request.fill(), client_builder, cache, reporter).await {
                         Ok(installation) => Ok(installation),
@@ -345,8 +345,14 @@ impl PartialOrd for PythonInstallationKey {
         Some(self.cmp(other))
     }
 }
+
 impl Ord for PythonInstallationKey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.to_string().cmp(&other.to_string())
+        self.implementation
+            .cmp(&other.implementation)
+            .then_with(|| self.version().cmp(&other.version()))
+            .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
+            .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
+            .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
     }
 }

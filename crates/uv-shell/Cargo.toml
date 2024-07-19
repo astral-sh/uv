@@ -1,0 +1,19 @@
+[package]
+name = "uv-shell"
+version = "0.0.1"
+edition = "2021"
+description = "Utilities for detecting and manipulating shell environments"
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-fs = { workspace = true }
+
+anyhow = { workspace = true }
+home =  { workspace = true }
+same-file =  { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = { workspace = true }

@@ -14,14 +14,14 @@ use uv_cli::{
     AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolInstallArgs,
-    ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
+    PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
+    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy, TargetTriple,
-    Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
+    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
+    TargetTriple, Upgrade,
 };
 use uv_distribution::pyproject::DependencyType;
 use uv_normalize::PackageName;
@@ -48,6 +48,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) preview: PreviewMode,
     pub(crate) python_preference: PythonPreference,
     pub(crate) python_fetch: PythonFetch,
+    pub(crate) no_progress: bool,
 }
 
 impl GlobalSettings {
@@ -118,6 +119,7 @@ impl GlobalSettings {
                 .python_fetch
                 .combine(workspace.and_then(|workspace| workspace.globals.python_fetch))
                 .unwrap_or_default(),
+            no_progress: args.no_progress,
         }
     }
 }
@@ -149,6 +151,8 @@ impl CacheSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) command: ExternalCommand,
@@ -164,6 +168,8 @@ impl RunSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let RunArgs {
+            locked,
+            frozen,
             extra,
             all_extras,
             no_all_extras,
@@ -179,6 +185,8 @@ impl RunSettings {
         } = args;
 
         Self {
+            locked,
+            frozen,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
@@ -283,15 +291,17 @@ impl ToolInstallSettings {
 /// The resolved settings to use for a `tool list` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub(crate) struct ToolListSettings;
+pub(crate) struct ToolListSettings {
+    pub(crate) show_paths: bool,
+}
 
 impl ToolListSettings {
     /// Resolve the [`ToolListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let ToolListArgs {} = args;
+        let ToolListArgs { show_paths } = args;
 
-        Self {}
+        Self { show_paths }
     }
 }
 
@@ -311,6 +321,23 @@ impl ToolUninstallSettings {
         Self {
             name: name.filter(|_| !all),
         }
+    }
+}
+
+/// The resolved settings to use for a `tool dir` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolDirSettings {
+    pub(crate) bin: bool,
+}
+
+impl ToolDirSettings {
+    /// Resolve the [`ToolDirSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolDirArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let ToolDirArgs { bin } = args;
+
+        Self { bin }
     }
 }
 
@@ -359,16 +386,16 @@ impl PythonListSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PythonInstallSettings {
     pub(crate) targets: Vec<String>,
-    pub(crate) force: bool,
+    pub(crate) reinstall: bool,
 }
 
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let PythonInstallArgs { targets, force } = args;
+        let PythonInstallArgs { targets, reinstall } = args;
 
-        Self { targets, force }
+        Self { targets, reinstall }
     }
 }
 
@@ -496,6 +523,8 @@ impl SyncSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
@@ -506,6 +535,8 @@ impl LockSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
+            locked,
+            frozen,
             resolver,
             build,
             refresh,
@@ -513,6 +544,8 @@ impl LockSettings {
         } = args;
 
         Self {
+            locked,
+            frozen,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
@@ -830,6 +863,8 @@ impl PipSyncSettings {
             refresh,
             require_hashes,
             no_require_hashes,
+            verify_hashes,
+            no_verify_hashes,
             python,
             system,
             no_system,
@@ -871,6 +906,7 @@ impl PipSyncSettings {
                     target,
                     prefix,
                     require_hashes: flag(require_hashes, no_require_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
@@ -927,6 +963,8 @@ impl PipInstallSettings {
             require_hashes,
             no_require_hashes,
             installer,
+            verify_hashes,
+            no_verify_hashes,
             python,
             system,
             no_system,
@@ -998,6 +1036,7 @@ impl PipInstallSettings {
                     python_version,
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
                     concurrent_builds: env(env::CONCURRENT_BUILDS),
                     concurrent_downloads: env(env::CONCURRENT_DOWNLOADS),
                     concurrent_installs: env(env::CONCURRENT_INSTALLS),
@@ -1300,7 +1339,7 @@ impl VenvSettings {
     }
 }
 
-/// The resolved settings to use for an invocation of the `uv` CLI when installing dependencies.
+/// The resolved settings to use for an invocation of the uv CLI when installing dependencies.
 ///
 /// Combines the `[tool.uv]` persistent configuration with the command-line arguments
 /// ([`InstallerArgs`], represented as [`InstallerOptions`]).
@@ -1317,7 +1356,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) build_options: &'a BuildOptions,
 }
 
-/// The resolved settings to use for an invocation of the `uv` CLI when resolving dependencies.
+/// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
 ///
 /// Combines the `[tool.uv]` persistent configuration with the command-line arguments
 /// ([`ResolverArgs`], represented as [`ResolverOptions`]).
@@ -1446,10 +1485,10 @@ impl ResolverSettings {
     }
 }
 
-/// The resolved settings to use for an invocation of the `uv` CLI with both resolver and installer
+/// The resolved settings to use for an invocation of the uv CLI with both resolver and installer
 /// capabilities.
 ///
-/// Represents the shared settings that are used across all `uv` commands outside the `pip` API.
+/// Represents the shared settings that are used across all uv commands outside the `pip` API.
 /// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
@@ -1640,7 +1679,7 @@ pub(crate) struct PipSettings {
     pub(crate) annotation_style: AnnotationStyle,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
-    pub(crate) require_hashes: bool,
+    pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
     pub(crate) concurrency: Concurrency,
@@ -1699,6 +1738,7 @@ impl PipSettings {
             link_mode,
             compile_bytecode,
             require_hashes,
+            verify_hashes,
             upgrade,
             upgrade_package,
             reinstall,
@@ -1850,10 +1890,14 @@ impl PipSettings {
                 .combine(emit_index_annotation)
                 .unwrap_or_default(),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
-            require_hashes: args
-                .require_hashes
-                .combine(require_hashes)
-                .unwrap_or_default(),
+            hash_checking: HashCheckingMode::from_args(
+                args.require_hashes
+                    .combine(require_hashes)
+                    .unwrap_or_default(),
+                args.verify_hashes
+                    .combine(verify_hashes)
+                    .unwrap_or_default(),
+            ),
             python: args.python.combine(python),
             system: args.system.combine(system).unwrap_or_default(),
             break_system_packages: args

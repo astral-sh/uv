@@ -11,14 +11,14 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
-use uv_fs::Simplified;
-use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
+use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{
     requests_from_version_file, PythonRequest, PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
 
+use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -26,7 +26,7 @@ use crate::printer::Printer;
 /// Download and install Python versions.
 pub(crate) async fn install(
     targets: Vec<String>,
-    force: bool,
+    reinstall: bool,
     native_tls: bool,
     connectivity: Connectivity,
     preview: PreviewMode,
@@ -67,11 +67,16 @@ pub(crate) async fn install(
 
     let download_requests = requests
         .iter()
-        .map(PythonDownloadRequest::from_request)
-        .collect::<Result<Vec<_>, downloads::Error>>()?;
+        .map(|request| {
+            PythonDownloadRequest::from_request(request).ok_or_else(|| {
+                anyhow::anyhow!("Cannot download managed Python for request: {request}")
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut unfilled_requests = Vec::new();
+    let mut uninstalled = Vec::new();
     for (request, download_request) in requests.iter().zip(download_requests) {
         if matches!(requests.as_slice(), [PythonRequest::Any]) {
             writeln!(printer.stderr(), "Searching for Python installations")?;
@@ -87,7 +92,7 @@ pub(crate) async fn install(
             .find(|installation| download_request.satisfied_by_key(installation.key()))
         {
             if matches!(request, PythonRequest::Any) {
-                writeln!(printer.stderr(), "Found: {}", installation.key().green(),)?;
+                writeln!(printer.stderr(), "Found: {}", installation.key().green())?;
             } else {
                 writeln!(
                     printer.stderr(),
@@ -96,13 +101,9 @@ pub(crate) async fn install(
                     installation.key().green(),
                 )?;
             }
-            if force {
-                writeln!(
-                    printer.stderr(),
-                    "Uninstalling {}",
-                    installation.key().green()
-                )?;
+            if reinstall {
                 fs::remove_dir_all(installation.path())?;
+                uninstalled.push(installation.key().clone());
                 unfilled_requests.push(download_request);
             }
         } else {
@@ -148,43 +149,91 @@ pub(crate) async fn install(
             let result = download
                 .fetch(&client, installations_dir, Some(&reporter))
                 .await;
-            (download.python_version(), result)
+            (download.key(), result)
         })
         .buffered(4)
         .collect::<Vec<_>>()
         .await;
 
-    for (version, result) in results {
-        let path = match result? {
-            // We should only encounter already-available during concurrent installs
-            DownloadResult::AlreadyAvailable(path) => path,
-            DownloadResult::Fetched(path) => {
-                writeln!(
-                    printer.stderr(),
-                    "Installed {} to: {}",
-                    format!("Python {version}").cyan(),
-                    path.user_display().cyan()
-                )?;
-                path
-            }
-        };
+    let mut installed = vec![];
+    let mut failed = false;
+    for (key, result) in results {
+        match result {
+            Ok(download) => {
+                let path = match download {
+                    // We should only encounter already-available during concurrent installs
+                    DownloadResult::AlreadyAvailable(path) => path,
+                    DownloadResult::Fetched(path) => path,
+                };
 
-        // Ensure the installations have externally managed markers
-        let installed = ManagedPythonInstallation::new(path.clone())?;
-        installed.ensure_externally_managed()?;
+                installed.push(key.clone());
+
+                // Ensure the installations have externally managed markers
+                let managed = ManagedPythonInstallation::new(path.clone())?;
+                managed.ensure_externally_managed()?;
+            }
+            Err(err) => {
+                failed = true;
+                writeln!(printer.stderr(), "Failed to install {}: {err}", key.green())?;
+            }
+        }
     }
 
-    let s = if downloads.len() == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Installed {} {}",
-            format!("{} version{s}", downloads.len()).bold(),
-            format!("in {}", elapsed(start.elapsed())).dimmed()
-        )
-        .dimmed()
-    )?;
+    if failed {
+        if downloads.len() > 1 {
+            writeln!(printer.stderr(), "Failed to install some Python versions")?;
+        }
+        return Ok(ExitStatus::Failure);
+    }
+
+    if let [installed] = installed.as_slice() {
+        // Ex) "Installed Python 3.9.7 in 1.68s"
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Installed {} {}",
+                format!("Python {}", installed.version()).bold(),
+                format!("in {}", elapsed(start.elapsed())).dimmed()
+            )
+            .dimmed()
+        )?;
+    } else {
+        // Ex) "Installed 2 versions in 1.68s"
+        let s = if installed.len() == 1 { "" } else { "s" };
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Installed {} {}",
+                format!("{} version{s}", installed.len()).bold(),
+                format!("in {}", elapsed(start.elapsed())).dimmed()
+            )
+            .dimmed()
+        )?;
+    }
+
+    for event in uninstalled
+        .into_iter()
+        .map(|key| ChangeEvent {
+            key,
+            kind: ChangeEventKind::Removed,
+        })
+        .chain(installed.into_iter().map(|key| ChangeEvent {
+            key,
+            kind: ChangeEventKind::Added,
+        }))
+        .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
+    {
+        match event.kind {
+            ChangeEventKind::Added => {
+                writeln!(printer.stderr(), " {} {}", "+".green(), event.key.bold(),)?;
+            }
+            ChangeEventKind::Removed => {
+                writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold(),)?;
+            }
+        }
+    }
 
     Ok(ExitStatus::Success)
 }

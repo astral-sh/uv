@@ -12,6 +12,7 @@ use std::str::FromStr;
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir, SymlinkToFile};
+use indoc::formatdoc;
 use predicates::prelude::predicate;
 use regex::Regex;
 
@@ -28,7 +29,7 @@ static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub const BUILD_VENDOR_LINKS_URL: &str =
-    "https://raw.githubusercontent.com/astral-sh/packse/0.3.29/vendor/links.html";
+    "https://raw.githubusercontent.com/astral-sh/packse/0.3.30/vendor/links.html";
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
@@ -312,7 +313,7 @@ impl TestContext {
         }
     }
 
-    /// Create a `uv` command for testing.
+    /// Create a uv command for testing.
     pub fn command(&self) -> Command {
         let mut command = Command::new(get_bin());
         self.add_shared_args(&mut command);
@@ -926,6 +927,28 @@ pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::
             fs_err::copy(entry.path(), dst.as_ref().join(relative))?;
         }
     }
+    Ok(())
+}
+
+/// Create a stub package `name` in `dir` with the given `pyproject.toml` body.
+pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
+    let pyproject_toml = formatdoc! {r#"
+        [project]
+        name = "{name}"
+        version = "0.1.0"
+        description = "Test package for direct URLs in branches"
+        requires-python = ">=3.11,<3.13"
+        {body}
+
+        [build-system]
+        requires = ["flit_core>=3.8,<4"]
+        build-backend = "flit_core.buildapi"
+        "#
+    };
+    fs_err::create_dir_all(dir)?;
+    fs_err::write(dir.join("pyproject.toml"), pyproject_toml)?;
+    fs_err::create_dir(dir.join(name))?;
+    fs_err::write(dir.join(name).join("__init__.py"), "")?;
     Ok(())
 }
 

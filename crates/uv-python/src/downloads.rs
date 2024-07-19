@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::task::{Context, Poll};
 
 use futures::TryStreamExt;
+use owo_colors::OwoColorize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -27,12 +28,12 @@ use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
-    #[error("Invalid python version: {0}")]
+    #[error("Invalid Python version: {0}")]
     InvalidPythonVersion(String),
-    #[error("Invalid request key, too many parts: {0}")]
+    #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
     #[error("Download failed")]
     NetworkError(#[from] WrappedReqwestError),
@@ -48,7 +49,7 @@ pub enum Error {
         expected: String,
         actual: String,
     },
-    #[error("Invalid download url")]
+    #[error("Invalid download URL")]
     InvalidUrl(#[from] url::ParseError),
     #[error("Failed to create download directory")]
     DownloadDirError(#[source] io::Error),
@@ -64,14 +65,9 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to parse managed Python directory name: {0}")]
-    NameError(String),
     #[error("Failed to parse request part")]
     InvalidRequestPlatform(#[from] platform::Error),
-    #[error("Cannot download managed Python for request: {0}")]
-    InvalidRequestKind(PythonRequest),
-    // TODO(zanieb): Implement display for `PythonDownloadRequest`
-    #[error("No download found for request: {0:?}")]
+    #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
 }
 
@@ -142,26 +138,23 @@ impl PythonDownloadRequest {
     ///
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
     /// a request for a specific directory or executable name.
-    pub fn try_from_request(request: &PythonRequest) -> Option<Self> {
-        Self::from_request(request).ok()
-    }
-
-    /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`].
-    pub fn from_request(request: &PythonRequest) -> Result<Self, Error> {
+    pub fn from_request(request: &PythonRequest) -> Option<Self> {
         match request {
-            PythonRequest::Version(version) => Ok(Self::default().with_version(version.clone())),
+            PythonRequest::Version(version) => Some(Self::default().with_version(version.clone())),
             PythonRequest::Implementation(implementation) => {
-                Ok(Self::default().with_implementation(*implementation))
+                Some(Self::default().with_implementation(*implementation))
             }
-            PythonRequest::ImplementationVersion(implementation, version) => Ok(Self::default()
-                .with_implementation(*implementation)
-                .with_version(version.clone())),
-            PythonRequest::Key(request) => Ok(request.clone()),
-            PythonRequest::Any => Ok(Self::default()),
+            PythonRequest::ImplementationVersion(implementation, version) => Some(
+                Self::default()
+                    .with_implementation(*implementation)
+                    .with_version(version.clone()),
+            ),
+            PythonRequest::Key(request) => Some(request.clone()),
+            PythonRequest::Any => Some(Self::default()),
             // We can't download a managed installation for these request kinds
             PythonRequest::Directory(_)
             | PythonRequest::ExecutableName(_)
-            | PythonRequest::File(_) => Err(Error::InvalidRequestKind(request.clone())),
+            | PythonRequest::File(_) => None,
         }
     }
 
@@ -230,6 +223,11 @@ impl PythonDownloadRequest {
         }
         if let Some(os) = &self.os {
             if key.os != *os {
+                return false;
+            }
+        }
+        if let Some(libc) = &self.libc {
+            if key.libc != *libc {
                 return false;
             }
         }

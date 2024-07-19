@@ -67,18 +67,30 @@ impl WheelFilename {
     /// sensitivity, we return `true` if the tags are unknown.
     pub fn matches_requires_python(&self, specifiers: &VersionSpecifiers) -> bool {
         self.abi_tag.iter().any(|abi_tag| {
-            if abi_tag == "abi3" || abi_tag == "none" {
-                if self
-                    .python_tag
-                    .iter()
-                    .all(|python_tag| python_tag.starts_with("py2"))
-                {
+            if abi_tag == "abi3" {
+                // Universal tags are allowed.
+                true
+            } else if abi_tag == "none" {
+                self.python_tag.iter().any(|python_tag| {
                     // Remove `py2-none-any` and `py27-none-any`.
-                    false
-                } else {
-                    // Universal tags are allowed.
-                    true
-                }
+                    if python_tag.starts_with("py2") {
+                        return false;
+                    }
+
+                    // Remove (e.g.) `cp36-none-any` if the specifier is `==3.10.*`.
+                    let Some(minor) = python_tag
+                        .strip_prefix("cp3")
+                        .or_else(|| python_tag.strip_prefix("pp3"))
+                        .or_else(|| python_tag.strip_prefix("py3"))
+                    else {
+                        return true;
+                    };
+                    let Ok(minor) = minor.parse::<u64>() else {
+                        return true;
+                    };
+                    let version = Version::new([3, minor]);
+                    specifiers.contains(&version)
+                })
             } else if abi_tag.starts_with("cp2") || abi_tag.starts_with("pypy2") {
                 // Python 2 is never allowed.
                 false
@@ -392,13 +404,17 @@ mod tests {
         let wheel_names = &[
             "bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl",
             "black-24.4.2-cp310-cp310-win_amd64.whl",
+            "black-24.4.2-cp310-none-win_amd64.whl",
             "cbor2-5.6.4-py3-none-any.whl",
             "watchfiles-0.22.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl",
         ];
         for wheel_name in wheel_names {
-            assert!(WheelFilename::from_str(wheel_name)
-                .unwrap()
-                .matches_requires_python(&version_specifiers));
+            assert!(
+                WheelFilename::from_str(wheel_name)
+                    .unwrap()
+                    .matches_requires_python(&version_specifiers),
+                "{wheel_name}"
+            );
         }
     }
 
@@ -410,11 +426,16 @@ mod tests {
             "black-24.4.2-cp39-cp39-win_amd64.whl",
             "psutil-6.0.0-cp36-cp36m-win32.whl",
             "pydantic_core-2.20.1-pp39-pypy39_pp73-win_amd64.whl",
+            "torch-1.10.0-cp36-none-macosx_10_9_x86_64.whl",
+            "torch-1.10.0-py36-none-macosx_10_9_x86_64.whl",
         ];
         for wheel_name in wheel_names {
-            assert!(!WheelFilename::from_str(wheel_name)
-                .unwrap()
-                .matches_requires_python(&version_specifiers));
+            assert!(
+                !WheelFilename::from_str(wheel_name)
+                    .unwrap()
+                    .matches_requires_python(&version_specifiers),
+                "{wheel_name}"
+            );
         }
     }
 }

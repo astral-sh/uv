@@ -174,7 +174,7 @@ impl Urls {
                 .chain(iter::once(verbatim_url.verbatim().to_string()))
                 .collect();
             conflicting_urls.sort();
-            return Err(ResolveError::ConflictingUrls(
+            return Err(ResolveError::ConflictingUrlsUniversal(
                 package_name.clone(),
                 conflicting_urls,
             ));

@@ -21,7 +21,9 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
-use uv_resolver::{FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph};
+use uv_resolver::{
+    FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
+};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
 
@@ -60,6 +62,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Virtualenv(#[from] uv_virtualenv::Error),
+
+    #[error(transparent)]
+    HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
     Tags(#[from] platform_tags::TagsError),
@@ -485,7 +490,7 @@ pub(crate) async fn resolve_environment<'a>(
         &reinstall,
         &upgrade,
         Some(tags),
-        Some(markers),
+        ResolverMarkers::SpecificEnvironment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -495,6 +500,7 @@ pub(crate) async fn resolve_environment<'a>(
         options,
         printer,
         preview,
+        false,
     )
     .await?)
 }
@@ -736,7 +742,7 @@ pub(crate) async fn update_environment(
         reinstall,
         upgrade,
         Some(tags),
-        Some(markers),
+        ResolverMarkers::SpecificEnvironment(markers.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -746,6 +752,7 @@ pub(crate) async fn update_environment(
         options,
         printer,
         preview,
+        false,
     )
     .await
     {

@@ -86,7 +86,7 @@ pub(crate) async fn tree(
     let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();
     for dist in lock.into_distributions() {
         let name = dist.name().clone();
-        let metadata = dist.into_metadata(workspace.install_path())?;
+        let metadata = dist.to_metadata(workspace.install_path())?;
         packages.entry(name).or_default().push(metadata);
     }
 

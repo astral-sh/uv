@@ -90,7 +90,7 @@ mod resolver {
     use uv_python::PythonEnvironment;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, ResolutionGraph,
-        Resolver,
+        Resolver, ResolverMarkers,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -175,7 +175,7 @@ mod resolver {
             manifest,
             options,
             &python_requirement,
-            Some(&MARKERS),
+            ResolverMarkers::SpecificEnvironment(MARKERS.clone()),
             Some(&TAGS),
             &flat_index,
             &index,

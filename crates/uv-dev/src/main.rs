@@ -19,7 +19,9 @@ use tracing_subscriber::{EnvFilter, Layer};
 use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
-use crate::generate_json_schema::GenerateJsonSchemaArgs;
+use crate::generate_all::Args as GenerateAllArgs;
+use crate::generate_json_schema::Args as GenerateJsonSchemaArgs;
+use crate::generate_options_reference::Args as GenerateOptionsReferenceArgs;
 #[cfg(feature = "render")]
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
@@ -43,7 +45,9 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod build;
 mod clear_compile;
 mod compile;
+mod generate_all;
 mod generate_json_schema;
+mod generate_options_reference;
 mod render_benchmarks;
 mod wheel_metadata;
 
@@ -59,8 +63,12 @@ enum Cli {
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
     ClearCompile(ClearCompileArgs),
+    /// Run all code and documentation generation steps.
+    GenerateAll(GenerateAllArgs),
     /// Generate JSON schema for the TOML configuration file.
     GenerateJSONSchema(GenerateJsonSchemaArgs),
+    /// Generate the options reference for the documentation.
+    GenerateOptionsReference(GenerateOptionsReferenceArgs),
     #[cfg(feature = "render")]
     /// Render the benchmarks.
     RenderBenchmarks(RenderBenchmarksArgs),
@@ -77,7 +85,9 @@ async fn run() -> Result<()> {
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
+        Cli::GenerateAll(args) => generate_all::main(&args)?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
+        Cli::GenerateOptionsReference(args) => generate_options_reference::main(&args)?,
         #[cfg(feature = "render")]
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
     }
@@ -114,7 +124,7 @@ async fn main() -> ExitCode {
         (None, None)
     };
 
-    // Show `INFO` messages from the `uv` crate, but allow `RUST_LOG` to override.
+    // Show `INFO` messages from the uv crate, but allow `RUST_LOG` to override.
     let default_directive = Directive::from_str("uv=info").unwrap();
 
     let filter = EnvFilter::builder()

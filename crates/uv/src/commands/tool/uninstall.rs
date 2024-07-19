@@ -27,7 +27,7 @@ pub(crate) async fn uninstall(
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = match installed_tools.acquire_lock() {
         Ok(lock) => lock,
-        Err(uv_tool::Error::IO(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
             if let Some(name) = name {
                 bail!("`{name}` is not installed");
             }
@@ -48,7 +48,7 @@ pub(crate) async fn uninstall(
                     )?;
                     return Ok(ExitStatus::Success);
                 }
-                Err(uv_tool::Error::IO(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                     bail!("`{name}` is not installed");
                 }
                 Err(err) => {
@@ -61,6 +61,25 @@ pub(crate) async fn uninstall(
     } else {
         let mut entrypoints = vec![];
         for (name, receipt) in installed_tools.tools()? {
+            let Ok(receipt) = receipt else {
+                // If the tool is not installed properly, attempt to remove the environment anyway.
+                match installed_tools.remove_environment(&name) {
+                    Ok(()) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed dangling environment for `{name}`"
+                        )?;
+                        continue;
+                    }
+                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                        bail!("`{name}` is not installed");
+                    }
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                }
+            };
+
             entrypoints.extend(uninstall_tool(&name, &receipt, &installed_tools).await?);
         }
         entrypoints
