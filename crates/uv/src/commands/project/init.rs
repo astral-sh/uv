@@ -24,7 +24,7 @@ pub(crate) async fn init(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv init` is experimental and may change without warning.");
+        warn_user_once!("`uv init` is experimental and may change without warning");
     }
 
     // Discover the current workspace, if it exists.

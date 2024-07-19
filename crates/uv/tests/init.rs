@@ -19,7 +19,7 @@ fn init() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning.
+    warning: `uv init` is experimental and may change without warning
     Initialized project foo in [TEMP_DIR]/foo
     "###);
 
@@ -63,7 +63,7 @@ fn init() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     warning: No `requires-python` field found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
@@ -82,7 +82,7 @@ fn init_no_readme() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning.
+    warning: `uv init` is experimental and may change without warning
     Initialized project foo in [TEMP_DIR]/foo
     "###);
 
@@ -122,7 +122,7 @@ fn current_dir() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning.
+    warning: `uv init` is experimental and may change without warning
     Initialized project foo
     "###);
 
@@ -166,7 +166,7 @@ fn current_dir() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     warning: No `requires-python` field found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
@@ -199,7 +199,7 @@ fn init_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv init` is experimental and may change without warning.
+    warning: `uv init` is experimental and may change without warning
     Adding foo as member of workspace [TEMP_DIR]/
     Initialized project foo
     "###);
@@ -263,7 +263,7 @@ fn init_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning.
+    warning: `uv lock` is experimental and may change without warning
     Resolved 5 packages in [TIME]
     "###);
 
