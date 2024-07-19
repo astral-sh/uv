@@ -1061,9 +1061,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         debug!(
-            "Selecting: {}=={} ({})",
+            "Selecting: {}=={} [{}] ({})",
             name,
             candidate.version(),
+            candidate.choice_kind(),
             filename,
         );
 

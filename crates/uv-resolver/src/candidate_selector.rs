@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use pubgrub::range::Range;
+use std::fmt::{Display, Formatter};
 use tracing::debug;
 
 use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
@@ -132,6 +133,7 @@ impl CandidateSelector {
                                     dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
                                         dist,
                                     )),
+                                    choice_kind: VersionChoiceKind::Preference,
                                 });
                             }
                         }
@@ -148,7 +150,12 @@ impl CandidateSelector {
                     .iter()
                     .find_map(|version_map| version_map.get(version))
                 {
-                    return Some(Candidate::new(package_name, version, file));
+                    return Some(Candidate::new(
+                        package_name,
+                        version,
+                        file,
+                        VersionChoiceKind::Preference,
+                    ));
                 }
             }
         }
@@ -167,6 +174,7 @@ impl CandidateSelector {
                             name: package_name,
                             version,
                             dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
+                            choice_kind: VersionChoiceKind::Installed,
                         });
                     }
                 }
@@ -311,7 +319,12 @@ impl CandidateSelector {
                             );
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
-                            Candidate::new(package_name, version, dist)
+                            Candidate::new(
+                                package_name,
+                                version,
+                                dist,
+                                VersionChoiceKind::Compatible,
+                            )
                         }
                         AllowPreRelease::IfNecessary => {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
@@ -350,7 +363,7 @@ impl CandidateSelector {
                         steps,
                         version,
                     );
-                    Candidate::new(package_name, version, dist)
+                    Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
                 } else {
                     continue;
                 }
@@ -384,9 +397,12 @@ impl CandidateSelector {
         match prerelease {
             None => None,
             Some(PreReleaseCandidate::NotNecessary) => None,
-            Some(PreReleaseCandidate::IfNecessary(version, dist)) => {
-                Some(Candidate::new(package_name, version, dist))
-            }
+            Some(PreReleaseCandidate::IfNecessary(version, dist)) => Some(Candidate::new(
+                package_name,
+                version,
+                dist,
+                VersionChoiceKind::Compatible,
+            )),
         }
     }
 }
@@ -418,6 +434,28 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
     }
 }
 
+/// The reason why we selected the version of the candidate version, either a preference or being
+/// compatible.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum VersionChoiceKind {
+    /// A preference from an output file such as `-o requirements.txt` or `uv.lock`.
+    Preference,
+    /// A preference from an installed version.
+    Installed,
+    /// The next compatible version in a version map
+    Compatible,
+}
+
+impl Display for VersionChoiceKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VersionChoiceKind::Preference => f.write_str("preference"),
+            VersionChoiceKind::Installed => f.write_str("installed"),
+            VersionChoiceKind::Compatible => f.write_str("compatible"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Candidate<'a> {
     /// The name of the package.
@@ -426,14 +464,22 @@ pub(crate) struct Candidate<'a> {
     version: &'a Version,
     /// The distributions to use for resolving and installing the package.
     dist: CandidateDist<'a>,
+    /// Whether this candidate was selected from a preference.
+    choice_kind: VersionChoiceKind,
 }
 
 impl<'a> Candidate<'a> {
-    fn new(name: &'a PackageName, version: &'a Version, dist: &'a PrioritizedDist) -> Self {
+    fn new(
+        name: &'a PackageName,
+        version: &'a Version,
+        dist: &'a PrioritizedDist,
+        choice_kind: VersionChoiceKind,
+    ) -> Self {
         Self {
             name,
             version,
             dist: CandidateDist::from(dist),
+            choice_kind,
         }
     }
 
@@ -454,6 +500,11 @@ impl<'a> Candidate<'a> {
         } else {
             None
         }
+    }
+
+    /// Return this candidate was selected from a preference.
+    pub(crate) fn choice_kind(&self) -> VersionChoiceKind {
+        self.choice_kind
     }
 
     /// Return the distribution for the candidate.
