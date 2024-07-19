@@ -2049,10 +2049,17 @@ impl ForkState {
                 // If the specifier is an exact version and the user requested a local version for this
                 // fork that's more precise than the specifier, use the local version instead.
                 if let Some(specifier) = specifier {
+                    let locals = locals.get(name, &self.markers);
+
+                    // Prioritize local versions over the original version range.
+                    if !locals.is_empty() {
+                        *version = Range::empty();
+                    }
+
                     // It's possible that there are multiple matching local versions requested with
                     // different marker expressions. All of these are potentially compatible until we
                     // narrow to a specific fork.
-                    for local in locals.get(name, &self.markers) {
+                    for local in locals {
                         let local = specifier
                             .iter()
                             .map(|specifier| {
