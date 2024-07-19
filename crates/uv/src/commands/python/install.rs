@@ -158,24 +158,44 @@ pub(crate) async fn install(
         .collect::<Vec<_>>()
         .await;
 
+    let mut failed = false;
     for (version, result) in results {
-        let path = match result? {
-            // We should only encounter already-available during concurrent installs
-            DownloadResult::AlreadyAvailable(path) => path,
-            DownloadResult::Fetched(path) => {
+        match result {
+            Ok(download) => {
+                let path = match download {
+                    // We should only encounter already-available during concurrent installs
+                    DownloadResult::AlreadyAvailable(path) => path,
+                    DownloadResult::Fetched(path) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Installed {} to: {}",
+                            format!("Python {version}").cyan(),
+                            path.user_display().cyan()
+                        )?;
+                        path
+                    }
+                };
+
+                // Ensure the installations have externally managed markers
+                let installed = ManagedPythonInstallation::new(path.clone())?;
+                installed.ensure_externally_managed()?;
+            }
+            Err(err) => {
+                failed = true;
                 writeln!(
                     printer.stderr(),
-                    "Installed {} to: {}",
-                    format!("Python {version}").cyan(),
-                    path.user_display().cyan()
+                    "Failed to install {}: {err}",
+                    version.green()
                 )?;
-                path
             }
-        };
+        }
+    }
 
-        // Ensure the installations have externally managed markers
-        let installed = ManagedPythonInstallation::new(path.clone())?;
-        installed.ensure_externally_managed()?;
+    if failed {
+        if downloads.len() > 1 {
+            writeln!(printer.stderr(), "Failed to install some Python versions")?;
+        }
+        return Ok(ExitStatus::Failure);
     }
 
     let s = if downloads.len() == 1 { "" } else { "s" };
