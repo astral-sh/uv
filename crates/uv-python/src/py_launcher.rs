@@ -24,9 +24,9 @@ pub enum Error {
         stdout: String,
         stderr: String,
     },
-    #[error("Failed to run `py --list-paths` to find Python installations.")]
+    #[error("Failed to run `py --list-paths` to find Python installations")]
     Io(#[source] io::Error),
-    #[error("The `py` launcher could not be found.")]
+    #[error("The `py` launcher could not be found")]
     NotFound,
 }
 

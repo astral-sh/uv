@@ -43,7 +43,7 @@ pub(crate) async fn tree(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv tree` is experimental and may change without warning.");
+        warn_user_once!("`uv tree` is experimental and may change without warning");
     }
 
     // Find the project requirements.

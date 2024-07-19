@@ -38,7 +38,7 @@ pub(crate) async fn list(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv python list` is experimental and may change without warning.");
+        warn_user_once!("`uv python list` is experimental and may change without warning");
     }
 
     let download_request = match kinds {

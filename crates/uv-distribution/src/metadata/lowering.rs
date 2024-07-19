@@ -93,7 +93,7 @@ pub(crate) fn lower_requirement(
     };
 
     if preview.is_disabled() {
-        warn_user_once!("`uv.sources` is experimental and may change without warning.");
+        warn_user_once!("`uv.sources` is experimental and may change without warning");
     }
 
     let source = match source {

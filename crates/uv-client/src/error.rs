@@ -151,18 +151,18 @@ pub enum ErrorKind {
     #[error(transparent)]
     DistInfo(#[from] install_wheel_rs::Error),
 
-    #[error("{0} isn't available locally, but making network requests to registries was banned.")]
+    #[error("{0} isn't available locally, but making network requests to registries was banned")]
     NoIndex(String),
 
     /// The package was not found in the registry.
     ///
     /// Make sure the package name is spelled correctly and that you've
     /// configured the right registry to fetch it from.
-    #[error("Package `{0}` was not found in the registry.")]
+    #[error("Package `{0}` was not found in the registry")]
     PackageNotFound(String),
 
     /// The package was not found in the local (file-based) index.
-    #[error("Package `{0}` was not found in the local index.")]
+    #[error("Package `{0}` was not found in the local index")]
     FileNotFound(String),
 
     /// The metadata file could not be parsed.

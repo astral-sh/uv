@@ -933,7 +933,7 @@ fn warn_on_yanked() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + colorama==0.4.2
-    warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install").
+    warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install")
     "###
     );
 
@@ -961,7 +961,7 @@ fn warn_on_yanked_dry_run() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + colorama==0.4.2
-    warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install").
+    warning: `colorama==0.4.2` is yanked (reason: "Bad build, missing files, will not install")
     "###
     );
 
@@ -1742,7 +1742,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
     let filters = if cfg!(windows) {
-        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed.\n", "")]
+        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed\n", "")]
             .into_iter()
             .chain(context.filters())
             .collect()
@@ -2278,11 +2278,11 @@ fn sync_editable_and_registry() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + black==24.1.0
-    warning: The package `black` requires `click>=8.0.0`, but it's not installed.
-    warning: The package `black` requires `mypy-extensions>=0.4.3`, but it's not installed.
-    warning: The package `black` requires `packaging>=22.0`, but it's not installed.
-    warning: The package `black` requires `pathspec>=0.9.0`, but it's not installed.
-    warning: The package `black` requires `platformdirs>=2`, but it's not installed.
+    warning: The package `black` requires `click>=8.0.0`, but it's not installed
+    warning: The package `black` requires `mypy-extensions>=0.4.3`, but it's not installed
+    warning: The package `black` requires `packaging>=22.0`, but it's not installed
+    warning: The package `black` requires `pathspec>=0.9.0`, but it's not installed
+    warning: The package `black` requires `platformdirs>=2`, but it's not installed
     "###
     );
 
@@ -2351,11 +2351,11 @@ fn sync_editable_and_registry() -> Result<()> {
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
      + black==23.10.0
-    warning: The package `black` requires `click>=8.0.0`, but it's not installed.
-    warning: The package `black` requires `mypy-extensions>=0.4.3`, but it's not installed.
-    warning: The package `black` requires `packaging>=22.0`, but it's not installed.
-    warning: The package `black` requires `pathspec>=0.9.0`, but it's not installed.
-    warning: The package `black` requires `platformdirs>=2`, but it's not installed.
+    warning: The package `black` requires `click>=8.0.0`, but it's not installed
+    warning: The package `black` requires `mypy-extensions>=0.4.3`, but it's not installed
+    warning: The package `black` requires `packaging>=22.0`, but it's not installed
+    warning: The package `black` requires `pathspec>=0.9.0`, but it's not installed
+    warning: The package `black` requires `platformdirs>=2`, but it's not installed
     "###
     );
 

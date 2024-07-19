@@ -2906,7 +2906,7 @@ fn compile_yanked_version_direct() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: `attrs==21.1.0` is yanked (reason: "Installable but not importable on Python 3.4.").
+    warning: `attrs==21.1.0` is yanked (reason: "Installable but not importable on Python 3.4.")
     "###
     );
 
@@ -3349,7 +3349,7 @@ fn missing_registry_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    warning: The package `black==23.10.1` does not have an extra named `tensorboard`.
+    warning: The package `black==23.10.1` does not have an extra named `tensorboard`
     "###
     );
 
@@ -3389,7 +3389,7 @@ fn missing_url_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    warning: The package `flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl` does not have an extra named `tensorboard`.
+    warning: The package `flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl` does not have an extra named `tensorboard`
     "###
     );
 
@@ -5084,7 +5084,7 @@ fn allow_unsafe() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: pip-compile's `--allow-unsafe` has no effect (uv can safely pin `pip` and other packages).
+    warning: pip-compile's `--allow-unsafe` has no effect (uv can safely pin `pip` and other packages)
     Resolved 2 packages in [TIME]
     "###
     );
@@ -5107,7 +5107,7 @@ fn resolver_legacy() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: pip-compile's `--resolver=legacy` is unsupported (uv always backtracks).
+    error: pip-compile's `--resolver=legacy` is unsupported (uv always backtracks)
     "###
     );
 
@@ -6064,7 +6064,7 @@ fn no_deps_invalid_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: The package `flask==3.0.2` does not have an extra named `empty`.
+    warning: The package `flask==3.0.2` does not have an extra named `empty`
     "###
     );
 
@@ -6161,7 +6161,7 @@ fn editable_invalid_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: The package `black @ file://[WORKSPACE]/scripts/packages/black_editable` does not have an extra named `empty`.
+    warning: The package `black @ file://[WORKSPACE]/scripts/packages/black_editable` does not have an extra named `empty`
     "###);
 
     Ok(())

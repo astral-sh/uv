@@ -25,7 +25,7 @@ pub(crate) async fn uninstall(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv python uninstall` is experimental and may change without warning.");
+        warn_user_once!("`uv python uninstall` is experimental and may change without warning");
     }
 
     let start = std::time::Instant::now();
