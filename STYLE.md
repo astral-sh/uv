@@ -9,7 +9,7 @@ _The following is a work-in-progress style guide for our user-facing messaging i
 1. Always wrap em-dashes in spaces, e.g., "hello — world" not "hello—world".
 1. Hyphenate compound words, e.g., use "platform-specific" not "platform specific".
 1. Use backticks to escape: commands, code expressions, package names, and file paths.
-1. Use less than and greater than symbols to wrap bare URLs, e.g., <https://astral.sh> (unless it is an example; then, use backticks).
+1. Use less than and greater than symbols to wrap bare URLs, e.g., `<https://astral.sh>` (unless it is an example; then, use backticks).
 1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.
 1. If a message ends with a single relevant value, precede it with a colon, e.g., `This is the value: value`. If the value is a literal, wrap it in backticks.
 
