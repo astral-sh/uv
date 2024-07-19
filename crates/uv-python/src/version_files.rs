@@ -46,6 +46,12 @@ pub async fn request_from_version_file() -> Result<Option<PythonRequest>, std::i
     }
 }
 
+/// Write a version to a .`python-version` file.
+pub async fn write_version_file(version: &str) -> Result<(), std::io::Error> {
+    debug!("Writing Python version `{version}` to `{PYTHON_VERSION_FILENAME}`");
+    fs::tokio::write(PYTHON_VERSION_FILENAME, format!("{version}\n")).await
+}
+
 async fn read_versions_file() -> Result<Option<Vec<String>>, std::io::Error> {
     match fs::tokio::read_to_string(PYTHON_VERSIONS_FILENAME).await {
         Ok(content) => {
