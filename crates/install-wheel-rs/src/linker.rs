@@ -6,19 +6,19 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use distribution_filename::WheelFilename;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
+use pep440_rs::Version;
+use pypi_types::DirectUrl;
 use reflink_copy as reflink;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
-
-use distribution_filename::WheelFilename;
-use pep440_rs::Version;
-use pypi_types::DirectUrl;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
+use walkdir::WalkDir;
 
 use crate::script::{scripts_from_ini, Script};
 use crate::wheel::{
@@ -227,6 +227,8 @@ pub enum LinkMode {
     Copy,
     /// Hard link packages from the wheel into the site packages.
     Hardlink,
+    /// Symbolically link packages from the wheel into the site packages
+    Symlink,
 }
 
 impl Default for LinkMode {
@@ -252,6 +254,7 @@ impl LinkMode {
             Self::Clone => clone_wheel_files(site_packages, wheel, locks),
             Self::Copy => copy_wheel_files(site_packages, wheel, locks),
             Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks),
+            Self::Symlink => symlink_wheel_files(site_packages, wheel, locks),
         }
     }
 }
@@ -548,6 +551,102 @@ fn hardlink_wheel_files(
     Ok(count)
 }
 
+/// Extract a wheel by symbolically-linking all of its files into site packages.
+fn symlink_wheel_files(
+    site_packages: impl AsRef<Path>,
+    wheel: impl AsRef<Path>,
+    locks: &Locks,
+) -> Result<usize, Error> {
+    let mut attempt = Attempt::default();
+    let mut count = 0usize;
+
+    // Walk over the directory.
+    for entry in WalkDir::new(&wheel) {
+        let entry = entry?;
+        let path = entry.path();
+
+        let relative = path.strip_prefix(&wheel).unwrap();
+        let out_path = site_packages.as_ref().join(relative);
+
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&out_path)?;
+            continue;
+        }
+
+        // The `RECORD` file is modified during installation, so we copy it instead of symlinking.
+        if path.ends_with("RECORD") {
+            fs::copy(path, &out_path)?;
+            count += 1;
+            continue;
+        }
+
+        // Fallback to copying if symlinks aren't supported for this installation.
+        match attempt {
+            Attempt::Initial => {
+                // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that.
+                attempt = Attempt::Subsequent;
+                if let Err(err) = create_symlink(path, &out_path) {
+                    // If the file already exists, remove it and try again.
+                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                        debug!(
+                            "File already exists (initial attempt), overwriting: {}",
+                            out_path.display()
+                        );
+                        // Removing and recreating would lead to race conditions.
+                        let tempdir = tempdir_in(&site_packages)?;
+                        let tempfile = tempdir.path().join(entry.file_name());
+                        if create_symlink(path, &tempfile).is_ok() {
+                            fs::rename(&tempfile, &out_path)?;
+                        } else {
+                            debug!(
+                                "Failed to symlink `{}` to `{}`, attempting to copy files as a fallback",
+                                out_path.display(),
+                                path.display()
+                            );
+                            synchronized_copy(path, &out_path, locks)?;
+                            attempt = Attempt::UseCopyFallback;
+                        }
+                    } else {
+                        debug!(
+                            "Failed to symlink `{}` to `{}`, attempting to copy files as a fallback",
+                            out_path.display(),
+                            path.display()
+                        );
+                        synchronized_copy(path, &out_path, locks)?;
+                        attempt = Attempt::UseCopyFallback;
+                    }
+                }
+            }
+            Attempt::Subsequent => {
+                if let Err(err) = create_symlink(path, &out_path) {
+                    // If the file already exists, remove it and try again.
+                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                        debug!(
+                            "File already exists (subsequent attempt), overwriting: {}",
+                            out_path.display()
+                        );
+                        // Removing and recreating would lead to race conditions.
+                        let tempdir = tempdir_in(&site_packages)?;
+                        let tempfile = tempdir.path().join(entry.file_name());
+                        create_symlink(path, &tempfile)?;
+                        fs::rename(&tempfile, &out_path)?;
+                    } else {
+                        return Err(err.into());
+                    }
+                }
+            }
+            Attempt::UseCopyFallback => {
+                synchronized_copy(path, &out_path, locks)?;
+                warn_user_once!("Failed to symlink files; falling back to full copy. This may lead to degraded performance. If this is intentional, use `--link-mode=copy` to suppress this warning.\n\nhint: If the cache and target directories are on different filesystems, symlinking may not be supported.");
+            }
+        }
+
+        count += 1;
+    }
+
+    Ok(count)
+}
+
 /// Copy from `from` to `to`, ensuring that the parent directory is locked. Avoids simultaneous
 /// writes to the same file, which can lead to corruption.
 ///
@@ -569,4 +668,18 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
     fs::copy(from, to)?;
 
     Ok(())
+}
+
+#[cfg(unix)]
+fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(original, link)
+}
+
+#[cfg(windows)]
+fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+    if original.as_ref().is_dir() {
+        std::os::windows::fs::symlink_dir(original, link)
+    } else {
+        std::os::windows::fs::symlink_file(original, link)
+    }
 }

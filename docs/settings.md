@@ -287,6 +287,7 @@ Windows.
 - `"clone"`: Clone (i.e., copy-on-write) packages from the wheel into the site packages
 - `"copy"`: Copy packages from the wheel into the site packages
 - `"hardlink"`: Hard link packages from the wheel into the site packages
+- `"symlink"`: Symbolically link packages from the wheel into the site packages
 
 **Example usage**:
 
@@ -1524,6 +1525,7 @@ Windows.
 - `"clone"`: Clone (i.e., copy-on-write) packages from the wheel into the site packages
 - `"copy"`: Copy packages from the wheel into the site packages
 - `"hardlink"`: Hard link packages from the wheel into the site packages
+- `"symlink"`: Symbolically link packages from the wheel into the site packages
 
 **Example usage**:
 
