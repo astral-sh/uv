@@ -172,15 +172,12 @@ fn warn_if_existing_pin_incompatible_with_project(
     python_preference: PythonPreference,
     cache: &Cache,
 ) {
-    // Check if the requested version is compatible with the project.
-    // If the compatibility check fails, exit early.
-    if let Some(request_version) = pep440_version_from_request(pin) {
-        // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed
-        let version = pep440_rs::Version::from_str(&request_version.to_string()).unwrap();
+    // Check if the pinned version is compatible with the project.
+    if let Some(pin_version) = pep440_version_from_request(pin) {
         if let Err(err) = assert_pin_compatible_with_project(
             &Pin {
                 request: pin,
-                version: &version,
+                version: &pin_version,
                 resolved: false,
                 existing: true,
             },
@@ -191,7 +188,8 @@ fn warn_if_existing_pin_incompatible_with_project(
         }
     }
 
-    // If the requested version is either not specified or compatible, attempt to resolve the request into an interpreter.
+    // If the there is not a version in the pinned request, attempt to resolve the pin into an interpreter
+    // to check for compatibility on the current system.
     match PythonInstallation::find(
         pin,
         EnvironmentPreference::OnlySystem,
@@ -204,6 +202,7 @@ fn warn_if_existing_pin_incompatible_with_project(
                 "The pinned Python version `{}` resolves to `{}`",
                 pin, python_version
             );
+            // Warn on incompatibilities when viewing existing pins
             if let Err(err) = assert_pin_compatible_with_project(
                 &Pin {
                     request: pin,
@@ -218,7 +217,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         }
         Err(err) => {
             warn_user_once!(
-                "Failed to resolve pinned Python version from `{}`: {}",
+                "Failed to resolve pinned Python version `{}`: {}",
                 pin.to_canonical_string(),
                 err
             );
@@ -226,6 +225,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     }
 }
 
+/// Utility struct for representing pins in error messages.
 struct Pin<'a> {
     request: &'a PythonRequest,
     version: &'a pep440_rs::Version,
@@ -255,21 +255,25 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
         }
     };
 
-    if let Some(requires_python) = requires_python {
-        if !requires_python.contains(pin.version) {
-            let given = if pin.existing { "pinned" } else { "requested" };
-            let resolved = if pin.resolved {
-                format!(" resolves to `{}` which ", pin.version)
-            } else {
-                String::new()
-            };
-            anyhow::bail!(
-                    "The {given} Python version `{}`{resolved} is incompatible with the {} `Requires-Python` requirement of `{}`.",
-                    pin.request.to_canonical_string(),
-                    project_type,
-                    requires_python
-                );
-        }
+    let Some(requires_python) = requires_python else {
+        return Ok(());
+    };
+
+    if requires_python.contains(pin.version) {
+        return Ok(());
     }
-    Ok(())
+
+    let given = if pin.existing { "pinned" } else { "requested" };
+    let resolved = if pin.resolved {
+        format!(" resolves to `{}` which ", pin.version)
+    } else {
+        String::new()
+    };
+
+    Err(anyhow::anyhow!(
+        "The {given} Python version `{}`{resolved} is incompatible with the {} `Requires-Python` requirement of `{}`.",
+        pin.request.to_canonical_string(),
+        project_type,
+        requires_python
+    ))
 }
