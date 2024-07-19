@@ -644,7 +644,11 @@ pub(crate) async fn update_environment(
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
-    if spec.source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() {
+    if spec.source_trees.is_empty()
+        && reinstall.is_none()
+        && upgrade.is_none()
+        && spec.overrides.is_empty()
+    {
         match site_packages.satisfies(&spec.requirements, &spec.constraints)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
