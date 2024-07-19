@@ -1631,7 +1631,7 @@ impl Display for MarkerExpression {
                 {
                     return write!(f, "{key} {op} '{version}.*'");
                 }
-                write!(f, "{key} {op} '{version}'",)
+                write!(f, "{key} {op} '{version}'")
             }
             MarkerExpression::VersionInverted {
                 version,

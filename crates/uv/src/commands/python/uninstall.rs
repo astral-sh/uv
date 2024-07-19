@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
+use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -93,82 +94,83 @@ pub(crate) async fn uninstall(
         return Ok(ExitStatus::Failure);
     }
 
-    let results = futures::stream::iter(matching_installations.iter())
-        .map(|installation| async {
+    let mut tasks = FuturesUnordered::new();
+    for installation in &matching_installations {
+        tasks.push(async {
             (
                 installation.key(),
                 fs_err::tokio::remove_dir_all(installation.path()).await,
             )
-        })
-        .buffered(4)
-        .collect::<Vec<_>>()
-        .await;
+        });
+    }
 
     let mut uninstalled = vec![];
-    let mut failed = false;
-    for (key, result) in results {
+    let mut errors = vec![];
+    while let Some((key, result)) = tasks.next().await {
         if let Err(err) = result {
-            failed = true;
-            writeln!(
-                printer.stderr(),
-                "Failed to uninstall {}: {err}",
-                key.green()
-            )?;
+            errors.push((key.clone(), err));
         } else {
             uninstalled.push(key.clone());
         }
     }
 
-    if failed {
-        if matching_installations.len() > 1 {
-            writeln!(printer.stderr(), "Failed to uninstall some Python versions")?;
+    if !uninstalled.is_empty() {
+        if let [uninstalled] = uninstalled.as_slice() {
+            // Ex) "Uninstalled Python 3.9.7 in 1.68s"
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Uninstalled {} {}",
+                    format!("Python {}", uninstalled.version()).bold(),
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+                .dimmed()
+            )?;
+        } else {
+            // Ex) "Uninstalled 2 versions in 1.68s"
+            let s = if uninstalled.len() == 1 { "" } else { "s" };
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Uninstalled {} {}",
+                    format!("{} version{s}", uninstalled.len()).bold(),
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+                .dimmed()
+            )?;
+        }
+
+        for event in uninstalled
+            .into_iter()
+            .map(|key| ChangeEvent {
+                key,
+                kind: ChangeEventKind::Removed,
+            })
+            .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
+        {
+            match event.kind {
+                ChangeEventKind::Added => {
+                    writeln!(printer.stderr(), " {} {}", "+".green(), event.key.bold())?;
+                }
+                ChangeEventKind::Removed => {
+                    writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold())?;
+                }
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        for (key, err) in errors {
+            writeln!(
+                printer.stderr(),
+                "Failed to uninstall {}: {}",
+                key.green(),
+                err
+            )?;
         }
         return Ok(ExitStatus::Failure);
-    }
-
-    if let [uninstalled] = uninstalled.as_slice() {
-        // Ex) "Uninstalled Python 3.9.7 in 1.68s"
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Uninstalled {} {}",
-                format!("Python {}", uninstalled.version()).bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )?;
-    } else {
-        // Ex) "Uninstalled 2 versions in 1.68s"
-        let s = if uninstalled.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Uninstalled {} {}",
-                format!("{} version{s}", uninstalled.len()).bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )?;
-    }
-
-    for event in uninstalled
-        .into_iter()
-        .map(|key| ChangeEvent {
-            key,
-            kind: ChangeEventKind::Removed,
-        })
-        .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
-    {
-        match event.kind {
-            ChangeEventKind::Added => {
-                writeln!(printer.stderr(), " {} {}", "+".green(), event.key.bold(),)?;
-            }
-            ChangeEventKind::Removed => {
-                writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold(),)?;
-            }
-        }
     }
 
     Ok(ExitStatus::Success)
