@@ -557,6 +557,7 @@ fn symlink_wheel_files(
     wheel: impl AsRef<Path>,
     locks: &Locks,
 ) -> Result<usize, Error> {
+    let mut attempt = Attempt::default();
     let mut count = 0usize;
 
     // Walk over the directory.
@@ -579,12 +580,62 @@ fn symlink_wheel_files(
             continue;
         }
 
-        // Try to create a symlink, fallback to copying if it fails.
-        if let Err(err) = create_symlink(path, &out_path) {
-            if err.kind() == std::io::ErrorKind::AlreadyExists {
-                fs::remove_file(&out_path)?;
-                create_symlink(path, &out_path)?;
-            } else {
+        // Fallback to copying if symlinks aren't supported for this installation.
+        match attempt {
+            Attempt::Initial => {
+                // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that.
+                attempt = Attempt::Subsequent;
+                if let Err(err) = create_symlink(path, &out_path) {
+                    // If the file already exists, remove it and try again.
+                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                        debug!(
+                            "File already exists (initial attempt), overwriting: {}",
+                            out_path.display()
+                        );
+                        // Removing and recreating would lead to race conditions.
+                        let tempdir = tempdir_in(&site_packages)?;
+                        let tempfile = tempdir.path().join(entry.file_name());
+                        if create_symlink(path, &tempfile).is_ok() {
+                            fs::rename(&tempfile, &out_path)?;
+                        } else {
+                            debug!(
+                                "Failed to symlink `{}` to `{}`, attempting to copy files as a fallback",
+                                out_path.display(),
+                                path.display()
+                            );
+                            synchronized_copy(path, &out_path, locks)?;
+                            attempt = Attempt::UseCopyFallback;
+                        }
+                    } else {
+                        debug!(
+                            "Failed to symlink `{}` to `{}`, attempting to copy files as a fallback",
+                            out_path.display(),
+                            path.display()
+                        );
+                        synchronized_copy(path, &out_path, locks)?;
+                        attempt = Attempt::UseCopyFallback;
+                    }
+                }
+            }
+            Attempt::Subsequent => {
+                if let Err(err) = create_symlink(path, &out_path) {
+                    // If the file already exists, remove it and try again.
+                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                        debug!(
+                            "File already exists (subsequent attempt), overwriting: {}",
+                            out_path.display()
+                        );
+                        // Removing and recreating would lead to race conditions.
+                        let tempdir = tempdir_in(&site_packages)?;
+                        let tempfile = tempdir.path().join(entry.file_name());
+                        create_symlink(path, &tempfile)?;
+                        fs::rename(&tempfile, &out_path)?;
+                    } else {
+                        return Err(err.into());
+                    }
+                }
+            }
+            Attempt::UseCopyFallback => {
                 synchronized_copy(path, &out_path, locks)?;
                 warn_user_once!("Failed to symlink files; falling back to full copy. This may lead to degraded performance. If this is intentional, use `--link-mode=copy` to suppress this warning.\n\nhint: If the cache and target directories are on different filesystems, symlinking may not be supported.");
             }
