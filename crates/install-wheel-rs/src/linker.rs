@@ -254,7 +254,7 @@ impl LinkMode {
             Self::Clone => clone_wheel_files(site_packages, wheel, locks),
             Self::Copy => copy_wheel_files(site_packages, wheel, locks),
             Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks),
-            Self::Symlink => symlink_wheel_files(site_packages, wheel)
+            Self::Symlink => symlink_wheel_files(site_packages, wheel, locks)
         }
     }
 }
@@ -555,6 +555,7 @@ fn hardlink_wheel_files(
 fn symlink_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
+    locks: &Locks,
 ) -> Result<usize, Error> {
     let mut count = 0usize;
 
@@ -584,7 +585,7 @@ fn symlink_wheel_files(
                 fs::remove_file(&out_path)?;
                 create_symlink(path, &out_path)?;
             } else {
-                fs::copy(path, &out_path)?;
+                synchronized_copy(path, &out_path, locks)?;
                 warn_user_once!("Failed to symlink files; falling back to full copy. This may lead to degraded performance. If this is intentional, use `--link-mode=copy` to suppress this warning.\n\nhint: If the cache and target directories are on different filesystems, symlinking may not be supported.");
             }
         }
