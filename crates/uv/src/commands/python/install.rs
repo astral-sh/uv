@@ -35,7 +35,7 @@ pub(crate) async fn install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv python install` is experimental and may change without warning.");
+        warn_user_once!("`uv python install` is experimental and may change without warning");
     }
 
     let start = std::time::Instant::now();

@@ -73,36 +73,34 @@ impl CompatArgs for PipCompileCompatArgs {
     fn validate(&self) -> Result<()> {
         if self.allow_unsafe {
             warn_user!(
-                "pip-compile's `--allow-unsafe` has no effect (uv can safely pin `pip` and other packages)."
+                "pip-compile's `--allow-unsafe` has no effect (uv can safely pin `pip` and other packages)"
             );
         }
 
         if self.no_allow_unsafe {
-            warn_user!("pip-compile's `--no-allow-unsafe` has no effect (uv can safely pin `pip` and other packages).");
+            warn_user!("pip-compile's `--no-allow-unsafe` has no effect (uv can safely pin `pip` and other packages)");
         }
 
         if self.reuse_hashes {
             return Err(anyhow!(
-                "pip-compile's `--reuse-hashes` is unsupported (uv doesn't reuse hashes)."
+                "pip-compile's `--reuse-hashes` is unsupported (uv doesn't reuse hashes)"
             ));
         }
 
         if self.no_reuse_hashes {
-            warn_user!(
-                "pip-compile's `--no-reuse-hashes` has no effect (uv doesn't reuse hashes)."
-            );
+            warn_user!("pip-compile's `--no-reuse-hashes` has no effect (uv doesn't reuse hashes)");
         }
 
         if let Some(resolver) = self.resolver {
             match resolver {
                 Resolver::Backtracking => {
                     warn_user!(
-                        "pip-compile's `--resolver=backtracking` has no effect (uv always backtracks)."
+                        "pip-compile's `--resolver=backtracking` has no effect (uv always backtracks)"
                     );
                 }
                 Resolver::Legacy => {
                     return Err(anyhow!(
-                        "pip-compile's `--resolver=legacy` is unsupported (uv always backtracks)."
+                        "pip-compile's `--resolver=legacy` is unsupported (uv always backtracks)"
                     ));
                 }
             }
@@ -110,59 +108,59 @@ impl CompatArgs for PipCompileCompatArgs {
 
         if self.max_rounds.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--max-rounds` is unsupported (uv always resolves until convergence)."
+                "pip-compile's `--max-rounds` is unsupported (uv always resolves until convergence)"
             ));
         }
 
         if self.client_cert.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--client-cert` is unsupported (uv doesn't support dedicated client certificates)."
+                "pip-compile's `--client-cert` is unsupported (uv doesn't support dedicated client certificates)"
             ));
         }
 
         if self.trusted_host.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--trusted-host` is unsupported (uv always requires HTTPS)."
+                "pip-compile's `--trusted-host` is unsupported (uv always requires HTTPS)"
             ));
         }
 
         if self.emit_trusted_host {
             return Err(anyhow!(
-                "pip-compile's `--emit-trusted-host` is unsupported (uv always requires HTTPS)."
+                "pip-compile's `--emit-trusted-host` is unsupported (uv always requires HTTPS)"
             ));
         }
 
         if self.no_emit_trusted_host {
             warn_user!(
-                "pip-compile's `--no-emit-trusted-host` has no effect (uv never emits trusted hosts)."
+                "pip-compile's `--no-emit-trusted-host` has no effect (uv never emits trusted hosts)"
             );
         }
 
         if self.config.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--config` is unsupported (uv does not use a configuration file)."
+                "pip-compile's `--config` is unsupported (uv does not use a configuration file)"
             ));
         }
 
         if self.no_config {
             warn_user!(
-                "pip-compile's `--no-config` has no effect (uv does not use a configuration file)."
+                "pip-compile's `--no-config` has no effect (uv does not use a configuration file)"
             );
         }
 
         if self.emit_options {
             return Err(anyhow!(
-                "pip-compile's `--emit-options` is unsupported (uv never emits options)."
+                "pip-compile's `--emit-options` is unsupported (uv never emits options)"
             ));
         }
 
         if self.no_emit_options {
-            warn_user!("pip-compile's `--no-emit-options` has no effect (uv never emits options).");
+            warn_user!("pip-compile's `--no-emit-options` has no effect (uv never emits options)");
         }
 
         if self.pip_args.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--pip-args` is unsupported (try passing arguments to uv directly)."
+                "pip-compile's `--pip-args` is unsupported (try passing arguments to uv directly)"
             ));
         }
 
@@ -191,11 +189,11 @@ impl CompatArgs for PipListCompatArgs {
     /// `--outdated`), this method will return an error.
     fn validate(&self) -> Result<()> {
         if self.disable_pip_version_check {
-            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+            warn_user!("pip's `--disable-pip-version-check` has no effect");
         }
 
         if self.outdated {
-            return Err(anyhow!("pip's `--outdated` is unsupported."));
+            return Err(anyhow!("pip's `--outdated` is unsupported"));
         }
 
         Ok(())
@@ -245,49 +243,49 @@ impl CompatArgs for PipSyncCompatArgs {
     fn validate(&self) -> Result<()> {
         if self.ask {
             return Err(anyhow!(
-                "pip-sync's `--ask` is unsupported (uv never asks for confirmation)."
+                "pip-sync's `--ask` is unsupported (uv never asks for confirmation)"
             ));
         }
 
         if self.python_executable.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--python-executable` is unsupported (to install into a separate Python environment, try setting `VIRTUAL_ENV` instead)."
+                "pip-sync's `--python-executable` is unsupported (to install into a separate Python environment, try setting `VIRTUAL_ENV` instead)"
             ));
         }
 
         if self.user {
             return Err(anyhow!(
-                "pip-sync's `--user` is unsupported (use a virtual environment instead)."
+                "pip-sync's `--user` is unsupported (use a virtual environment instead)"
             ));
         }
 
         if self.client_cert.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--client-cert` is unsupported (uv doesn't support dedicated client certificates)."
+                "pip-sync's `--client-cert` is unsupported (uv doesn't support dedicated client certificates)"
             ));
         }
 
         if self.trusted_host.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--trusted-host` is unsupported (uv always requires HTTPS)."
+                "pip-sync's `--trusted-host` is unsupported (uv always requires HTTPS)"
             ));
         }
 
         if self.config.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--config` is unsupported (uv does not use a configuration file)."
+                "pip-sync's `--config` is unsupported (uv does not use a configuration file)"
             ));
         }
 
         if self.no_config {
             warn_user!(
-                "pip-sync's `--no-config` has no effect (uv does not use a configuration file)."
+                "pip-sync's `--no-config` has no effect (uv does not use a configuration file)"
             );
         }
 
         if self.pip_args.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--pip-args` is unsupported (try passing arguments to uv directly)."
+                "pip-sync's `--pip-args` is unsupported (try passing arguments to uv directly)"
             ));
         }
 
@@ -332,28 +330,28 @@ impl CompatArgs for VenvCompatArgs {
     fn validate(&self) -> Result<()> {
         if self.clear {
             warn_user!(
-                "virtualenv's `--clear` has no effect (uv always clears the virtual environment)."
+                "virtualenv's `--clear` has no effect (uv always clears the virtual environment)"
             );
         }
 
         if self.no_seed {
             warn_user!(
-                "virtualenv's `--no-seed` has no effect (uv omits seed packages by default)."
+                "virtualenv's `--no-seed` has no effect (uv omits seed packages by default)"
             );
         }
 
         if self.no_pip {
-            warn_user!("virtualenv's `--no-pip` has no effect (uv omits `pip` by default).");
+            warn_user!("virtualenv's `--no-pip` has no effect (uv omits `pip` by default)");
         }
 
         if self.no_setuptools {
             warn_user!(
-                "virtualenv's `--no-setuptools` has no effect (uv omits `setuptools` by default)."
+                "virtualenv's `--no-setuptools` has no effect (uv omits `setuptools` by default)"
             );
         }
 
         if self.no_wheel {
-            warn_user!("virtualenv's `--no-wheel` has no effect (uv omits `wheel` by default).");
+            warn_user!("virtualenv's `--no-wheel` has no effect (uv omits `wheel` by default)");
         }
 
         Ok(())
@@ -381,12 +379,12 @@ impl CompatArgs for PipInstallCompatArgs {
     /// return an error.
     fn validate(&self) -> Result<()> {
         if self.disable_pip_version_check {
-            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+            warn_user!("pip's `--disable-pip-version-check` has no effect");
         }
 
         if self.user {
             return Err(anyhow!(
-                "pip's `--user` is unsupported (use a virtual environment instead)."
+                "pip's `--user` is unsupported (use a virtual environment instead)"
             ));
         }
 
@@ -412,7 +410,7 @@ impl CompatArgs for PipGlobalCompatArgs {
     /// return an error.
     fn validate(&self) -> Result<()> {
         if self.disable_pip_version_check {
-            warn_user!("pip's `--disable-pip-version-check` has no effect.");
+            warn_user!("pip's `--disable-pip-version-check` has no effect");
         }
 
         Ok(())

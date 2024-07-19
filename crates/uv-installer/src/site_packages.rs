@@ -428,26 +428,26 @@ impl Diagnostic for SitePackagesDiagnostic {
                 version,
                 requires_python,
             } => format!(
-                "The package `{package}` requires Python {requires_python}, but `{version}` is installed."
+                "The package `{package}` requires Python {requires_python}, but `{version}` is installed"
             ),
             Self::MissingDependency {
                 package,
                 requirement,
             } => {
-                format!("The package `{package}` requires `{requirement}`, but it's not installed.")
+                format!("The package `{package}` requires `{requirement}`, but it's not installed")
             }
             Self::IncompatibleDependency {
                 package,
                 version,
                 requirement,
             } => format!(
-                "The package `{package}` requires `{requirement}`, but `{version}` is installed."
+                "The package `{package}` requires `{requirement}`, but `{version}` is installed"
             ),
             Self::DuplicatePackage { package, paths } => {
                 let mut paths = paths.clone();
                 paths.sort();
                 format!(
-                    "The package `{package}` has multiple installed distributions:{}",
+                    "The package `{package}` has multiple installed distributions: {}",
                     paths.iter().fold(String::new(), |acc, path| acc + &format!("\n  - {}", path.display()))
                 )
             }

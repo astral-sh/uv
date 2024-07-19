@@ -34,7 +34,7 @@ pub(crate) async fn remove(
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
-        warn_user_once!("`uv remove` is experimental and may change without warning.");
+        warn_user_once!("`uv remove` is experimental and may change without warning");
     }
 
     // Find the project in the workspace.

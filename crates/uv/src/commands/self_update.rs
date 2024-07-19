@@ -95,7 +95,7 @@ pub(crate) async fn self_update(printer: Printer) -> Result<ExitStatus> {
                 printer.stderr(),
                 "{}",
                 format_args!(
-                    "{}{} You're on the latest version of uv ({}).",
+                    "{}{} You're on the latest version of uv ({})",
                     "success".green().bold(),
                     ":".bold(),
                     format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()

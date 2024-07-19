@@ -20,7 +20,7 @@ fn python_pin() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No pinned Python version found.
+    error: No pinned Python version found
     "###);
 
     // Given an argument, we pin to that version

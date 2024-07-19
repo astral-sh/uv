@@ -898,7 +898,7 @@ fn warn_on_unsupported_python(interpreter: &Interpreter) {
     // Warn on usage with an unsupported Python version
     if interpreter.python_tuple() < (3, 8) {
         warn_user_once!(
-            "uv is only compatible with Python 3.8+, found Python {}.",
+            "uv is only compatible with Python >=3.8, found Python {}",
             interpreter.python_version()
         );
     }

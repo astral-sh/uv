@@ -38,7 +38,7 @@ fn nested_dependencies() -> Result<()> {
         └── threadpoolctl v3.4.0
 
     ----- stderr -----
-    warning: `uv tree` is experimental and may change without warning.
+    warning: `uv tree` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###
     );
@@ -84,7 +84,7 @@ fn invert() -> Result<()> {
     (*) Package tree already displayed
 
     ----- stderr -----
-    warning: `uv tree` is experimental and may change without warning.
+    warning: `uv tree` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###
     );
@@ -107,7 +107,7 @@ fn invert() -> Result<()> {
         └── project v0.1.0
 
     ----- stderr -----
-    warning: `uv tree` is experimental and may change without warning.
+    warning: `uv tree` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###
     );
@@ -141,7 +141,7 @@ fn frozen() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
-    warning: `uv tree` is experimental and may change without warning.
+    warning: `uv tree` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###
     );
@@ -174,7 +174,7 @@ fn frozen() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
-    warning: `uv tree` is experimental and may change without warning.
+    warning: `uv tree` is experimental and may change without warning
     "###
     );
 
