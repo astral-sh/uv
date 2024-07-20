@@ -192,13 +192,14 @@ impl DisplayDependencyGraph {
         let package_name = &metadata.name;
         let mut line = format!("{} v{}", package_name, metadata.version,);
 
-        if self.version_specifiers.len() > 0 && path.len() > 0 {
-            line.push_str(" ");
+        // if `--emit-version-specifier` flag was given and
+        // the current package is not a top-level one (i.e. it has a parent).
+        if !self.version_specifiers.is_empty() && !path.is_empty() {
+            line.push(' ');
             line.push_str(
-                self.version_specifiers
-                    .get(&((**path.last().unwrap()).clone(), metadata.name.clone()))
-                    .unwrap(),
-            )
+                self.version_specifiers[&((**path.last().unwrap()).clone(), metadata.name.clone())]
+                    .as_str(),
+            );
         }
 
         // Skip the traversal if:

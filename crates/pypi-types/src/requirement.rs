@@ -392,6 +392,10 @@ impl RequirementSource {
         }
     }
 
+    /// Convert the source to a version specifier string.
+    /// For `Registry`, it returns `*` if the specifier is empty and
+    /// comma-separated constraints otherwise (e.g. "<1.29.0, >=1.22.4").
+    /// For all other variants, it returns the verbatim URL via `to_verbatim_parsed_url`.
     pub fn to_version_specifier_str(&self) -> String {
         match self {
             Self::Registry { specifier, .. } => {
