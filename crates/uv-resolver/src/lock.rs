@@ -42,7 +42,8 @@ use uv_workspace::VirtualProject;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::resolver::FxOnceMap;
 use crate::{
-    InMemoryIndex, MetadataResponse, RequiresPython, ResolutionGraph, VersionMap, VersionsResponse,
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PreReleaseMode, RequiresPython, ResolutionGraph,
+    ResolutionMode, VersionMap, VersionsResponse,
 };
 
 /// The current version of the lock file format.
@@ -55,6 +56,12 @@ pub struct Lock {
     distributions: Vec<Distribution>,
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
+    /// The [`ResolutionMode`] used to generate this lock.
+    resolution_mode: ResolutionMode,
+    /// The [`PreReleaseMode`] used to generate this lock.
+    prerelease_mode: PreReleaseMode,
+    /// The [`ExcludeNewer`] used to generate this lock.
+    exclude_newer: Option<ExcludeNewer>,
     /// A map from distribution ID to index in `distributions`.
     ///
     /// This can be used to quickly lookup the full distribution for any ID
@@ -144,7 +151,15 @@ impl Lock {
 
         let distributions = locked_dists.into_values().collect();
         let requires_python = graph.requires_python.clone();
-        let lock = Self::new(VERSION, distributions, requires_python)?;
+        let options = graph.options;
+        let lock = Self::new(
+            VERSION,
+            distributions,
+            requires_python,
+            options.resolution_mode,
+            options.prerelease_mode,
+            options.exclude_newer,
+        )?;
         Ok(lock)
     }
 
@@ -153,6 +168,9 @@ impl Lock {
         version: u32,
         mut distributions: Vec<Distribution>,
         requires_python: Option<RequiresPython>,
+        resolution_mode: ResolutionMode,
+        prerelease_mode: PreReleaseMode,
+        exclude_newer: Option<ExcludeNewer>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each distribution in a canonical order and
         // check for duplicates.
@@ -307,10 +325,13 @@ impl Lock {
                 }
             }
         }
-        Ok(Lock {
+        Ok(Self {
             version,
             distributions,
             requires_python,
+            resolution_mode,
+            prerelease_mode,
+            exclude_newer,
             by_id,
         })
     }
@@ -328,6 +349,21 @@ impl Lock {
     /// Returns the supported Python version range for the lockfile, if present.
     pub fn requires_python(&self) -> Option<&RequiresPython> {
         self.requires_python.as_ref()
+    }
+
+    /// Returns the resolution mode used to generate this lock.
+    pub fn resolution_mode(&self) -> ResolutionMode {
+        self.resolution_mode
+    }
+
+    /// Returns the pre-release mode used to generate this lock.
+    pub fn prerelease_mode(&self) -> PreReleaseMode {
+        self.prerelease_mode
+    }
+
+    /// Returns the exclude newer setting used to generate this lock.
+    pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
+        self.exclude_newer
     }
 
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
@@ -417,6 +453,19 @@ impl Lock {
 
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
+        }
+
+        // Write the settings that were used to generate the resolution.
+        // This enables us to invalidate the lockfile if the user changes
+        // their settings.
+        if self.resolution_mode != ResolutionMode::default() {
+            doc.insert("resolution-mode", value(self.resolution_mode.to_string()));
+        }
+        if self.prerelease_mode != PreReleaseMode::default() {
+            doc.insert("prerelease-mode", value(self.prerelease_mode.to_string()));
+        }
+        if let Some(exclude_newer) = self.exclude_newer {
+            doc.insert("exclude-newer", value(exclude_newer.to_string()));
         }
 
         // Count the number of distributions for each package name. When
@@ -522,12 +571,18 @@ impl Lock {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
     #[serde(rename = "distribution")]
     distributions: Vec<DistributionWire>,
-    #[serde(rename = "requires-python")]
     requires_python: Option<RequiresPython>,
+    #[serde(default)]
+    resolution_mode: ResolutionMode,
+    #[serde(default)]
+    prerelease_mode: PreReleaseMode,
+    #[serde(default)]
+    exclude_newer: Option<ExcludeNewer>,
 }
 
 impl From<Lock> for LockWire {
@@ -540,6 +595,9 @@ impl From<Lock> for LockWire {
                 .map(DistributionWire::from)
                 .collect(),
             requires_python: lock.requires_python,
+            resolution_mode: lock.resolution_mode,
+            prerelease_mode: lock.prerelease_mode,
+            exclude_newer: lock.exclude_newer,
         }
     }
 }
@@ -570,7 +628,14 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|dist| dist.unwire(&unambiguous_dist_ids))
             .collect::<Result<Vec<_>, _>>()?;
-        Lock::new(wire.version, distributions, wire.requires_python)
+        Lock::new(
+            wire.version,
+            distributions,
+            wire.requires_python,
+            wire.resolution_mode,
+            wire.prerelease_mode,
+            wire.exclude_newer,
+        )
     }
 }
 

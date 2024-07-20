@@ -41,6 +41,9 @@ Ok(
             },
         ],
         requires_python: None,
+        resolution_mode: Highest,
+        prerelease_mode: IfNecessaryOrExplicit,
+        exclude_newer: None,
         by_id: {
             DistributionId {
                 name: PackageName(

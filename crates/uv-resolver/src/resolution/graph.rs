@@ -22,7 +22,7 @@ use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::{Resolution, ResolutionPackage};
 use crate::{
-    InMemoryIndex, MetadataResponse, PythonRequirement, RequiresPython, ResolveError,
+    InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
     VersionsResponse,
 };
 
@@ -42,6 +42,8 @@ pub struct ResolutionGraph {
     pub(crate) constraints: Constraints,
     /// The overrides that were used to build the graph.
     pub(crate) overrides: Overrides,
+    /// The options that were used to build the graph.
+    pub(crate) options: Options,
 }
 
 #[derive(Debug)]
@@ -53,6 +55,7 @@ pub(crate) enum ResolutionGraphNode {
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
     pub(crate) fn from_state(
+        resolution: Resolution,
         requirements: &[Requirement],
         constraints: &Constraints,
         overrides: &Overrides,
@@ -60,7 +63,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
-        resolution: Resolution,
+        options: Options,
     ) -> Result<Self, ResolveError> {
         type NodeKey<'a> = (
             &'a PackageName,
@@ -308,6 +311,7 @@ impl ResolutionGraph {
             requirements: requirements.to_vec(),
             constraints: constraints.clone(),
             overrides: overrides.clone(),
+            options,
         })
     }
 

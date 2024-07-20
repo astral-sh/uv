@@ -65,6 +65,7 @@ fn lock_wheel_registry() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "anyio"
@@ -236,6 +237,7 @@ fn lock_sdist_git() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "project"
@@ -307,6 +309,7 @@ fn lock_wheel_url() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "anyio"
@@ -405,6 +408,7 @@ fn lock_sdist_url() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "anyio"
@@ -504,6 +508,7 @@ fn lock_project_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "anyio"
@@ -680,6 +685,7 @@ fn lock_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "blinker"
@@ -866,6 +872,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "certifi"
@@ -1116,6 +1123,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "blinker"
@@ -1285,6 +1293,7 @@ fn lock_upgrade_log() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "blinker"
@@ -1438,6 +1447,7 @@ fn lock_upgrade_log() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
         name = "blinker"
@@ -1587,6 +1597,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "blinker"
@@ -1757,6 +1768,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
         name = "blinker"
@@ -1905,6 +1917,7 @@ fn lock_preference() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "iniconfig"
@@ -1960,6 +1973,7 @@ fn lock_preference() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
         name = "iniconfig"
@@ -2006,6 +2020,7 @@ fn lock_preference() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "iniconfig"
@@ -2068,6 +2083,7 @@ fn lock_git_sha() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "project"
@@ -2124,6 +2140,7 @@ fn lock_git_sha() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
         name = "project"
@@ -2164,6 +2181,7 @@ fn lock_git_sha() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "project"
@@ -2262,6 +2280,7 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "attrs"
@@ -2410,6 +2429,7 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7.9"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "attrs"
@@ -2548,6 +2568,7 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "attrs"
@@ -2677,6 +2698,7 @@ fn lock_requires_python_wheels() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12, <3.13"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "frozenlist"
@@ -2746,6 +2768,7 @@ fn lock_requires_python_wheels() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "frozenlist"
@@ -2825,6 +2848,7 @@ fn lock_requires_python_star() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "attrs"
@@ -2934,6 +2958,7 @@ fn lock_requires_python_pre() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "attrs"
@@ -3042,6 +3067,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = "<=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "iniconfig"
@@ -3118,6 +3144,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.8"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "attrs"
@@ -3202,6 +3229,7 @@ fn lock_dev() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "iniconfig"
@@ -3302,6 +3330,7 @@ fn lock_conditional_unconditional() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "iniconfig"
@@ -3363,6 +3392,7 @@ fn lock_multiple_markers() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "iniconfig"
@@ -3464,6 +3494,7 @@ fn relative_and_absolute_paths() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.13"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "a"
@@ -3527,6 +3558,7 @@ fn lock_cycles() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "argparse"
@@ -3714,6 +3746,7 @@ fn lock_new_extras() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "certifi"
@@ -3823,6 +3856,7 @@ fn lock_new_extras() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "certifi"
@@ -4001,6 +4035,165 @@ fn lock_invalid_hash() -> Result<()> {
     Computed:
       sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
     "###);
+
+    Ok(())
+}
+
+/// Vary the `--resolution-mode`, and ensure that the lockfile is updated.
+#[test]
+fn lock_resolution_mode() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>=3"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning
+        Resolved 4 packages in [TIME]
+        "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[distribution]]
+            name = "anyio"
+            version = "4.3.0"
+            source = { registry = "https://pypi.org/simple" }
+            dependencies = [
+                { name = "idna" },
+                { name = "sniffio" },
+            ]
+            sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+            ]
+
+            [[distribution]]
+            name = "idna"
+            version = "3.6"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+            ]
+
+            [[distribution]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "anyio" },
+            ]
+
+            [[distribution]]
+            name = "sniffio"
+            version = "1.3.1"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+            ]
+            "###
+        );
+    });
+
+    // Locking again should be a no-op.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning
+        Resolved 4 packages in [TIME]
+        "###);
+
+    // Locking with `lowest-direct` should ignore the existing lockfile.
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning
+        Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
+        Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-mode = "lowest-direct"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[distribution]]
+        name = "anyio"
+        version = "3.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", hash = "sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9", size = 116952 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", hash = "sha256:e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395", size = 72182 },
+        ]
+
+        [[distribution]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [[distribution]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
 
     Ok(())
 }

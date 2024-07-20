@@ -1,4 +1,4 @@
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 pub enum DependencyMode {
     /// Include all dependencies, whether direct or transitive.
     #[default]

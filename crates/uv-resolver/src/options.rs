@@ -3,7 +3,7 @@ use uv_configuration::IndexStrategy;
 use crate::{DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 pub struct Options {
     pub resolution_mode: ResolutionMode,
     pub prerelease_mode: PreReleaseMode,

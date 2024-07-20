@@ -305,7 +305,7 @@ impl NoBuild {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
