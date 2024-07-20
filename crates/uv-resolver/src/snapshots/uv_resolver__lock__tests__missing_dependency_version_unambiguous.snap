@@ -32,21 +32,9 @@ Ok(
                 },
                 sdist: Some(
                     Url {
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "example.com",
-                                ),
-                            ),
-                            port: None,
-                            path: "/",
-                            query: None,
-                            fragment: None,
-                        },
+                        url: UrlString(
+                            "https://example.com",
+                        ),
                         metadata: SourceDistMetadata {
                             hash: Some(
                                 Hash(
@@ -93,21 +81,9 @@ Ok(
                 },
                 sdist: Some(
                     Url {
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "example.com",
-                                ),
-                            ),
-                            port: None,
-                            path: "/",
-                            query: None,
-                            fragment: None,
-                        },
+                        url: UrlString(
+                            "https://example.com",
+                        ),
                         metadata: SourceDistMetadata {
                             hash: Some(
                                 Hash(
