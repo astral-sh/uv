@@ -254,6 +254,38 @@ impl Workspace {
             .collect()
     }
 
+    /// Returns the set of constraints for the workspace.
+    pub fn constraints(&self) -> Vec<Requirement> {
+        let Some(workspace_package) = self
+            .packages
+            .values()
+            .find(|workspace_package| workspace_package.root() == self.install_path())
+        else {
+            return vec![];
+        };
+
+        let Some(constraints) = workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.constraint_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        constraints
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
+            })
+            .collect()
+    }
+
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn install_path(&self) -> &PathBuf {

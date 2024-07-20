@@ -48,6 +48,7 @@ pub struct Options {
         )
     )]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 }
 
 /// Global settings, relevant to all invocations.
