@@ -145,9 +145,13 @@ impl DisplayDependencyGraph {
                     .map_or(true, |m| m.evaluate(markers, &[]))
             }) {
                 let (parent, child, version_specifier_prefix) = if invert {
-                    (&required.name, &metadata.name, "requires")
+                    (
+                        &required.name,
+                        &metadata.name,
+                        format!("requires: {}", metadata.name),
+                    )
                 } else {
-                    (&metadata.name, &required.name, "required")
+                    (&metadata.name, &required.name, "required: ".to_string())
                 };
                 requirements
                     .entry(parent.clone())
@@ -158,7 +162,7 @@ impl DisplayDependencyGraph {
                     version_specifiers.insert(
                         (parent.clone(), child.clone()),
                         format!(
-                            "[{}: {}]",
+                            "[{}{}]",
                             version_specifier_prefix,
                             required.source.to_version_specifier_str()
                         ),
