@@ -567,6 +567,15 @@ pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     Url(T),
 }
 
+impl<T: Pep508Url> Display for VersionOrUrl<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VersionSpecifier(version_specifier) => Display::fmt(version_specifier, f),
+            Self::Url(url) => Display::fmt(url, f),
+        }
+    }
+}
+
 /// Unowned version specifier or URL to install.
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
@@ -574,6 +583,15 @@ pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     VersionSpecifier(&'a VersionSpecifiers),
     /// A installable URL
     Url(&'a T),
+}
+
+impl<T: Pep508Url> Display for VersionOrUrlRef<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VersionSpecifier(version_specifier) => Display::fmt(version_specifier, f),
+            Self::Url(url) => Display::fmt(url, f),
+        }
+    }
 }
 
 impl<'a> From<&'a VersionOrUrl> for VersionOrUrlRef<'a> {

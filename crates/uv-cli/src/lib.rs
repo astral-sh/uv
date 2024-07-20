@@ -2764,5 +2764,5 @@ pub struct DisplayTreeArgs {
 
     /// Show the version constraint(s) imposed on each package.
     #[arg(long)]
-    pub emit_version_specifier: bool,
+    pub show_version_specifiers: bool,
 }

@@ -30,7 +30,7 @@ pub(crate) async fn tree(
     package: Vec<PackageName>,
     no_dedupe: bool,
     invert: bool,
-    emit_version_specifier: bool,
+    show_version_specifiers: bool,
     python: Option<String>,
     settings: ResolverSettings,
     python_preference: PythonPreference,
@@ -95,7 +95,7 @@ pub(crate) async fn tree(
         package,
         no_dedupe,
         invert,
-        emit_version_specifier,
+        show_version_specifiers,
         interpreter.markers(),
         packages,
     )

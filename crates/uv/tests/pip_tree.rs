@@ -1501,7 +1501,7 @@ fn package_flag() {
 }
 
 #[test]
-fn emit_version_specifier_simple() {
+fn show_version_specifiers_simple() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1528,7 +1528,7 @@ fn emit_version_specifier_simple() {
     "###
     );
 
-    uv_snapshot!(context.filters(), context.pip_tree().arg("--emit-version-specifier"), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--show-version-specifiers"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1545,7 +1545,7 @@ fn emit_version_specifier_simple() {
 
 #[test]
 #[cfg(target_os = "macos")]
-fn emit_version_specifier_complex() {
+fn show_version_specifiers_complex() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1599,7 +1599,7 @@ fn emit_version_specifier_complex() {
     "###
     );
 
-    uv_snapshot!(context.filters(), context.pip_tree().arg("--emit-version-specifier"), @r###"
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--show-version-specifiers"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1647,7 +1647,7 @@ fn emit_version_specifier_complex() {
 }
 
 #[test]
-fn emit_version_specifier_with_invert() {
+fn show_version_specifiers_with_invert() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1679,7 +1679,7 @@ fn emit_version_specifier_with_invert() {
     uv_snapshot!(
         context.filters(),
         context.pip_tree()
-        .arg("--emit-version-specifier")
+        .arg("--show-version-specifiers")
         .arg("--invert"), @r###"
     success: true
     exit_code: 0
@@ -1699,7 +1699,7 @@ fn emit_version_specifier_with_invert() {
 }
 
 #[test]
-fn emit_version_specifier_with_package() {
+fn show_version_specifiers_with_package() {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1731,7 +1731,7 @@ fn emit_version_specifier_with_package() {
     uv_snapshot!(
         context.filters(),
         context.pip_tree()
-        .arg("--emit-version-specifier")
+        .arg("--show-version-specifiers")
         .arg("--package")
         .arg("scipy"), @r###"
     success: true
