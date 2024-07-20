@@ -14,9 +14,8 @@ use uv_fs::{relative_to, Simplified};
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
-
-use crate::pyproject::Source;
-use crate::Workspace;
+use uv_workspace::pyproject::Source;
+use uv_workspace::Workspace;
 
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.

@@ -4498,6 +4498,7 @@ dependencies = [
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
+ "uv-workspace",
  "which",
 ]
 
@@ -4707,7 +4708,6 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
- "uv-distribution",
  "uv-git",
  "uv-installer",
  "uv-macros",
@@ -4716,6 +4716,7 @@ dependencies = [
  "uv-resolver",
  "uv-settings",
  "uv-types",
+ "uv-workspace",
  "walkdir",
 ]
 
@@ -4750,34 +4751,27 @@ dependencies = [
  "anyhow",
  "distribution-filename",
  "distribution-types",
- "either",
  "fs-err",
  "futures",
- "glob",
  "indoc",
  "insta",
  "install-wheel-rs",
  "nanoid",
  "once_cell",
  "path-absolutize",
- "path-slash",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
- "regex",
  "reqwest",
  "reqwest-middleware",
  "rmp-serde",
  "rustc-hash 2.0.0",
- "schemars",
  "serde",
  "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
- "toml",
- "toml_edit",
  "tracing",
  "url",
  "uv-cache",
@@ -4786,11 +4780,10 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-git",
- "uv-macros",
  "uv-normalize",
- "uv-options-metadata",
  "uv-types",
  "uv-warnings",
+ "uv-workspace",
  "zip",
 ]
 
@@ -5001,6 +4994,7 @@ dependencies = [
  "uv-resolver",
  "uv-types",
  "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]
@@ -5052,6 +5046,7 @@ dependencies = [
  "uv-python",
  "uv-types",
  "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]
@@ -5190,6 +5185,36 @@ dependencies = [
  "once_cell",
  "owo-colors",
  "rustc-hash 2.0.0",
+]
+
+[[package]]
+name = "uv-workspace"
+version = "0.0.1"
+dependencies = [
+ "either",
+ "fs-err",
+ "glob",
+ "insta",
+ "path-slash",
+ "pep440_rs",
+ "pep508_rs",
+ "pypi-types",
+ "regex",
+ "rustc-hash 2.0.0",
+ "schemars",
+ "serde",
+ "thiserror",
+ "tokio",
+ "toml",
+ "toml_edit",
+ "tracing",
+ "url",
+ "uv-fs",
+ "uv-git",
+ "uv-macros",
+ "uv-normalize",
+ "uv-options-metadata",
+ "uv-warnings",
 ]
 
 [[package]]

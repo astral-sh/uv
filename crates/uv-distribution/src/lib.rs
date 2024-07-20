@@ -4,7 +4,6 @@ pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use metadata::{ArchiveMetadata, Metadata, RequiresDist, DEV_DEPENDENCIES};
 pub use reporter::Reporter;
-pub use workspace::{ProjectWorkspace, VirtualProject, Workspace, WorkspaceError, WorkspaceMember};
 
 mod archive;
 mod distribution_database;
@@ -13,8 +12,5 @@ mod error;
 mod index;
 mod locks;
 mod metadata;
-pub mod pyproject;
-pub mod pyproject_mut;
 mod reporter;
 mod source;
-mod workspace;

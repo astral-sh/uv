@@ -31,6 +31,7 @@ uv-python = { workspace = true }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 chrono = { workspace = true }

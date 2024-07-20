@@ -23,7 +23,6 @@ use uv_configuration::{
     IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
     TargetTriple, Upgrade,
 };
-use uv_distribution::pyproject::DependencyType;
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonFetch, PythonPreference, PythonVersion, Target};
 use uv_requirements::RequirementsSource;
@@ -31,6 +30,7 @@ use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode,
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
+use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::pip::operations::Modifications;
 

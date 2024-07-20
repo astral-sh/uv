@@ -34,9 +34,10 @@ use pypi_types::{
     HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
 };
 use uv_configuration::{ExtrasSpecification, Upgrade};
-use uv_distribution::{ArchiveMetadata, Metadata, VirtualProject};
+use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_workspace::VirtualProject;
 
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::resolver::FxOnceMap;

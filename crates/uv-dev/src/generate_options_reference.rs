@@ -11,10 +11,10 @@ use pretty_assertions::StrComparison;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use uv_distribution::pyproject::ToolUv as WorkspaceOptions;
 use uv_macros::OptionsMetadata;
 use uv_options_metadata::{OptionField, OptionSet, OptionsMetadata, Visit};
 use uv_settings::Options as SettingsOptions;
+use uv_workspace::pyproject::ToolUv as WorkspaceOptions;
 
 use crate::generate_all::Mode;
 use crate::ROOT_DIR;

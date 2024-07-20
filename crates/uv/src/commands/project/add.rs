@@ -5,16 +5,16 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::pyproject::{DependencyType, Source, SourceError};
-use uv_distribution::pyproject_mut::PyProjectTomlMut;
-use uv_distribution::{DistributionDatabase, ProjectWorkspace, VirtualProject, Workspace};
+use uv_distribution::DistributionDatabase;
 use uv_normalize::PackageName;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
-
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
+use uv_workspace::pyproject::{DependencyType, Source, SourceError};
+use uv_workspace::pyproject_mut::PyProjectTomlMut;
+use uv_workspace::{ProjectWorkspace, VirtualProject, Workspace};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;

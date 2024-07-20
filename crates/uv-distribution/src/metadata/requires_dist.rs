@@ -1,13 +1,15 @@
-use once_cell::sync::Lazy;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use once_cell::sync::Lazy;
+
 use uv_configuration::PreviewMode;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_workspace::ProjectWorkspace;
 
 use crate::metadata::lowering::lower_requirement;
 use crate::metadata::MetadataError;
-use crate::{Metadata, ProjectWorkspace};
+use crate::Metadata;
 
 /// The name of the global `dev-dependencies` group.
 ///
@@ -152,9 +154,10 @@ mod test {
     use insta::assert_snapshot;
 
     use uv_configuration::PreviewMode;
+    use uv_workspace::pyproject::PyProjectToml;
+    use uv_workspace::ProjectWorkspace;
 
-    use crate::pyproject::PyProjectToml;
-    use crate::{ProjectWorkspace, RequiresDist};
+    use crate::RequiresDist;
 
     async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
         let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;

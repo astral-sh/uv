@@ -13,7 +13,7 @@ use uv_configuration::{
     Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, Workspace};
+use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_python::{
@@ -26,6 +26,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
+use uv_workspace::Workspace;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};

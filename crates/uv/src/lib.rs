@@ -22,9 +22,9 @@ use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace};
 use uv_configuration::Concurrency;
-use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
+use uv_workspace::Workspace;
 
 use crate::commands::{ExitStatus, ToolRunCommand};
 use crate::printer::Printer;

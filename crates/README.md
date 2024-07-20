@@ -129,6 +129,10 @@ A `venv` replacement to create virtual environments in Rust.
 
 User-facing warnings for uv.
 
+## [uv-workspace](./uv-workspace)
+
+Workspace abstractions for uv.
+
 ## [requirements-txt](./requirements-txt)
 
 Functionality for parsing `requirements.txt` files.

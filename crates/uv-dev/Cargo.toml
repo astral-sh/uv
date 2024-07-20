@@ -26,7 +26,6 @@ uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
-uv-distribution = { workspace = true, features = ["schemars"] }
 uv-git = { workspace = true }
 uv-installer = { workspace = true }
 uv-macros = { workspace = true }
@@ -35,6 +34,7 @@ uv-python = { workspace = true }
 uv-resolver = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-types = { workspace = true }
+uv-workspace = { workspace = true, features = ["schemars"] }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
 # dependencies, to ensure that we're forced to think twice before including them in other crates.

@@ -54,6 +54,7 @@ uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
+uv-workspace = { path = "crates/uv-workspace" }
 
 anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }

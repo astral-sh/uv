@@ -3,14 +3,13 @@ use std::path::Path;
 
 use thiserror::Error;
 
+use crate::metadata::lowering::LoweringError;
+pub use crate::metadata::requires_dist::{RequiresDist, DEV_DEPENDENCIES};
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{HashDigest, Metadata23};
 use uv_configuration::PreviewMode;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-
-use crate::metadata::lowering::LoweringError;
-pub use crate::metadata::requires_dist::{RequiresDist, DEV_DEPENDENCIES};
-use crate::WorkspaceError;
+use uv_workspace::WorkspaceError;
 
 mod lowering;
 mod requires_dist;
