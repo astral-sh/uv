@@ -801,7 +801,7 @@ impl Distribution {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: None,
-                    url: FileLocation::AbsoluteUrl(file_url.clone().into()),
+                    url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
                 let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
@@ -1599,7 +1599,7 @@ struct SourceDistMetadata {
 #[serde(untagged)]
 enum SourceDist {
     Url {
-        url: Url,
+        url: UrlString,
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
@@ -1634,7 +1634,7 @@ impl SourceDist {
         }
     }
 
-    fn url(&self) -> Option<&Url> {
+    fn url(&self) -> Option<&UrlString> {
         match &self {
             SourceDist::Url { url, .. } => Some(url),
             SourceDist::Path { .. } => None,
@@ -1662,7 +1662,7 @@ impl SourceDist {
         let mut table = InlineTable::new();
         match &self {
             SourceDist::Url { url, .. } => {
-                table.insert("url", Value::from(url.as_str()));
+                table.insert("url", Value::from(url.as_ref()));
             }
             SourceDist::Path { path, .. } => {
                 table.insert("path", Value::from(serialize_path_with_dot(path).as_ref()));
@@ -1733,7 +1733,7 @@ impl SourceDist {
         let url = reg_dist
             .file
             .url
-            .to_url()
+            .to_url_string()
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
         let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
@@ -1758,7 +1758,7 @@ impl SourceDist {
             return Err(kind.into());
         };
         Ok(SourceDist::Url {
-            url: direct_dist.url.to_url(),
+            url: UrlString::from(direct_dist.url.to_url()),
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
@@ -1975,7 +1975,7 @@ struct WheelWire {
     /// against was found. The location does not need to exist in the future,
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
-    url: Url,
+    url: UrlString,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -2016,7 +2016,7 @@ impl TryFrom<WheelWire> for Wheel {
             .map_err(|err| format!("failed to parse `{filename}` as wheel filename: {err}"))?;
 
         Ok(Wheel {
-            url: wire.url.into(),
+            url: wire.url,
             hash: wire.hash,
             size: wire.size,
             filename,
