@@ -1,17 +1,16 @@
 use std::fmt::Write;
 
 use anyhow::Result;
-
 use indexmap::IndexMap;
 use owo_colors::OwoColorize;
+
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
-use uv_distribution::Workspace;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
-
 use uv_warnings::warn_user_once;
+use uv_workspace::Workspace;
 
 use crate::commands::pip::tree::DisplayDependencyGraph;
 use crate::commands::project::FoundInterpreter;

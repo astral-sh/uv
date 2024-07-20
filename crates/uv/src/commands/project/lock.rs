@@ -1,18 +1,20 @@
 #![allow(clippy::single_match_else)]
 
-use anstream::eprint;
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
-use owo_colors::OwoColorize;
-use pep440_rs::Version;
-use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::BTreeSet;
 use std::{fmt::Write, path::Path};
+
+use anstream::eprint;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
+
+use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
+use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{Workspace, DEV_DEPENDENCIES};
+use uv_distribution::DEV_DEPENDENCIES;
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
@@ -22,6 +24,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
+use uv_workspace::Workspace;
 
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
 use crate::commands::{pip, ExitStatus};

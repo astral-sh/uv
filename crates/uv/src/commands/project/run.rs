@@ -14,7 +14,6 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_distribution::{VirtualProject, Workspace, WorkspaceError};
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -22,9 +21,9 @@ use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
     PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
-
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
+use uv_workspace::{VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;

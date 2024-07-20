@@ -2,14 +2,14 @@ use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-
 use owo_colors::OwoColorize;
+
 use pep508_rs::PackageName;
 use uv_configuration::PreviewMode;
-use uv_distribution::pyproject_mut::PyProjectTomlMut;
-use uv_distribution::{ProjectWorkspace, WorkspaceError};
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
+use uv_workspace::pyproject_mut::PyProjectTomlMut;
+use uv_workspace::{ProjectWorkspace, WorkspaceError};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
