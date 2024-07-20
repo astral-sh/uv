@@ -18,7 +18,7 @@ Note this is exactly equivalent to:
 $ uv tool run ruff
 ```
 
-Arguments can be passed afted the tool name:
+Arguments can be passed after the tool name:
 
 ```console
 $ uvx pycowsay hello from uv
