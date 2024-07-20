@@ -364,3 +364,99 @@ fn init_workspace_relative_sub_package() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn init_workspace_outside() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    })?;
+
+    let child = context.temp_dir.join("foo");
+    fs_err::create_dir(&child)?;
+
+    // Run `uv init <path>` outside the workspace.
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.home_dir).arg(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Adding foo as member of workspace [TEMP_DIR]/
+    Initialized project foo in [TEMP_DIR]/foo
+    "###);
+
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    let init_py = fs_err::read_to_string(child.join("src/foo/__init__.py"))?;
+
+    let _ = fs_err::read_to_string(child.join("README.md")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+        "###
+        );
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init_py, @r###"
+        def hello() -> str:
+            return "Hello from foo!"
+        "###
+        );
+    });
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["foo"]
+        "###
+        );
+    });
+
+    // Run `uv lock` in the workspace.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    Ok(())
+}
