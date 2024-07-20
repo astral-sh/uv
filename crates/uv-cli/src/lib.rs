@@ -2764,4 +2764,8 @@ pub struct DisplayTreeArgs {
     /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
+
+    /// Show the version constraint(s) imposed on each package.
+    #[arg(long)]
+    pub show_version_specifiers: bool,
 }

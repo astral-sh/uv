@@ -392,6 +392,24 @@ impl RequirementSource {
         }
     }
 
+    /// Convert the source to a version specifier or URL.
+    ///
+    /// If the source is a registry and the specifier is empty, it returns `None`.
+    pub fn version_or_url(&self) -> Option<VersionOrUrl<VerbatimParsedUrl>> {
+        match self {
+            Self::Registry { specifier, .. } => {
+                if specifier.len() == 0 {
+                    None
+                } else {
+                    Some(VersionOrUrl::VersionSpecifier(specifier.clone()))
+                }
+            }
+            Self::Url { .. } | Self::Git { .. } | Self::Path { .. } | Self::Directory { .. } => {
+                Some(VersionOrUrl::Url(self.to_verbatim_parsed_url()?))
+            }
+        }
+    }
+
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Directory { editable: true, .. })

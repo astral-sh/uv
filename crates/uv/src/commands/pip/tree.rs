@@ -1,14 +1,14 @@
-use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use anyhow::Result;
 use indexmap::IndexMap;
 use owo_colors::OwoColorize;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::debug;
 
 use distribution_types::{Diagnostic, Name};
 use pep508_rs::MarkerEnvironment;
+use pypi_types::RequirementSource;
 use uv_cache::Cache;
 use uv_distribution::Metadata;
 use uv_fs::Simplified;
@@ -29,6 +29,7 @@ pub(crate) fn pip_tree(
     package: Vec<PackageName>,
     no_dedupe: bool,
     invert: bool,
+    show_version_specifiers: bool,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -66,6 +67,7 @@ pub(crate) fn pip_tree(
         package,
         no_dedupe,
         invert,
+        show_version_specifiers,
         environment.interpreter().markers(),
         packages,
     )
@@ -74,7 +76,7 @@ pub(crate) fn pip_tree(
 
     writeln!(printer.stdout(), "{rendered_tree}")?;
 
-    if rendered_tree.contains('*') {
+    if rendered_tree.contains("(*)") {
         let message = if no_dedupe {
             "(*) Package tree is a cycle and cannot be shown".italic()
         } else {
@@ -113,7 +115,9 @@ pub(crate) struct DisplayDependencyGraph {
     /// Map from package name to its requirements.
     ///
     /// If `--invert` is given the map is inverted.
-    requirements: HashMap<PackageName, Vec<PackageName>>,
+    requirements: FxHashMap<PackageName, Vec<PackageName>>,
+    /// Map from requirement package name-to-parent-to-dependency metadata.
+    dependencies: FxHashMap<PackageName, FxHashMap<PackageName, Dependency>>,
 }
 
 impl DisplayDependencyGraph {
@@ -124,10 +128,13 @@ impl DisplayDependencyGraph {
         package: Vec<PackageName>,
         no_dedupe: bool,
         invert: bool,
+        show_version_specifiers: bool,
         markers: &MarkerEnvironment,
         packages: IndexMap<PackageName, Vec<Metadata>>,
     ) -> Self {
-        let mut requirements: HashMap<_, Vec<_>> = HashMap::new();
+        let mut requirements: FxHashMap<_, Vec<_>> = FxHashMap::default();
+        let mut dependencies: FxHashMap<PackageName, FxHashMap<PackageName, Dependency>> =
+            FxHashMap::default();
 
         // Add all transitive requirements.
         for metadata in packages.values().flatten() {
@@ -138,20 +145,33 @@ impl DisplayDependencyGraph {
                     .as_ref()
                     .map_or(true, |m| m.evaluate(markers, &[]))
             }) {
-                if invert {
-                    requirements
-                        .entry(required.name.clone())
-                        .or_default()
-                        .push(metadata.name.clone());
+                let dependency = if invert {
+                    Dependency::Inverted(
+                        required.name.clone(),
+                        metadata.name.clone(),
+                        required.source.clone(),
+                    )
                 } else {
-                    requirements
-                        .entry(metadata.name.clone())
+                    Dependency::Normal(
+                        metadata.name.clone(),
+                        required.name.clone(),
+                        required.source.clone(),
+                    )
+                };
+
+                requirements
+                    .entry(dependency.parent().clone())
+                    .or_default()
+                    .push(dependency.child().clone());
+
+                if show_version_specifiers {
+                    dependencies
+                        .entry(dependency.parent().clone())
                         .or_default()
-                        .push(required.name.clone());
+                        .insert(dependency.child().clone(), dependency);
                 }
             }
         }
-
         Self {
             packages,
             depth,
@@ -159,6 +179,7 @@ impl DisplayDependencyGraph {
             package,
             no_dedupe,
             requirements,
+            dependencies,
         }
     }
 
@@ -175,7 +196,19 @@ impl DisplayDependencyGraph {
         }
 
         let package_name = &metadata.name;
-        let line = format!("{} v{}", package_name, metadata.version);
+        let mut line = format!("{} v{}", package_name, metadata.version);
+
+        // If the current package is not top-level (i.e., it has a parent), include the specifiers.
+        if let Some(last) = path.last().copied() {
+            if let Some(dependency) = self
+                .dependencies
+                .get(last)
+                .and_then(|deps| deps.get(package_name))
+            {
+                line.push(' ');
+                line.push_str(&format!("[{dependency}]"));
+            }
+        }
 
         // Skip the traversal if:
         // 1. The package is in the current traversal path (i.e., a dependency cycle).
@@ -261,7 +294,7 @@ impl DisplayDependencyGraph {
 
         if self.package.is_empty() {
             // The root nodes are those that are not required by any other package.
-            let children: HashSet<_> = self.requirements.values().flatten().collect();
+            let children: FxHashSet<_> = self.requirements.values().flatten().collect();
             for package in self.packages.values().flatten() {
                 // If the current package is not required by any other package, start the traversal
                 // with the current package as the root.
@@ -284,5 +317,52 @@ impl DisplayDependencyGraph {
         }
 
         lines
+    }
+}
+
+#[derive(Debug)]
+enum Dependency {
+    /// Show dependencies from parent to the child package that it requires.
+    Normal(PackageName, PackageName, RequirementSource),
+    /// Show dependencies from the child package to the parent that requires it.
+    Inverted(PackageName, PackageName, RequirementSource),
+}
+
+impl Dependency {
+    /// Return the parent in the tree.
+    fn parent(&self) -> &PackageName {
+        match self {
+            Self::Normal(parent, _, _) => parent,
+            Self::Inverted(parent, _, _) => parent,
+        }
+    }
+
+    /// Return the child in the tree.
+    fn child(&self) -> &PackageName {
+        match self {
+            Self::Normal(_, child, _) => child,
+            Self::Inverted(_, child, _) => child,
+        }
+    }
+}
+
+impl std::fmt::Display for Dependency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Normal(_, _, source) => {
+                let version = match source.version_or_url() {
+                    None => "*".to_string(),
+                    Some(version) => version.to_string(),
+                };
+                write!(f, "required: {version}")
+            }
+            Self::Inverted(parent, _, source) => {
+                let version = match source.version_or_url() {
+                    None => "*".to_string(),
+                    Some(version) => version.to_string(),
+                };
+                write!(f, "requires: {parent} {version}")
+            }
+        }
     }
 }
