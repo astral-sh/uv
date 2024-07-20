@@ -1693,7 +1693,6 @@ fn emit_version_specifier_with_invert() {
     threadpoolctl v3.4.0
     └── scikit-learn v1.4.1.post1 [requires: threadpoolctl>=2.0.0]
 
-
     ----- stderr -----
     "###
     );
