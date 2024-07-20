@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
@@ -28,7 +28,7 @@ pub(crate) async fn init(
     }
 
     // Discover the current workspace, if it exists.
-    let current_dir = std::env::current_dir()?.canonicalize()?;
+    let current_dir = std::env::current_dir()?.simple_canonicalize()?;
     let workspace = match ProjectWorkspace::discover(&current_dir, None).await {
         Ok(project) => Some(project),
         Err(WorkspaceError::MissingPyprojectToml) => None,
@@ -38,7 +38,7 @@ pub(crate) async fn init(
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
         None => current_dir.clone(),
-        Some(ref path) => PathBuf::from(path),
+        Some(ref path) => uv_fs::absolutize_path(Path::new(path))?.to_path_buf(),
     };
 
     // Default to the directory name if a name was not provided.
