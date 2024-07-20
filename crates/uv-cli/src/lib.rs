@@ -2762,7 +2762,7 @@ pub struct DisplayTreeArgs {
     #[arg(long, alias = "reverse")]
     pub invert: bool,
 
-    /// Show the version constrained imposed on each package.
+    /// Show the version constraint(s) imposed on each package.
     #[arg(long)]
     pub emit_version_specifier: bool,
 }
