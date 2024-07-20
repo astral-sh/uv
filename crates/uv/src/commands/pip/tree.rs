@@ -148,7 +148,7 @@ impl DisplayDependencyGraph {
                     (
                         &required.name,
                         &metadata.name,
-                        format!("requires: {}", metadata.name),
+                        format!("requires: {}", required.name),
                     )
                 } else {
                     (&metadata.name, &required.name, "required: ".to_string())

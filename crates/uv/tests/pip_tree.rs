@@ -1685,13 +1685,14 @@ fn emit_version_specifier_with_invert() {
     exit_code: 0
     ----- stdout -----
     joblib v1.3.2
-    └── scikit-learn v1.4.1.post1 [requires: scikit-learn>=1.2.0]
+    └── scikit-learn v1.4.1.post1 [requires: joblib>=1.2.0]
     numpy v1.26.4
-    ├── scikit-learn v1.4.1.post1 [requires: scikit-learn<2.0, >=1.19.5]
-    └── scipy v1.12.0 [requires: scipy<1.29.0, >=1.22.4]
-        └── scikit-learn v1.4.1.post1 [requires: scikit-learn>=1.6.0]
+    ├── scikit-learn v1.4.1.post1 [requires: numpy<2.0, >=1.19.5]
+    └── scipy v1.12.0 [requires: numpy<1.29.0, >=1.22.4]
+        └── scikit-learn v1.4.1.post1 [requires: scipy>=1.6.0]
     threadpoolctl v3.4.0
-    └── scikit-learn v1.4.1.post1 [requires: scikit-learn>=2.0.0]
+    └── scikit-learn v1.4.1.post1 [requires: threadpoolctl>=2.0.0]
+
 
     ----- stderr -----
     "###
