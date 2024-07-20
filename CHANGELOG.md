@@ -21,7 +21,7 @@
 
 - Make entrypoint writes atomic to avoid overwriting symlinks ([#5165](https://github.com/astral-sh/uv/pull/5165))
 - Use `which`-retrieved path directly when spawning pager ([#5198](https://github.com/astral-sh/uv/pull/5198))
-- Don't apply irrelevant constraints when validating site-packages ([#5321](https://github.com/astral-sh/uv/pull/5321))
+- Don't apply irrelevant constraints when validating site-packages ([#5231](https://github.com/astral-sh/uv/pull/5231))
 - Respect local versions for all user requirements ([#5232](https://github.com/astral-sh/uv/pull/5232))
 
 ## 0.2.26
