@@ -26,13 +26,7 @@ pub(crate) async fn init(
         warn_user_once!("`uv init` is experimental and may change without warning");
     }
 
-    // Discover the current workspace, if it exists.
     let current_dir = std::env::current_dir()?.canonicalize()?;
-    let workspace = match ProjectWorkspace::discover(&current_dir, None).await {
-        Ok(project) => Some(project),
-        Err(WorkspaceError::MissingPyprojectToml) => None,
-        Err(err) => return Err(err.into()),
-    };
 
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
@@ -71,6 +65,13 @@ pub(crate) async fn init(
 
     // Canonicalize the path to the project.
     let path = path.canonicalize()?;
+
+    // Discover the current workspace, if it exists.
+    let workspace = match ProjectWorkspace::discover(&path, None).await {
+        Ok(project) => Some(project),
+        Err(WorkspaceError::MissingPyprojectToml) => None,
+        Err(err) => return Err(err.into()),
+    };
 
     // Create the `pyproject.toml`.
     let pyproject = indoc::formatdoc! {r#"
