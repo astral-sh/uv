@@ -1,9 +1,8 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
-
 use pep508_rs::PackageName;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
@@ -28,7 +27,7 @@ pub(crate) async fn init(
     }
 
     // Discover the current workspace, if it exists.
-    let current_dir = std::env::current_dir()?.simple_canonicalize()?;
+    let current_dir = std::env::current_dir()?.canonicalize()?;
     let workspace = match ProjectWorkspace::discover(&current_dir, None).await {
         Ok(project) => Some(project),
         Err(WorkspaceError::MissingPyprojectToml) => None,
@@ -38,7 +37,7 @@ pub(crate) async fn init(
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
         None => current_dir.clone(),
-        Some(ref path) => uv_fs::absolutize_path(Path::new(path))?.to_path_buf(),
+        Some(ref path) => PathBuf::from(path),
     };
 
     // Default to the directory name if a name was not provided.
@@ -69,6 +68,9 @@ pub(crate) async fn init(
     // Create the directory for the project.
     let src_dir = path.join("src").join(name.as_ref());
     fs_err::create_dir_all(&src_dir)?;
+
+    // Canonicalize the path to the project.
+    let path = path.canonicalize()?;
 
     // Create the `pyproject.toml`.
     let pyproject = indoc::formatdoc! {r#"
@@ -110,7 +112,7 @@ pub(crate) async fn init(
         // Add the package to the workspace.
         let mut pyproject =
             PyProjectTomlMut::from_toml(workspace.current_project().pyproject_toml())?;
-        pyproject.add_workspace(dbg!(path).strip_prefix(dbg!(workspace.project_root()))?)?;
+        pyproject.add_workspace(path.strip_prefix(workspace.project_root())?)?;
 
         // Save the modified `pyproject.toml`.
         fs_err::write(
