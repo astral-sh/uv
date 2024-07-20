@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
-
 use pep508_rs::PackageName;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
@@ -69,6 +68,9 @@ pub(crate) async fn init(
     // Create the directory for the project.
     let src_dir = path.join("src").join(name.as_ref());
     fs_err::create_dir_all(&src_dir)?;
+
+    // Canonicalize the path to the project.
+    let path = path.canonicalize()?;
 
     // Create the `pyproject.toml`.
     let pyproject = indoc::formatdoc! {r#"
