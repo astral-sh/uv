@@ -211,7 +211,7 @@ pub(super) async fn do_lock(
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
         .collect::<Vec<_>>();
-    let constraints = workspace.constraints().into_iter().collect::<Vec<_>>();
+    let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
 
