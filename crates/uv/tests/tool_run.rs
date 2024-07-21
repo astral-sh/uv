@@ -162,7 +162,7 @@ fn tool_run_at_version() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
-    warning: A `pytest@8.0.0` executable is not provided by package `pytest`.
+    warning: An executable named `pytest@8.0.0` is not provided by package `pytest`.
     "###);
 }
 
@@ -227,7 +227,7 @@ fn tool_run_suggest_valid_commands() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    warning: A `orange` executable is not provided by package `black`.
+    warning: An executable named `orange` is not provided by package `black`.
     "###);
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -247,7 +247,7 @@ fn tool_run_suggest_valid_commands() {
      + fastapi-cli==0.0.1
      + importlib-metadata==1.7.0
      + zipp==3.18.1
-    warning: A `fastapi-cli` executable is not provided by package `fastapi-cli`.
+    warning: An executable named `fastapi-cli` is not provided by package `fastapi-cli`.
     "###);
 }
 
@@ -312,7 +312,7 @@ fn tool_run_warn_executable_not_in_from() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    warning: A `fastapi` executable is not provided by package `fastapi` but is available via the dependency `fastapi-cli`. Consider using `uv tool run --from fastapi-cli fastapi` instead.
+    warning: An executable named `fastapi` is not provided by package `fastapi` but is available via the dependency `fastapi-cli`. Consider using `uv tool run --from fastapi-cli fastapi` instead.
     "###);
 }
 
