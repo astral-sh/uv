@@ -173,10 +173,6 @@ pub enum ErrorKind {
         #[source] Box<pypi_types::MetadataError>,
     ),
 
-    /// The metadata file was not found in the wheel.
-    #[error("Metadata file `{0}` was not found in {1}")]
-    MetadataNotFound(WheelFilename, String),
-
     /// An error that happened while making a request or in a reqwest middleware.
     #[error(transparent)]
     WrappedReqwestError(#[from] WrappedReqwestError),
