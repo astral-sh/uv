@@ -1,7 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
-use rustc_hash::FxHashMap;
 use tracing::instrument;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -15,7 +14,7 @@ use platform_tags::{TagCompatibility, Tags};
 use pypi_types::HashDigest;
 use uv_client::FlatIndexEntries;
 use uv_configuration::BuildOptions;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 use uv_types::HashStrategy;
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
@@ -23,7 +22,7 @@ use uv_types::HashStrategy;
 #[derive(Debug, Clone, Default)]
 pub struct FlatIndex {
     /// The list of [`FlatDistributions`] from the `--find-links` entries, indexed by package name.
-    index: FxHashMap<PackageName, FlatDistributions>,
+    index: InternedMap<PackageName, FlatDistributions>,
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
     offline: bool,
@@ -39,7 +38,7 @@ impl FlatIndex {
         build_options: &BuildOptions,
     ) -> Self {
         // Collect compatible distributions.
-        let mut index = FxHashMap::default();
+        let mut index = InternedMap::default();
         for (filename, file, url) in entries.entries {
             let distributions = index.entry(filename.name().clone()).or_default();
             Self::add_file(

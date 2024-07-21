@@ -37,7 +37,7 @@ pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_git::GitResolver;
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, InternedMap, InternedSet, PackageName};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -312,7 +312,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             debug!("Solving with target Python version: {}", target);
         }
 
-        let mut visited = FxHashSet::default();
+        let mut visited = InternedSet::default();
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let mut prefetcher = BatchPrefetcher::default();
@@ -795,7 +795,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: &ForkUrls,
         fork_markers: &ResolverMarkers,
         python_requirement: &PythonRequirement,
-        visited: &mut FxHashSet<PackageName>,
+        visited: &mut InternedSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         match &**package {
@@ -939,7 +939,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_markers: &ResolverMarkers,
         python_requirement: &PythonRequirement,
         pins: &mut FilePins,
-        visited: &mut FxHashSet<PackageName>,
+        visited: &mut InternedSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
@@ -1870,12 +1870,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         mut err: pubgrub::error::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
-        visited: &FxHashSet<PackageName>,
+        visited: &InternedSet<PackageName>,
         index_locations: &IndexLocations,
     ) -> ResolveError {
         NoSolutionError::collapse_proxies(&mut err);
 
-        let mut unavailable_packages = FxHashMap::default();
+        let mut unavailable_packages = InternedMap::default();
         for package in err.packages() {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
                 if let Some(reason) = self.unavailable_packages.get(name) {
@@ -1884,7 +1884,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        let mut incomplete_packages = FxHashMap::default();
+        let mut incomplete_packages = InternedMap::default();
         for package in err.packages() {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
                 if let Some(versions) = self.incomplete_packages.get(name) {

@@ -30,7 +30,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use rustc_hash::FxHashSet;
 use tracing::instrument;
 
 use cache_key::CanonicalUrl;
@@ -44,7 +43,7 @@ use requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_fs::Simplified;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, InternedSet, PackageName};
 use uv_workspace::pyproject::PyProjectToml;
 
 use crate::RequirementsSource;
@@ -62,7 +61,7 @@ pub struct RequirementsSpecification {
     /// The source trees from which to extract requirements.
     pub source_trees: Vec<PathBuf>,
     /// The extras used to collect requirements.
-    pub extras: FxHashSet<ExtraName>,
+    pub extras: InternedSet<ExtraName>,
     /// The index URL to use for fetching packages.
     pub index_url: Option<IndexUrl>,
     /// The extra index URLs to use for fetching packages.

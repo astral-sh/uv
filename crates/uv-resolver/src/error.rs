@@ -9,7 +9,7 @@ use rustc_hash::FxHashMap;
 use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
 use pep440_rs::Version;
 use pep508_rs::{MarkerTree, Requirement};
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
@@ -122,8 +122,8 @@ pub struct NoSolutionError {
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
     index_locations: IndexLocations,
-    unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
-    incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+    unavailable_packages: InternedMap<PackageName, UnavailablePackage>,
+    incomplete_packages: InternedMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
     markers: ResolverMarkers,
 }
@@ -146,8 +146,8 @@ impl NoSolutionError {
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
         index_locations: IndexLocations,
-        unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        unavailable_packages: InternedMap<PackageName, UnavailablePackage>,
+        incomplete_packages: InternedMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
     ) -> Self {

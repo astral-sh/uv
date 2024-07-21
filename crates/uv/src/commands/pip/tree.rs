@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_distribution::Metadata;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 use uv_python::EnvironmentPreference;
 use uv_python::PythonEnvironment;
 use uv_python::PythonRequest;
@@ -115,9 +115,9 @@ pub(crate) struct DisplayDependencyGraph {
     /// Map from package name to its requirements.
     ///
     /// If `--invert` is given the map is inverted.
-    requirements: FxHashMap<PackageName, Vec<PackageName>>,
+    requirements: InternedMap<PackageName, Vec<PackageName>>,
     /// Map from requirement package name-to-parent-to-dependency metadata.
-    dependencies: FxHashMap<PackageName, FxHashMap<PackageName, Dependency>>,
+    dependencies: InternedMap<PackageName, InternedMap<PackageName, Dependency>>,
 }
 
 impl DisplayDependencyGraph {
@@ -132,9 +132,9 @@ impl DisplayDependencyGraph {
         markers: &MarkerEnvironment,
         packages: IndexMap<PackageName, Vec<Metadata>>,
     ) -> Self {
-        let mut requirements: FxHashMap<_, Vec<_>> = FxHashMap::default();
-        let mut dependencies: FxHashMap<PackageName, FxHashMap<PackageName, Dependency>> =
-            FxHashMap::default();
+        let mut requirements: InternedMap<_, Vec<_>> = InternedMap::default();
+        let mut dependencies: InternedMap<PackageName, InternedMap<PackageName, Dependency>> =
+            InternedMap::default();
 
         // Add all transitive requirements.
         for metadata in packages.values().flatten() {

@@ -12,7 +12,7 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{Requirement, VerbatimParsedUrl};
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::InstalledPackagesProvider;
 
@@ -31,7 +31,7 @@ pub struct SitePackages {
     /// The installed distributions, keyed by name. Although the Python runtime does not support it,
     /// it is possible to have multiple distributions with the same name to be present in the
     /// virtual environment, which we handle gracefully.
-    by_name: FxHashMap<PackageName, Vec<usize>>,
+    by_name: InternedMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
     by_url: FxHashMap<Url, Vec<usize>>,
 }
@@ -45,7 +45,7 @@ impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
-        let mut by_name = FxHashMap::default();
+        let mut by_name = InternedMap::default();
         let mut by_url = FxHashMap::default();
 
         for site_packages in interpreter.site_packages() {

@@ -1,17 +1,15 @@
 use std::collections::hash_map::Entry;
 
-use rustc_hash::FxHashMap;
-
 use distribution_types::Verbatim;
 use pypi_types::VerbatimParsedUrl;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 
 use crate::resolver::ResolverMarkers;
 use crate::ResolveError;
 
 /// See [`crate::resolver::SolveState`].
 #[derive(Default, Debug, Clone)]
-pub(crate) struct ForkUrls(FxHashMap<PackageName, VerbatimParsedUrl>);
+pub(crate) struct ForkUrls(InternedMap<PackageName, VerbatimParsedUrl>);
 
 impl ForkUrls {
     /// Get the URL previously used for a package in this fork.

@@ -1,12 +1,11 @@
 use std::cmp::Reverse;
 
 use pubgrub::range::Range;
-use rustc_hash::FxHashMap;
+
+use pep440_rs::Version;
+use uv_normalize::{InternedMap, PackageName};
 
 use crate::fork_urls::ForkUrls;
-use pep440_rs::Version;
-use uv_normalize::PackageName;
-
 use crate::pubgrub::package::PubGrubPackage;
 use crate::pubgrub::PubGrubPackageInner;
 
@@ -20,7 +19,7 @@ use crate::pubgrub::PubGrubPackageInner;
 ///
 /// See: <https://github.com/pypa/pip/blob/ef78c129b1a966dbbbdb8ebfffc43723e89110d1/src/pip/_internal/resolution/resolvelib/provider.py#L120>
 #[derive(Clone, Debug, Default)]
-pub(crate) struct PubGrubPriorities(FxHashMap<PackageName, PubGrubPriority>);
+pub(crate) struct PubGrubPriorities(InternedMap<PackageName, PubGrubPriority>);
 
 impl PubGrubPriorities {
     /// Add a [`PubGrubPackage`] to the priority map.

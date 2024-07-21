@@ -1,11 +1,10 @@
 #![allow(clippy::single_match_else)]
 
-use std::collections::BTreeSet;
-use std::{fmt::Write, path::Path};
-
 use anstream::eprint;
 use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::BTreeSet;
+use std::hash::BuildHasherDefault;
+use std::{fmt::Write, path::Path};
 use tracing::debug;
 
 use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
@@ -17,7 +16,7 @@ use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall,
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DEV_DEPENDENCIES;
 use uv_git::ResolvedRepositoryReference;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{
@@ -549,9 +548,12 @@ fn report_upgrades(
     workspace_root: &Path,
     printer: Printer,
 ) -> anyhow::Result<()> {
-    let existing_distributions: FxHashMap<PackageName, BTreeSet<Version>> =
+    let existing_distributions: InternedMap<PackageName, BTreeSet<Version>> =
         existing_lock.distributions().iter().fold(
-            FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
+            InternedMap::with_capacity_and_hasher(
+                existing_lock.distributions().len(),
+                BuildHasherDefault::default(),
+            ),
             |mut acc, distribution| {
                 if let Ok(VersionId::NameVersion(name, version)) =
                     distribution.version_id(workspace_root)
@@ -562,9 +564,12 @@ fn report_upgrades(
             },
         );
 
-    let new_distribution_names: FxHashMap<PackageName, BTreeSet<Version>> =
+    let new_distribution_names: InternedMap<PackageName, BTreeSet<Version>> =
         new_lock.distributions().iter().fold(
-            FxHashMap::with_capacity_and_hasher(new_lock.distributions().len(), FxBuildHasher),
+            InternedMap::with_capacity_and_hasher(
+                new_lock.distributions().len(),
+                BuildHasherDefault::default(),
+            ),
             |mut acc, distribution| {
                 if let Ok(VersionId::NameVersion(name, version)) =
                     distribution.version_id(workspace_root)

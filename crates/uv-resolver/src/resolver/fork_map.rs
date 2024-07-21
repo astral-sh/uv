@@ -1,6 +1,6 @@
 use pep508_rs::{MarkerTree, PackageName};
 use pypi_types::Requirement;
-use rustc_hash::FxHashMap;
+use uv_normalize::InternedMap;
 
 use crate::marker::is_disjoint;
 use crate::ResolverMarkers;
@@ -10,7 +10,7 @@ pub(crate) type ForkSet = ForkMap<()>;
 
 /// A map from package names to their values for a given fork.
 #[derive(Debug, Clone)]
-pub(crate) struct ForkMap<T>(FxHashMap<PackageName, Vec<Entry<T>>>);
+pub(crate) struct ForkMap<T>(InternedMap<PackageName, Vec<Entry<T>>>);
 
 /// An entry in a [`ForkMap`].
 #[derive(Debug, Clone)]
@@ -21,7 +21,7 @@ struct Entry<T> {
 
 impl<T> Default for ForkMap<T> {
     fn default() -> Self {
-        Self(FxHashMap::default())
+        Self(InternedMap::default())
     }
 }
 

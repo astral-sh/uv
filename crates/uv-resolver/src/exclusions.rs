@@ -1,6 +1,6 @@
 use pep508_rs::PackageName;
-use rustc_hash::FxHashSet;
 use uv_configuration::{Reinstall, Upgrade};
+use uv_normalize::InternedSet;
 
 /// Tracks locally installed packages that should not be selected during resolution.
 #[derive(Debug, Default, Clone)]
@@ -8,7 +8,7 @@ pub enum Exclusions {
     #[default]
     None,
     /// Exclude some local packages from consideration, e.g. from `--reinstall-package foo --upgrade-package bar`
-    Some(FxHashSet<PackageName>),
+    Some(InternedSet<PackageName>),
     /// Exclude all local packages from consideration, e.g. from `--reinstall` or `--upgrade`
     All,
 }
@@ -18,11 +18,11 @@ impl Exclusions {
         if upgrade.is_all() || reinstall.is_all() {
             Self::All
         } else {
-            let mut exclusions: FxHashSet<PackageName> =
+            let mut exclusions: InternedSet<PackageName> =
                 if let Reinstall::Packages(packages) = reinstall {
-                    FxHashSet::from_iter(packages)
+                    InternedSet::from_iter(packages)
                 } else {
-                    FxHashSet::default()
+                    InternedSet::default()
                 };
 
             if let Upgrade::Packages(packages) = upgrade {

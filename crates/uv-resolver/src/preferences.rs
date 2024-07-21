@@ -1,7 +1,6 @@
 use std::collections::hash_map::Entry;
 use std::str::FromStr;
 
-use rustc_hash::FxHashMap;
 use tracing::trace;
 
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
@@ -9,7 +8,7 @@ use pep440_rs::{Operator, Version};
 use pep508_rs::{MarkerEnvironment, MarkerTree, VersionOrUrl};
 use pypi_types::{HashDigest, HashError};
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
@@ -99,7 +98,7 @@ impl Preference {
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
 #[derive(Debug, Clone, Default)]
-pub struct Preferences(FxHashMap<PackageName, Pin>);
+pub struct Preferences(InternedMap<PackageName, Pin>);
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
