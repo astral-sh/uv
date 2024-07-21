@@ -52,4 +52,4 @@ Scripts that declare inline metadata are automatically executed in environments 
 
 ## Projects with many packages
 
-See the [workspaces](./preview/workspaces.md) documentation.
+See the [workspaces](./workspaces.md) documentation.

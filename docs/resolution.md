@@ -106,10 +106,21 @@ hatch for erroneous upper version bounds.
 ## Multi-platform resolution
 
 By default, uv's `pip-compile` command produces a resolution that's known to be compatible with
-the current platform and Python version. Unlike Poetry and PDM, uv does not yet produce a
-machine-agnostic lockfile ([#2679](https://github.com/astral-sh/uv/issues/2679)).
+the current platform and Python version. 
 
-However, uv _does_ support resolving for alternate platforms and Python versions via the
+uv also supports a machine agnostic resolution. uv supports writing multiplatform resolutions in both a `requirements.txt` format
+and uv-specific (`uv.lock`) format.
+
+If using uv's `pip compile`, the `--universal` flag will generate a resolution that is compatible with all operating systems, 
+architectures, and Python implementations. In universal mode, the current Python version (or provided `--python-version`)
+will be treated as a lower bound. For example, `--universal --python-version 3.7` would produce a universal resolution 
+for Python 3.7 and later.
+
+If using uv's [project](./guides/projects.md) interface, the machine agnostic resolution will be used
+automatically and a `uv.lock` file will be created. The lock file can also be created with an explicit `uv lock`
+invocation.
+
+uv also supports resolving for specific alternate platforms and Python versions via the
 `--python-platform` and `--python-version` command line arguments.
 
 For example, if you're running uv on macOS, but want to resolve for Linux, you can run
@@ -123,12 +134,15 @@ The `--python-platform` and `--python-version` arguments can be combined to prod
 a specific platform and Python version, enabling users to generate multiple lockfiles for
 different environments from a single machine.
 
-_N.B. Python's environment markers expose far more information about the current machine
-than can be expressed by a simple `--python-platform` argument. For example, the `platform_version` marker
-on macOS includes the time at which the kernel was built, which can (in theory) be encoded in
-package requirements. uv's resolver makes a best-effort attempt to generate a resolution that is
-compatible with any machine running on the target `--python-platform`, which should be sufficient for
-most use cases, but may lose fidelity for complex package and platform combinations._
+!!! note
+
+    Python's environment markers expose far more information about the current machine
+    than can be expressed by a simple `--python-platform` argument. For example, the `platform_version` marker
+    on macOS includes the time at which the kernel was built, which can (in theory) be encoded in
+    package requirements. uv's resolver makes a best-effort attempt to generate a resolution that is
+    compatible with any machine running on the target `--python-platform`, which should be sufficient for
+    most use cases, but may lose fidelity for complex package and platform combinations.
+
 
 ## Time-restricted reproducible resolutions
 

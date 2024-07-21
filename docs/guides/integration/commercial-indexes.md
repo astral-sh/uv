@@ -6,7 +6,7 @@ While uv uses the official Python Package Index (PyPI) by default, it also suppo
 
 uv can install packages from [Azure DevOps Artifacts](https://learn.microsoft.com/en-us/azure/devops/artifacts/start-using-azure-artifacts?view=azure-devops&tabs=nuget%2Cnugetserver). Authenticate to a feed using a [Personal Access Token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows) (PAT) or interactively using the [`keyring`](https://github.com/jaraco/keyring) package.
 
-### Authenticate using a PAT
+### Using a PAT
 
 If there is a PAT available (eg [`$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)), credentials can be provided via the "Basic" HTTP authentication scheme. Include the PAT in the password field of the URL. A username must be included as well, but can be any string.
 
@@ -15,7 +15,7 @@ If there is a PAT available (eg [`$(System.AccessToken)` in an Azure pipeline](h
 export UV_EXTRA_INDEX_URL=https://dummy:$ADO_PAT@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
-### Authenticate using the `keyring` plugin
+### Using `keyring`
 
 If there is not a PAT available, authenticate to Artifacts using the [`keyring`](https://github.com/jaraco/keyring) package with [the `artifacts-keyring` plugin](https://github.com/Microsoft/artifacts-keyring). Because these two packages are required to authenticate to Azure Artifacts, they must be pre-installed from a source other than Artifacts.
 
