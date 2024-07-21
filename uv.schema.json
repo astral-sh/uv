@@ -29,6 +29,15 @@
         }
       ]
     },
+    "constraint-dependencies": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/Requirement"
+      }
+    },
     "dev-dependencies": {
       "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
       "type": [

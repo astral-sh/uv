@@ -763,6 +763,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
+    pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -824,6 +825,20 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
+        let constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let overrides_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .override_dependencies
@@ -848,6 +863,7 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            constraints_from_workspace,
             overrides_from_workspace,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
@@ -988,6 +1004,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
     pub(crate) dry_run: bool,
+    pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -1036,6 +1053,20 @@ impl PipInstallSettings {
             compat_args: _,
         } = args;
 
+        let constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let overrides_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .override_dependencies
@@ -1063,6 +1094,7 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             dry_run,
+            constraints_from_workspace,
             overrides_from_workspace,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
