@@ -2429,6 +2429,46 @@ fn install_constraints_txt() -> Result<()> {
     Ok(())
 }
 
+/// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
+#[test]
+fn install_constraints_from_pyproject() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+    name = "example"
+    version = "0.0.0"
+    dependencies = [
+      "anyio==3.7.0"
+    ]
+
+    [tool.uv]
+    constraint-dependencies = [
+      "idna<3.4"
+    ]
+    "#,
+    )?;
+    
+    uv_snapshot!(context.pip_install()
+            .arg("-r")
+            .arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a package from a `requirements.txt` file, with an inline constraint.
 #[test]
 fn install_constraints_inline() -> Result<()> {

@@ -73,6 +73,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -206,6 +207,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -340,6 +342,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -506,6 +509,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -641,6 +645,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -762,6 +767,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -920,6 +926,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -1078,6 +1085,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -1281,6 +1289,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -1438,6 +1447,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -1565,6 +1575,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -1720,6 +1731,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -1899,6 +1911,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -2016,6 +2029,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -2133,6 +2147,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -2252,6 +2267,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -2396,6 +2412,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
@@ -2541,6 +2558,7 @@ fn resolve_both() -> anyhow::Result<()> {
         ],
         constraint: [],
         override: [],
+        constraints_from_workspace: [],
         overrides_from_workspace: [],
         refresh: None(
             Timestamp(
