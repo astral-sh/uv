@@ -2448,7 +2448,7 @@ fn install_constraints_from_pyproject() -> Result<()> {
     ]
     "#,
     )?;
-    
+
     uv_snapshot!(context.pip_install()
             .arg("-r")
             .arg("pyproject.toml"), @r###"

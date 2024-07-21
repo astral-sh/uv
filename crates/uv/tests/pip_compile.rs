@@ -3062,7 +3062,7 @@ fn constraint_dependency_from_pyproject() -> Result<()> {
     ]
     "#,
     )?;
-    
+
     uv_snapshot!(context.pip_compile()
             .arg("pyproject.toml"), @r###"
     success: true
