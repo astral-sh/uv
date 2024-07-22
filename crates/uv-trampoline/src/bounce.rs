@@ -411,10 +411,7 @@ fn close_handles(si: &STARTUPINFOA) {
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
-                eprintln!(
-                    "Failed to close standard device handle {}",
-                    handle.0 as u32
-                );
+                eprintln!("Failed to close standard device handle {}", handle.0 as u32);
             });
             unsafe { SetStdHandle(std_handle, INVALID_HANDLE_VALUE) }.unwrap_or_else(|_| {
                 eprintln!("Failed to modify standard device handle {}", std_handle.0);
