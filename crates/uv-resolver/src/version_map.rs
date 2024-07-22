@@ -7,8 +7,7 @@ use tracing::instrument;
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    PythonRequirementKind, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::Version;
 use platform_tags::{IncompatibleTag, TagCompatibility, Tags};
