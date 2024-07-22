@@ -60,7 +60,7 @@ pub(crate) async fn init(
     }
 
     // Create the directory for the project.
-    let src_dir = path.join("src").join(name.as_ref());
+    let src_dir = path.join("src").join(&*name.as_dist_info_name());
     fs_err::create_dir_all(&src_dir)?;
 
     // Canonicalize the path to the project.
