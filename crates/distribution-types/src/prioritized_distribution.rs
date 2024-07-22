@@ -75,20 +75,18 @@ impl Display for IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => {
-                    f.write_str("has no available source distribution and using wheels is disabled")
+                    f.write_str("has no source distribution and using wheels is disabled")
                 }
                 IncompatibleWheel::Tag(tag) => match tag {
-                    IncompatibleTag::Invalid => {
-                        f.write_str("has no wheels are available with valid tags")
+                    IncompatibleTag::Invalid => f.write_str("has no wheels with valid tags"),
+                    IncompatibleTag::Python => {
+                        f.write_str("has no wheels with a matching Python implementation tag")
                     }
-                    IncompatibleTag::Python => f.write_str(
-                        "has no wheels are available with a matching Python implementation",
-                    ),
                     IncompatibleTag::Abi => {
-                        f.write_str("has no wheels are available with a matching Python ABI")
+                        f.write_str("has no wheels with a matching Python ABI tag")
                     }
                     IncompatibleTag::Platform => {
-                        f.write_str("has no wheels are available with a matching platform")
+                        f.write_str("has no wheels with a matching platform tag")
                     }
                 },
                 IncompatibleWheel::Yanked(yanked) => match yanked {
