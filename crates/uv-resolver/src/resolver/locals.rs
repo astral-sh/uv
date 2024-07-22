@@ -3,15 +3,15 @@ use std::str::FromStr;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::RemoteSource;
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
-use pep508_rs::{MarkerEnvironment, MarkerTree, PackageName};
+use pep508_rs::{MarkerEnvironment, PackageName};
 use pypi_types::RequirementSource;
-use rustc_hash::FxHashMap;
 
-use crate::{marker::is_disjoint, DependencyMode, Manifest, ResolverMarkers};
+use crate::resolver::ForkMap;
+use crate::{DependencyMode, Manifest, ResolverMarkers};
 
 /// A map of package names to their associated, required local versions across all forks.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct Locals(FxHashMap<PackageName, Vec<(Option<MarkerTree>, Version)>>);
+pub(crate) struct Locals(ForkMap<Version>);
 
 impl Locals {
     /// Determine the set of permitted local versions in the [`Manifest`].
@@ -20,20 +20,17 @@ impl Locals {
         markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Self {
-        let mut required: FxHashMap<PackageName, Vec<_>> = FxHashMap::default();
+        let mut locals = ForkMap::default();
 
         // Add all direct requirements and constraints. There's no need to look for conflicts,
         // since conflicts will be enforced by the solver.
         for requirement in manifest.requirements(markers, dependencies) {
             if let Some(local) = from_source(&requirement.source) {
-                required
-                    .entry(requirement.name.clone())
-                    .or_default()
-                    .push((requirement.marker.clone(), local));
+                locals.add(&requirement, local);
             }
         }
 
-        Self(required)
+        Self(locals)
     }
 
     /// Return a list of local versions that are compatible with a package in the given fork.
@@ -42,35 +39,7 @@ impl Locals {
         package_name: &PackageName,
         markers: &ResolverMarkers,
     ) -> Vec<&Version> {
-        let Some(locals) = self.0.get(package_name) else {
-            return Vec::new();
-        };
-
-        match markers {
-            // If we are solving for a specific environment we already filtered
-            // compatible requirements `from_manifest`.
-            ResolverMarkers::SpecificEnvironment(_) => {
-                locals.first().map(|(_, local)| local).into_iter().collect()
-            }
-
-            // Return all locals that were requested with markers that are compatible
-            // with the current fork.
-            //
-            // Compatibility implies that the markers are not disjoint. The resolver will
-            // choose the most compatible local when it narrows to the specific fork.
-            ResolverMarkers::Fork(fork) => locals
-                .iter()
-                .filter(|(marker, _)| {
-                    !marker
-                        .as_ref()
-                        .is_some_and(|marker| is_disjoint(fork, marker))
-                })
-                .map(|(_, local)| local)
-                .collect(),
-
-            // If we haven't forked yet, all locals are potentially compatible.
-            ResolverMarkers::Universal => locals.iter().map(|(_, local)| local).collect(),
-        }
+        self.0.get(package_name, markers)
     }
 
     /// Given a specifier that may include the version _without_ a local segment, return a specifier

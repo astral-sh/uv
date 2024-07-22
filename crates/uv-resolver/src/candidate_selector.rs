@@ -12,10 +12,10 @@ use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::Preferences;
-use crate::prerelease_mode::PreReleaseStrategy;
+use crate::prerelease_mode::{AllowPreRelease, PreReleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
-use crate::{Exclusions, Manifest, Options};
+use crate::{Exclusions, Manifest, Options, ResolverMarkers};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_field_names)]
@@ -68,13 +68,6 @@ impl CandidateSelector {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum AllowPreRelease {
-    Yes,
-    No,
-    IfNecessary,
-}
-
 impl CandidateSelector {
     /// Select a [`Candidate`] from a set of candidate versions and files.
     ///
@@ -89,35 +82,52 @@ impl CandidateSelector {
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
+        markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
-        if let Some(preferred) = Self::get_preferred(
+        if let Some(preferred) = self.get_preferred(
             package_name,
             range,
             version_maps,
             preferences,
             installed_packages,
             exclusions,
+            markers,
         ) {
             return Some(preferred);
         }
 
-        self.select_no_preference(package_name, range, version_maps)
+        self.select_no_preference(package_name, range, version_maps, markers)
     }
 
     /// Get a preferred version if one exists. This is the preference from a lockfile or a locally
     /// installed version.
     fn get_preferred<'a, InstalledPackages: InstalledPackagesProvider>(
+        &self,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
+        markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
         // and the preference satisfies the current range, use that.
         if let Some(version) = preferences.version(package_name) {
-            if range.contains(version) {
+            'preference: {
+                // Respect the version range for this requirement.
+                if !range.contains(version) {
+                    break 'preference;
+                }
+
+                // Respect the pre-release strategy for this fork.
+                if version.any_prerelease()
+                    && self.prerelease_strategy.allows(package_name, markers)
+                        != AllowPreRelease::Yes
+                {
+                    break 'preference;
+                }
+
                 // Check for a locally installed distribution that matches the preferred version
                 if !exclusions.contains(package_name) {
                     let installed_dists = installed_packages.get_packages(package_name);
@@ -167,16 +177,27 @@ impl CandidateSelector {
                 [] => {}
                 [dist] => {
                     let version = dist.version();
-                    if range.contains(version) {
-                        debug!("Found installed version of {dist} that satisfies {range}");
 
-                        return Some(Candidate {
-                            name: package_name,
-                            version,
-                            dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
-                            choice_kind: VersionChoiceKind::Installed,
-                        });
+                    // Respect the version range for this requirement.
+                    if !range.contains(version) {
+                        return None;
                     }
+
+                    // Respect the pre-release strategy for this fork.
+                    if version.any_prerelease()
+                        && self.prerelease_strategy.allows(package_name, markers)
+                            != AllowPreRelease::Yes
+                    {
+                        return None;
+                    }
+
+                    debug!("Found installed version of {dist} that satisfies {range}");
+                    return Some(Candidate {
+                        name: package_name,
+                        version,
+                        dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
+                        choice_kind: VersionChoiceKind::Installed,
+                    });
                 }
                 // We do not consider installed distributions with multiple versions because
                 // during installation these must be reinstalled from the remote
@@ -189,29 +210,6 @@ impl CandidateSelector {
         None
     }
 
-    /// Determine the appropriate prerelease strategy for the current package.
-    fn allow_prereleases(&self, package_name: &PackageName) -> AllowPreRelease {
-        match &self.prerelease_strategy {
-            PreReleaseStrategy::Disallow => AllowPreRelease::No,
-            PreReleaseStrategy::Allow => AllowPreRelease::Yes,
-            PreReleaseStrategy::IfNecessary => AllowPreRelease::IfNecessary,
-            PreReleaseStrategy::Explicit(packages) => {
-                if packages.contains(package_name) {
-                    AllowPreRelease::Yes
-                } else {
-                    AllowPreRelease::No
-                }
-            }
-            PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
-                if packages.contains(package_name) {
-                    AllowPreRelease::Yes
-                } else {
-                    AllowPreRelease::IfNecessary
-                }
-            }
-        }
-    }
-
     /// Select a [`Candidate`] without checking for version preference such as an existing
     /// lockfile.
     pub(crate) fn select_no_preference<'a>(
@@ -219,13 +217,14 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
+        markers: &ResolverMarkers,
     ) -> Option<Candidate> {
         tracing::trace!(
             "selecting candidate for package {package_name} with range {range:?} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name);
-        let allow_prerelease = self.allow_prereleases(package_name);
+        let allow_prerelease = self.prerelease_strategy.allows(package_name, markers);
 
         if self.index_strategy == IndexStrategy::UnsafeBestMatch {
             if highest {

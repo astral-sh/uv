@@ -18,9 +18,10 @@ use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::fork_urls::ForkUrls;
+use crate::prerelease_mode::AllowPreRelease;
 use crate::python_requirement::{PythonRequirement, PythonTarget};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
-use crate::RequiresPython;
+use crate::{RequiresPython, ResolverMarkers};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 
@@ -407,6 +408,7 @@ impl PubGrubReportFormatter<'_> {
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
+        markers: &ResolverMarkers,
     ) -> IndexSet<PubGrubHint> {
         let mut hints = IndexSet::default();
         match derivation_tree {
@@ -416,7 +418,9 @@ impl PubGrubReportFormatter<'_> {
                 if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
                     if !fork_urls.contains_key(name) {
-                        self.prerelease_available_hint(package, name, set, selector, &mut hints);
+                        self.prerelease_available_hint(
+                            package, name, set, selector, markers, &mut hints,
+                        );
                     }
                 }
 
@@ -465,6 +469,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
+                    markers,
                 ));
                 hints.extend(self.hints(
                     &derived.cause2,
@@ -473,6 +478,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
+                    markers,
                 ));
             }
         }
@@ -569,6 +575,7 @@ impl PubGrubReportFormatter<'_> {
         name: &PackageName,
         set: &Range<Version>,
         selector: &CandidateSelector,
+        markers: &ResolverMarkers,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let any_prerelease = set.iter().any(|(start, end)| {
@@ -587,7 +594,7 @@ impl PubGrubReportFormatter<'_> {
 
         if any_prerelease {
             // A pre-release marker appeared in the version requirements.
-            if !selector.prerelease_strategy().allows(name) {
+            if selector.prerelease_strategy().allows(name, markers) != AllowPreRelease::Yes {
                 hints.insert(PubGrubHint::PreReleaseRequested {
                     package: package.clone(),
                     range: self.simplify_set(set, package).into_owned(),
@@ -601,7 +608,7 @@ impl PubGrubReportFormatter<'_> {
                 .find(|version| set.contains(version))
         }) {
             // There are pre-release versions available for the package.
-            if !selector.prerelease_strategy().allows(name) {
+            if selector.prerelease_strategy().allows(name, markers) != AllowPreRelease::Yes {
                 hints.insert(PubGrubHint::PreReleaseAvailable {
                     package: package.clone(),
                     version: version.clone(),

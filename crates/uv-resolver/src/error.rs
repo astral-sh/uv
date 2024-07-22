@@ -232,6 +232,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.unavailable_packages,
             &self.incomplete_packages,
             &self.fork_urls,
+            &self.markers,
         ) {
             write!(f, "\n\n{hint}")?;
         }

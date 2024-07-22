@@ -1,10 +1,10 @@
 use pypi_types::RequirementSource;
-use rustc_hash::FxHashSet;
 
 use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
-use crate::{DependencyMode, Manifest};
+use crate::resolver::ForkSet;
+use crate::{DependencyMode, Manifest, ResolverMarkers};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -57,11 +57,11 @@ pub(crate) enum PreReleaseStrategy {
 
     /// Allow pre-release versions for first-party packages with explicit pre-release markers in
     /// their version requirements.
-    Explicit(FxHashSet<PackageName>),
+    Explicit(ForkSet),
 
     /// Allow pre-release versions if all versions of a package are pre-release, or if the package
     /// has an explicit pre-release marker in its version requirements.
-    IfNecessaryOrExplicit(FxHashSet<PackageName>),
+    IfNecessaryOrExplicit(ForkSet),
 }
 
 impl PreReleaseStrategy {
@@ -71,51 +71,72 @@ impl PreReleaseStrategy {
         markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Self {
+        let mut packages = ForkSet::default();
+
         match mode {
             PreReleaseMode::Disallow => Self::Disallow,
             PreReleaseMode::Allow => Self::Allow,
             PreReleaseMode::IfNecessary => Self::IfNecessary,
-            PreReleaseMode::Explicit => Self::Explicit(
-                manifest
-                    .requirements(markers, dependencies)
-                    .filter(|requirement| {
-                        let RequirementSource::Registry { specifier, .. } = &requirement.source
-                        else {
-                            return false;
-                        };
-                        specifier
-                            .iter()
-                            .any(pep440_rs::VersionSpecifier::any_prerelease)
-                    })
-                    .map(|requirement| requirement.name.clone())
-                    .collect(),
-            ),
-            PreReleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(
-                manifest
-                    .requirements(markers, dependencies)
-                    .filter(|requirement| {
-                        let RequirementSource::Registry { specifier, .. } = &requirement.source
-                        else {
-                            return false;
-                        };
-                        specifier
-                            .iter()
-                            .any(pep440_rs::VersionSpecifier::any_prerelease)
-                    })
-                    .map(|requirement| requirement.name.clone())
-                    .collect(),
-            ),
+            _ => {
+                for requirement in manifest.requirements(markers, dependencies) {
+                    let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+                        continue;
+                    };
+
+                    if specifier
+                        .iter()
+                        .any(pep440_rs::VersionSpecifier::any_prerelease)
+                    {
+                        packages.add(&requirement, ());
+                    }
+                }
+
+                match mode {
+                    PreReleaseMode::Explicit => Self::Explicit(packages),
+                    PreReleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(packages),
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 
     /// Returns `true` if a [`PackageName`] is allowed to have pre-release versions.
-    pub(crate) fn allows(&self, package: &PackageName) -> bool {
+    pub(crate) fn allows(
+        &self,
+        package_name: &PackageName,
+        markers: &ResolverMarkers,
+    ) -> AllowPreRelease {
         match self {
-            Self::Disallow => false,
-            Self::Allow => true,
-            Self::IfNecessary => false,
-            Self::Explicit(packages) => packages.contains(package),
-            Self::IfNecessaryOrExplicit(packages) => packages.contains(package),
+            PreReleaseStrategy::Disallow => AllowPreRelease::No,
+            PreReleaseStrategy::Allow => AllowPreRelease::Yes,
+            PreReleaseStrategy::IfNecessary => AllowPreRelease::IfNecessary,
+            PreReleaseStrategy::Explicit(packages) => {
+                if packages.contains(package_name, markers) {
+                    AllowPreRelease::Yes
+                } else {
+                    AllowPreRelease::No
+                }
+            }
+            PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
+                if packages.contains(package_name, markers) {
+                    AllowPreRelease::Yes
+                } else {
+                    AllowPreRelease::IfNecessary
+                }
+            }
         }
     }
+}
+
+/// The pre-release strategy for a given package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum AllowPreRelease {
+    /// Allow all pre-release versions.
+    Yes,
+
+    /// Disallow all pre-release versions.
+    No,
+
+    /// Allow pre-release versions if all versions of this package are pre-release.
+    IfNecessary,
 }

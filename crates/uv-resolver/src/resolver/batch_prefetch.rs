@@ -12,7 +12,7 @@ use pep440_rs::Version;
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::Request;
-use crate::{InMemoryIndex, PythonRequirement, ResolveError, VersionsResponse};
+use crate::{InMemoryIndex, PythonRequirement, ResolveError, ResolverMarkers, VersionsResponse};
 
 enum BatchPrefetchStrategy {
     /// Go through the next versions assuming the existing selection and its constraints
@@ -53,6 +53,7 @@ impl BatchPrefetcher {
         request_sink: &Sender<Request>,
         index: &InMemoryIndex,
         selector: &CandidateSelector,
+        markers: &ResolverMarkers,
     ) -> anyhow::Result<(), ResolveError> {
         let PubGrubPackageInner::Package {
             name,
@@ -92,7 +93,7 @@ impl BatchPrefetcher {
                     previous,
                 } => {
                     if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map)
+                        selector.select_no_preference(name, &compatible, version_map, markers)
                     {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
@@ -116,7 +117,7 @@ impl BatchPrefetcher {
                         Range::strictly_higher_than(previous)
                     };
                     if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map)
+                        selector.select_no_preference(name, &range, version_map, markers)
                     {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),
