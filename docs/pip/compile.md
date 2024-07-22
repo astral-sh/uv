@@ -97,12 +97,11 @@ including a package in a constraints file will _not_ trigger the installation of
 
 To define an constraint, define a bound for a package:
 
-```text
-# constraints.txt
+```text title="constraints.txt
 pydantic<2.0
 ```
 
-To use a constraint file:
+To use a constraints file:
 
 ```shell
 uv pip compile requirements.in --constraint constraints.txt
@@ -122,15 +121,14 @@ Overrides are most often used to remove upper bounds from a transtive dependency
 
 To define an override, define the new requirement for the problematic package:
 
-```text
-# override.txt
+```text overrides.txt
 c>=2.0
 ```
 
-To use an override file:
+To use an overrides file:
 
 ```shell
-uv pip compile requirements.in --override override.txt
+uv pip compile requirements.in --override overrides.txt
 ```
 
 Now, resolution can succeed. However, note that if `a` is _correct_ that it does not support `c>=2.0` then a runtime error will likely be encountered when using the packages.

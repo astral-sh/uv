@@ -8,7 +8,7 @@ The `pyproject.toml` file is the Python standard for defining configuration for 
 
 To define project dependencies in a `pyproject.toml` file:
 
-```toml
+```toml title="pyproject.toml"
 [project]
 dependencies = [
   "httpx",
@@ -18,7 +18,7 @@ dependencies = [
 
 To define optional dependencies in a `pyproject.toml` file:
 
-```toml
+```toml title="pyproject.toml"
 [project.optional-dependencies]
 cli = [
   "rich",
@@ -36,7 +36,7 @@ It is also common to use a lightweight `requirements.txt` format to declare the 
 
 To define dependencies in a `requirements.in` file:
 
-```text
+```text title="requirements.in"
 httpx
 ruff>=0.3.0
 ```

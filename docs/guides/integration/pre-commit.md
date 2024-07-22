@@ -4,7 +4,7 @@ An official pre-commit hook is provided at [`astral-sh/uv-pre-commit`](https://g
 
 To compile requirements via pre-commit, add the following to the `.pre-commit-config.yaml`:
 
-```yaml
+```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
   rev: 0.2.27
@@ -16,7 +16,7 @@ To compile requirements via pre-commit, add the following to the `.pre-commit-co
 
 To compile alternative files, modify `args` and `files`:
 
-```yaml
+```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
   rev: 0.2.27
@@ -29,7 +29,7 @@ To compile alternative files, modify `args` and `files`:
 
 To run the hook over multiple files at the same time:
 
-```yaml
+```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
   rev: 0.2.27

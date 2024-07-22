@@ -26,8 +26,8 @@ uv venv --python 3.11
 ```
 
 Note this requires the requested Python version to be available on the system.
-However, in preview mode, [uv will download Python for you](../python-versions.md).
-See the [Python request](../python.md) documentation for more details on requesting Python versions.
+However, if available, uv will download Python for you.
+See the [Python version](../python-versions.md) documentation for more details.
 
 ## Using a virtual environment
 
