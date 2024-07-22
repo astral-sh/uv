@@ -4287,7 +4287,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
-      ╰─▶ Because dearpygui==1.9.1 has no wheels are available with a matching Python ABI and project==0.1.0 depends on dearpygui==1.9.1, we can conclude that project==0.1.0 cannot be used.
+      ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python ABI tag and project==0.1.0 depends on dearpygui==1.9.1, we can conclude that project==0.1.0 cannot be used.
           And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
     "###);
 
