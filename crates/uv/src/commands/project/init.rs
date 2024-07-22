@@ -3,12 +3,13 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
+
 use pep508_rs::PackageName;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
-use uv_workspace::{ProjectWorkspace, WorkspaceError};
+use uv_workspace::{Workspace, WorkspaceError};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -53,7 +54,7 @@ pub(crate) async fn init(
             .unwrap_or_else(|_| path.simplified().to_path_buf());
 
         anyhow::bail!(
-            "Project is already initialized in {}",
+            "Project is already initialized in `{}`",
             path.display().cyan()
         );
     }
@@ -69,8 +70,9 @@ pub(crate) async fn init(
     let workspace = if isolated {
         None
     } else {
-        match ProjectWorkspace::discover(&path, None).await {
-            Ok(project) => Some(project),
+        // Attempt to find a workspace root.
+        match Workspace::discover(&path, None).await {
+            Ok(workspace) => Some(workspace),
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(err) => return Err(err.into()),
         }
@@ -114,25 +116,20 @@ pub(crate) async fn init(
 
     if let Some(workspace) = workspace {
         // Add the package to the workspace.
-        let mut pyproject =
-            PyProjectTomlMut::from_toml(workspace.current_project().pyproject_toml())?;
-        pyproject.add_workspace(path.strip_prefix(workspace.project_root())?)?;
+        let mut pyproject = PyProjectTomlMut::from_toml(workspace.pyproject_toml())?;
+        pyproject.add_workspace(path.strip_prefix(workspace.install_path())?)?;
 
         // Save the modified `pyproject.toml`.
         fs_err::write(
-            workspace.current_project().root().join("pyproject.toml"),
+            workspace.install_path().join("pyproject.toml"),
             pyproject.to_string(),
         )?;
 
         writeln!(
             printer.stderr(),
-            "Adding {} as member of workspace {}",
+            "Adding `{}` as member of workspace `{}`",
             name.cyan(),
-            workspace
-                .workspace()
-                .install_path()
-                .simplified_display()
-                .cyan()
+            workspace.install_path().simplified_display().cyan()
         )?;
     }
 
