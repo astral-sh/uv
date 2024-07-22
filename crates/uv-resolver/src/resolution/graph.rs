@@ -250,39 +250,35 @@ impl ResolutionGraph {
         }
 
         // Add every edge to the graph.
-        for (names, version_set) in resolution.dependencies {
-            for versions in version_set {
-                let from_index = names.from.as_ref().map_or(root_index, |from| {
-                    inverse[&(
-                        from,
-                        &versions.from_version,
-                        versions.from_extra.as_ref(),
-                        versions.from_dev.as_ref(),
-                    )]
-                });
-                let to_index = inverse[&(
-                    &names.to,
-                    &versions.to_version,
-                    versions.to_extra.as_ref(),
-                    versions.to_dev.as_ref(),
-                )];
+        for edge in resolution.edges {
+            let from_index = edge.from.as_ref().map_or(root_index, |from| {
+                inverse[&(
+                    from,
+                    &edge.from_version,
+                    edge.from_extra.as_ref(),
+                    edge.from_dev.as_ref(),
+                )]
+            });
+            let to_index = inverse[&(
+                &edge.to,
+                &edge.to_version,
+                edge.to_extra.as_ref(),
+                edge.to_dev.as_ref(),
+            )];
 
-                if let Some(edge) = petgraph
-                    .find_edge(from_index, to_index)
-                    .and_then(|edge| petgraph.edge_weight_mut(edge))
-                {
-                    // If either the existing marker or new marker is `None`, then the dependency is
-                    // included unconditionally, and so the combined marker should be `None`.
-                    if let (Some(marker), Some(ref version_marker)) =
-                        (edge.as_mut(), versions.marker)
-                    {
-                        marker.or(version_marker.clone());
-                    } else {
-                        *edge = None;
-                    }
+            if let Some(marker) = petgraph
+                .find_edge(from_index, to_index)
+                .and_then(|edge| petgraph.edge_weight_mut(edge))
+            {
+                // If either the existing marker or new marker is `None`, then the dependency is
+                // included unconditionally, and so the combined marker should be `None`.
+                if let (Some(marker), Some(ref version_marker)) = (marker.as_mut(), edge.marker) {
+                    marker.or(version_marker.clone());
                 } else {
-                    petgraph.update_edge(from_index, to_index, versions.marker.clone());
+                    *marker = None;
                 }
+            } else {
+                petgraph.update_edge(from_index, to_index, edge.marker.clone());
             }
         }
 
