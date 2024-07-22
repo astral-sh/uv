@@ -485,201 +485,96 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 self.on_progress(&state.next, &version);
 
-                if state
+                if !state
                     .added_dependencies
                     .entry(state.next.clone())
                     .or_default()
                     .insert(version.clone())
                 {
-                    let for_package = if let PubGrubPackageInner::Root(_) = &*state.next {
-                        None
-                    } else {
-                        state.next.name().map(|name| format!("{name}=={version}"))
-                    };
-                    // Retrieve that package dependencies.
-                    let forked_deps = self.get_dependencies_forking(
-                        &state.next,
-                        &version,
-                        &state.fork_urls,
-                        &state.markers,
-                        state.requires_python.as_ref(),
-                    )?;
-                    match forked_deps {
-                        ForkedDependencies::Unavailable(reason) => {
-                            state
-                                .pubgrub
-                                .add_incompatibility(Incompatibility::custom_version(
-                                    state.next.clone(),
-                                    version.clone(),
-                                    UnavailableReason::Version(reason),
-                                ));
-                            continue;
-                        }
-                        ForkedDependencies::Unforked(dependencies) => {
-                            state.add_package_version_dependencies(
-                                for_package.as_deref(),
-                                &version,
-                                &self.urls,
-                                &self.locals,
-                                dependencies.clone(),
-                                &self.git,
-                                self.selector.resolution_strategy(),
-                            )?;
+                    // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
+                    // terms and can add the decision directly.
+                    state
+                        .pubgrub
+                        .partial_solution
+                        .add_decision(state.next.clone(), version);
+                    continue;
+                }
 
-                            // Emit a request to fetch the metadata for each registry package.
-                            for dependency in &dependencies {
-                                let PubGrubDependency {
-                                    package,
-                                    version: _,
-                                    specifier: _,
-                                    url: _,
-                                } = dependency;
-                                let url = package.name().and_then(|name| state.fork_urls.get(name));
-                                self.visit_package(package, url, &request_sink)?;
-                            }
-                            continue;
-                        }
-                        ForkedDependencies::Forked {
-                            forks,
-                            diverging_packages,
-                        } => {
-                            debug!(
-                                "Splitting resolution on {}=={} over {}",
-                                state.next,
-                                version,
-                                diverging_packages
-                                    .iter()
-                                    .map(ToString::to_string)
-                                    .join(", ")
-                            );
-                            assert!(forks.len() >= 2);
-                            // This is a somewhat tortured technique to ensure
-                            // that our resolver state is only cloned as much
-                            // as it needs to be. We basically move the state
-                            // into `forked_states`, and then only clone it if
-                            // there is at least one more fork to visit.
-                            let markers = state.markers.clone();
-                            let mut cur_state = Some(state);
-                            let forks_len = forks.len();
-                            for (i, fork) in forks.into_iter().enumerate() {
-                                let is_last = i == forks_len - 1;
-                                let mut forked_state = cur_state.take().unwrap();
-                                if !is_last {
-                                    cur_state = Some(forked_state.clone());
-                                }
+                let for_package = if let PubGrubPackageInner::Root(_) = &*state.next {
+                    None
+                } else {
+                    state.next.name().map(|name| format!("{name}=={version}"))
+                };
+                // Retrieve that package dependencies.
+                let forked_deps = self.get_dependencies_forking(
+                    &state.next,
+                    &version,
+                    &state.fork_urls,
+                    &state.markers,
+                    state.requires_python.as_ref(),
+                )?;
+                match forked_deps {
+                    ForkedDependencies::Unavailable(reason) => {
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::custom_version(
+                                state.next.clone(),
+                                version.clone(),
+                                UnavailableReason::Version(reason),
+                            ));
+                    }
+                    ForkedDependencies::Unforked(dependencies) => {
+                        state.add_package_version_dependencies(
+                            for_package.as_deref(),
+                            &version,
+                            &self.urls,
+                            &self.locals,
+                            dependencies.clone(),
+                            &self.git,
+                            self.selector.resolution_strategy(),
+                        )?;
 
-                                let combined_markers = forked_state.markers.and(fork.markers);
-                                let combined_markers = normalize(combined_markers, None)
-                                    .expect("Fork markers are universal");
-
-                                // If the fork contains a narrowed Python requirement, apply it.
-                                let python_requirement = requires_python_marker(&combined_markers)
-                                    .and_then(|marker| {
-                                        forked_state.python_requirement.narrow(&marker)
-                                    });
-                                if let Some(python_requirement) = python_requirement {
-                                    if let Some(target) = python_requirement.target() {
-                                        debug!("Narrowed `requires-python` bound to: {target}");
-                                    }
-                                    forked_state.requires_python =
-                                        if forked_state.requires_python.is_some() {
-                                            python_requirement.to_marker_tree()
-                                        } else {
-                                            None
-                                        };
-                                    forked_state.python_requirement = python_requirement;
-                                }
-
-                                forked_state.markers = ResolverMarkers::Fork(combined_markers);
-                                forked_state.add_package_version_dependencies(
-                                    for_package.as_deref(),
-                                    &version,
-                                    &self.urls,
-                                    &self.locals,
-                                    fork.dependencies.clone(),
-                                    &self.git,
-                                    self.selector.resolution_strategy(),
-                                )?;
-                                // Emit a request to fetch the metadata for each registry package.
-                                for dependency in &fork.dependencies {
-                                    let PubGrubDependency {
-                                        package,
-                                        version: _,
-                                        specifier: _,
-                                        url: _,
-                                    } = dependency;
-                                    let url = package
-                                        .name()
-                                        .and_then(|name| forked_state.fork_urls.get(name));
-                                    self.visit_package(package, url, &request_sink)?;
-                                }
-                                forked_states.push(forked_state);
-                            }
-                            debug!(
-                                "Pre-fork split {} took {:.3}s",
-                                markers,
-                                start.elapsed().as_secs_f32()
-                            );
-                            continue 'FORK;
+                        // Emit a request to fetch the metadata for each registry package.
+                        for dependency in &dependencies {
+                            let PubGrubDependency {
+                                package,
+                                version: _,
+                                specifier: _,
+                                url: _,
+                            } = dependency;
+                            let url = package.name().and_then(|name| state.fork_urls.get(name));
+                            self.visit_package(package, url, &request_sink)?;
                         }
                     }
+                    ForkedDependencies::Forked {
+                        forks,
+                        diverging_packages,
+                    } => {
+                        debug!(
+                            "Pre-fork split {} took {:.3}s",
+                            state.markers,
+                            start.elapsed().as_secs_f32()
+                        );
+                        for new_fork_state in self.forks_to_fork_states(
+                            state,
+                            &version,
+                            forks,
+                            &request_sink,
+                            for_package.as_deref(),
+                            &diverging_packages,
+                        ) {
+                            forked_states.push(new_fork_state?);
+                        }
+                        continue 'FORK;
+                    }
                 }
-                // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
-                // terms and can add the decision directly.
-                state
-                    .pubgrub
-                    .partial_solution
-                    .add_decision(state.next.clone(), version);
             }
         }
         let mut combined = Resolution::default();
         for resolution in resolutions {
             combined.union(resolution);
         }
-        // When trace level logging is enabled, we dump the final
-        // unioned resolution, including markers, to help with
-        // debugging. Namely, this tells use precisely the state
-        // emitted by the resolver before going off to construct a
-        // resolution graph.
-        if tracing::enabled!(Level::TRACE) {
-            for (names, versions) in &combined.dependencies {
-                trace!(
-                    "Resolution: {} -> {}",
-                    names
-                        .from
-                        .as_ref()
-                        .map(PackageName::as_str)
-                        .unwrap_or("ROOT"),
-                    names.to,
-                );
-                for v in versions {
-                    // The unwraps below are OK because `write`ing to
-                    // a String can never fail (except for OOM).
-                    let mut msg = String::new();
-                    write!(msg, "{}", v.from_version).unwrap();
-                    if let Some(ref extra) = v.from_extra {
-                        write!(msg, " (extra: {extra})").unwrap();
-                    }
-                    if let Some(ref dev) = v.from_dev {
-                        write!(msg, " (group: {dev})").unwrap();
-                    }
-
-                    write!(msg, " -> ").unwrap();
-
-                    write!(msg, "{}", v.to_version).unwrap();
-                    if let Some(ref extra) = v.to_extra {
-                        write!(msg, " (extra: {extra})").unwrap();
-                    }
-                    if let Some(ref dev) = v.to_dev {
-                        write!(msg, " (group: {dev})").unwrap();
-                    }
-                    if let Some(ref marker) = v.marker {
-                        write!(msg, " ; {marker}").unwrap();
-                    }
-                    trace!("Resolution:     {msg}");
-                }
-            }
-        }
+        Self::trace_resolution(&combined);
         ResolutionGraph::from_state(
             combined,
             &self.requirements,
@@ -691,6 +586,135 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.python_requirement,
             self.options,
         )
+    }
+
+    /// When trace level logging is enabled, we dump the final
+    /// unioned resolution, including markers, to help with
+    /// debugging. Namely, this tells use precisely the state
+    /// emitted by the resolver before going off to construct a
+    /// resolution graph.
+    fn trace_resolution(combined: &Resolution) {
+        if !tracing::enabled!(Level::TRACE) {
+            return;
+        }
+        for (names, versions) in &combined.dependencies {
+            trace!(
+                "Resolution: {} -> {}",
+                names
+                    .from
+                    .as_ref()
+                    .map(PackageName::as_str)
+                    .unwrap_or("ROOT"),
+                names.to,
+            );
+            for v in versions {
+                // The unwraps below are OK because `write`ing to
+                // a String can never fail (except for OOM).
+                let mut msg = String::new();
+                write!(msg, "{}", v.from_version).unwrap();
+                if let Some(ref extra) = v.from_extra {
+                    write!(msg, " (extra: {extra})").unwrap();
+                }
+                if let Some(ref dev) = v.from_dev {
+                    write!(msg, " (group: {dev})").unwrap();
+                }
+
+                write!(msg, " -> ").unwrap();
+
+                write!(msg, "{}", v.to_version).unwrap();
+                if let Some(ref extra) = v.to_extra {
+                    write!(msg, " (extra: {extra})").unwrap();
+                }
+                if let Some(ref dev) = v.to_dev {
+                    write!(msg, " (group: {dev})").unwrap();
+                }
+                if let Some(ref marker) = v.marker {
+                    write!(msg, " ; {marker}").unwrap();
+                }
+                trace!("Resolution:     {msg}");
+            }
+        }
+    }
+
+    /// Convert the dependency [`Fork`]s into [`ForkState`]s.
+    fn forks_to_fork_states<'a>(
+        &'a self,
+        current_state: ForkState,
+        version: &'a Version,
+        forks: Vec<Fork>,
+        request_sink: &'a Sender<Request>,
+        for_package: Option<&'a str>,
+        diverging_packages: &'a [PackageName],
+    ) -> impl Iterator<Item = Result<ForkState, ResolveError>> + 'a {
+        debug!(
+            "Splitting resolution on {}=={} over {} into {} resolution with separate markers",
+            current_state.next,
+            version,
+            diverging_packages
+                .iter()
+                .map(ToString::to_string)
+                .join(", "),
+            forks.len()
+        );
+        assert!(forks.len() >= 2);
+        // This is a somewhat tortured technique to ensure
+        // that our resolver state is only cloned as much
+        // as it needs to be. We basically move the state
+        // into `forked_states`, and then only clone it if
+        // there is at least one more fork to visit.
+        let mut cur_state = Some(current_state);
+        let forks_len = forks.len();
+        forks.into_iter().enumerate().map(move |(i, fork)| {
+            let is_last = i == forks_len - 1;
+            let mut forked_state = cur_state.take().unwrap();
+            if !is_last {
+                cur_state = Some(forked_state.clone());
+            }
+
+            let combined_markers = forked_state.markers.and(fork.markers);
+            let combined_markers =
+                normalize(combined_markers, None).expect("Fork markers are universal");
+
+            // If the fork contains a narrowed Python requirement, apply it.
+            let python_requirement = requires_python_marker(&combined_markers)
+                .and_then(|marker| forked_state.python_requirement.narrow(&marker));
+            if let Some(python_requirement) = python_requirement {
+                if let Some(target) = python_requirement.target() {
+                    debug!("Narrowed `requires-python` bound to: {target}");
+                }
+                forked_state.requires_python = if forked_state.requires_python.is_some() {
+                    python_requirement.to_marker_tree()
+                } else {
+                    None
+                };
+                forked_state.python_requirement = python_requirement;
+            }
+
+            forked_state.markers = ResolverMarkers::Fork(combined_markers);
+            forked_state.add_package_version_dependencies(
+                for_package,
+                version,
+                &self.urls,
+                &self.locals,
+                fork.dependencies.clone(),
+                &self.git,
+                self.selector.resolution_strategy(),
+            )?;
+            // Emit a request to fetch the metadata for each registry package.
+            for dependency in &fork.dependencies {
+                let PubGrubDependency {
+                    package,
+                    version: _,
+                    specifier: _,
+                    url: _,
+                } = dependency;
+                let url = package
+                    .name()
+                    .and_then(|name| forked_state.fork_urls.get(name));
+                self.visit_package(package, url, request_sink)?;
+            }
+            Ok(forked_state)
+        })
     }
 
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
@@ -2622,7 +2646,7 @@ impl Dependencies {
             assert!(fork_groups.forks.len() >= 2, "expected definitive fork");
             let mut new_forks: Vec<Fork> = vec![];
             if let Some(markers) = fork_groups.remaining_universe() {
-                debug!("Adding split to cover possibly incomplete markers: {markers}");
+                trace!("Adding split to cover possibly incomplete markers: {markers}");
                 new_forks.push(Fork {
                     dependencies: vec![],
                     markers,
