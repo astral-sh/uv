@@ -1,26 +1,18 @@
-**Warning: This documentation refers to experimental features that may change.**
-
 # Python versions
 
-A Python installation is composed of a Python interpreter (i.e. the `python` executable), the standard library, and other supporting files. It is common for an operating system to come with a Python version installed and there are many tools to help manage Python versions.
+A Python version is composed of a Python interpreter (i.e. the `python` executable), the standard library, and other supporting files. It is common for an operating system to come with a Python version installed.
 
 ## Requesting a version
 
 uv will automatically download a Python version if it cannot be found.
 
-In stable commands, this behavior requires enabling preview mode. For example, when creating a virtual environment:
+For example, when creating a virtual environment:
 
 ```bash
-uv venv --preview --python 3.11.6
+uv venv --python 3.11.6
 ```
 
 uv will ensure that Python 3.11.6 is available — downloading and installing it if necessary — then create the virtual environment with it.
-
-For commands that are in preview, like `uv sync`, preview behavior is always on.
-
-```bash
-uv sync --python 3.12.3
-```
 
 Many Python version request formats are supported:
 
@@ -127,3 +119,11 @@ When searching for a Python version, the following locations are checked:
 If a specific Python version is requested, e.g. `--python 3.7`, additional executable names are included in the search:
 
 - A Python interpreter on the `PATH` as, e.g., `python3.7` on macOS and Linux.
+
+## Python distributions
+
+Python does not publish official distributable binaries, uv uses third-party standalone distributions from the [`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The project is partially maintained by the uv maintainers and is used by many other Python projects.
+
+The Python distributions are self-contained and highly-portable. Additionally, these distributions have various build-time optimizations enabled to ensure they are performant.
+
+These distributions have some behavior quirks, generally as a consequence of portability. See the [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html) documentation for details. 

@@ -1,14 +1,19 @@
 # Installing Python
 
-If Python is already installed, uv will [detect and use](#using-an-existing-python-installation) it without configuration. However, uv can also install and manage Python versions.
+If Python is already installed on your system, uv will [detect and use](#using-an-existing-python-installation) it without configuration. However, uv can also install and manage Python versions for you.
 
-To install Python:
+To install the latest Python version:
 
 ```console
 $ uv python install
 ```
 
-This will install a uv-managed Python version even if there is already a Python installation on the system.
+This will install a uv managed Python version even if there is already a Python installation on your system.
+
+!!! note
+
+    Python does not publish official distributable binaries so uv uses third-party distributions from the [`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The project is partially maintained by the uv maintainers and is used by many other Python projects. See the [Python distributions](../python-versions.md#python-distributions) documentation for more details.
+
 
 <!-- TODO(zanieb): Restore when Python shim management is added
 Note that when an automatic Python installation occurs, the `python` command will not be added to the shell. Use `uv python install-shim` to ensure the `python` shim is installed.
@@ -22,7 +27,7 @@ $ python --version
 To prevent uv from managing Python system-wide, provide the `--no-shim` option during installation.
 -->
 
-Once Python is installed, it will be used by `uv` commands.
+Once Python is installed, it will be used by `uv` commands automatically.
 
 ## Installing a specific version
 
@@ -32,7 +37,7 @@ To install a specific Python version:
 $ uv python install 3.12
 ```
 
-See the [Python versions](../python-versions.md) documentation for more details.
+See the [`python install`](../python-versions.md#installing-a-python-version) documentation for more details.
 
 ## Viewing Python installations
 
@@ -66,6 +71,6 @@ Note that when an automatic Python installation occurs, the `python` command wil
 
 ## Using an existing Python installation
 
-uv will also use an existing Python installation if already present on the system. There's no configuration necessary for this behavior: uv will use the system Python if it satisfies the requirements of the command invocation. See the [Python discovery](../python-versions.md#discovery-order) documentation for details.
+uv will also use an existing Python installation if already present on your system. There is no configuration necessary for this behavior: uv will use the system Python if it satisfies the requirements of the command invocation. See the [Python discovery](../python-versions.md#discovery-order) documentation for details.
 
 To force uv to use the system Python, provide the `--python-preference only-system` option. See the [Python version preference](../python-versions.md#adjusting-python-version-preferences) documentation for more details.

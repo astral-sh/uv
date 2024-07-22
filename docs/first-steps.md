@@ -1,72 +1,59 @@
 # First steps with uv
 
-## Check the version
+uv only provides a command-line interface and must be used from a terminal.
 
-After [installing uv](./installation.md), check that it works from the CLI:
+After [installing uv](./installation.md), you can check that uv is installed by running the `uv` command:
 
-```bash
-uv version
+```console
+$ uv
 ```
 
-The installed version should be displayed.
+You should see a help menu listing the available commands.
 
-## uv's interfaces
+## Viewing the version
 
-uv's commands can be grouped into a few sections.
+To check the installed version:
 
-### Project management
+```console
+$ uv version
+```
 
-These commands are intended for managing development of a Python project. In these workflows, management of the virtual environment is done automatically by uv.
+The following are also valid:
 
-- `uv add`
-- `uv remove`
-- `uv sync`
-- `uv lock`
+```console
+$ uv --version      # Same output as `uv version`
+$ uv -V             # Will not include the build commit and date
+$ uv pip --version  # Can be used with a subcommand
+```
 
-See the [project guide](./guides/projects.md) for more details on getting started.
+## Help menus
 
-### Toolchain management
+The `--help` flag can be used to view the help menu for a command, e.g., for `uv`:
 
-These commands are used to manage Python itself. uv is capable of installing and managing multiple Python versions.
+```console
+$ uv --help
+```
 
-- `uv python install`
-- `uv python list`
-- `uv python find`
+To view the help menu for a specific command, e.g., for `uv init`:
 
-See the documentation on [toolchains](./python-versions.md) for more details on getting started.
+```console
+$ uv init --help
+```
 
-### Command-line tool management
+When using the `--help` flag, uv displays a condensed help menu. To view a longer help menu for a command, use `uv help`:
 
-These commands are used to manage command-line tools written in Python.
+```console
+$ uv help
+```
 
-- `uv tool run`
+To view the long help menu for a specific command, e.g., for `uv init`:
 
-See the documentation on [tools](./tools.md) for more details on getting started.
+```console
+$ uv help init
+```
 
-### Low-level plumbing commands
+When using the long help menu, uv will attempt to use `less` or `more` to "page" the output so it is not all displayed at once. To exit the pager, press `q`.
 
-The commands in this group allow manual management of environments and packages. They are intended to be used in legacy workflows or cases where the high-level commands do not provide enough control.
+## Next steps
 
-This command is designed as replacement for the Python `venv` and `virtualenv` modules:
-
-- `uv venv`
-
-These commands are designed as replacements for `pip`:
-
-- `uv pip install`
-- `uv pip show`
-- `uv pip freeze`
-- `uv pip check`
-- `uv pip list`
-- `uv pip uninstall`
-
-These commands are designed as replacements for `pip-tools`:
-
-- `uv pip compile`
-- `uv pip sync`
-
-This command is designed as a replacement for `pipdeptree`:
-
-- `uv pip tree`
-
-Please note these commands do not exactly implement the interfaces and behavior of the tools that informed their design. Consult the [pip-compatibility guide](./pip/compatibility.md) for details on differences.
+Now that you've confirmed uv is installed and know how to get help, check out the [feature overview](./features.md) to start using uv.

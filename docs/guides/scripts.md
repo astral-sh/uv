@@ -5,7 +5,7 @@ script dependencies are properly managed inside and outside of projects.
 
 ## Running a script without dependencies
 
-If a script has no dependencies, it can be executed with `uv run`:
+If your script has no dependencies, you can execute it with `uv run`:
 
 ```python
 print("Hello world")
@@ -16,7 +16,9 @@ $ uv run example.py
 Hello world
 ```
 
-Similarly, if the script depends on a module in the standard library, there's nothing more to do:
+<!-- TODO(zanieb): Once we have a `python` shim, note you can execute it with `python` here -->
+
+Similarly, if your script depends on a module in the standard library, there's nothing more to do:
 
 ```python
 import os
@@ -29,7 +31,7 @@ $ uv run example.py
 /Users/astral
 ```
 
-Arguments can be passed to the script:
+Arguments may be provided to the script:
 
 ```python
 import sys
@@ -45,18 +47,18 @@ $ uv run example.py hello world!
 hello world!
 ```
 
-Note that if `uv run` is used in a _project_, i.e. a directory with a `pyproject.toml`, it will install the current project before running the script. If the script does not depend on the project, use the `--isolated` flag to skip this:
+Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will install the current project before running the script. If your script does not depend on the project, use the `--isolated` flag to skip this:
 
 ```console
 # Note, it is important that the flag comes _before_ the script
 $ uv run --isolated example.py
 ```
 
-See the [projects](./projects.md) guide for more details on working in projects.
+See the [projects guide](./projects.md) for more details on working in projects.
 
 ## Running a script with dependencies
 
-When a script requires dependencies, they must be installed into the environment that the script runs in. uv prefers to create these environments on-demand instead of maintaining a long-lived virtual environment with manually managed dependencies. This requires explicit declaration
+When your script requires other packages, they must be installed into the environment that the script runs in. uv prefers to create these environments on-demand instead of using a long-lived virtual environment with manually managed dependencies. This requires explicit declaration
 of dependencies that are required for the script. Generally, it's recommended to use a [project](./projects.md) or [inline metadata](#declaring-script-dependencies) to declare dependencies, but uv supports requesting dependencies per invocation as well.
 
 For example, the following script requires `rich`.
@@ -79,7 +81,7 @@ Traceback (most recent call last):
 ModuleNotFoundError: No module named 'rich'
 ```
 
-The dependency can be requested with the `--with` option:
+Request the dependency using the `--with` option:
 
 ```console
 $ uv run --with rich example.py
@@ -175,4 +177,4 @@ $ uv run --python 3.10 example.py
 3.10.13
 ```
 
-See the [Python versions](../python-versions.md) documentation for more details on requesting Python versions.
+See the [Python version request](../python-versions.md#requesting-a-version) documentation for more details on requesting Python versions.

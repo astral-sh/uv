@@ -1,5 +1,3 @@
-**Warning: This documentation refers to experimental features that may change.**
-
 # Workspaces
 
 Workspaces help organize large codebases by splitting them into multiple packages with
@@ -25,15 +23,11 @@ exclude = ["example/excluded_example"]
 If `tool.uv.sources` is defined in the workspace root, it applies to all packages, unless
 overridden in the `tool.uv.sources` of a specific project.
 
-## Common usage
+## Common structures
 
-There a two main usage patterns: A root package and helpers, and the flat workspace. The root
-workspace layout defines one main package in the root of the repository, with helper packages in
-`packages`. In the flat layout, all packages are in the `packages` directory, and the root
-`pyproject.toml` defines a so-called virtual workspace.
+There a two main workspace structures: A **root package with helpers** and a **flat workspace**. 
 
-Root package and helpers: In this layout `albatross/pyproject.toml` has both a `project` section and
-a `tool.uv.workspace` section.
+The root workspace layout defines one main package in the root of the repository, with helper packages in `packages`. In this example `albatross/pyproject.toml` has both a `project` section and a `tool.uv.workspace` section.
 
 ```
 albatross
@@ -58,7 +52,8 @@ albatross
         └── main.py
 ```
 
-Flat workspace: In this layout `albatross/pyproject.toml` has only a `tool.uv.workspace` section,
+In the flat layout, all packages are in the `packages` directory, and the root
+`pyproject.toml` defines a so-called virtual workspace. In this example `albatross/pyproject.toml` has only a `tool.uv.workspace` section,
 but no `project`.
 
 ```

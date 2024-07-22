@@ -36,6 +36,7 @@ jobs:
             code:
               - "**/*"
               - "!docs/**/*"
+              - "!mkdocs.*.yml"
               - "!**/*.md"
               - "!bin/**"
               - "!assets/**"
