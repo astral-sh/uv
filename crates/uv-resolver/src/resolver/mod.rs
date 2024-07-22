@@ -382,7 +382,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let resolution = state.into_resolution();
 
                     // Walk over the selected versions, and mark them as preferences.
-                    for (package, versions) in &resolution.packages {
+                    for (package, versions) in &resolution.nodes {
                         if let Entry::Vacant(entry) = preferences.entry(package.name.clone()) {
                             if let Some(version) = versions.iter().next() {
                                 entry.insert(version.clone().into());
@@ -597,42 +597,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if !tracing::enabled!(Level::TRACE) {
             return;
         }
-        for (names, versions) in &combined.dependencies {
+        for edge in &combined.edges {
             trace!(
                 "Resolution: {} -> {}",
-                names
-                    .from
+                edge.from
                     .as_ref()
                     .map(PackageName::as_str)
                     .unwrap_or("ROOT"),
-                names.to,
+                edge.to,
             );
-            for v in versions {
-                // The unwraps below are OK because `write`ing to
-                // a String can never fail (except for OOM).
-                let mut msg = String::new();
-                write!(msg, "{}", v.from_version).unwrap();
-                if let Some(ref extra) = v.from_extra {
-                    write!(msg, " (extra: {extra})").unwrap();
-                }
-                if let Some(ref dev) = v.from_dev {
-                    write!(msg, " (group: {dev})").unwrap();
-                }
-
-                write!(msg, " -> ").unwrap();
-
-                write!(msg, "{}", v.to_version).unwrap();
-                if let Some(ref extra) = v.to_extra {
-                    write!(msg, " (extra: {extra})").unwrap();
-                }
-                if let Some(ref dev) = v.to_dev {
-                    write!(msg, " (group: {dev})").unwrap();
-                }
-                if let Some(ref marker) = v.marker {
-                    write!(msg, " ; {marker}").unwrap();
-                }
-                trace!("Resolution:     {msg}");
+            // The unwraps below are OK because `write`ing to
+            // a String can never fail (except for OOM).
+            let mut msg = String::new();
+            write!(msg, "{}", edge.from_version).unwrap();
+            if let Some(ref extra) = edge.from_extra {
+                write!(msg, " (extra: {extra})").unwrap();
             }
+            if let Some(ref dev) = edge.from_dev {
+                write!(msg, " (group: {dev})").unwrap();
+            }
+
+            write!(msg, " -> ").unwrap();
+
+            write!(msg, "{}", edge.to_version).unwrap();
+            if let Some(ref extra) = edge.to_extra {
+                write!(msg, " (extra: {extra})").unwrap();
+            }
+            if let Some(ref dev) = edge.to_dev {
+                write!(msg, " (group: {dev})").unwrap();
+            }
+            if let Some(ref marker) = edge.marker {
+                write!(msg, " ; {marker}").unwrap();
+            }
+            trace!("Resolution:     {msg}");
         }
     }
 
@@ -2193,10 +2190,7 @@ impl ForkState {
 
     fn into_resolution(self) -> Resolution {
         let solution = self.pubgrub.partial_solution.extract_solution();
-        let mut dependencies: FxHashMap<
-            ResolutionDependencyNames,
-            FxHashSet<ResolutionDependencyVersions>,
-        > = FxHashMap::default();
+        let mut dependencies: FxHashSet<ResolutionDependencyEdge> = FxHashSet::default();
         for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
                 let pubgrub::solver::Kind::FromDependencyOf(
@@ -2244,20 +2238,18 @@ impl ForkState {
                         if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
-                        let names = ResolutionDependencyNames {
+                        let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
-                            to: dependency_name.clone(),
-                        };
-                        let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
                             from_extra: self_extra.cloned(),
                             from_dev: self_dev.cloned(),
+                            to: dependency_name.clone(),
                             to_version: dependency_version.clone(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
                             marker: None,
                         };
-                        dependencies.entry(names).or_default().insert(versions);
+                        dependencies.insert(edge);
                     }
 
                     PubGrubPackageInner::Marker {
@@ -2268,20 +2260,18 @@ impl ForkState {
                         if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
-                        let names = ResolutionDependencyNames {
+                        let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
-                            to: dependency_name.clone(),
-                        };
-                        let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
                             from_extra: self_extra.cloned(),
                             from_dev: self_dev.cloned(),
+                            to: dependency_name.clone(),
                             to_version: dependency_version.clone(),
                             to_extra: None,
                             to_dev: None,
                             marker: Some(dependency_marker.clone()),
                         };
-                        dependencies.entry(names).or_default().insert(versions);
+                        dependencies.insert(edge);
                     }
 
                     PubGrubPackageInner::Extra {
@@ -2293,20 +2283,18 @@ impl ForkState {
                         if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
-                        let names = ResolutionDependencyNames {
+                        let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
-                            to: dependency_name.clone(),
-                        };
-                        let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
                             from_extra: self_extra.cloned(),
                             from_dev: self_dev.cloned(),
+                            to: dependency_name.clone(),
                             to_version: dependency_version.clone(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
                             marker: dependency_marker.clone(),
                         };
-                        dependencies.entry(names).or_default().insert(versions);
+                        dependencies.insert(edge);
                     }
 
                     PubGrubPackageInner::Dev {
@@ -2318,20 +2306,18 @@ impl ForkState {
                         if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
-                        let names = ResolutionDependencyNames {
+                        let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
-                            to: dependency_name.clone(),
-                        };
-                        let versions = ResolutionDependencyVersions {
                             from_version: self_version.clone(),
                             from_extra: self_extra.cloned(),
                             from_dev: self_dev.cloned(),
+                            to: dependency_name.clone(),
                             to_version: dependency_version.clone(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
                             marker: dependency_marker.clone(),
                         };
-                        dependencies.entry(names).or_default().insert(versions);
+                        dependencies.insert(edge);
                     }
 
                     _ => {}
@@ -2365,40 +2351,48 @@ impl ForkState {
             .collect();
 
         Resolution {
-            packages,
-            dependencies,
+            nodes: packages,
+            edges: dependencies,
             pins: self.pins,
         }
     }
 }
 
+/// The resolution from one or more forks including the virtual packages and the edges between them.
+///
+/// Each package can have multiple versions and each edge between two packages can have multiple
+/// version specifiers to support diverging versions and requirements in different forks.
 #[derive(Debug, Default)]
 pub(crate) struct Resolution {
-    pub(crate) packages: FxHashMap<ResolutionPackage, FxHashSet<Version>>,
-    pub(crate) dependencies:
-        FxHashMap<ResolutionDependencyNames, FxHashSet<ResolutionDependencyVersions>>,
+    pub(crate) nodes: FxHashMap<ResolutionPackage, FxHashSet<Version>>,
+    /// If `foo` requires `bar>=3` and `foo` requires `bar <3` in another fork, we'd store it as
+    /// `(foo, bar) -> {>=3, <3}`.
+    pub(crate) edges: FxHashSet<ResolutionDependencyEdge>,
+    /// Map each package name, version tuple from `packages` to a distribution.
     pub(crate) pins: FilePins,
 }
 
+/// Package representation we used during resolution where each extra and also the dev-dependencies
+/// group are their own package.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionPackage {
     pub(crate) name: PackageName,
     pub(crate) extra: Option<ExtraName>,
     pub(crate) dev: Option<GroupName>,
+    /// For index packages, this is `None`.
     pub(crate) url: Option<VerbatimParsedUrl>,
 }
 
+/// The `from_` fields and the `to_` fields allow mapping to the originating and target
+///  [`ResolutionPackage`] respectively.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct ResolutionDependencyNames {
+pub(crate) struct ResolutionDependencyEdge {
+    /// This value is `None` if the dependency comes from the root package.
     pub(crate) from: Option<PackageName>,
-    pub(crate) to: PackageName,
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct ResolutionDependencyVersions {
     pub(crate) from_version: Version,
     pub(crate) from_extra: Option<ExtraName>,
     pub(crate) from_dev: Option<GroupName>,
+    pub(crate) to: PackageName,
     pub(crate) to_version: Version,
     pub(crate) to_extra: Option<ExtraName>,
     pub(crate) to_dev: Option<GroupName>,
@@ -2407,15 +2401,13 @@ pub(crate) struct ResolutionDependencyVersions {
 
 impl Resolution {
     fn union(&mut self, other: Resolution) {
-        for (other_package, other_versions) in other.packages {
-            self.packages
+        for (other_package, other_versions) in other.nodes {
+            self.nodes
                 .entry(other_package)
                 .or_default()
                 .extend(other_versions);
         }
-        for (names, versions) in other.dependencies {
-            self.dependencies.entry(names).or_default().extend(versions);
-        }
+        self.edges.extend(other.edges);
         self.pins.union(other.pins);
     }
 }
