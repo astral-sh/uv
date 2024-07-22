@@ -116,6 +116,9 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
     incomplete_packages: DashMap<PackageName, DashMap<Version, IncompletePackage>>,
+    /// The options that were used to configure this resolver.
+    options: Options,
+    /// The reporter to use for this resolver.
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -202,8 +205,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
-            unavailable_packages: DashMap::default(),
-            incomplete_packages: DashMap::default(),
             selector: CandidateSelector::for_resolution(
                 options,
                 &manifest,
@@ -236,8 +237,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             },
             markers,
             python_requirement: python_requirement.clone(),
-            reporter: None,
             installed_packages,
+            unavailable_packages: DashMap::default(),
+            incomplete_packages: DashMap::default(),
+            options,
+            reporter: None,
         };
         Ok(Self { state, provider })
     }
@@ -677,6 +681,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
         ResolutionGraph::from_state(
+            combined,
             &self.requirements,
             &self.constraints,
             &self.overrides,
@@ -684,7 +689,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.index,
             &self.git,
             &self.python_requirement,
-            combined,
+            self.options,
         )
     }
 

@@ -267,6 +267,58 @@ pub(super) async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
+    // If any of the resolution-determining settings changed, invalidate the lock.
+    let existing_lock = existing_lock.filter(|lock| {
+        if lock.resolution_mode() != options.resolution_mode {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in resolution mode: `{}` vs. `{}`",
+                lock.resolution_mode().cyan(),
+                options.resolution_mode.cyan()
+            );
+            return false;
+        }
+        if lock.prerelease_mode() != options.prerelease_mode {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in prerelease mode: `{}` vs. `{}`",
+                lock.prerelease_mode().cyan(),
+                options.prerelease_mode.cyan()
+            );
+            return false;
+        }
+        match (lock.exclude_newer(), options.exclude_newer) {
+            (None, None) => (),
+            (Some(existing), Some(provided)) if existing == provided => (),
+            (Some(existing), Some(provided)) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to change in timestamp cutoff: `{}` vs. `{}`",
+                    existing.cyan(),
+                    provided.cyan()
+                );
+                return false;
+            }
+            (Some(existing), None) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to removal of timestamp cutoff: `{}`",
+                    existing.cyan(),
+                );
+                return false;
+            }
+            (None, Some(provided)) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to addition of timestamp cutoff: `{}`",
+                    provided.cyan()
+                );
+                return false;
+            }
+        }
+        true
+    });
+
     // If an existing lockfile exists, build up a set of preferences.
     let LockedRequirements { preferences, git } = existing_lock
         .as_ref()
