@@ -1160,7 +1160,15 @@ mod tests {
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
             },
-            "sources": {}
+            "sources": {},
+            "pyproject_toml": {
+              "project": {
+                "name": "bird-feeder",
+                "requires-python": ">=3.12",
+                "optional-dependencies": null
+              },
+              "tool": null
+            }
           }
         }
         "###);
@@ -1196,7 +1204,15 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
-                "sources": {}
+                "sources": {},
+                "pyproject_toml": {
+                  "project": {
+                    "name": "bird-feeder",
+                    "requires-python": ">=3.12",
+                    "optional-dependencies": null
+                  },
+                  "tool": null
+                }
               }
             }
             "###);
@@ -1254,6 +1270,33 @@ mod tests {
                     "workspace": true,
                     "editable": null
                   }
+                },
+                "pyproject_toml": {
+                  "project": {
+                    "name": "albatross",
+                    "requires-python": ">=3.12",
+                    "optional-dependencies": null
+                  },
+                  "tool": {
+                    "uv": {
+                      "sources": {
+                        "bird-feeder": {
+                          "workspace": true,
+                          "editable": null
+                        }
+                      },
+                      "workspace": {
+                        "members": [
+                          "packages/*"
+                        ],
+                        "exclude": null
+                      },
+                      "managed": null,
+                      "dev-dependencies": null,
+                      "override-dependencies": null,
+                      "constraint-dependencies": null
+                    }
+                  }
                 }
               }
             }
@@ -1308,7 +1351,25 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
-                "sources": {}
+                "sources": {},
+                "pyproject_toml": {
+                  "project": null,
+                  "tool": {
+                    "uv": {
+                      "sources": null,
+                      "workspace": {
+                        "members": [
+                          "packages/*"
+                        ],
+                        "exclude": null
+                      },
+                      "managed": null,
+                      "dev-dependencies": null,
+                      "override-dependencies": null,
+                      "constraint-dependencies": null
+                    }
+                  }
+                }
               }
             }
             "###);
@@ -1343,7 +1404,15 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
-                "sources": {}
+                "sources": {},
+                "pyproject_toml": {
+                  "project": {
+                    "name": "albatross",
+                    "requires-python": ">=3.12",
+                    "optional-dependencies": null
+                  },
+                  "tool": null
+                }
               }
             }
             "###);
