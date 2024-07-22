@@ -195,7 +195,17 @@ impl Workspace {
                     .as_ref()
                     .map(|optional_dependencies| {
                         // It's a `BTreeMap` so the keys are sorted.
-                        optional_dependencies.keys().cloned().collect::<Vec<_>>()
+                        optional_dependencies
+                            .iter()
+                            .filter_map(|(name, dependencies)| {
+                                if dependencies.is_empty() {
+                                    None
+                                } else {
+                                    Some(name)
+                                }
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
 
