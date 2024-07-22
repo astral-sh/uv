@@ -160,7 +160,34 @@ pub(crate) async fn install(
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.acquire_lock()?;
-    let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
+
+    // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
+    // remove the environment and continue with the install.
+    //
+    // Later on, we want to replace entrypoints if the tool already exists, regardless of whether
+    // the receipt was valid.
+    //
+    // (If we find existing entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing
+    // the external tool's entrypoints (without `--force`).)
+    let (existing_tool_receipt, reinstall_entry_points) =
+        match installed_tools.get_tool_receipt(&from.name) {
+            Ok(None) => (None, false),
+            Ok(Some(receipt)) => (Some(receipt), true),
+            Err(_) => {
+                // If the tool is not installed properly, remove the environment and continue.
+                match installed_tools.remove_environment(&from.name) {
+                    Ok(()) => {
+                        warn_user!("Removed existing `{}` with invalid receipt", from.name);
+                    }
+                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                }
+                (None, true)
+            }
+        };
+
     let existing_environment =
         installed_tools
             .get_environment(&from.name, cache)?
@@ -199,11 +226,6 @@ pub(crate) async fn install(
             }
         }
     }
-
-    // Replace entrypoints if the tool already exists (and we made it this far). If we find existing
-    // entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing the external tool's
-    // entrypoints (without `--force`).
-    let reinstall_entry_points = existing_tool_receipt.is_some();
 
     // Resolve the requirements.
     let state = SharedState::default();
