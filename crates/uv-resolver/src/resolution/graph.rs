@@ -73,16 +73,16 @@ impl ResolutionGraph {
         );
 
         let mut petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed> =
-            Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
+            Graph::with_capacity(resolution.nodes.len(), resolution.nodes.len());
         let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> =
-            FxHashMap::with_capacity_and_hasher(resolution.packages.len(), FxBuildHasher);
+            FxHashMap::with_capacity_and_hasher(resolution.nodes.len(), FxBuildHasher);
         let mut diagnostics = Vec::new();
 
         // Add the root node.
         let root_index = petgraph.add_node(ResolutionGraphNode::Root);
 
         // Add every package to the graph.
-        for (package, versions) in &resolution.packages {
+        for (package, versions) in &resolution.nodes {
             let ResolutionPackage {
                 name,
                 extra,

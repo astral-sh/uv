@@ -382,7 +382,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let resolution = state.into_resolution();
 
                     // Walk over the selected versions, and mark them as preferences.
-                    for (package, versions) in &resolution.packages {
+                    for (package, versions) in &resolution.nodes {
                         if let Entry::Vacant(entry) = preferences.entry(package.name.clone()) {
                             if let Some(version) = versions.iter().next() {
                                 entry.insert(version.clone().into());
@@ -2351,7 +2351,7 @@ impl ForkState {
             .collect();
 
         Resolution {
-            packages,
+            nodes: packages,
             edges: dependencies,
             pins: self.pins,
         }
@@ -2364,7 +2364,7 @@ impl ForkState {
 /// version specifiers to support diverging versions and requirements in different forks.
 #[derive(Debug, Default)]
 pub(crate) struct Resolution {
-    pub(crate) packages: FxHashMap<ResolutionPackage, FxHashSet<Version>>,
+    pub(crate) nodes: FxHashMap<ResolutionPackage, FxHashSet<Version>>,
     /// If `foo` requires `bar>=3` and `foo` requires `bar <3` in another fork, we'd store it as
     /// `(foo, bar) -> {>=3, <3}`.
     pub(crate) edges: FxHashSet<ResolutionDependencyEdge>,
@@ -2401,8 +2401,8 @@ pub(crate) struct ResolutionDependencyEdge {
 
 impl Resolution {
     fn union(&mut self, other: Resolution) {
-        for (other_package, other_versions) in other.packages {
-            self.packages
+        for (other_package, other_versions) in other.nodes {
+            self.nodes
                 .entry(other_package)
                 .or_default()
                 .extend(other_versions);
