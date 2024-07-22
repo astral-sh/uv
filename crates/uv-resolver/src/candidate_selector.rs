@@ -237,11 +237,12 @@ impl CandidateSelector {
                             version_map.iter().rev().map(move |item| (map_index, item))
                         })
                         .kmerge_by(
-                            |(index1, (version1, _)), (index2, (version2, _))| match version2
-                                .cmp(version1)
+                            |(index1, (version1, _)), (index2, (version2, _))| match version1
+                                .cmp(version2)
                             {
                                 std::cmp::Ordering::Equal => index1 < index2,
-                                _ => version1 > version2,
+                                std::cmp::Ordering::Less => false,
+                                std::cmp::Ordering::Greater => true,
                             },
                         )
                         .map(|(_, item)| item),
@@ -258,11 +259,12 @@ impl CandidateSelector {
                             version_map.iter().map(move |item| (map_index, item))
                         })
                         .kmerge_by(
-                            |(index1, (version1, _)), (index2, (version2, _))| match version2
-                                .cmp(version1)
+                            |(index1, (version1, _)), (index2, (version2, _))| match version1
+                                .cmp(version2)
                             {
                                 std::cmp::Ordering::Equal => index1 < index2,
-                                _ => version1 < version2,
+                                std::cmp::Ordering::Less => true,
+                                std::cmp::Ordering::Greater => false,
                             },
                         )
                         .map(|(_, item)| item),
