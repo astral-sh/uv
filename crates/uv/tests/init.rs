@@ -460,3 +460,54 @@ fn init_workspace_outside() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn init_invalid_names() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // `foo-bar` normalized to `foo_bar`.
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo-bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized project foo-bar in [TEMP_DIR]/foo-bar
+    "###);
+
+    let child = context.temp_dir.child("foo-bar");
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    let _ = fs_err::read_to_string(child.join("src/foo_bar/__init__.py"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo-bar"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+        "###
+        );
+    });
+
+    // "bar baz" is not allowed.
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("bar baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    error: Not a valid package or extra name: "bar baz". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    "###);
+
+    Ok(())
+}
