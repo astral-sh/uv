@@ -462,9 +462,10 @@ fn init_workspace_outside() -> Result<()> {
 }
 
 #[test]
-fn init_invalid_name() -> Result<()> {
+fn init_invalid_names() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    // `foo-bar` normalized to `foo_bar`.
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo-bar"), @r###"
     success: true
     exit_code: 0
@@ -496,6 +497,17 @@ fn init_invalid_name() -> Result<()> {
         "###
         );
     });
+
+    // "bar baz" is not allowed.
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("bar baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    error: Not a valid package or extra name: "bar baz". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    "###);
 
     Ok(())
 }
