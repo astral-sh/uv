@@ -64,7 +64,7 @@ import sys
 def make_gui() -> None:
     from tkinter import Tk, ttk
     root = Tk()
-    root.title("UV Test App")
+    root.title("uv Test App")
     frm = ttk.Frame(root, padding=10)
     frm.grid()
     ttk.Label(frm, text="Hello from uv-trampoline-gui.exe").grid(column=0, row=0)
