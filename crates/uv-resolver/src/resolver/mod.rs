@@ -2227,6 +2227,7 @@ impl ForkState {
 
                     _ => continue,
                 };
+                let self_url = self_name.as_ref().and_then(|name| self.fork_urls.get(name));
 
                 match **dependency_package {
                     PubGrubPackageInner::Package {
@@ -2238,13 +2239,16 @@ impl ForkState {
                         if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
+                        let to_url = self.fork_urls.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
+                            from_url: self_url.cloned(),
                             from_extra: self_extra.cloned(),
                             from_dev: self_dev.cloned(),
                             to: dependency_name.clone(),
                             to_version: dependency_version.clone(),
+                            to_url: to_url.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
                             marker: None,
@@ -2260,13 +2264,16 @@ impl ForkState {
                         if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
+                        let to_url = self.fork_urls.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
+                            from_url: self_url.cloned(),
                             from_extra: self_extra.cloned(),
                             from_dev: self_dev.cloned(),
                             to: dependency_name.clone(),
                             to_version: dependency_version.clone(),
+                            to_url: to_url.cloned(),
                             to_extra: None,
                             to_dev: None,
                             marker: Some(dependency_marker.clone()),
@@ -2283,13 +2290,16 @@ impl ForkState {
                         if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
+                        let to_url = self.fork_urls.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
+                            from_url: self_url.cloned(),
                             from_extra: self_extra.cloned(),
                             from_dev: self_dev.cloned(),
                             to: dependency_name.clone(),
                             to_version: dependency_version.clone(),
+                            to_url: to_url.cloned(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
                             marker: dependency_marker.clone(),
@@ -2306,13 +2316,16 @@ impl ForkState {
                         if self_name.is_some_and(|self_name| self_name == dependency_name) {
                             continue;
                         }
+                        let to_url = self.fork_urls.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
                             from: self_name.cloned(),
                             from_version: self_version.clone(),
+                            from_url: self_url.cloned(),
                             from_extra: self_extra.cloned(),
                             from_dev: self_dev.cloned(),
                             to: dependency_name.clone(),
                             to_version: dependency_version.clone(),
+                            to_url: to_url.cloned(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
                             marker: dependency_marker.clone(),
@@ -2390,10 +2403,12 @@ pub(crate) struct ResolutionDependencyEdge {
     /// This value is `None` if the dependency comes from the root package.
     pub(crate) from: Option<PackageName>,
     pub(crate) from_version: Version,
+    pub(crate) from_url: Option<VerbatimParsedUrl>,
     pub(crate) from_extra: Option<ExtraName>,
     pub(crate) from_dev: Option<GroupName>,
     pub(crate) to: PackageName,
     pub(crate) to_version: Version,
+    pub(crate) to_url: Option<VerbatimParsedUrl>,
     pub(crate) to_extra: Option<ExtraName>,
     pub(crate) to_dev: Option<GroupName>,
     pub(crate) marker: Option<MarkerTree>,

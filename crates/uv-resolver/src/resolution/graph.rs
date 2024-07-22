@@ -10,7 +10,7 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
-use pypi_types::{ParsedUrlError, Requirement, Yanked};
+use pypi_types::{ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use uv_configuration::{Constraints, Overrides};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -68,6 +68,7 @@ impl ResolutionGraph {
         type NodeKey<'a> = (
             &'a PackageName,
             &'a Version,
+            Option<&'a VerbatimParsedUrl>,
             Option<&'a ExtraName>,
             Option<&'a GroupName>,
         );
@@ -245,7 +246,10 @@ impl ResolutionGraph {
                     hashes,
                     metadata,
                 }));
-                inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
+                inverse.insert(
+                    (name, version, url.as_ref(), extra.as_ref(), dev.as_ref()),
+                    index,
+                );
             }
         }
 
@@ -255,6 +259,7 @@ impl ResolutionGraph {
                 inverse[&(
                     from,
                     &edge.from_version,
+                    edge.from_url.as_ref(),
                     edge.from_extra.as_ref(),
                     edge.from_dev.as_ref(),
                 )]
@@ -262,6 +267,7 @@ impl ResolutionGraph {
             let to_index = inverse[&(
                 &edge.to,
                 &edge.to_version,
+                edge.to_url.as_ref(),
                 edge.to_extra.as_ref(),
                 edge.to_dev.as_ref(),
             )];
