@@ -536,7 +536,7 @@ fn init_workspace_isolated() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Initialized project foo
+    Initialized project `foo`
     "###);
 
     let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
