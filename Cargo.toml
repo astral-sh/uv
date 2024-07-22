@@ -111,8 +111,8 @@ petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 proc-macro2 = { version = "1.0.86" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "3f0ba760951ab0deeac874b98bb18fc90103fcf7" }
-pyo3 = { version = "0.21.0" }
-pyo3-log = { version = "0.10.0" }
+pyo3 = { version = "0.22.0" }
+pyo3-log = { version = "0.11.0" }
 quote = { version = "1.0.36" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
