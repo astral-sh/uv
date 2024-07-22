@@ -834,6 +834,7 @@ async fn run_project(
                 args.path,
                 args.name,
                 args.no_readme,
+                globals.isolated,
                 globals.preview,
                 printer,
             )

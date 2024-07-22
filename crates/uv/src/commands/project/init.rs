@@ -19,6 +19,7 @@ pub(crate) async fn init(
     explicit_path: Option<String>,
     name: Option<PackageName>,
     no_readme: bool,
+    isolated: bool,
     preview: PreviewMode,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -26,11 +27,9 @@ pub(crate) async fn init(
         warn_user_once!("`uv init` is experimental and may change without warning");
     }
 
-    let current_dir = std::env::current_dir()?.canonicalize()?;
-
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
-        None => current_dir.clone(),
+        None => std::env::current_dir()?.canonicalize()?,
         Some(ref path) => PathBuf::from(path),
     };
 
@@ -67,10 +66,14 @@ pub(crate) async fn init(
     let path = path.canonicalize()?;
 
     // Discover the current workspace, if it exists.
-    let workspace = match ProjectWorkspace::discover(&path, None).await {
-        Ok(project) => Some(project),
-        Err(WorkspaceError::MissingPyprojectToml) => None,
-        Err(err) => return Err(err.into()),
+    let workspace = if isolated {
+        None
+    } else {
+        match ProjectWorkspace::discover(&path, None).await {
+            Ok(project) => Some(project),
+            Err(WorkspaceError::MissingPyprojectToml) => None,
+            Err(err) => return Err(err.into()),
+        }
     };
 
     // Create the `pyproject.toml`.
