@@ -5,6 +5,7 @@ use std::ops::Deref;
 use itertools::Itertools;
 use pubgrub::range::Range;
 
+use distribution_filename::WheelFilename;
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{MarkerExpression, MarkerTree, MarkerValueVersion};
 
@@ -160,6 +161,23 @@ impl RequiresPython {
         &self.bound
     }
 
+    /// Returns the [`RequiresPythonBound`] truncated to the major and minor version.
+    pub fn bound_major_minor(&self) -> RequiresPythonBound {
+        match self.bound.as_ref() {
+            // Ex) `>=3.10.1` -> `>=3.10`
+            Bound::Included(version) => RequiresPythonBound(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            // Ex) `>3.10.1` -> `>=3.10`
+            // This is unintuitive, but `>3.10.1` does indicate that _some_ version of Python 3.10
+            // is supported.
+            Bound::Excluded(version) => RequiresPythonBound(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            Bound::Unbounded => RequiresPythonBound(Bound::Unbounded),
+        }
+    }
+
     /// Returns this `Requires-Python` specifier as an equivalent marker
     /// expression utilizing the `python_version` marker field.
     ///
@@ -216,6 +234,74 @@ impl RequiresPython {
             MarkerTree::Expression(expr_python_version),
             MarkerTree::Expression(expr_python_full_version),
         ])
+    }
+
+    /// Returns `false` if the wheel's tags state it can't be used in the given Python version
+    /// range.
+    ///
+    /// It is meant to filter out clearly unusable wheels with perfect specificity and acceptable
+    /// sensitivity, we return `true` if the tags are unknown.
+    pub fn matches_wheel_tag(&self, wheel: &WheelFilename) -> bool {
+        wheel.abi_tag.iter().any(|abi_tag| {
+            if abi_tag == "abi3" {
+                // Universal tags are allowed.
+                true
+            } else if abi_tag == "none" {
+                wheel.python_tag.iter().any(|python_tag| {
+                    // Remove `py2-none-any` and `py27-none-any`.
+                    if python_tag.starts_with("py2") {
+                        return false;
+                    }
+
+                    // Remove (e.g.) `cp36-none-any` if the specifier is `==3.10.*`.
+                    let Some(minor) = python_tag
+                        .strip_prefix("cp3")
+                        .or_else(|| python_tag.strip_prefix("pp3"))
+                        .or_else(|| python_tag.strip_prefix("py3"))
+                    else {
+                        return true;
+                    };
+                    let Ok(minor) = minor.parse::<u64>() else {
+                        return true;
+                    };
+
+                    // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
+                    let wheel_bound =
+                        RequiresPythonBound(Bound::Included(Version::new([3, minor])));
+                    wheel_bound >= self.bound_major_minor()
+                })
+            } else if abi_tag.starts_with("cp2") || abi_tag.starts_with("pypy2") {
+                // Python 2 is never allowed.
+                false
+            } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("cp3") {
+                // Remove ABI tags, both old (dmu) and future (t, and all other letters).
+                let minor_not_dot = minor_no_dot_abi.trim_matches(char::is_alphabetic);
+                let Ok(minor) = minor_not_dot.parse::<u64>() else {
+                    // Unknown version pattern are allowed.
+                    return true;
+                };
+
+                let wheel_bound = RequiresPythonBound(Bound::Included(Version::new([3, minor])));
+                wheel_bound >= self.bound_major_minor()
+            } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("pypy3") {
+                // Given  `pypy39_pp73`, we just removed `pypy3`, now we remove `_pp73` ...
+                let Some((minor_not_dot, _)) = minor_no_dot_abi.split_once('_') else {
+                    // Unknown version pattern are allowed.
+                    return true;
+                };
+                // ... and get `9`.
+                let Ok(minor) = minor_not_dot.parse::<u64>() else {
+                    // Unknown version pattern are allowed.
+                    return true;
+                };
+
+                let wheel_bound = RequiresPythonBound(Bound::Included(Version::new([3, minor])));
+                wheel_bound >= self.bound_major_minor()
+            } else {
+                // Unknown python tag -> allowed.
+                true
+            }
+        })
     }
 }
 
@@ -292,6 +378,84 @@ impl Ord for RequiresPythonBound {
             (Bound::Excluded(a), Bound::Excluded(b)) => a.cmp(b),
             (Bound::Unbounded, _) => Ordering::Less,
             (_, Bound::Unbounded) => Ordering::Greater,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use distribution_filename::WheelFilename;
+    use pep440_rs::VersionSpecifiers;
+
+    use crate::RequiresPython;
+
+    #[test]
+    fn requires_python_included() {
+        let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
+        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
+            .unwrap()
+            .unwrap();
+        let wheel_names = &[
+            "bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl",
+            "black-24.4.2-cp310-cp310-win_amd64.whl",
+            "black-24.4.2-cp310-none-win_amd64.whl",
+            "cbor2-5.6.4-py3-none-any.whl",
+            "watchfiles-0.22.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl",
+            "dearpygui-1.11.1-cp312-cp312-win_amd64.whl",
+        ];
+        for wheel_name in wheel_names {
+            assert!(
+                requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+
+        let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
+        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
+            .unwrap()
+            .unwrap();
+        let wheel_names = &["dearpygui-1.11.1-cp312-cp312-win_amd64.whl"];
+        for wheel_name in wheel_names {
+            assert!(
+                requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn requires_python_dropped() {
+        let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
+        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
+            .unwrap()
+            .unwrap();
+        let wheel_names = &[
+            "PySocks-1.7.1-py27-none-any.whl",
+            "black-24.4.2-cp39-cp39-win_amd64.whl",
+            "psutil-6.0.0-cp36-cp36m-win32.whl",
+            "pydantic_core-2.20.1-pp39-pypy39_pp73-win_amd64.whl",
+            "torch-1.10.0-cp36-none-macosx_10_9_x86_64.whl",
+            "torch-1.10.0-py36-none-macosx_10_9_x86_64.whl",
+        ];
+        for wheel_name in wheel_names {
+            assert!(
+                !requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
+        }
+
+        let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
+        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
+            .unwrap()
+            .unwrap();
+        let wheel_names = &["dearpygui-1.11.1-cp310-cp310-win_amd64.whl"];
+        for wheel_name in wheel_names {
+            assert!(
+                !requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+                "{wheel_name}"
+            );
         }
     }
 }
