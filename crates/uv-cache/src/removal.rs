@@ -103,7 +103,7 @@ fn set_readable(path: &Path) -> io::Result<bool> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = path.metadata()?.permissions();
+        let mut perms = fs_err::metadata(path)?.permissions();
         if perms.mode() & 0o500 == 0 {
             perms.set_mode(perms.mode() | 0o500);
             fs_err::set_permissions(path, perms)?;
@@ -115,7 +115,7 @@ fn set_readable(path: &Path) -> io::Result<bool> {
 
 /// If the file is readonly, change the permissions to make it _not_ readonly.
 fn set_not_readonly(path: &Path) -> io::Result<bool> {
-    let mut perms = path.metadata()?.permissions();
+    let mut perms = fs_err::metadata(path)?.permissions();
     if !perms.readonly() {
         return Ok(false);
     }
