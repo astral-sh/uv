@@ -27,12 +27,12 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
-pub struct PackageName(String);
+pub struct PackageName(Box<str>);
 
 impl PackageName {
     /// Create a validated, normalized package name.
     pub fn new(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_owned(name).map(Self)
+        validate_and_normalize_owned(name).map(|name| Self(name.into_boxed_str()))
     }
 
     /// Escape this name with underscores (`_`) instead of dashes (`-`)
@@ -56,7 +56,7 @@ impl PackageName {
 
             Cow::Owned(owned_string)
         } else {
-            Cow::Borrowed(self.0.as_str())
+            Cow::Borrowed(self.0.as_ref())
         }
     }
 
@@ -77,7 +77,7 @@ impl FromStr for PackageName {
     type Err = InvalidNameError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        validate_and_normalize_ref(name).map(Self)
+        validate_and_normalize_ref(name).map(|name| Self(name.into_boxed_str()))
     }
 }
 

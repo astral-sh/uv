@@ -18,9 +18,9 @@ pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
     pub build_tag: Option<BuildTag>,
-    pub python_tag: Vec<String>,
-    pub abi_tag: Vec<String>,
-    pub platform_tag: Vec<String>,
+    pub python_tag: Box<[String]>,
+    pub abi_tag: Box<[String]>,
+    pub platform_tag: Box<[String]>,
 }
 
 impl FromStr for WheelFilename {
@@ -41,10 +41,12 @@ impl Display for WheelFilename {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}-{}-{}.whl",
+            "{}-{}-{}-{}-{}.whl",
             self.name.as_dist_info_name(),
             self.version,
-            self.get_tag()
+            self.python_tag.join("."),
+            self.abi_tag.join("."),
+            self.platform_tag.join(".")
         )
     }
 }
@@ -60,25 +62,17 @@ impl WheelFilename {
         compatible_tags.compatibility(&self.python_tag, &self.abi_tag, &self.platform_tag)
     }
 
-    /// The wheel filename without the extension.
-    pub fn stem(&self) -> String {
-        format!(
-            "{}-{}-{}",
-            self.name.as_dist_info_name(),
-            self.version,
-            self.get_tag()
-        )
-    }
-
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     pub fn from_stem(stem: &str) -> Result<Self, WheelFilenameError> {
         Self::parse(stem, stem)
     }
 
-    /// Get the tag for this wheel.
-    fn get_tag(&self) -> String {
+    /// The wheel filename without the extension.
+    pub fn stem(&self) -> String {
         format!(
-            "{}-{}-{}",
+            "{}-{}-{}-{}-{}",
+            self.name.as_dist_info_name(),
+            self.version,
             self.python_tag.join("."),
             self.abi_tag.join("."),
             self.platform_tag.join(".")
@@ -92,12 +86,6 @@ impl WheelFilename {
         // The wheel filename should contain either five or six entries. If six, then the third
         // entry is the build tag. If five, then the third entry is the Python tag.
         // https://www.python.org/dev/peps/pep-0427/#file-name-convention
-        //
-        // 2023-11-08(burntsushi): It looks like the code below actually drops
-        // the build tag if one is found. According to PEP 0427, the build tag
-        // is used to break ties. This might mean that we generate identical
-        // `WheelName` values for multiple distinct wheels, but it's not clear
-        // if this is a problem in practice.
         let mut parts = stem.split('-');
 
         let name = parts
@@ -173,9 +161,21 @@ impl WheelFilename {
             name,
             version,
             build_tag,
-            python_tag: python_tag.split('.').map(String::from).collect(),
-            abi_tag: abi_tag.split('.').map(String::from).collect(),
-            platform_tag: platform_tag.split('.').map(String::from).collect(),
+            python_tag: python_tag
+                .split('.')
+                .map(String::from)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            abi_tag: abi_tag
+                .split('.')
+                .map(String::from)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            platform_tag: platform_tag
+                .split('.')
+                .map(String::from)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
         })
     }
 }
@@ -331,5 +331,15 @@ mod tests {
                 *wheel_name
             );
         }
+    }
+
+    /// Ensure that we don't accidentally grow the `WheelFilename` size.
+    #[test]
+    fn wheel_size() {
+        assert!(
+            std::mem::size_of::<WheelFilename>() <= 112,
+            "{}",
+            std::mem::size_of::<WheelFilename>()
+        );
     }
 }
