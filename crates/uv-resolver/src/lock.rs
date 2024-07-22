@@ -222,11 +222,8 @@ impl Lock {
             // Remove wheels that don't match `requires-python` and can't be selected for
             // installation.
             if let Some(requires_python) = &requires_python {
-                dist.wheels.retain(|wheel| {
-                    wheel
-                        .filename
-                        .matches_requires_python(requires_python.specifiers())
-                });
+                dist.wheels
+                    .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
             }
         }
         distributions.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));

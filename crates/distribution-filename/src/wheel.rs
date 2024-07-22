@@ -5,7 +5,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use pep440_rs::{Version, VersionParseError, VersionSpecifiers};
+use pep440_rs::{Version, VersionParseError};
 use platform_tags::{TagCompatibility, Tags};
 use uv_normalize::{InvalidNameError, PackageName};
 
@@ -58,71 +58,6 @@ impl WheelFilename {
     /// Return the [`TagCompatibility`] of the wheel with the given tags
     pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
         compatible_tags.compatibility(&self.python_tag, &self.abi_tag, &self.platform_tag)
-    }
-
-    /// Returns `false` if the wheel's tags state it can't be used in the given Python version
-    /// range.
-    ///
-    /// It is meant to filter out clearly unusable wheels with perfect specificity and acceptable
-    /// sensitivity, we return `true` if the tags are unknown.
-    pub fn matches_requires_python(&self, specifiers: &VersionSpecifiers) -> bool {
-        self.abi_tag.iter().any(|abi_tag| {
-            if abi_tag == "abi3" {
-                // Universal tags are allowed.
-                true
-            } else if abi_tag == "none" {
-                self.python_tag.iter().any(|python_tag| {
-                    // Remove `py2-none-any` and `py27-none-any`.
-                    if python_tag.starts_with("py2") {
-                        return false;
-                    }
-
-                    // Remove (e.g.) `cp36-none-any` if the specifier is `==3.10.*`.
-                    let Some(minor) = python_tag
-                        .strip_prefix("cp3")
-                        .or_else(|| python_tag.strip_prefix("pp3"))
-                        .or_else(|| python_tag.strip_prefix("py3"))
-                    else {
-                        return true;
-                    };
-                    let Ok(minor) = minor.parse::<u64>() else {
-                        return true;
-                    };
-                    let version = Version::new([3, minor]);
-                    specifiers.contains(&version)
-                })
-            } else if abi_tag.starts_with("cp2") || abi_tag.starts_with("pypy2") {
-                // Python 2 is never allowed.
-                false
-            } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("cp3") {
-                // Remove ABI tags, both old (dmu) and future (t, and all other letters).
-                let minor_not_dot = minor_no_dot_abi.trim_matches(char::is_alphabetic);
-                let Ok(minor) = minor_not_dot.parse::<u64>() else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-
-                let version = Version::new([3, minor]);
-                specifiers.contains(&version)
-            } else if let Some(minor_no_dot_abi) = abi_tag.strip_prefix("pypy3") {
-                // Given  `pypy39_pp73`, we just removed `pypy3`, now we remove `_pp73` ...
-                let Some((minor_not_dot, _)) = minor_no_dot_abi.split_once('_') else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-                // ... and get `9`.
-                let Ok(minor) = minor_not_dot.parse::<u64>() else {
-                    // Unknown version pattern are allowed.
-                    return true;
-                };
-
-                let version = Version::new([3, minor]);
-                specifiers.contains(&version)
-            } else {
-                // Unknown python tag -> allowed.
-                true
-            }
-        })
     }
 
     /// The wheel filename without the extension.
@@ -394,47 +329,6 @@ mod tests {
             assert_eq!(
                 WheelFilename::from_str(wheel_name).unwrap().to_string(),
                 *wheel_name
-            );
-        }
-    }
-
-    #[test]
-    fn test_requires_python_included() {
-        let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-        let wheel_names = &[
-            "bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl",
-            "black-24.4.2-cp310-cp310-win_amd64.whl",
-            "black-24.4.2-cp310-none-win_amd64.whl",
-            "cbor2-5.6.4-py3-none-any.whl",
-            "watchfiles-0.22.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl",
-        ];
-        for wheel_name in wheel_names {
-            assert!(
-                WheelFilename::from_str(wheel_name)
-                    .unwrap()
-                    .matches_requires_python(&version_specifiers),
-                "{wheel_name}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_requires_python_dropped() {
-        let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-        let wheel_names = &[
-            "PySocks-1.7.1-py27-none-any.whl",
-            "black-24.4.2-cp39-cp39-win_amd64.whl",
-            "psutil-6.0.0-cp36-cp36m-win32.whl",
-            "pydantic_core-2.20.1-pp39-pypy39_pp73-win_amd64.whl",
-            "torch-1.10.0-cp36-none-macosx_10_9_x86_64.whl",
-            "torch-1.10.0-py36-none-macosx_10_9_x86_64.whl",
-        ];
-        for wheel_name in wheel_names {
-            assert!(
-                !WheelFilename::from_str(wheel_name)
-                    .unwrap()
-                    .matches_requires_python(&version_specifiers),
-                "{wheel_name}"
             );
         }
     }

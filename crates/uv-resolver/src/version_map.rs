@@ -511,7 +511,7 @@ impl VersionMapLazy {
         // Check if the wheel is compatible with the `requires-python` (i.e., the Python ABI tag
         // is not less than the `requires-python` minimum version).
         if let Some(requires_python) = self.requires_python.as_ref() {
-            if !filename.matches_requires_python(requires_python.specifiers()) {
+            if !requires_python.matches_wheel_tag(filename) {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
                     requires_python.specifiers().clone(),
                     PythonRequirementKind::Target,
