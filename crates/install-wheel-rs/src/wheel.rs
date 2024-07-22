@@ -233,12 +233,17 @@ pub(crate) fn windows_script_launcher(
 }
 
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.
+///
+/// <https://github.com/pypa/pip/blob/76e82a43f8fb04695e834810df64f2d9a2ff6020/src/pip/_vendor/distlib/scripts.py#L121-L126>
 fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
     // Only check for pythonw.exe on Windows
     if cfg!(windows) && is_gui {
         python_executable
-            .parent()
-            .map(|parent| parent.join("pythonw.exe"))
+            .file_name()
+            .map(|name| {
+                let new_name = name.to_string_lossy().replace("python", "pythonw");
+                python_executable.with_file_name(new_name)
+            })
             .filter(|path| path.is_file())
             .unwrap_or_else(|| python_executable.to_path_buf())
     } else {
@@ -1001,6 +1006,26 @@ mod test {
 
         let script_path = get_script_executable(&python_exe, false);
         assert_eq!(script_path, python_exe.to_path_buf());
+
+        // Test with overridden python.exe and pythonw.exe
+        let temp_dir = assert_fs::TempDir::new()?;
+        let python_exe = temp_dir.child("python.exe");
+        let pythonw_exe = temp_dir.child("pythonw.exe");
+        let dot_python_exe = temp_dir.child(".python.exe");
+        let dot_pythonw_exe = temp_dir.child(".pythonw.exe");
+        python_exe.write_str("")?;
+        pythonw_exe.write_str("")?;
+        dot_python_exe.write_str("")?;
+        dot_pythonw_exe.write_str("")?;
+
+        let script_path = get_script_executable(&dot_python_exe, true);
+        #[cfg(windows)]
+        assert_eq!(script_path, dot_pythonw_exe.to_path_buf());
+        #[cfg(not(windows))]
+        assert_eq!(script_path, dot_python_exe.to_path_buf());
+
+        let script_path = get_script_executable(&dot_python_exe, false);
+        assert_eq!(script_path, dot_python_exe.to_path_buf());
 
         Ok(())
     }
