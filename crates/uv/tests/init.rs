@@ -200,7 +200,7 @@ fn init_workspace() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Adding foo as member of workspace [TEMP_DIR]/
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo`
     "###);
 
@@ -295,7 +295,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Adding foo as member of workspace [TEMP_DIR]/
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -391,7 +391,7 @@ fn init_workspace_outside() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Adding foo as member of workspace [TEMP_DIR]/
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -536,7 +536,7 @@ fn init_workspace_isolated() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Initialized project foo
+    Initialized project `foo`
     "###);
 
     let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -579,7 +579,7 @@ fn init_nested_workspace() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Adding foo as member of workspace [TEMP_DIR]/
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
@@ -591,7 +591,7 @@ fn init_nested_workspace() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Adding bar as member of workspace [TEMP_DIR]/
+    Adding `bar` as member of workspace `[TEMP_DIR]/`
     Initialized project `bar` at `[TEMP_DIR]/foo/bar`
     "###);
 

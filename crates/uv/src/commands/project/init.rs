@@ -53,7 +53,7 @@ pub(crate) async fn init(
             .unwrap_or_else(|_| path.simplified().to_path_buf());
 
         anyhow::bail!(
-            "Project is already initialized in {}",
+            "Project is already initialized in `{}`",
             path.display().cyan()
         );
     }
@@ -126,7 +126,7 @@ pub(crate) async fn init(
 
         writeln!(
             printer.stderr(),
-            "Adding {} as member of workspace {}",
+            "Adding `{}` as member of workspace `{}`",
             name.cyan(),
             root_member.root().simplified_display().cyan()
         )?;
