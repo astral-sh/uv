@@ -140,7 +140,7 @@ async fn venv_impl(
     }
 
     // Locate the Python interpreter to use in the environment
-    let interpreter = PythonInstallation::find_or_fetch(
+    let python = PythonInstallation::find_or_fetch(
         interpreter_request,
         EnvironmentPreference::OnlySystem,
         python_preference,
@@ -150,21 +150,32 @@ async fn venv_impl(
         Some(&reporter),
     )
     .await
-    .into_diagnostic()?
-    .into_interpreter();
+    .into_diagnostic()?;
+
+    let managed = python.source().is_managed();
+    let interpreter = python.into_interpreter();
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
         store_credentials_from_url(url);
     }
 
-    writeln!(
-        printer.stderr(),
-        "Using Python {} interpreter at: {}",
-        interpreter.python_version(),
-        interpreter.sys_executable().user_display().cyan()
-    )
-    .into_diagnostic()?;
+    if managed {
+        writeln!(
+            printer.stderr(),
+            "Using Python {}",
+            interpreter.python_version().cyan()
+        )
+        .into_diagnostic()?;
+    } else {
+        writeln!(
+            printer.stderr(),
+            "Using Python {} interpreter at: {}",
+            interpreter.python_version(),
+            interpreter.sys_executable().user_display().cyan()
+        )
+        .into_diagnostic()?;
+    }
 
     writeln!(
         printer.stderr(),

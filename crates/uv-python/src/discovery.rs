@@ -1244,6 +1244,12 @@ impl PythonRequest {
     }
 }
 
+impl PythonSource {
+    pub fn is_managed(&self) -> bool {
+        matches!(self, Self::Managed)
+    }
+}
+
 impl PythonPreference {
     fn allows(self, source: PythonSource) -> bool {
         // If not dealing with a system interpreter source, we don't care about the preference
