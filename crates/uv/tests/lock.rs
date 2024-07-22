@@ -4261,3 +4261,57 @@ fn lock_resolution_mode() -> Result<()> {
 
     Ok(())
 }
+
+/// Lock a requirement from PyPI, filtering out wheels that target an ABI that is non-overlapping
+/// with the `Requires-Python` constraint.
+#[test]
+fn lock_requires_python_no_wheels() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let lockfile = context.temp_dir.join("uv.lock");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dearpygui==1.9.1"]
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning
+        Resolved 6 packages in [TIME]
+        "###);
+
+        let lock = fs_err::read_to_string(&lockfile).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            success: false
+            exit_code: 1
+            ----- stdout -----
+
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+              × No solution found when resolving dependencies:
+              ╰─▶ Because dearpygui==1.9.1 has no wheels are available with a matching Python ABI and project==0.1.0 depends on dearpygui==1.9.1, we can conclude that project==0.1.0 cannot be used.
+                  And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+            "###
+            );
+        });
+    }
+
+    Ok(())
+}

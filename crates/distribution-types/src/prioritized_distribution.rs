@@ -150,10 +150,15 @@ pub enum WheelCompatibility {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleWheel {
+    /// The wheel was published after the exclude newer time.
     ExcludeNewer(Option<i64>),
+    /// The wheel tags do not match those of the target Python platform.
     Tag(IncompatibleTag),
+    /// The required Python version is not a superset of the target Python version range.
     RequiresPython(VersionSpecifiers, PythonRequirementKind),
+    /// The wheel was yanked.
     Yanked(Yanked),
+    /// The use of binary wheels is disabled.
     NoBinary,
 }
 

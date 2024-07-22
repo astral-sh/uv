@@ -11,7 +11,7 @@ use distribution_types::{
     WheelCompatibility,
 };
 use pep440_rs::Version;
-use platform_tags::{TagCompatibility, Tags};
+use platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use pypi_types::{HashDigest, Yanked};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
@@ -512,9 +512,8 @@ impl VersionMapLazy {
         // is not less than the `requires-python` minimum version).
         if let Some(requires_python) = self.requires_python.as_ref() {
             if !requires_python.matches_wheel_tag(filename) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
-                    requires_python.specifiers().clone(),
-                    PythonRequirementKind::Target,
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                    IncompatibleTag::Abi,
                 ));
             }
         }
