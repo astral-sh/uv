@@ -188,38 +188,28 @@ fn windows_script_launcher(
 }
 
 #[test]
-fn generate_test_launchers() -> Result<()> {
+fn generate_console_launcher() -> Result<()> {
     // Create Temp Dirs
     let temp_dir = assert_fs::TempDir::new()?;
     let console_bin_path = temp_dir.child("launcher.console.exe");
-    let gui_bin_path = temp_dir.child("launcher.gui.exe");
 
     // Locate an arbitrary python installation from PATH
     let python_executable_path = which("python")?;
-    let pythonw_executable_path = which("pythonw")?;
 
-    // Generate Launcher Scripts
+    // Generate Launcher Script
     let launcher_console_script =
         get_script_launcher(&format_shebang(&python_executable_path), false);
-    let launcher_gui_script = get_script_launcher(&format_shebang(&pythonw_executable_path), true);
 
     // Generate Launcher Payload
     let console_launcher =
         windows_script_launcher(&launcher_console_script, false, &python_executable_path)?;
-    let gui_launcher =
-        windows_script_launcher(&launcher_gui_script, true, &pythonw_executable_path)?;
 
-    // Create Launchers
+    // Create Launcher
     File::create(console_bin_path.path())?.write_all(console_launcher.as_ref())?;
-    File::create(gui_bin_path.path())?.write_all(gui_launcher.as_ref())?;
 
     println!(
         "Wrote Console Launcher in {}",
         console_bin_path.path().simplified_display()
-    );
-    println!(
-        "Wrote GUI Launcher in {}",
-        gui_bin_path.path().simplified_display()
     );
 
     // Test Console Launcher
@@ -229,6 +219,34 @@ fn generate_test_launchers() -> Result<()> {
         .success()
         .stdout("Hello from uv-trampoline-console.exe\r\n")
         .stderr("Hello from uv-trampoline-console.exe\r\n");
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn generate_gui_launcher() -> Result<()> {
+    // Create Temp Dirs
+    let temp_dir = assert_fs::TempDir::new()?;
+    let gui_bin_path = temp_dir.child("launcher.gui.exe");
+
+    // Locate an arbitrary pythonw installation from PATH
+    let pythonw_executable_path = which("pythonw")?;
+
+    // Generate Launcher Script
+    let launcher_gui_script = get_script_launcher(&format_shebang(&pythonw_executable_path), true);
+
+    // Generate Launcher Payload
+    let gui_launcher =
+        windows_script_launcher(&launcher_gui_script, true, &pythonw_executable_path)?;
+
+    // Create Launcher
+    File::create(gui_bin_path.path())?.write_all(gui_launcher.as_ref())?;
+
+    println!(
+        "Wrote GUI Launcher in {}",
+        gui_bin_path.path().simplified_display()
+    );
 
     // Test GUI Launcher
     // NOTICE: This will spawn a GUI and will wait until you close the window.
