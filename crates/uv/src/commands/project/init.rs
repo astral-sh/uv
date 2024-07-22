@@ -3,12 +3,13 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
+
 use pep508_rs::PackageName;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
-use uv_workspace::{ProjectWorkspace, WorkspaceError};
+use uv_workspace::{Workspace, WorkspaceError};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -69,8 +70,9 @@ pub(crate) async fn init(
     let workspace = if isolated {
         None
     } else {
-        match ProjectWorkspace::discover(&path, None).await {
-            Ok(project) => Some(project),
+        // Attempt to find a workspace root.
+        match Workspace::discover(&path, None).await {
+            Ok(workspace) => Some(workspace),
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(err) => return Err(err.into()),
         }
@@ -114,13 +116,12 @@ pub(crate) async fn init(
 
     if let Some(workspace) = workspace {
         // Add the package to the workspace.
-        let root_member = workspace.root_member();
-        let mut pyproject = PyProjectTomlMut::from_toml(root_member.pyproject_toml())?;
-        pyproject.add_workspace(path.strip_prefix(root_member.root())?)?;
+        let mut pyproject = PyProjectTomlMut::from_toml(workspace.pyproject_toml())?;
+        pyproject.add_workspace(path.strip_prefix(workspace.install_path())?)?;
 
         // Save the modified `pyproject.toml`.
         fs_err::write(
-            root_member.root().join("pyproject.toml"),
+            workspace.install_path().join("pyproject.toml"),
             pyproject.to_string(),
         )?;
 
@@ -128,7 +129,7 @@ pub(crate) async fn init(
             printer.stderr(),
             "Adding `{}` as member of workspace `{}`",
             name.cyan(),
-            root_member.root().simplified_display().cyan()
+            workspace.install_path().simplified_display().cyan()
         )?;
     }
 

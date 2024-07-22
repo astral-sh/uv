@@ -571,6 +571,7 @@ fn init_nested_workspace() -> Result<()> {
         "#,
     })?;
 
+    // Create a child from the workspace root.
     let child = context.temp_dir.join("foo");
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
     success: true
@@ -583,8 +584,8 @@ fn init_nested_workspace() -> Result<()> {
     Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
-    let grandchild = child.join("bar");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&grandchild), @r###"
+    // Create a grandchild from the child directory.
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -627,6 +628,96 @@ fn init_nested_workspace() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init` from within a workspace with an explicit root.
+#[test]
+fn init_explicit_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = []
+        "#,
+    })?;
+
+    let child = context.temp_dir.join("foo");
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["foo"]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init` from within a virtual workspace.
+#[test]
+fn init_virtual_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r"
+        [tool.uv.workspace]
+        members = []
+        ",
+    })?;
+
+    let child = context.temp_dir.join("foo");
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [tool.uv.workspace]
+        members = ["foo"]
         "###
         );
     });
