@@ -114,13 +114,13 @@ pub(crate) async fn init(
 
     if let Some(workspace) = workspace {
         // Add the package to the workspace.
-        let mut pyproject =
-            PyProjectTomlMut::from_toml(workspace.current_project().pyproject_toml())?;
-        pyproject.add_workspace(path.strip_prefix(workspace.project_root())?)?;
+        let root_member = workspace.root_member();
+        let mut pyproject = PyProjectTomlMut::from_toml(root_member.pyproject_toml())?;
+        pyproject.add_workspace(path.strip_prefix(root_member.root())?)?;
 
         // Save the modified `pyproject.toml`.
         fs_err::write(
-            workspace.current_project().root().join("pyproject.toml"),
+            root_member.root().join("pyproject.toml"),
             pyproject.to_string(),
         )?;
 
@@ -128,11 +128,7 @@ pub(crate) async fn init(
             printer.stderr(),
             "Adding {} as member of workspace {}",
             name.cyan(),
-            workspace
-                .workspace()
-                .install_path()
-                .simplified_display()
-                .cyan()
+            root_member.root().simplified_display().cyan()
         )?;
     }
 

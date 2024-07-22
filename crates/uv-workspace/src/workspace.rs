@@ -684,6 +684,17 @@ impl ProjectWorkspace {
         &self.workspace().packages[&self.project_name]
     }
 
+    /// Returns the workspace root member as a [`WorkspaceMember`].
+    ///
+    /// The root member can be an explicit workspace root or an implicit single project.
+    pub fn root_member(&self) -> &WorkspaceMember {
+        self.workspace()
+            .packages
+            .values()
+            .find(|member| member.root() == self.workspace().install_path())
+            .expect("workspace root member must exist")
+    }
+
     /// Find the workspace for a project.
     pub async fn from_project(
         install_path: &Path,
