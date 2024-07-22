@@ -136,7 +136,7 @@ pub(crate) async fn init(
     match explicit_path {
         // Initialized a project in the current directory.
         None => {
-            writeln!(printer.stderr(), "Initialized project {}", name.cyan())?;
+            writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
         }
 
         // Initialized a project in the given directory.
@@ -147,7 +147,7 @@ pub(crate) async fn init(
 
             writeln!(
                 printer.stderr(),
-                "Initialized project {} in {}",
+                "Initialized project `{}` at `{}`",
                 name.cyan(),
                 path.display().cyan()
             )?;

@@ -20,7 +20,7 @@ fn init() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Initialized project foo in [TEMP_DIR]/foo
+    Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
     let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
@@ -83,7 +83,7 @@ fn init_no_readme() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Initialized project foo in [TEMP_DIR]/foo
+    Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
     let pyproject = fs_err::read_to_string(context.temp_dir.join("foo/pyproject.toml"))?;
@@ -123,7 +123,7 @@ fn current_dir() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Initialized project foo
+    Initialized project `foo`
     "###);
 
     let pyproject = fs_err::read_to_string(dir.join("pyproject.toml"))?;
@@ -201,7 +201,7 @@ fn init_workspace() -> Result<()> {
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
     Adding foo as member of workspace [TEMP_DIR]/
-    Initialized project foo
+    Initialized project `foo`
     "###);
 
     let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
@@ -296,7 +296,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
     Adding foo as member of workspace [TEMP_DIR]/
-    Initialized project foo in [TEMP_DIR]/foo
+    Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
     let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
@@ -392,7 +392,7 @@ fn init_workspace_outside() -> Result<()> {
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
     Adding foo as member of workspace [TEMP_DIR]/
-    Initialized project foo in [TEMP_DIR]/foo
+    Initialized project `foo` at `[TEMP_DIR]/foo`
     "###);
 
     let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
@@ -473,7 +473,7 @@ fn init_invalid_names() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Initialized project foo-bar in [TEMP_DIR]/foo-bar
+    Initialized project `foo-bar` at `[TEMP_DIR]/foo-bar`
     "###);
 
     let child = context.temp_dir.child("foo-bar");
