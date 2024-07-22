@@ -69,3 +69,6 @@ version_files = [
   "crates/uv-version/Cargo.toml",
   "docs/guides/integration/pre-commit.md",
 ]
+
+[tool.uv]
+managed = false
