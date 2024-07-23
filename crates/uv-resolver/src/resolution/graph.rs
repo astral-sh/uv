@@ -1,17 +1,16 @@
-use indexmap::IndexSet;
-use petgraph::{
-    graph::{Graph, NodeIndex},
-    Directed,
-};
-use rustc_hash::{FxBuildHasher, FxHashMap};
-
 use distribution_types::{
     Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
     VersionOrUrlRef,
 };
+use indexmap::IndexSet;
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
+use petgraph::{
+    graph::{Graph, NodeIndex},
+    Directed,
+};
 use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_git::GitResolver;
@@ -67,7 +66,7 @@ struct PackageRef<'a> {
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
     pub(crate) fn from_state(
-        resolution: Resolution,
+        resolutions: &[Resolution],
         requirements: &[Requirement],
         constraints: &Constraints,
         overrides: &Overrides,
@@ -77,18 +76,24 @@ impl ResolutionGraph {
         python: &PythonRequirement,
         options: Options,
     ) -> Result<Self, ResolveError> {
+        let size_guess = resolutions[0].nodes.len();
         let mut petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed> =
-            Graph::with_capacity(resolution.nodes.len(), resolution.nodes.len());
+            Graph::with_capacity(size_guess, size_guess);
         let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
-            FxHashMap::with_capacity_and_hasher(resolution.nodes.len(), FxBuildHasher);
+            FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
         let mut diagnostics = Vec::new();
 
         // Add the root node.
         let root_index = petgraph.add_node(ResolutionGraphNode::Root);
 
-        // Add every package to the graph.
-        for (package, versions) in &resolution.nodes {
-            for version in versions {
+        let mut seen = FxHashSet::default();
+        for resolution in resolutions {
+            // Add every package to the graph.
+            for (package, version) in &resolution.nodes {
+                if !seen.insert((package, version)) {
+                    // Insert each node only once.
+                    continue;
+                }
                 Self::add_version(
                     &mut petgraph,
                     &mut inverse,
@@ -102,10 +107,17 @@ impl ResolutionGraph {
                 )?;
             }
         }
+        let mut seen = FxHashSet::default();
+        for resolution in resolutions {
+            // Add every edge to the graph.
+            for edge in &resolution.edges {
+                if !seen.insert(edge) {
+                    // Insert each node only once.
+                    continue;
+                }
 
-        // Add every edge to the graph.
-        for edge in resolution.edges {
-            Self::add_edge(&mut petgraph, &mut inverse, root_index, edge);
+                Self::add_edge(&mut petgraph, &mut inverse, root_index, edge);
+            }
         }
 
         // Extract the `Requires-Python` range, if provided.
@@ -141,7 +153,7 @@ impl ResolutionGraph {
         petgraph: &mut Graph<ResolutionGraphNode, Option<MarkerTree>>,
         inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
-        edge: ResolutionDependencyEdge,
+        edge: &ResolutionDependencyEdge,
     ) {
         let from_index = edge.from.as_ref().map_or(root_index, |from| {
             inverse[&PackageRef {
@@ -166,7 +178,8 @@ impl ResolutionGraph {
         {
             // If either the existing marker or new marker is `None`, then the dependency is
             // included unconditionally, and so the combined marker should be `None`.
-            if let (Some(marker), Some(ref version_marker)) = (marker.as_mut(), edge.marker) {
+            if let (Some(marker), Some(ref version_marker)) = (marker.as_mut(), edge.marker.clone())
+            {
                 marker.or(version_marker.clone());
             } else {
                 *marker = None;
