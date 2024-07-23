@@ -142,11 +142,21 @@ pub(crate) async fn list(
     for (key, path) in include {
         let key = key.to_string();
         if let Some(path) = path {
-            writeln!(
-                printer.stdout(),
-                "{key:width$}    {}",
-                path.user_display().cyan()
-            )?;
+            let is_symlink = fs_err::symlink_metadata(path)?.is_symlink();
+            if is_symlink {
+                writeln!(
+                    printer.stdout(),
+                    "{key:width$}    {} -> {}",
+                    path.user_display().cyan(),
+                    path.read_link()?.user_display().cyan()
+                )?;
+            } else {
+                writeln!(
+                    printer.stdout(),
+                    "{key:width$}    {}",
+                    path.user_display().cyan()
+                )?;
+            }
         } else {
             writeln!(
                 printer.stdout(),
