@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
 use pep508_rs::PackageName;
@@ -56,7 +56,7 @@ pub(crate) async fn init(
             let name = path
                 .file_name()
                 .and_then(|path| path.to_str())
-                .expect("Invalid package name");
+                .context("Missing directory name")?;
 
             PackageName::new(name.to_string())?
         }
