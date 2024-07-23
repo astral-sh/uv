@@ -1043,3 +1043,41 @@ fn init_requires_python_specifiers() -> Result<()> {
 
     Ok(())
 }
+
+/// Run `uv init` from within an unmanaged project.
+#[test]
+fn init_unmanaged() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r"
+        [tool.uv]
+        managed = false
+        ",
+    })?;
+
+    uv_snapshot!(context.filters(), context.init().arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [tool.uv]
+        managed = false
+        "###
+        );
+    });
+
+    Ok(())
+}
