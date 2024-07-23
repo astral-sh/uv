@@ -14,7 +14,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use pubgrub::range::Range;
-use pubgrub::solver::{Incompatibility, State};
+use pubgrub::solver::{Id, Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -313,10 +313,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut visited = FxHashSet::default();
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
+        let pubgrub = State::init(root.clone(), MIN_VERSION.clone());
         let mut prefetcher = BatchPrefetcher::default();
         let state = ForkState {
-            pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
-            next: root,
+            next: pubgrub.root_package,
+            pubgrub,
             pins: FilePins::default(),
             fork_urls: ForkUrls::default(),
             priorities: PubGrubPriorities::default(),
@@ -343,7 +344,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let start = Instant::now();
             loop {
                 // Run unit propagation.
-                if let Err(err) = state.pubgrub.unit_propagation(state.next.clone()) {
+                if let Err(err) = state.pubgrub.unit_propagation(state.next) {
                     return Err(self.convert_no_solution_err(
                         err,
                         state.fork_urls,
@@ -357,7 +358,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // the dependency mode is direct, we only need to visit the root package.
                 if self.dependency_mode.is_transitive() {
                     Self::pre_visit(
-                        state.pubgrub.partial_solution.prioritized_packages(),
+                        state
+                            .pubgrub
+                            .partial_solution
+                            .prioritized_packages()
+                            .map(|(id, range)| (&state.pubgrub.package_store[id], range)),
                         &self.urls,
                         &state.python_requirement,
                         &request_sink,
@@ -368,7 +373,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let Some(highest_priority_pkg) = state
                     .pubgrub
                     .partial_solution
-                    .pick_highest_priority_pkg(|package, _range| state.priorities.get(package))
+                    .pick_highest_priority_pkg(|id, _range| {
+                        state.priorities.get(&state.pubgrub.package_store[id])
+                    })
                 else {
                     if tracing::enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
@@ -394,7 +401,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     continue 'FORK;
                 };
                 state.next = highest_priority_pkg;
-                let url = state.next.name().and_then(|name| state.fork_urls.get(name));
+
+                let next = &state.pubgrub.package_store[state.next];
+                let url = next.name().and_then(|name| state.fork_urls.get(name));
 
                 // Consider:
                 // ```toml
@@ -407,17 +416,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // since we weren't sure whether it might also be a URL requirement when
                 // transforming the requirements. For that case, we do another request here
                 // (idempotent due to caching).
-                self.request_package(&state.next, url, &request_sink)?;
+                self.request_package(&next, url, &request_sink)?;
 
-                prefetcher.version_tried(state.next.clone());
+                prefetcher.version_tried(state.next, next);
 
                 let term_intersection = state
                     .pubgrub
                     .partial_solution
-                    .term_intersection_for_package(&state.next)
+                    .term_intersection_for_package(state.next)
                     .expect("a package was chosen but we don't have a term");
                 let decision = self.choose_version(
-                    &state.next,
+                    &next,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
                     &preferences,
@@ -430,21 +439,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Pick the next compatible version.
                 let version = match decision {
                     None => {
-                        debug!("No compatible version found for: {next}", next = state.next);
+                        debug!("No compatible version found for: {next}", next = &next);
 
                         let term_intersection = state
                             .pubgrub
                             .partial_solution
-                            .term_intersection_for_package(&state.next)
+                            .term_intersection_for_package(state.next)
                             .expect("a package was chosen but we don't have a term");
 
                         // Check if the decision was due to the package being unavailable
-                        if let PubGrubPackageInner::Package { ref name, .. } = &*state.next {
+                        if let PubGrubPackageInner::Package { ref name, .. } = &**next {
                             if let Some(entry) = self.unavailable_packages.get(name) {
                                 state
                                     .pubgrub
                                     .add_incompatibility(Incompatibility::custom_term(
-                                        state.next.clone(),
+                                        state.next,
                                         term_intersection.clone(),
                                         UnavailableReason::Package(entry.clone()),
                                     ));
@@ -455,7 +464,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state
                             .pubgrub
                             .add_incompatibility(Incompatibility::no_versions(
-                                state.next.clone(),
+                                state.next,
                                 term_intersection.clone(),
                             ));
                         continue;
@@ -470,10 +479,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
+                let next_package = &state.pubgrub.package_store[state.next];
+
                 // Only consider registry packages for prefetch.
                 if url.is_none() {
                     prefetcher.prefetch_batches(
-                        &state.next,
+                        state.next,
+                        &next_package,
                         &version,
                         term_intersection.unwrap_positive(),
                         &state.python_requirement,
@@ -483,11 +495,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )?;
                 }
 
-                self.on_progress(&state.next, &version);
+                self.on_progress(&next_package, &version);
 
                 if !state
                     .added_dependencies
-                    .entry(state.next.clone())
+                    .entry(state.next)
                     .or_default()
                     .insert(version.clone())
                 {
@@ -496,18 +508,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     state
                         .pubgrub
                         .partial_solution
-                        .add_decision(state.next.clone(), version);
+                        .add_decision(state.next, version);
                     continue;
                 }
 
-                let for_package = if let PubGrubPackageInner::Root(_) = &*state.next {
+                let for_package = if let PubGrubPackageInner::Root(_) = &**next_package {
                     None
                 } else {
-                    state.next.name().map(|name| format!("{name}=={version}"))
+                    next_package.name().map(|name| format!("{name}=={version}"))
                 };
                 // Retrieve that package dependencies.
                 let forked_deps = self.get_dependencies_forking(
-                    &state.next,
+                    next_package,
                     &version,
                     &state.fork_urls,
                     &state.markers,
@@ -518,7 +530,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state
                             .pubgrub
                             .add_incompatibility(Incompatibility::custom_version(
-                                state.next.clone(),
+                                state.next,
                                 version.clone(),
                                 UnavailableReason::Version(reason),
                             ));
@@ -643,16 +655,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for_package: Option<&'a str>,
         diverging_packages: &'a [PackageName],
     ) -> impl Iterator<Item = Result<ForkState, ResolveError>> + 'a {
-        debug!(
-            "Splitting resolution on {}=={} over {} into {} resolution with separate markers",
-            current_state.next,
-            version,
-            diverging_packages
-                .iter()
-                .map(ToString::to_string)
-                .join(", "),
-            forks.len()
-        );
+        // debug!(
+        //     "Splitting resolution on {}=={} over {} into {} resolution with separate markers",
+        //     current_state.next,
+        //     version,
+        //     diverging_packages
+        //         .iter()
+        //         .map(ToString::to_string)
+        //         .join(", "),
+        //     forks.len()
+        // );
         assert!(forks.len() >= 2);
         // This is a somewhat tortured technique to ensure
         // that our resolver state is only cloned as much
@@ -1982,7 +1994,7 @@ struct ForkState {
     /// assignments (to packages) from this state's "partial solution."
     pubgrub: State<UvDependencyProvider>,
     /// The next package on which to run unit propagation.
-    next: PubGrubPackage,
+    next: Id<PubGrubPackage>,
     /// The set of pinned versions we accrue throughout resolution.
     ///
     /// The key of this map is a package name, and each package name maps to
@@ -2007,7 +2019,7 @@ struct ForkState {
     priorities: PubGrubPriorities,
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
-    added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
+    added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -2161,18 +2173,18 @@ impl ForkState {
             let python_version: Range<Version> =
                 PubGrubSpecifier::from_release_specifiers(&requires_python)?.into();
 
-            let package = &self.next;
+            let package = self.next;
+            let python = self.pubgrub.package_store.alloc(PubGrubPackage::from(
+                PubGrubPackageInner::Python(match kind {
+                    PythonRequirementKind::Installed => PubGrubPython::Installed,
+                    PythonRequirementKind::Target => PubGrubPython::Target,
+                }),
+            ));
             self.pubgrub
                 .add_incompatibility(Incompatibility::from_dependency(
-                    package.clone(),
+                    package,
                     Range::singleton(version.clone()),
-                    (
-                        PubGrubPackage::from(PubGrubPackageInner::Python(match kind {
-                            PythonRequirementKind::Installed => PubGrubPython::Installed,
-                            PythonRequirementKind::Target => PubGrubPython::Target,
-                        })),
-                        python_version.clone(),
-                    ),
+                    (python, python_version.clone()),
                 ));
             self.pubgrub
                 .partial_solution
@@ -2189,31 +2201,34 @@ impl ForkState {
     }
 
     fn into_resolution(self) -> Resolution {
-        let solution = self.pubgrub.partial_solution.extract_solution();
+        let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
         let mut dependencies: FxHashSet<ResolutionDependencyEdge> = FxHashSet::default();
         for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
                 let pubgrub::solver::Kind::FromDependencyOf(
-                    ref self_package,
+                    self_package,
                     ref self_range,
-                    ref dependency_package,
+                    dependency_package,
                     ref dependency_range,
                 ) = self.pubgrub.incompatibility_store[*id].kind
                 else {
                     continue;
                 };
-                if package != self_package {
+                if *package != self_package {
                     continue;
                 }
                 if !self_range.contains(self_version) {
                     continue;
                 }
-                let Some(dependency_version) = solution.get(dependency_package) else {
+                let Some(dependency_version) = solution.get(&dependency_package) else {
                     continue;
                 };
                 if !dependency_range.contains(dependency_version) {
                     continue;
                 }
+
+                let self_package = &self.pubgrub.package_store[self_package];
+                let dependency_package = &self.pubgrub.package_store[dependency_package];
 
                 let (self_name, self_extra, self_dev) = match &**self_package {
                     PubGrubPackageInner::Package {
@@ -2346,7 +2361,7 @@ impl ForkState {
                     extra,
                     dev,
                     marker: None,
-                } = &*package
+                } = &*self.pubgrub.package_store[package]
                 {
                     Some((
                         ResolutionPackage {
