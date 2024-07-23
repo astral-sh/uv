@@ -17,10 +17,11 @@ pep440_rs = { workspace = true }
 platform-tags = { workspace = true }
 uv-normalize = { workspace = true }
 
-rkyv = { workspace = true }
+rkyv = { workspace = true, features = ["smallvec"] }
 serde = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+smallvec = { version = "1.13.2",features = ["serde"] }
 
 [dev-dependencies]
 insta = { version = "1.36.1" }
