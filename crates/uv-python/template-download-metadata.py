@@ -35,6 +35,8 @@ def prepare_name(name: str) -> str:
     match name:
         case "cpython":
             return "CPython"
+        case "pypy":
+            return "PyPy"
         case _:
             raise ValueError(f"Unknown implementation name: {name}")
 

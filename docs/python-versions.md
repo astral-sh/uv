@@ -18,13 +18,11 @@ Many Python version request formats are supported:
 
 - `<version>` e.g. `3`, `3.12`, `3.12.3`
 - `<version-specifier>` e.g. `>=3.12,<3.13`
-- `<implementation>` e.g. `cpython` or `cp`
-- `<implementation>@<version>` e.g. `cpython@3.12`
-- `<implementation><version>` e.g. `cpython3.12` or `cp312`
+- `<implementation>` e.g. `cpython` or `cp`, `pypy` or `pp`
+- `<implementation>@<version>` e.g. `cpython@3.12` or `pypy@3.12`
+- `<implementation><version>` e.g. `cpython3.12` or `cp312`, `pypy3.12` or `pp312`
 - `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
 - `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
-
-At this time, only CPython downloads are supported. However, PyPy support is planned.
 
 ## Installing a Python version
 

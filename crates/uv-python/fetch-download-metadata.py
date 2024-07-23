@@ -322,6 +322,94 @@ class CPythonFinder(Finder):
         return pref
 
 
+class PyPyFinder(Finder):
+    implementation = ImplementationName.PYPY
+
+    RELEASE_URL = "https://raw.githubusercontent.com/pypy/pypy/main/pypy/tool/release/versions.json"
+    CHECKSUM_URL = (
+        "https://raw.githubusercontent.com/pypy/pypy.org/main/pages/checksums.rst"
+    )
+    CHECKSUM_RE = re.compile(
+        r"^\s*(?P<checksum>\w{64})\s+(?P<filename>pypy.+)$", re.MULTILINE
+    )
+
+    ARCH_MAPPING = {
+        "x64": "x86_64",
+        "x86": "i686",
+        "i686": "i686",
+        "aarch64": "aarch64",
+        "arm64": "aarch64",
+        "s390x": "s390x",
+    }
+
+    PLATFORM_MAPPING = {
+        "win32": "windows",
+        "win64": "windows",
+        "linux": "linux",
+        "darwin": "darwin",
+    }
+
+    def __init__(self, client: httpx.AsyncClient):
+        self.client = client
+
+    async def find(self) -> list[PythonDownload]:
+        downloads = await self._fetch_downloads()
+        await self._fetch_checksums(downloads)
+        return downloads
+
+    async def _fetch_downloads(self) -> list[PythonDownload]:
+        resp = await self.client.get(self.RELEASE_URL)
+        resp.raise_for_status()
+        versions = resp.json()
+
+        results = {}
+        for version in versions:
+            if not version["stable"]:
+                continue
+            python_version = Version.from_str(version["python_version"])
+            if python_version < (3, 7, 0):
+                continue
+            for file in version["files"]:
+                arch = self._normalize_arch(file["arch"])
+                platform = self._normalize_os(file["platform"])
+                libc = "gnu" if platform == "linux" else "none"
+                download = PythonDownload(
+                    version=python_version,
+                    triple=PlatformTriple(
+                        arch=arch,
+                        platform=platform,
+                        libc=libc,
+                    ),
+                    flavor="",
+                    implementation=self.implementation,
+                    filename=file["filename"],
+                    url=file["download_url"],
+                )
+                # Only keep the latest pypy version of each arch/platform
+                if (python_version, arch, platform) not in results:
+                    results[(python_version, arch, platform)] = download
+
+        return list(results.values())
+
+    def _normalize_arch(self, arch: str) -> str:
+        return self.ARCH_MAPPING.get(arch, arch)
+
+    def _normalize_os(self, os: str) -> str:
+        return self.PLATFORM_MAPPING.get(os, os)
+
+    async def _fetch_checksums(self, downloads: list[PythonDownload]) -> None:
+        logging.info("Fetching PyPy checksums")
+        resp = await self.client.get(self.CHECKSUM_URL)
+        text = resp.text
+
+        checksums = {}
+        for match in self.CHECKSUM_RE.finditer(text):
+            checksums[match.group("filename")] = match.group("checksum")
+
+        for download in downloads:
+            download.sha256 = checksums.get(download.filename)
+
+
 def render(downloads: list[PythonDownload]) -> None:
     """Render `download-metadata.json`."""
 
@@ -371,9 +459,9 @@ async def find() -> None:
         headers["Authorization"] = "Bearer " + token
     client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=15)
 
-    # TODO: Add PyPyFinder
     finders = [
         CPythonFinder(client),
+        PyPyFinder(client),
     ]
     downloads = []
 
