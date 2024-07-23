@@ -619,3 +619,47 @@ fn tool_run_url() {
      + werkzeug==3.0.1
     "###);
 }
+
+/// Read requirements from a `requirements.txt` file.
+#[test]
+fn tool_run_requirements_txt() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig").unwrap();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("requirements.txt")
+        .arg("--with")
+        .arg("typing-extensions")
+        .arg("flask")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + iniconfig==2.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + typing-extensions==4.10.0
+     + werkzeug==3.0.1
+    "###);
+}

@@ -1,11 +1,11 @@
 use distribution_types::{InstalledDist, Name};
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_installer::SitePackages;
 use uv_python::{Interpreter, PythonEnvironment};
-use uv_requirements::RequirementsSpecification;
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_tool::entrypoint_paths;
 
 use crate::commands::{project, SharedState};
@@ -14,7 +14,7 @@ use crate::settings::ResolverInstallerSettings;
 
 /// Resolve any [`UnnamedRequirements`].
 pub(super) async fn resolve_requirements(
-    requirements: impl Iterator<Item = &str>,
+    requirements: &[RequirementsSource],
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
@@ -25,18 +25,17 @@ pub(super) async fn resolve_requirements(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<Vec<Requirement>> {
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
+
     // Parse the requirements.
-    let requirements = {
-        let mut parsed = vec![];
-        for requirement in requirements {
-            parsed.push(RequirementsSpecification::parse_package(requirement)?);
-        }
-        parsed
-    };
+    let spec =
+        RequirementsSpecification::from_simple_sources(requirements, &client_builder).await?;
 
     // Resolve the parsed requirements.
     project::resolve_names(
-        requirements,
+        spec.requirements,
         interpreter,
         settings,
         state,

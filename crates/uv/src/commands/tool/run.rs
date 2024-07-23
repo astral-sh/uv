@@ -23,12 +23,15 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
     PythonRequest,
 };
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
-use crate::commands::{project::environment::CachedEnvironment, tool::common::matching_packages};
+use crate::commands::{
+    project, project::environment::CachedEnvironment, tool::common::matching_packages,
+};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -54,7 +57,7 @@ impl Display for ToolRunCommand {
 pub(crate) async fn run(
     command: ExternalCommand,
     from: Option<String>,
-    with: Vec<String>,
+    with: &[RequirementsSource],
     python: Option<String>,
     settings: ResolverInstallerSettings,
     invocation_source: ToolRunCommand,
@@ -86,7 +89,7 @@ pub(crate) async fn run(
     // Get or create a compatible environment in which to execute the tool.
     let (from, environment) = get_or_create_environment(
         &from,
-        &with,
+        with,
         python.as_deref(),
         &settings,
         isolated,
@@ -273,7 +276,7 @@ fn warn_executable_not_provided_by_package(
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
 async fn get_or_create_environment(
     from: &str,
-    with: &[String],
+    with: &[RequirementsSource],
     python: Option<&str>,
     settings: &ResolverInstallerSettings,
     isolated: bool,
@@ -312,8 +315,8 @@ async fn get_or_create_environment(
 
     // Resolve the `from` requirement.
     let from = {
-        resolve_requirements(
-            std::iter::once(from),
+        project::resolve_names(
+            vec![RequirementsSpecification::parse_package(from)?],
             &interpreter,
             settings,
             &state,
@@ -335,7 +338,7 @@ async fn get_or_create_environment(
         requirements.push(from.clone());
         requirements.extend(
             resolve_requirements(
-                with.iter().map(String::as_str),
+                with,
                 &interpreter,
                 settings,
                 &state,
