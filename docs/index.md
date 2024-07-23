@@ -6,7 +6,7 @@
   <a href="https://discord.gg/astral-sh"><img src="https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white" /></a>
 </div>
 
-An extremely fast Python version, package, and project manager, written in Rust.
+An extremely fast Python package and project manager, written in Rust.
 
 <p align="center">
   <img alt="Shows a bar chart with benchmark results." src="https://github.com/astral-sh/uv/assets/1309177/629e59c0-9c6e-4013-9ad4-adb2bcf5080d#only-light">
@@ -24,26 +24,19 @@ An extremely fast Python version, package, and project manager, written in Rust.
 
 - 🐍 [Installs and manages](./guides/install-python.md) Python versions.
 - 🛠️ [Executes and installs](./guides/tools.md) commands provided by Python packages.
-- ❇️ [Runs scripts](./guides/scripts.md) with inline dependency metadata.
-- 🗂️ Provides comprehensive project management, with a multi-platform lock file.
-- 🏢 Supports Cargo-style workspaces for large projects.
-- 🚀 A replacement for `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, and more.
+- ❇️ [Runs scripts](./guides/scripts.md) with [inline dependency metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
+- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a multi-platform lock file.
+- 🏢 Supports Cargo-style [workspaces](./workspaces.md) for large projects.
+- 🚀 A replacement for `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`
   and `pip-tools` (`pip-compile` and `pip-sync`).
 - 🧪 Tested at-scale against the top 10,000 PyPI packages.
-- 💾 Disk-space efficient, with a global cache for dependency deduplication.
+- 💾 Disk-space efficient, with a [global cache](./cache.md) for dependency deduplication.
 - ⁉️ Best-in-class error messages with a conflict-tracking resolver.
 - ⏬ A static binary that can be installed without Rust or Python via `curl` or `pip`.
 - 🖥️ Support for macOS, Linux, and Windows.
 
 uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
-
-## Replacement for `pip` and `pip-tools`
-
-uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands with support for
-a wide range of advanced `pip` features, including editable installs, Git dependencies, direct URL dependencies, local dependencies, constraints, source distributions, HTML and JSON indexes, and more.
-
-uv extends these interfaces with advanced features, such as dependency version overrides, multi-platform resolutions, reproducible resolutions, alternative resolution strategies, and more.
 
 ## Getting started
 
@@ -57,4 +50,136 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Then, check out the [first steps](./first-steps.md) or see more [installation methods](./installation.md).
+Then, check out the [first steps](./first-steps.md), see more [installation methods](./installation.md), or read on for a brief overview.
+
+## Project management
+
+uv can manage project dependencies and environments:
+
+```console
+$ uv init example
+Initialized project `example` at `/home/user/example`
+
+$ cd example
+
+$ uv add ruff
+Creating virtualenv at: .venv
+Resolved 2 packages in 170ms
+   Built example @ file:///home/user/example
+Prepared 2 packages in 627ms
+Installed 2 packages in 1ms
+ + example==0.1.0 (from file:///home/user/example)
+ + ruff==0.5.4
+
+$ uv run -- ruff check
+All checks passed!
+```
+
+See the [project guide](./guides/projects.md) to get started.
+
+## Tool management
+
+uv provides an interface for executing and installing command-line tools provided by Python packages, similar to `pipx`. 
+
+Run a tool in an ephemeral environment with `uvx`:
+
+```console
+$ uvx pycowsay 'hello world!'
+Resolved 1 package in 167ms
+Installed 1 package in 9ms
+ + pycowsay==0.0.0.2
+  """
+
+  ------------
+< hello world! >
+  ------------
+   \   ^__^
+    \  (oo)\_______
+       (__)\       )\/\
+           ||----w |
+           ||     ||
+```
+
+Install a tool with `uv tool install`:
+
+```console
+$ uv tool install ruff
+Resolved 1 package in 6ms
+Installed 1 package in 2ms
+ + ruff==0.5.4
+Installed 1 executable: ruff
+
+$ ruff --version
+ruff 0.5.4
+```
+
+See the [tools guide](./guides/tools.md) to get started.
+
+## Python management
+
+uv supports installing Python and managing multiple Python versions.
+
+Install the Python versions your project requires:
+
+```console
+$ uv python install 3.10 3.11 3.12
+warning: `uv python install` is experimental and may change without warning
+Searching for Python versions matching: Python 3.10
+Searching for Python versions matching: Python 3.11
+Searching for Python versions matching: Python 3.12
+Installed 3 versions in 3.42s
+ + cpython-3.10.14-macos-aarch64-none
+ + cpython-3.11.9-macos-aarch64-none
+ + cpython-3.12.4-macos-aarch64-none
+```
+
+Or, fetch Python versions on demand:
+
+```console
+$ uv venv --python 3.12.0
+Creating virtualenv at: .venv
+Activate with: source .venv/bin/activate
+```
+
+See the [installing Python guide](./guides/install-python.md) to get started.
+
+## Package management
+
+uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands with support for
+a wide range of advanced `pip` features, including editable installs, Git dependencies, direct URL dependencies, local dependencies, constraints, source distributions, HTML and JSON indexes, and more.
+
+uv extends these interfaces with advanced features, such as dependency version overrides, multi-platform resolutions, reproducible resolutions, alternative resolution strategies, and more.
+
+Compile requirements into a multi-platform requirements file:
+
+```console
+$ uv pip compile docs/requirements.in --universal --output-file docs/requirements.txt
+Resolved 43 packages in 12ms
+```
+
+Create a virtual environment:
+
+```console
+$ uv venv
+Using Python 3.12.3 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
+Creating virtualenv at: .venv
+Activate with: source .venv/bin/activate
+```
+
+Install the locked requirements:
+
+```console
+$ uv pip sync docs/requirements.txt
+Resolved 43 packages in 11ms
+Installed 43 packages in 208ms
+ + babel==2.15.0
+ + black==24.4.2
+ + certifi==2024.7.4
+ ...
+```
+
+See the [uv pip documentation](./pip/environments.md) to get started.
+
+## Next steps
+
+See the [documentation overview](./overview.md) to learn more about uv.

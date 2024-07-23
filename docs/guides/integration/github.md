@@ -6,7 +6,7 @@ uv installation differs depending on the platform.
 
 ### on Unix
 
-```yaml
+```yaml title="example.yml"
 name: Example on Unix
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
 
 ### on Windows
 
-```yaml
+```yaml title="example.yml"
 name: Example on Windows
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
 
 ### Using a matrix
 
-```yaml
+```yaml title="example.yml"
 name: Example
 
 jobs:
@@ -78,7 +78,7 @@ jobs:
 
 Python can be installed with the `python install` command:
 
-```yaml
+```yaml title="example.yml"
 steps:
   # ... setup up uv ...
 
@@ -90,7 +90,7 @@ This will respect the Python version pinned in the project.
 
 Or, when using a matrix, as in:
 
-```yaml
+```yaml title="example.yml"
 strategy:
   matrix:
     python-version:
@@ -101,7 +101,7 @@ strategy:
 
 Provide the version to the `python install` invocation:
 
-```yaml
+```yaml title="example.yml"
 steps:
   # ... setup up uv ...
 
@@ -111,7 +111,7 @@ steps:
 
 Alternatively, the official GitHub `setup-python` action can be used. This is generally faster, but will not respect the project's pinned Python version.
 
-```yaml
+```yaml title="example.yml"
 steps:
   - name: "Set up Python"
     uses: actions/setup-python@v5
@@ -123,7 +123,7 @@ steps:
 
 Once uv and Python are installed, the project can be installed with `uv sync` and commands can be run in the environment with `uv run`:
 
-```yaml
+```yaml title="example.yml"
 steps:
   # ... setup up Python and uv ...
 
@@ -139,7 +139,7 @@ steps:
 
 If using the `uv pip` interface instead of the uv project interface, uv requires a virtual environment by default. To allow installing packages into the system environment, use the `--system` flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable, e.g.:
 
-```yaml
+```yaml title="example.yml"
 steps:
   - name: Allow uv to use the system Python by default
     run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
@@ -147,7 +147,7 @@ steps:
 
 Now, `uv pip` can modify the system environment without creating and activating a virtual environment.
 
-```yaml
+```yaml title="example.yml"
 steps:
   # ... setup up Python and uv ...
 

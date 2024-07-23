@@ -10,7 +10,7 @@ uv pip install flask
 
 To install a package with optional dependencies enabled, e.g., Flask with the "dotenv" extra:
 
-```
+```bash
 uv pip install "flask[dotenv]"
 ```
 

@@ -29,7 +29,7 @@ There a two main workspace structures: A **root package with helpers** and a **f
 
 The root workspace layout defines one main package in the root of the repository, with helper packages in `packages`. In this example `albatross/pyproject.toml` has both a `project` section and a `tool.uv.workspace` section.
 
-```
+```text
 albatross
 ├── packages
 │   ├── provider_a
@@ -56,7 +56,7 @@ In the flat layout, all packages are in the `packages` directory, and the root
 `pyproject.toml` defines a so-called virtual workspace. In this example `albatross/pyproject.toml` has only a `tool.uv.workspace` section,
 but no `project`.
 
-```
+```text
 albatross
 ├── packages
 │   ├── albatross

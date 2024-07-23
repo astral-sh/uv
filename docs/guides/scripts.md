@@ -7,7 +7,7 @@ script dependencies are properly managed inside and outside of projects.
 
 If your script has no dependencies, you can execute it with `uv run`:
 
-```python
+```python title="example.py"
 print("Hello world")
 ```
 
@@ -33,7 +33,7 @@ $ uv run example.py
 
 Arguments may be provided to the script:
 
-```python
+```python title="example.py"
 import sys
 
 print(" ".join(sys.argv[1:]))
@@ -63,7 +63,7 @@ of dependencies that are required for the script. Generally, it's recommended to
 
 For example, the following script requires `rich`.
 
-```python
+```python title="example.py"
 import time
 from rich.progress import track
 
@@ -104,7 +104,7 @@ Python recently added a standard format for [inline script metadata](https://pac
 
 To use inline script metadata, include a `script` section at the top of the script:
 
-```python
+```python title="example.py"
 # /// script
 # dependencies = [
 #   "requests<3",
@@ -140,7 +140,7 @@ $ uv run example.py
 
 uv also supports Python version requirements:
 
-```python
+```python title="example.py"
 # /// script
 # requires-python = ">=3.12"
 # dependencies = []
@@ -159,7 +159,7 @@ Note that when using inline script metadata, even if `uv run` is used in a _proj
 
 uv allows arbitrary Python versions to be requested on each script invocation, for example:
 
-```python
+```python title="example.py"
 import sys
 
 print(".".join(map(str, sys.version_info[:3])))

@@ -19,7 +19,7 @@ standard.
 `project.dependencies` is structured as a list. Each entry includes a dependency name and
 version. An entry may include extras or environment markers for platform-specific packages. For example:
 
-```toml
+```toml title="pyproject.toml"
 [project]
 name = "albatross"
 version = "0.1.0"
@@ -37,41 +37,126 @@ dependencies = [
 ]
 ```
 
-If the project only requires packages from standaard package indexes, then `project.dependencies` is sufficient. If, the project depends on packages from Git, remote URLs, or local sources, `tool.uv.sources` is needed.
+If the project only requires packages from standard package indexes, then `project.dependencies` is sufficient. If, the project depends on packages from Git, remote URLs, or local sources, `tool.uv.sources` is needed.
 
 ## Dependency sources
 
-During development, the project may rely on a package that isn't available on PyPI. In the following example, the project will require several package sources:
+During development, the project may rely on a package that isn't available on PyPI. The following additional sources are supported by uv:
 
-- `tqdm` from a specific Git commit
-- `importlib_metadata` from a dedicated URL
-- `torch` from the PyTorch-specific index
-- `mollymawk` from the current workspace
+- Git
+- URL
+- Path
+- Workspace
 
-These requirements can be expressed by extending the definitions in the `project.dependencies` table with `tool.uv.sources` entries:
+Only a single source may be defined for each dependency.
 
-```toml
+Note that if a non-uv project uses a project with sources as a Git- or path-dependency, only
+`project.dependencies` is respected, the information in the source table
+will need to be re-specified in a format specific to the other package manager.
+
+### Git
+
+To add a Git dependency source, prefix a Git-compatible URL to clone with `git+`.
+
+For example:
+
+```console
+$ uv add git+https://github.com/encode/httpx
+```
+
+Will result in a `pyproject.toml` with:
+
+```toml title="pyproject.toml"
 [project]
-name = "albatross"
-version = "0.1.0"
 dependencies = [
-  # Any version in this range.
-  "tqdm >=4.66.2,<5",
-  # Exactly this version of torch.
-  "torch ==2.2.2",
-  # Install transformers with the torch extra.
-  "transformers[torch] >=4.39.3,<5",
-  # Only install this package on Python versions prior to 3.10.
-  "importlib_metadata >=7.1.0,<8; python_version < '3.10'",
+    "httpx",
+]
+
+[tool.uv.sources]
+httpx = { git = "https://github.com/encode/httpx" }
+```
+
+A revision, tag, or branch may also be included, e.g.:
+
+```console
+$ uv add git+https://github.com/encode/httpx --tag 0.27.0
+$ uv add git+https://github.com/encode/httpx --branch main
+$ uv add git+https://github.com/encode/httpx --rev 326b943
+```
+
+Git dependencies can also be manually added or edited in the `pyproject.toml` with the `{ git = <url> }` syntax. A target revision may be specified with one of: `rev`, `tag`, or `branch`. A `subdirectory` may be specified if the package isn't in the repository root.
+
+### URL
+
+To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source distribution (ending in `.zip` or `.tar.gz`).
+
+For example:
+
+```console
+$ uv add "https://files.pythonhosted.org/packages/5c/2d/3da5bdf4408b8b2800061c339f240c1802f2e82d55e50bd39c5a881f47f0/httpx-0.27.0.tar.gz"
+```
+
+Will result in a `pyproject.toml` with:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+    "httpx",
+]
+
+[tool.uv.sources]
+httpx = { url = "https://files.pythonhosted.org/packages/5c/2d/3da5bdf4408b8b2800061c339f240c1802f2e82d55e50bd39c5a881f47f0/httpx-0.27.0.tar.gz" }
+```
+
+URL dependencies can also be manually added or edited in the `pyproject.toml` with the `{ url = <url> }` syntax.  A `subdirectory` may be specified if the if the source distribution isn't in the archive root.
+
+### Path
+
+To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution (ending in `.zip` or `.tar.gz`), or a directory containing a `pyproject.toml`.
+
+For example:
+
+```console
+$ uv add /example/foo.whl
+```
+
+Will result in a `pyproject.toml` with:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+    "foo",
+]
+
+[tool.uv.sources]
+foo = { path = "/example/foo.whl" }
+```
+
+The path may also be a relative path, e.g.:
+
+```console
+$ uv add ./foo
+```
+
+Note an [editable installation](#editables-dependencies) is not used for path dependencies. However, for directories, an editable installation may be requested, e.g.:
+
+```console
+$ uv add --editable ./foo
+```
+
+However, it is recommended to use [_workspaces_](#workspaces) instead of manual path dependencies. 
+
+### Workspace member
+
+To declare a workspace member, add the dependency with `{ workspace = true }`. All workspace members must be explicitly stated. Workspace members are [editable](#editables-dependencies) by default; `editable = false` may be included to install them as regular dependencies. See the [workspace](./workspaces.md) documentation for more details on workspaces.
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
   "mollymawk ==0.1.0"
 ]
 
 [tool.uv.sources]
-# Install a specific Git commit.
-tqdm = { git = "https://github.com/tqdm/tqdm", rev = "cc372d09dcd5a5eabdc6ed4cf365bdb0be004d44" }
-# Install a remote source distribution (`.zip`, `.tar.gz`) or wheel (`.whl`).
-importlib_metadata = { url = "https://github.com/python/importlib_metadata/archive/refs/tags/v7.1.0.zip" }
-# Use a package included in the same workspace (as an editable installation).
 mollymawk = { workspace = true }
 
 [tool.uv.workspace]
@@ -79,22 +164,6 @@ include = [
   "packages/mollymawk"
 ]
 ```
-
-uv supports the following sources:
-
-- **Git**: `git = <url>`. A git-compatible URL to clone. A target revision may be specified with one of: `rev`, `tag`, or `branch`. A `subdirectory` may be specified if the package isn't in the repository root.
-- **URL**: `url = <url>`. An `https://` URL to either a wheel (ending in `.whl`) or a source distribution
-  (ending in `.zip` or `.tar.gz`). A `subdirectory` may be specified if the if the source distribution isn't in the archive root.
-- **Path**: `path = <path>`. A path to a wheel (ending in `.whl`), a source
-  distribution (ending in `.zip` or `.tar.gz`), or a directory containing a `pyproject.toml`. 
-  The path may be absolute or relative path. It is recommended to use _workspaces_ instead of manual path dependencies. For directories, `editable = true` may be specified for an [editable](#editables-dependencies) installation.
-- **Workspace**: `workspace = true`. All workspace dependencies must be explicitly stated. Workspace dependencies are [editable](#editables-dependencies) by default; `editable = false` may be specified to install them as regular dependencies. See the [workspace](./workspaces.md) documentation for more details on workspaces.
-
-Only a single source may be defined for each dependency.
-
-Note that if a non-uv project uses this project as a Git- or path-dependency, only
-`project.dependencies` is respected, the information in the source table
-will need to be specified in a format specific to the other package manager.
 
 ## Optional dependencies
 
@@ -107,7 +176,7 @@ from extra name to its dependencies, following [PEP 508](#pep-508) syntax.
 
 Optional dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
-```toml
+```toml title="pyproject.toml"
 [project]
 name = "pandas"
 version = "1.0.0"
@@ -126,17 +195,29 @@ excel = [
 ]
 ```
 
+To add an optional dependency, use the `--optional <extra>` option:
+
+```console
+$ uv add httpx --optional network
+```
+
 ## Development dependencies
 
 Unlike optional dependencies, development dependencies are local-only and will _not_ be included in the project requirements when published to PyPI or other indexes. As such, development dependencies are included under `[tool.uv]` instead of `[project]`. 
 
 Development dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
-```toml
+```toml title="pyproject.toml"
 [tool.uv]
 dev-dependencies = [
   "pytest >=8.1.1,<9"
 ]
+```
+
+To add a development dependency, include the `--dev` flag:
+
+```console
+$ uv add ruff --dev`
 ```
 
 ## PEP 508
@@ -182,4 +263,16 @@ There are some limitations to editables (mainly: the build backend needs to supp
 native modules aren't recompiled before import), but they are useful for development, as the
 virtual environment will always use the latest changes to the package.
 
-uv uses editable installation for workspace packages and patched dependencies by default.
+uv uses editable installation for workspace packages by default.
+
+To add an editable dependency, use the `--editable` flag:
+
+```console
+$ uv add --editable ./path/foo
+```
+
+Or, to opt-out of using an editable dependency in a workspace:
+
+```console
+$ uv add --no-editable ./path/foo
+```

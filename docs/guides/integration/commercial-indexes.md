@@ -33,3 +33,7 @@ export UV_KEYRING_PROVIDER=subprocess
 # Configure the index URL with the username
 export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
+
+## Other indexes
+
+uv is also known to work with JFrog's Artifactory, the Google Cloud Artifact Registry, and AWS Code Artifact.

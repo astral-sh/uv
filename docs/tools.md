@@ -30,25 +30,25 @@ Tool environments may be either mutated or re-created by subsequent `uv tool ins
 
 To upgrade a single package in a tool environment:
 
-```
+```console
 $ uv tool install black --upgrade-package click
 ```
 
 To upgrade all packages in a tool environment
 
-```
+```console
 $ uv tool install black --upgrade
 ```
 
 To reinstall a single package in a tool environment:
 
-```
+```console
 $ uv tool install black --reinstall-package click
 ```
 
 To reinstall all packages in a tool environment
 
-```
+```console
 $ uv tool install black --reinstall
 ```
 

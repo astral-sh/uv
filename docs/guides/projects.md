@@ -21,7 +21,7 @@ $ uv init
 
 This will create the following directory structure:
 
-```
+```text
 .
 ├── pyproject.toml
 ├── README.md
@@ -52,7 +52,7 @@ run a project command.
 
 The `pyproject.toml` contains metadata about your project:
 
-```toml
+```toml title="pyproject.toml"
 [project]
 name = "hello-world"
 version = "0.1.0"
