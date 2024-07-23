@@ -17,7 +17,7 @@ use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 
 use crate::downloads::PythonDownloadRequest;
-use crate::implementation::{ImplementationName, LenientImplementationName};
+use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::managed::ManagedPythonInstallations;
@@ -271,7 +271,7 @@ fn python_executables_from_installed<'a>(
                                 version.matches_version(&installation.version())
                             })
                     })
-                    .inspect(|installation| debug!("Found managed Python `{installation}`"))
+                    .inspect(|installation| debug!("Found managed installation `{installation}`"))
                     .map(|installation| (PythonSource::Managed, installation.executable())))
             })
     })
@@ -508,9 +508,8 @@ fn python_interpreters_from_executables<'a>(
             .map(|interpreter| (source, interpreter))
             .inspect(|(source, interpreter)| {
                 debug!(
-                    "Found {} {} at `{}` ({source})",
-                    LenientImplementationName::from(interpreter.implementation_name()),
-                    interpreter.python_full_version(),
+                    "Found `{}` at `{}` ({source})",
+                    interpreter.key(),
                     path.display()
                 );
             })

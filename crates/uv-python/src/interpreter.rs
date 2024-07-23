@@ -21,8 +21,10 @@ use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
+use crate::implementation::LenientImplementationName;
+use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
-use crate::{Prefix, PythonVersion, Target, VirtualEnvironment};
+use crate::{Prefix, PythonInstallationKey, PythonVersion, Target, VirtualEnvironment};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -170,6 +172,34 @@ impl Interpreter {
     #[inline]
     pub const fn markers(&self) -> &MarkerEnvironment {
         &self.markers
+    }
+
+    /// Returns the [`PythonInstallationKey`] for this interpreter.
+    pub fn key(&self) -> PythonInstallationKey {
+        PythonInstallationKey::new(
+            LenientImplementationName::from(self.implementation_name()),
+            self.python_major(),
+            self.python_minor(),
+            self.python_patch(),
+            self.os(),
+            self.arch(),
+            self.libc(),
+        )
+    }
+
+    /// Return the [`Arch`] reported by the interpreter platform tags.
+    pub fn arch(&self) -> Arch {
+        Arch::from(&self.platform().arch())
+    }
+
+    /// Return the [`Libc`] reported by the interpreter platform tags.
+    pub fn libc(&self) -> Libc {
+        Libc::from(self.platform().os())
+    }
+
+    /// Return the [`Os`] reported by the interpreter platform tags.
+    pub fn os(&self) -> Os {
+        Os::from(self.platform().os())
     }
 
     /// Returns the [`Tags`] for this Python executable.

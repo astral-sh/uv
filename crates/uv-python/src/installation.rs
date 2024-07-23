@@ -166,15 +166,7 @@ impl PythonInstallation {
     }
 
     pub fn key(&self) -> PythonInstallationKey {
-        PythonInstallationKey::new(
-            LenientImplementationName::from(self.interpreter.implementation_name()),
-            self.interpreter.python_major(),
-            self.interpreter.python_minor(),
-            self.interpreter.python_patch(),
-            self.os(),
-            self.arch(),
-            self.libc(),
-        )
+        self.interpreter.key()
     }
 
     /// Return the Python [`Version`] of the Python installation as reported by its interpreter.
@@ -189,17 +181,17 @@ impl PythonInstallation {
 
     /// Return the [`Arch`] of the Python installation as reported by its interpreter.
     pub fn arch(&self) -> Arch {
-        Arch::from(&self.interpreter.platform().arch())
+        self.interpreter.arch()
     }
 
     /// Return the [`Libc`] of the Python installation as reported by its interpreter.
     pub fn libc(&self) -> Libc {
-        Libc::from(self.interpreter.platform().os())
+        self.interpreter.libc()
     }
 
     /// Return the [`Os`] of the Python installation as reported by its interpreter.
     pub fn os(&self) -> Os {
-        Os::from(self.interpreter.platform().os())
+        self.interpreter.os()
     }
 
     /// Return the [`Interpreter`] for the Python installation.
