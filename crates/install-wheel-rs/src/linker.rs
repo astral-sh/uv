@@ -221,13 +221,18 @@ fn parse_scripts(
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum LinkMode {
-    /// Clone (i.e., copy-on-write) packages from the wheel into the site packages.
+    /// Clone (i.e., copy-on-write) packages from the wheel into the `site-packages` directory.
     Clone,
-    /// Copy packages from the wheel into the site packages.
+    /// Copy packages from the wheel into the `site-packages` directory.
     Copy,
-    /// Hard link packages from the wheel into the site packages.
+    /// Hard link packages from the wheel into the `site-packages` directory.
     Hardlink,
-    /// Symbolically link packages from the wheel into the site packages
+    /// Symbolically link packages from the wheel into the `site-packages` directory.
+    ///
+    /// WARNING: The use of symlinks is discouraged, as they create tight coupling between the
+    /// cache and the target environment. For example, clearing the cache (`uv cache clear`) will
+    /// break all installed packages by way of removing the underlying source files. Use symlinks
+    /// with caution.
     Symlink,
 }
 

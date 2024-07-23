@@ -444,28 +444,28 @@
     "LinkMode": {
       "oneOf": [
         {
-          "description": "Clone (i.e., copy-on-write) packages from the wheel into the site packages.",
+          "description": "Clone (i.e., copy-on-write) packages from the wheel into the `site-packages` directory.",
           "type": "string",
           "enum": [
             "clone"
           ]
         },
         {
-          "description": "Copy packages from the wheel into the site packages.",
+          "description": "Copy packages from the wheel into the `site-packages` directory.",
           "type": "string",
           "enum": [
             "copy"
           ]
         },
         {
-          "description": "Hard link packages from the wheel into the site packages.",
+          "description": "Hard link packages from the wheel into the `site-packages` directory.",
           "type": "string",
           "enum": [
             "hardlink"
           ]
         },
         {
-          "description": "Symbolically link packages from the wheel into the site packages",
+          "description": "Symbolically link packages from the wheel into the `site-packages` directory.\n\nWARNING: The use of symlinks is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (`uv cache clear`) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.",
           "type": "string",
           "enum": [
             "symlink"

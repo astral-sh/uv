@@ -285,10 +285,10 @@ Windows.
 
 **Possible values**:
 
-- `"clone"`: Clone (i.e., copy-on-write) packages from the wheel into the site packages
-- `"copy"`: Copy packages from the wheel into the site packages
-- `"hardlink"`: Hard link packages from the wheel into the site packages
-- `"symlink"`: Symbolically link packages from the wheel into the site packages
+- `"clone"`: Clone (i.e., copy-on-write) packages from the wheel into the `site-packages` directory
+- `"copy"`: Copy packages from the wheel into the `site-packages` directory
+- `"hardlink"`: Hard link packages from the wheel into the `site-packages` directory
+- `"symlink"`: Symbolically link packages from the wheel into the `site-packages` directory
 
 **Example usage**:
 
@@ -1524,10 +1524,10 @@ Windows.
 
 **Possible values**:
 
-- `"clone"`: Clone (i.e., copy-on-write) packages from the wheel into the site packages
-- `"copy"`: Copy packages from the wheel into the site packages
-- `"hardlink"`: Hard link packages from the wheel into the site packages
-- `"symlink"`: Symbolically link packages from the wheel into the site packages
+- `"clone"`: Clone (i.e., copy-on-write) packages from the wheel into the `site-packages` directory
+- `"copy"`: Copy packages from the wheel into the `site-packages` directory
+- `"hardlink"`: Hard link packages from the wheel into the `site-packages` directory
+- `"symlink"`: Symbolically link packages from the wheel into the `site-packages` directory
 
 **Example usage**:
 
