@@ -441,11 +441,29 @@ fn install_script(
     record: &mut [RecordEntry],
     file: &DirEntry,
 ) -> Result<(), Error> {
-    if !file.file_type()?.is_file() {
+    let file_type = file.file_type()?;
+
+    if file_type.is_dir() {
         return Err(Error::InvalidWheel(format!(
-            "Wheel contains entry in scripts directory that is not a file: {}",
-            file.path().display()
+            "Wheel contains an invalid entry (directory) in the `scripts` directory: {}",
+            file.path().simplified_display()
         )));
+    }
+
+    if file_type.is_symlink() {
+        let Ok(target) = file.path().canonicalize() else {
+            return Err(Error::InvalidWheel(format!(
+                "Wheel contains an invalid entry (broken symlink) in the `scripts` directory: {}",
+                file.path().simplified_display(),
+            )));
+        };
+        if target.is_dir() {
+            return Err(Error::InvalidWheel(format!(
+                "Wheel contains an invalid entry (directory symlink) in the `scripts` directory: {} ({})",
+                file.path().simplified_display(),
+                target.simplified_display()
+            )));
+        }
     }
 
     let script_absolute = layout.scheme.scripts.join(file.file_name());
