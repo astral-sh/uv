@@ -233,7 +233,7 @@ pub enum Source {
 
 #[derive(Error, Debug)]
 pub enum SourceError {
-    #[error("Cannot resolve git reference `{0}`")]
+    #[error("Failed to resolve Git reference: `{0}`")]
     UnresolvedReference(String),
     #[error("Workspace dependency `{0}` must refer to local directory, not a Git repository")]
     WorkspacePackageGit(String),
@@ -241,6 +241,12 @@ pub enum SourceError {
     WorkspacePackageUrl(String),
     #[error("Workspace dependency `{0}` must refer to local directory, not a file")]
     WorkspacePackageFile(String),
+    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--rev {1}`) was provided.")]
+    UnusedRev(String, String),
+    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--tag {1}`) was provided.")]
+    UnusedTag(String, String),
+    #[error("`{0}` did not resolve to a Git repository, but a Git reference (`--branch {1}`) was provided.")]
+    UnusedBranch(String, String),
 }
 
 impl Source {
@@ -253,6 +259,20 @@ impl Source {
         tag: Option<String>,
         branch: Option<String>,
     ) -> Result<Option<Source>, SourceError> {
+        // If we resolved to a non-Git source, and the user specified a Git reference, error.
+        if !matches!(source, RequirementSource::Git { .. }) {
+            if let Some(rev) = rev {
+                return Err(SourceError::UnusedRev(name.to_string(), rev));
+            }
+            if let Some(tag) = tag {
+                return Err(SourceError::UnusedTag(name.to_string(), tag));
+            }
+            if let Some(branch) = branch {
+                return Err(SourceError::UnusedBranch(name.to_string(), branch));
+            }
+        }
+
+        // If the source is a workspace package, error if the user tried to specify a source.
         if workspace {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
