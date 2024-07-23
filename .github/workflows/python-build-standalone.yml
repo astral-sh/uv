@@ -21,7 +21,7 @@ jobs:
       - name: Sync Python Releases
         run: |
           uv run --isolated -- fetch-download-metadata.py
-          uv run --isolated --with chevron-blue -- template-download-metadata.py
+          uv run --isolated -- template-download-metadata.py
         working-directory: ./crates/uv-python
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -360,10 +360,10 @@ def render(downloads: list[PythonDownload]) -> None:
 
 
 async def find() -> None:
-    token = os.environ.get("GH_TOKEN")
+    token = os.environ.get("GITHUB_TOKEN")
     if not token:
         logging.warning(
-            "`GH_TOKEN` env var not found, you may hit rate limits for GitHub API requests."
+            "`GITHUB_TOKEN` env var not found, you may hit rate limits for GitHub API requests."
         )
 
     headers = {"X-GitHub-Api-Version": "2022-11-28"}
