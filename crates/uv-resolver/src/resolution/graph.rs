@@ -55,13 +55,14 @@ pub(crate) enum ResolutionGraphNode {
     Dist(AnnotatedDist),
 }
 
-type NodeKey<'a> = (
-    &'a PackageName,
-    &'a Version,
-    Option<&'a VerbatimParsedUrl>,
-    Option<&'a ExtraName>,
-    Option<&'a GroupName>,
-);
+#[derive(Eq, PartialEq, Hash)]
+struct PackageRef<'a> {
+    package_name: &'a PackageName,
+    version: &'a Version,
+    url: Option<&'a VerbatimParsedUrl>,
+    extra: Option<&'a ExtraName>,
+    group: Option<&'a GroupName>,
+}
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
@@ -78,7 +79,7 @@ impl ResolutionGraph {
     ) -> Result<Self, ResolveError> {
         let mut petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed> =
             Graph::with_capacity(resolution.nodes.len(), resolution.nodes.len());
-        let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> =
+        let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
             FxHashMap::with_capacity_and_hasher(resolution.nodes.len(), FxBuildHasher);
         let mut diagnostics = Vec::new();
 
@@ -138,26 +139,26 @@ impl ResolutionGraph {
 
     fn add_edge(
         petgraph: &mut Graph<ResolutionGraphNode, Option<MarkerTree>>,
-        inverse: &mut FxHashMap<NodeKey<'_>, NodeIndex>,
+        inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
         edge: ResolutionDependencyEdge,
     ) {
         let from_index = edge.from.as_ref().map_or(root_index, |from| {
-            inverse[&(
-                from,
-                &edge.from_version,
-                edge.from_url.as_ref(),
-                edge.from_extra.as_ref(),
-                edge.from_dev.as_ref(),
-            )]
+            inverse[&PackageRef {
+                package_name: from,
+                version: &edge.from_version,
+                url: edge.from_url.as_ref(),
+                extra: edge.from_extra.as_ref(),
+                group: edge.from_dev.as_ref(),
+            }]
         });
-        let to_index = inverse[&(
-            &edge.to,
-            &edge.to_version,
-            edge.to_url.as_ref(),
-            edge.to_extra.as_ref(),
-            edge.to_dev.as_ref(),
-        )];
+        let to_index = inverse[&PackageRef {
+            package_name: &edge.to,
+            version: &edge.to_version,
+            url: edge.to_url.as_ref(),
+            extra: edge.to_extra.as_ref(),
+            group: edge.to_dev.as_ref(),
+        }];
 
         if let Some(marker) = petgraph
             .find_edge(from_index, to_index)
@@ -177,7 +178,7 @@ impl ResolutionGraph {
 
     fn add_version<'a>(
         petgraph: &mut Graph<ResolutionGraphNode, Option<MarkerTree>>,
-        inverse: &mut FxHashMap<NodeKey<'a>, NodeIndex>,
+        inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
         pins: &FilePins,
@@ -234,7 +235,13 @@ impl ResolutionGraph {
             metadata,
         }));
         inverse.insert(
-            (name, version, url.as_ref(), extra.as_ref(), dev.as_ref()),
+            PackageRef {
+                package_name: name,
+                version,
+                url: url.as_ref(),
+                extra: extra.as_ref(),
+                group: dev.as_ref(),
+            },
             index,
         );
         Ok(())
