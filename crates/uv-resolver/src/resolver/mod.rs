@@ -26,7 +26,8 @@ use distribution_types::{
     IncompatibleWheel, IndexLocations, InstalledDist, PythonRequirementKind, RemoteSource,
     ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
-pub(crate) use locals::Locals;
+pub(crate) use fork_map::{ForkMap, ForkSet};
+use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::MarkerTree;
 use platform_tags::Tags;
@@ -72,6 +73,7 @@ use crate::{DependencyMode, Exclusions, FlatIndex, Options};
 
 mod availability;
 mod batch_prefetch;
+mod fork_map;
 mod index;
 mod locals;
 mod provider;
@@ -422,6 +424,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &mut state.pins,
                     &preferences,
                     &state.fork_urls,
+                    &state.markers,
                     &state.python_requirement,
                     &mut visited,
                     &request_sink,
@@ -480,6 +483,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &request_sink,
                         &self.index,
                         &self.selector,
+                        &state.markers,
                     )?;
                 }
 
@@ -812,6 +816,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins,
         preferences: &Preferences,
         fork_urls: &ForkUrls,
+        fork_markers: &ResolverMarkers,
         python_requirement: &PythonRequirement,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -840,6 +845,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         range,
                         package,
                         preferences,
+                        fork_markers,
                         python_requirement,
                         pins,
                         visited,
@@ -953,6 +959,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         range: &Range<Version>,
         package: &PubGrubPackage,
         preferences: &Preferences,
+        fork_markers: &ResolverMarkers,
         python_requirement: &PythonRequirement,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
@@ -995,6 +1002,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             preferences,
             &self.installed_packages,
             &self.exclusions,
+            fork_markers,
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1767,6 +1775,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.preferences,
                     &self.installed_packages,
                     &self.exclusions,
+                    // We don't have access to the fork state when prefetching, so assume that
+                    // pre-release versions are allowed.
+                    &ResolverMarkers::Universal,
                 ) else {
                     return Ok(None);
                 };
