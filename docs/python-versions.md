@@ -24,11 +24,11 @@ Many Python version request formats are supported:
 - `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
 - `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
 
-At this time, only CPython downloads are supported. However, PyPy support is planned.
-
 ## Installing a Python version
 
 Sometimes it is preferable to install the Python versions before they are needed.
+
+uv bundles a list of downloadable CPython and PyPy distributions for macOS, Linux, and Windows.
 
 To install a Python version at a specific version:
 
@@ -122,8 +122,10 @@ If a specific Python version is requested, e.g. `--python 3.7`, additional execu
 
 ## Python distributions
 
-Python does not publish official distributable binaries, uv uses third-party standalone distributions from the [`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The project is partially maintained by the uv maintainers and is used by many other Python projects.
+Python does not publish official distributable CPython binaries, uv uses third-party standalone distributions from the [`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The project is partially maintained by the uv maintainers and is used by many other Python projects.
 
 The Python distributions are self-contained and highly-portable. Additionally, these distributions have various build-time optimizations enabled to ensure they are performant.
 
 These distributions have some behavior quirks, generally as a consequence of portability. See the [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html) documentation for details. 
+
+PyPy distributions are provided by the PyPy project.
