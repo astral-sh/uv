@@ -72,3 +72,7 @@ version_files = [
 
 [tool.uv]
 managed = false
+
+[tool.mypy]
+ignore_missing_imports = true
+files = "crates/uv-python/*.py"

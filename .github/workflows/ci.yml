@@ -59,14 +59,27 @@ jobs:
       - name: "Prettier"
         run: npx prettier --check "**/*.{json5,yaml,yml}"
 
+      - name: "README check"
+        run: python scripts/transform_readme.py --target pypi
+
+  python-lint:
+    name: "Python lint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
       - name: "Ruff format"
         run: pipx run ruff format --diff .
 
       - name: "Ruff check"
         run: pipx run ruff check .
 
-      - name: "README check"
-        run: python scripts/transform_readme.py --target pypi
+      - name: "Mypy check"
+        run: pipx run --python 3.12 mypy
 
   cargo-clippy:
     needs: determine_changes
