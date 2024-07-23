@@ -10,6 +10,7 @@ use tracing::debug;
 
 use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
 use pep440_rs::Version;
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
@@ -235,6 +236,11 @@ pub(super) async fn do_lock(
     };
 
     let python_requirement = PythonRequirement::from_requires_python(interpreter, &requires_python);
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

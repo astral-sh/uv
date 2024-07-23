@@ -200,6 +200,11 @@ async fn venv_impl(
         // Extract the interpreter.
         let interpreter = venv.interpreter();
 
+        // Add all authenticated sources to the cache.
+        for url in index_locations.urls() {
+            store_credentials_from_url(url);
+        }
+
         // Instantiate a client.
         let client = RegistryClientBuilder::from(client_builder_clone)
             .cache(cache.clone())

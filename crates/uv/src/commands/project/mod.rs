@@ -7,6 +7,7 @@ use tracing::debug;
 use distribution_types::{Resolution, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use pypi_types::Requirement;
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -335,6 +336,11 @@ pub(crate) async fn resolve_names(
         build_options,
     } = settings;
 
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
@@ -416,6 +422,11 @@ pub(crate) async fn resolve_environment<'a>(
     let tags = interpreter.tags()?;
     let markers = interpreter.markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -538,6 +549,11 @@ pub(crate) async fn sync_environment(
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -676,6 +692,11 @@ pub(crate) async fn update_environment(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
