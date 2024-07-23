@@ -314,15 +314,23 @@ impl ManagedPythonInstallation {
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
         // Construct the path to the `stdlib` directory.
-        let stdlib = if cfg!(windows) {
+        let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
             self.python_dir().join("Lib")
         } else {
-            self.python_dir()
-                .join("lib")
-                .join(format!("python{}", self.key.version().python_version()))
+            let python = if matches!(
+                self.key.implementation,
+                LenientImplementationName::Known(ImplementationName::PyPy)
+            ) {
+                format!("pypy{}", self.key.version().python_version())
+            } else {
+                format!("python{}", self.key.version().python_version())
+            };
+            self.python_dir().join("lib").join(python)
         };
+
         let file = stdlib.join("EXTERNALLY-MANAGED");
         fs_err::write(file, EXTERNALLY_MANAGED)?;
+
         Ok(())
     }
 }
