@@ -33,17 +33,19 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning");
     }
 
-    let virtual_project =
+    let virtual_project = if isolated {
+        None
+    } else {
         match VirtualProject::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
             .await
         {
-            Ok(virtual_project) if !isolated => Some(virtual_project),
-            Ok(_) => None,
+            Ok(virtual_project) => Some(virtual_project),
             Err(err) => {
                 debug!("Failed to discover virtual project: {err}");
                 None
             }
-        };
+        }
+    };
 
     let Some(request) = request else {
         // Display the current pinned Python version
