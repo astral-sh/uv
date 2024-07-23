@@ -1310,7 +1310,8 @@ fn update() -> Result<()> {
         );
     });
 
-    // Change the source by specifying a version (note the extras should be preserved).
+    // Change the source by specifying a version (note the extras, markers, and version should be
+    // preserved).
     uv_snapshot!(context.filters(), context.add(&["requests @ git+https://github.com/psf/requests"]).arg("--tag=v2.32.3"), @r###"
     success: true
     exit_code: 0
@@ -1341,7 +1342,7 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3] ; python_version > '3.7'",
+            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_version > '3.7'",
         ]
 
         [tool.uv.sources]
@@ -1470,6 +1471,65 @@ fn update() -> Result<()> {
     warning: `uv sync` is experimental and may change without warning
     Audited 8 packages in [TIME]
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn update_source_replace_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests[security] @ https://files.pythonhosted.org/packages/f9/9b/335f9764261e915ed497fcdeb11df5dfd6f7bf257d4a6a2a686d80da4d54/requests-2.32.3-py3-none-any.whl"
+        ]
+    "#})?;
+
+    // Change the source. The existing URL should be removed.
+    uv_snapshot!(context.filters(), context.add(&["requests @ git+https://github.com/psf/requests"]).arg("--tag=v2.32.3"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068?tag=v2.32.3#0e322af87745eff34caffe4df68456ebc20d9068)
+     + urllib3==2.2.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests[security]",
+        ]
+
+        [tool.uv.sources]
+        requests = { git = "https://github.com/psf/requests", tag = "v2.32.3" }
+        "###
+        );
+    });
 
     Ok(())
 }
