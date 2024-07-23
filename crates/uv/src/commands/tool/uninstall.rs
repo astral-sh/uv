@@ -37,6 +37,7 @@ pub(crate) async fn uninstall(
         Err(err) => return Err(err.into()),
     };
 
+    let mut dangling = false;
     let mut entrypoints = if let Some(name) = name {
         let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
             // If the tool is not installed, attempt to remove the environment anyway.
@@ -65,6 +66,7 @@ pub(crate) async fn uninstall(
                 // If the tool is not installed properly, attempt to remove the environment anyway.
                 match installed_tools.remove_environment(&name) {
                     Ok(()) => {
+                        dangling = true;
                         writeln!(
                             printer.stderr(),
                             "Removed dangling environment for `{name}`"
@@ -87,7 +89,10 @@ pub(crate) async fn uninstall(
     entrypoints.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
     if entrypoints.is_empty() {
-        writeln!(printer.stderr(), "Nothing to uninstall")?;
+        // If we removed at least one dangling environment, there's no need to summarize.
+        if !dangling {
+            writeln!(printer.stderr(), "Nothing to uninstall")?;
+        }
         return Ok(ExitStatus::Success);
     }
 
