@@ -29,6 +29,7 @@ regex = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true, optional = true }
+smallvec = "1.13.2"
 thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }

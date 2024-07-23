@@ -56,6 +56,7 @@ pub use verbatim_url::{
 
 mod cursor;
 mod marker;
+mod marker2;
 mod origin;
 #[cfg(feature = "non-pep508-extensions")]
 mod unnamed;
