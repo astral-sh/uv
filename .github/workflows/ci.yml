@@ -579,10 +579,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "pypy3.9"
-
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
@@ -591,12 +587,12 @@ jobs:
       - name: "Prepare binary"
         run: chmod +x ./uv
 
-      - name: PyPy info
-        run: which pypy
+      - name: "Install PyPy"
+        run: ./uv python install pypy3.9
 
       - name: "Create a virtual environment"
         run: |
-          ./uv venv -p $(which pypy)
+          ./uv venv -p pypy3.9 --python-preference only-managed
 
       - name: "Check for executables"
         run: |
@@ -645,22 +641,17 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "pypy3.9"
-
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
           name: uv-windows-${{ github.sha }}
 
-      - name: PyPy info
-        run: Get-Command pypy
+      - name: "Install PyPy"
+        run: .\uv.exe python install pypy3.9
 
       - name: "Create a virtual environment"
         run: |
-          $pypy = (Get-Command pypy).source
-          .\uv.exe venv -p $pypy
+          .\uv.exe venv -p pypy3.9 --python-preference only-managed
 
       - name: "Check for executables"
         shell: python

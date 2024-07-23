@@ -329,7 +329,8 @@ class PyPyFinder(Finder):
     CHECKSUM_URL = (
         "https://raw.githubusercontent.com/pypy/pypy.org/main/pages/checksums.rst"
     )
-    CHECKSUM_RE = re.compile(
+
+    _checksum_re = re.compile(
         r"^\s*(?P<checksum>\w{64})\s+(?P<filename>pypy.+)$", re.MULTILINE
     )
 
@@ -400,10 +401,11 @@ class PyPyFinder(Finder):
     async def _fetch_checksums(self, downloads: list[PythonDownload]) -> None:
         logging.info("Fetching PyPy checksums")
         resp = await self.client.get(self.CHECKSUM_URL)
+        resp.raise_for_status()
         text = resp.text
 
         checksums = {}
-        for match in self.CHECKSUM_RE.finditer(text):
+        for match in self._checksum_re.finditer(text):
             checksums[match.group("filename")] = match.group("checksum")
 
         for download in downloads:
