@@ -14,12 +14,13 @@ Usage:
     uv run --isolated -- crates/uv-python/template-download-metadata.py
 """
 
-import sys
-import logging
 import argparse
 import json
+import logging
 import subprocess
+import sys
 from pathlib import Path
+from typing import Any
 
 import chevron_blue
 
@@ -66,10 +67,10 @@ def prepare_value(value: dict) -> dict:
     return value
 
 
-def main():
+def main() -> None:
     debug = logging.getLogger().getEffectiveLevel() <= logging.DEBUG
 
-    data = {}
+    data: dict[str, Any] = {}
     data["generated_with"] = Path(__file__).relative_to(WORKSPACE_ROOT).as_posix()
     data["generated_from"] = TEMPLATE.relative_to(WORKSPACE_ROOT).as_posix()
     data["versions"] = [

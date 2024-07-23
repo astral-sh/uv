@@ -78,7 +78,7 @@ class ImplementationName(StrEnum):
 class PythonDownload:
     version: Version
     triple: PlatformTriple
-    flavor: str | None
+    flavor: str
     implementation: ImplementationName
     filename: str
     url: str
@@ -185,7 +185,7 @@ class CPythonFinder(Finder):
         # Collapse CPython variants to a single URL flavor per triple
         downloads = []
         for choices in results.values():
-            flavors = {}
+            flavors: dict[PlatformTriple, tuple[PythonDownload, int]] = {}
             for choice in choices:
                 priority = self._get_flavor_priority(choice.flavor)
                 existing = flavors.get(choice.triple)
@@ -250,12 +250,12 @@ class CPythonFinder(Finder):
         # Ex)
         # https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
         if url.endswith(".sha256"):
-            return
+            return None
         filename = unquote(url.rsplit("/", maxsplit=1)[-1])
 
         match = self._filename_re.match(filename)
         if match is None:
-            return
+            return None
 
         version, triple = match.groups()
         if triple.endswith("-full"):
@@ -265,14 +265,14 @@ class CPythonFinder(Finder):
         if match is not None:
             triple, flavor = match.groups()
         else:
-            flavor = None
+            flavor = ""
         if flavor in self.HIDDEN_FLAVORS:
-            return
+            return None
 
         version = Version.from_str(version)
         triple = self._normalize_triple(triple)
         if triple is None:
-            return
+            return None
 
         return PythonDownload(
             version=version,
@@ -286,7 +286,7 @@ class CPythonFinder(Finder):
     def _normalize_triple(self, triple: str) -> PlatformTriple | None:
         if "-static" in triple:
             logging.debug("Skipping %r: static unsupported", triple)
-            return
+            return None
 
         triple = self.SPECIAL_TRIPLES.get(triple, triple)
         pieces = triple.split("-")
@@ -300,7 +300,7 @@ class CPythonFinder(Finder):
                 libc = "none"
         except IndexError:
             logging.debug("Skipping %r: unknown triple", triple)
-            return
+            return None
 
         return PlatformTriple(arch, operating_system, libc)
 
@@ -313,7 +313,7 @@ class CPythonFinder(Finder):
     def _normalize_os(self, os: str) -> str:
         return os
 
-    def _get_flavor_priority(self, flavor: str | None) -> int:
+    def _get_flavor_priority(self, flavor: str) -> int:
         """Returns the priority of a flavor. Lower is better."""
         try:
             pref = self.FLAVOR_PREFERENCES.index(flavor)
@@ -385,7 +385,7 @@ async def find() -> None:
     render(downloads)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Python version metadata.")
     parser.add_argument(
         "-v",
