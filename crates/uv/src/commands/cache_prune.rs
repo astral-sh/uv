@@ -10,7 +10,11 @@ use crate::commands::{human_readable_bytes, ExitStatus};
 use crate::printer::Printer;
 
 /// Prune all unreachable objects from the cache.
-pub(crate) fn cache_prune(cache: &Cache, printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn cache_prune(
+    all_unzipped: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
             printer.stderr(),
@@ -27,7 +31,7 @@ pub(crate) fn cache_prune(cache: &Cache, printer: Printer) -> Result<ExitStatus>
     )?;
 
     let summary = cache
-        .prune()
+        .prune(all_unzipped)
         .with_context(|| format!("Failed to prune cache at: {}", cache.root().user_display()))?;
 
     // Write a summary of the number of files and directories removed.

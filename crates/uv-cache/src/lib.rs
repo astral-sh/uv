@@ -340,7 +340,7 @@ impl Cache {
     }
 
     /// Run the garbage collector on the cache, removing any dangling entries.
-    pub fn prune(&self) -> Result<Removal, io::Error> {
+    pub fn prune(&self, all_unzipped: bool) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
 
         // First, remove any top-level directories that are unused. These typically represent
@@ -384,6 +384,34 @@ impl Cache {
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err),
+        }
+
+        // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
+        if all_unzipped {
+            // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
+            match fs::read_dir(self.bucket(CacheBucket::Wheels)) {
+                Ok(entries) => {
+                    for entry in entries {
+                        let entry = entry?;
+                        let path = fs_err::canonicalize(entry.path())?;
+                        if path.is_dir() {
+                            debug!("Removing unzipped wheel entry: {}", path.display());
+                            summary += rm_rf(path)?;
+                        }
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                Err(err) => return Err(err),
+            }
+
+            // Remove any unzipped wheels (i.e., symlinks) from the built wheels cache.
+            for entry in walkdir::WalkDir::new(self.bucket(CacheBucket::SourceDistributions)) {
+                let entry = entry?;
+                if entry.file_type().is_symlink() {
+                    debug!("Removing unzipped wheel entry: {}", entry.path().display());
+                    summary += rm_rf(entry.path())?;
+                }
+            }
         }
 
         // Third, remove any unused archives (by searching for archives that are not symlinked).

@@ -279,7 +279,7 @@ pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
     Clean(CleanArgs),
     /// Prune all unreachable objects from the cache.
-    Prune,
+    Prune(PruneArgs),
     /// Show the cache directory.
     Dir,
 }
@@ -289,6 +289,20 @@ pub enum CacheCommand {
 pub struct CleanArgs {
     /// The packages to remove from the cache.
     pub package: Vec<PackageName>,
+}
+
+#[derive(Args, Debug)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PruneArgs {
+    /// Whether to remove unzipped wheels from the cache, leaving only zipped wheel entries.
+    ///
+    /// By default, uv stores unzipped wheels in the cache, which enables high-performance package
+    /// installation. In some scenarios, though, persisting unzipped wheels may be undesirable. For
+    /// example, in GitHub Actions or other CI environments, uploading unzipped wheels to a remote
+    /// cache may have a negative impact on cache performance. Pruning unzipped wheels will leave
+    /// the cache with any built wheels in their zipped form.
+    #[arg(long)]
+    pub all_unzipped: bool,
 }
 
 #[derive(Args)]

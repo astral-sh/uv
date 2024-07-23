@@ -538,8 +538,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::cache_clean(&args.package, &cache, printer)
         }
         Commands::Cache(CacheNamespace {
-            command: CacheCommand::Prune,
-        }) => commands::cache_prune(&cache, printer),
+            command: CacheCommand::Prune(args),
+        }) => {
+            show_settings!(args);
+            commands::cache_prune(args.all_unzipped, &cache, printer)
+        }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
         }) => {
