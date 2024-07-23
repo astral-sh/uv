@@ -104,6 +104,14 @@
   background-color: var(--md-code-bg-color);
 }
 
+/* Prevent the shadow from the nav title from blurring the top link.
+The box shadow isn't really doing anything anyway.
+
+This is a consequence of the reduced nav spacing below. */
+.md-nav--primary .md-nav__title {
+  box-shadow: none;
+}
+
 /* Reducing spacing between nav items to fit more content */
 .md-nav__link {
   margin-top: 0.3em;
