@@ -345,6 +345,13 @@ impl Workspace {
         }
     }
 
+    /// Returns `true` if the path is a workspace member.
+    pub fn includes(&self, project_path: &Path) -> bool {
+        self.packages
+            .values()
+            .any(|member| project_path == member.root())
+    }
+
     /// Collect the workspace member projects from the `members` and `excludes` entries.
     async fn collect_members(
         workspace_root: PathBuf,
