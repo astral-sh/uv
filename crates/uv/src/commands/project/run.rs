@@ -33,6 +33,13 @@ use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
+#[cfg(unix)]
+use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::mpsc;
+
+#[cfg(windows)]
+use tokio::signal::windows::{ctrl_break, ctrl_c};
+
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -452,14 +459,75 @@ pub(crate) async fn run(
             command.executable().to_string_lossy()
         )
     })?;
-    let status = handle.wait().await.context("Child process disappeared")?;
 
-    // Exit based on the result of the command
-    // TODO(zanieb): Do we want to exit with the code of the child process? Probably.
-    if status.success() {
-        Ok(ExitStatus::Success)
-    } else {
-        Ok(ExitStatus::Failure)
+    let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
+
+    // Signal handling
+    tokio::spawn(async move {
+        #[cfg(unix)]
+        {
+            let mut sigterm =
+                signal(SignalKind::terminate()).expect("Failed to install SIGTERM handler");
+            tokio::select! {
+                _ = sigterm.recv() => {
+                    debug!("Received SIGTERM");
+                },
+                _ = tokio::signal::ctrl_c() => {
+                    debug!("Received Ctrl-C");
+                }
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            let mut ctrl_c = ctrl_c().expect("Failed to install Ctrl-C handler");
+            let mut ctrl_break = ctrl_break().expect("Failed to install Ctrl-Break handler");
+            tokio::select! {
+                _ = ctrl_c.recv() => {
+                    debug!("Received Ctrl-C");
+                },
+                _ = ctrl_break.recv() => {
+                    debug!("Received Ctrl-Break");
+                },
+            }
+        }
+        _ = shutdown_tx.send(());
+    });
+
+    tokio::select! {
+        status = handle.wait() => {
+            match status {
+                Ok(status) => {
+                    if status.success() {
+                        Ok(ExitStatus::Success)
+                    } else {
+                        Ok(ExitStatus::Failure)
+                    }
+                },
+                Err(e) => {
+                    Err(e.into())
+                }
+            }
+        },
+        _ = shutdown_rx.recv() => {
+            debug!("Shutting down child process...");
+            #[cfg(unix)]
+            {
+                use nix::sys::signal::{kill, Signal};
+                use nix::unistd::Pid;
+                let pid = Pid::from_raw(handle.id().unwrap() as i32);
+                kill(pid, Signal::SIGTERM).expect("Failed to send SIGTERM");
+            }
+
+            #[cfg(windows)]
+            {
+                use winapi::um::wincon::GenerateConsoleCtrlEvent;
+                unsafe {
+                    GenerateConsoleCtrlEvent(winapi::um::wincon::CTRL_C_EVENT, child.id()).expect("Failed to send Ctrl-C event");
+                }
+            }
+            Ok(ExitStatus::Success)
+        }
     }
 }
 

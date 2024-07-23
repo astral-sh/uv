@@ -74,6 +74,11 @@ tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+winapi = { workspace = true }
+nix = "0.29.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.29.0", features = ["signal", "process"] } 
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = { version = "0.1.39" }
