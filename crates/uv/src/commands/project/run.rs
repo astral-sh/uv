@@ -21,11 +21,11 @@ use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
     PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
-use uv_requirements::RequirementsSource;
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 use uv_workspace::{VirtualProject, Workspace, WorkspaceError};
 
-use crate::commands::pip::operations::{self, Modifications};
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::ProjectError;
 use crate::commands::reporters::PythonDownloadReporter;
@@ -38,8 +38,6 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn run(
     command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
-    constraints: &[RequirementsSource],
-    overrides: &[RequirementsSource],
     locked: bool,
     frozen: bool,
     package: Option<PackageName>,
@@ -63,23 +61,19 @@ pub(crate) async fn run(
 
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
-    if requirements
-        .iter()
-        .any(|source| matches!(source, RequirementsSource::PyprojectToml(_)))
-    {
-        bail!("Adding requirements from a `pyproject.toml` is not supported in `uv run`");
-    }
-    if requirements
-        .iter()
-        .any(|source| matches!(source, RequirementsSource::SetupCfg(_)))
-    {
-        bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
-    }
-    if requirements
-        .iter()
-        .any(|source| matches!(source, RequirementsSource::SetupCfg(_)))
-    {
-        bail!("Adding requirements from a `setup.py` is not supported in `uv run`");
+    for source in &requirements {
+        match source {
+            RequirementsSource::PyprojectToml(_) => {
+                bail!("Adding requirements from a `pyproject.toml` is not supported in `uv run`");
+            }
+            RequirementsSource::SetupPy(_) => {
+                bail!("Adding requirements from a `setup.py` is not supported in `uv run`");
+            }
+            RequirementsSource::SetupCfg(_) => {
+                bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
+            }
+            _ => {}
+        }
     }
 
     // Parse the input command.
@@ -286,21 +280,15 @@ pub(crate) async fn run(
     }
 
     // Read the requirements.
-    let spec = if requirements.is_empty() && constraints.is_empty() && overrides.is_empty() {
+    let spec = if requirements.is_empty() {
         None
     } else {
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
             .native_tls(native_tls);
 
-        let spec = operations::read_requirements(
-            &requirements,
-            constraints,
-            overrides,
-            &extras,
-            &client_builder,
-        )
-        .await?;
+        let spec =
+            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
         Some(spec)
     };
@@ -309,7 +297,7 @@ pub(crate) async fn run(
     // any `--with` requirements, and we already have a base environment, then there's no need to
     // create an additional environment.
     let skip_ephemeral = base_interpreter.as_ref().is_some_and(|base_interpreter| {
-        // No additional requrements
+        // No additional requirements.
         let Some(spec) = spec.as_ref() else {
             return true;
         };
@@ -322,9 +310,10 @@ pub(crate) async fn run(
             return false;
         }
 
-        // `SitePackages::satisfies` handle overrides yet and constraints are only enforced on `--with`
-        // requirements instead of the project requirements so we perform a full resolution
-        // to ensure things are up to date
+        // `SitePackages::satisfies` doesn't handle overrides yet, and constraints are only enforced
+        // on `--with` requirements instead of the project requirements, so we perform a full
+        // resolution to ensure things are up-to-date.
+        // TODO(charlie): Support constraints and overrides in `uv run`.
         if !(spec.constraints.is_empty() && spec.overrides.is_empty()) {
             return false;
         }
