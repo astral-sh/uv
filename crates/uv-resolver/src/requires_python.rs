@@ -49,6 +49,21 @@ impl RequiresPython {
         }
     }
 
+    /// Returns a [`RequiresPython`] from a version specifier.
+    pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Result<Self, RequiresPythonError> {
+        let bound = RequiresPythonBound(
+            crate::pubgrub::PubGrubSpecifier::from_release_specifiers(specifiers)?
+                .iter()
+                .next()
+                .map(|(lower, _)| lower.clone())
+                .unwrap_or(Bound::Unbounded),
+        );
+        Ok(Self {
+            specifiers: specifiers.clone(),
+            bound,
+        })
+    }
+
     /// Returns a [`RequiresPython`] to express the union of the given version specifiers.
     ///
     /// For example, given `>=3.8` and `>=3.9`, this would return `>=3.8`.

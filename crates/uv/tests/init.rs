@@ -37,6 +37,7 @@ fn init() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -65,7 +66,6 @@ fn init() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: No `requires-python` field found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
     "###);
 
@@ -98,6 +98,7 @@ fn init_no_readme() -> Result<()> {
         name = "foo"
         version = "0.1.0"
         description = "Add your description here"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -140,6 +141,7 @@ fn current_dir() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -168,7 +170,6 @@ fn current_dir() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: No `requires-python` field found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
     "###);
 
@@ -285,6 +286,7 @@ fn init_workspace() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -380,6 +382,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -476,6 +479,7 @@ fn init_workspace_outside() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -556,6 +560,7 @@ fn init_invalid_names() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -690,6 +695,7 @@ fn init_nested_workspace() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -870,6 +876,166 @@ fn init_matches_exclude() -> Result<()> {
         [tool.uv.workspace]
         exclude = ['packages/foo']
         members = ['packages/*']
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, inheriting the `requires-python` from the workspace.
+#[test]
+fn init_requires_python_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+
+        [tool.uv.workspace]
+        members = []
+        "#,
+    })?;
+
+    let child = context.temp_dir.join("foo");
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.10"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, inferring the `requires-python` from the `--python` flag.
+#[test]
+fn init_requires_python_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = []
+        "#,
+    })?;
+
+    let child = context.temp_dir.join("foo");
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("3.8"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.8"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, inferring the `requires-python` from the `--python` flag, and preserving the
+/// specifiers verbatim.
+#[test]
+fn init_requires_python_specifiers() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = []
+        "#,
+    })?;
+
+    let child = context.temp_dir.join("foo");
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.8.*"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = "==3.8.*"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
         "###
         );
     });

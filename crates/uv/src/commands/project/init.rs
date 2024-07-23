@@ -3,14 +3,23 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-
+use pep440_rs::Version;
 use pep508_rs::PackageName;
+use uv_cache::Cache;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::PreviewMode;
 use uv_fs::{absolutize_path, Simplified};
+use uv_python::{
+    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
+    VersionRequest,
+};
+use uv_resolver::RequiresPython;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
 use uv_workspace::{Workspace, WorkspaceError};
 
+use crate::commands::project::find_requires_python;
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -20,8 +29,14 @@ pub(crate) async fn init(
     explicit_path: Option<String>,
     name: Option<PackageName>,
     no_readme: bool,
+    python: Option<String>,
     isolated: bool,
     preview: PreviewMode,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
+    connectivity: Connectivity,
+    native_tls: bool,
+    cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
@@ -62,23 +77,6 @@ pub(crate) async fn init(
         }
     };
 
-    // Create the `pyproject.toml`.
-    let pyproject = indoc::formatdoc! {r#"
-        [project]
-        name = "{name}"
-        version = "0.1.0"
-        description = "Add your description here"{readme}
-        dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
-        "#,
-        readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
-    };
-
-    fs_err::create_dir_all(&path)?;
-    fs_err::write(path.join("pyproject.toml"), pyproject)?;
-
     // Discover the current workspace, if it exists.
     let workspace = if isolated {
         None
@@ -91,6 +89,90 @@ pub(crate) async fn init(
             Err(err) => return Err(err.into()),
         }
     };
+
+    // Add a `requires-python` field to the `pyproject.toml`.
+    let requires_python = if let Some(request) = python.as_deref() {
+        // (1) Explicit request from user
+        match PythonRequest::parse(request) {
+            PythonRequest::Version(VersionRequest::MajorMinor(major, minor)) => {
+                RequiresPython::greater_than_equal_version(&Version::new([
+                    u64::from(major),
+                    u64::from(minor),
+                ]))
+            }
+            PythonRequest::Version(VersionRequest::MajorMinorPatch(major, minor, patch)) => {
+                RequiresPython::greater_than_equal_version(&Version::new([
+                    u64::from(major),
+                    u64::from(minor),
+                    u64::from(patch),
+                ]))
+            }
+            PythonRequest::Version(VersionRequest::Range(specifiers)) => {
+                RequiresPython::from_specifiers(&specifiers)?
+            }
+            request => {
+                let reporter = PythonDownloadReporter::single(printer);
+                let client_builder = BaseClientBuilder::new()
+                    .connectivity(connectivity)
+                    .native_tls(native_tls);
+                let interpreter = PythonInstallation::find_or_fetch(
+                    Some(request),
+                    EnvironmentPreference::Any,
+                    python_preference,
+                    python_fetch,
+                    &client_builder,
+                    cache,
+                    Some(&reporter),
+                )
+                .await?
+                .into_interpreter();
+                RequiresPython::greater_than_equal_version(&interpreter.python_minor_version())
+            }
+        }
+    } else if let Some(requires_python) = workspace
+        .as_ref()
+        .and_then(|workspace| find_requires_python(workspace).ok().flatten())
+    {
+        // (2) `Requires-Python` from the workspace
+        requires_python
+    } else {
+        // (3) Default to the system Python
+        let request = PythonRequest::Any;
+        let reporter = PythonDownloadReporter::single(printer);
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+        let interpreter = PythonInstallation::find_or_fetch(
+            Some(request),
+            EnvironmentPreference::Any,
+            python_preference,
+            python_fetch,
+            &client_builder,
+            cache,
+            Some(&reporter),
+        )
+        .await?
+        .into_interpreter();
+        RequiresPython::greater_than_equal_version(&interpreter.python_minor_version())
+    };
+
+    // Create the `pyproject.toml`.
+    let pyproject = indoc::formatdoc! {r#"
+        [project]
+        name = "{name}"
+        version = "0.1.0"
+        description = "Add your description here"{readme}
+        requires-python = "{requires_python}"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+        "#,
+        readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
+        requires_python = requires_python.specifiers(),
+    };
+    fs_err::create_dir_all(&path)?;
+    fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
     // Create `src/{name}/__init__.py` if it does not already exist.
     let src_dir = path.join("src").join(&*name.as_dist_info_name());

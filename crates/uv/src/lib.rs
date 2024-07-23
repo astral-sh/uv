@@ -834,8 +834,14 @@ async fn run_project(
                 args.path,
                 args.name,
                 args.no_readme,
+                args.python,
                 globals.isolated,
                 globals.preview,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.connectivity,
+                globals.native_tls,
+                &cache,
                 printer,
             )
             .await
