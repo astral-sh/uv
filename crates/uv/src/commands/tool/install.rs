@@ -22,7 +22,7 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
     PythonRequest,
 };
-use uv_requirements::RequirementsSpecification;
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_shell::Shell;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::{warn_user, warn_user_once};
@@ -30,7 +30,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::resolve_requirements;
 use crate::commands::{
-    project::{resolve_environment, sync_environment, update_environment},
+    project::{resolve_environment, resolve_names, sync_environment, update_environment},
     tool::common::matching_packages,
 };
 use crate::commands::{ExitStatus, SharedState};
@@ -41,8 +41,8 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn install(
     package: String,
     from: Option<String>,
+    with: &[RequirementsSource],
     python: Option<String>,
-    with: Vec<String>,
     force: bool,
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
@@ -91,21 +91,23 @@ pub(crate) async fn install(
             bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)", from = from.cyan(), package = package.cyan())
         };
 
-        let from_requirement = resolve_requirements(
-            std::iter::once(from.as_str()),
-            &interpreter,
-            &settings,
-            &state,
-            preview,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?
-        .pop()
-        .unwrap();
+        let from_requirement = {
+            resolve_names(
+                vec![RequirementsSpecification::parse_package(&from)?],
+                &interpreter,
+                &settings,
+                &state,
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?
+            .pop()
+            .unwrap()
+        };
 
         // Check if the positional name conflicts with `--from`.
         if from_requirement.name != package {
@@ -119,8 +121,8 @@ pub(crate) async fn install(
 
         from_requirement
     } else {
-        resolve_requirements(
-            std::iter::once(package.as_str()),
+        resolve_names(
+            vec![RequirementsSpecification::parse_package(&package)?],
             &interpreter,
             &settings,
             &state,
@@ -142,7 +144,7 @@ pub(crate) async fn install(
         requirements.push(from.clone());
         requirements.extend(
             resolve_requirements(
-                with.iter().map(String::as_str),
+                with,
                 &interpreter,
                 &settings,
                 &state,

@@ -248,6 +248,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) command: ExternalCommand,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
+    pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -261,6 +262,7 @@ impl ToolRunSettings {
             command,
             from,
             with,
+            with_requirements,
             installer,
             build,
             refresh,
@@ -271,6 +273,10 @@ impl ToolRunSettings {
             command,
             from,
             with,
+            with_requirements: with_requirements
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -288,6 +294,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) package: String,
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
+    pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -302,6 +309,7 @@ impl ToolInstallSettings {
             package,
             from,
             with,
+            with_requirements,
             installer,
             force,
             build,
@@ -313,6 +321,10 @@ impl ToolInstallSettings {
             package,
             from,
             with,
+            with_requirements: with_requirements
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             python,
             force,
             refresh: Refresh::from(refresh),

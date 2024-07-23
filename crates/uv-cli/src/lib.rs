@@ -2208,9 +2208,13 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub from: Option<String>,
 
-    /// Include the following extra requirements.
+    /// Run with the given packages installed.
     #[arg(long)]
     pub with: Vec<String>,
+
+    /// Run with all packages listed in the given `requirements.txt` files.
+    #[arg(long, value_parser = parse_maybe_file_path)]
+    pub with_requirements: Vec<Maybe<PathBuf>>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -2251,6 +2255,10 @@ pub struct ToolInstallArgs {
     /// Include the following extra requirements.
     #[arg(long)]
     pub with: Vec<String>,
+
+    /// Run all requirements listed in the given `requirements.txt` files.
+    #[arg(long, value_parser = parse_maybe_file_path)]
+    pub with_requirements: Vec<Maybe<PathBuf>>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,

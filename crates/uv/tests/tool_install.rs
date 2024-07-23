@@ -1273,6 +1273,106 @@ fn tool_install_unnamed_with() {
     "###);
 }
 
+/// Test installing a tool with extra requirements from a `requirements.txt` file.
+#[test]
+fn tool_install_requirements_txt() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig").unwrap();
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with-requirements")
+        .arg("requirements.txt")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + iniconfig==2.0.0
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            "black",
+            "iniconfig",
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+
+    // Update the `requirements.txt` file.
+    requirements_txt.write_str("idna").unwrap();
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with-requirements")
+        .arg("requirements.txt")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + idna==3.6
+     - iniconfig==2.0.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            "black",
+            "idna",
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+}
+
 /// Test upgrading an already installed tool.
 #[test]
 fn tool_install_upgrade() {

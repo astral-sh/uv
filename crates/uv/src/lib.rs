@@ -618,10 +618,22 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
+
+            let requirements = args
+                .with
+                .into_iter()
+                .map(RequirementsSource::from_package)
+                .chain(
+                    args.with_requirements
+                        .into_iter()
+                        .map(RequirementsSource::from_requirements_file),
+                )
+                .collect::<Vec<_>>();
+
             commands::tool_run(
                 args.command,
                 args.from,
-                args.with,
+                &requirements,
                 args.python,
                 args.settings,
                 invocation_source,
@@ -647,11 +659,22 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(args.refresh);
 
+            let requirements = args
+                .with
+                .into_iter()
+                .map(RequirementsSource::from_package)
+                .chain(
+                    args.with_requirements
+                        .into_iter()
+                        .map(RequirementsSource::from_requirements_file),
+                )
+                .collect::<Vec<_>>();
+
             commands::tool_install(
                 args.package,
                 args.from,
+                &requirements,
                 args.python,
-                args.with,
                 args.force,
                 args.settings,
                 globals.preview,
