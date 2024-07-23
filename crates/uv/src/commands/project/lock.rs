@@ -224,13 +224,13 @@ pub(super) async fn do_lock(
         if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-            warn_user!("The workspace `requires-python` field does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+            warn_user!("The workspace `requires-python` value does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
         }
         requires_python
     } else {
         let default =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-        warn_user!("No `requires-python` field found in the workspace. Defaulting to `{default}`.");
+        warn_user!("No `requires-python` value found in the workspace. Defaulting to `{default}`.");
         default
     };
 

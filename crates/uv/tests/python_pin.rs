@@ -250,7 +250,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The requested Python version `3.10` is incompatible with the project `Requires-Python` requirement of `>=3.11`.
+    error: The requested Python version `3.10` is incompatible with the project `requires-python` value of `>=3.11`.
     "###);
 
     // Request a implementation version that is incompatible
@@ -260,7 +260,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The requested Python version `cpython@3.10` is incompatible with the project `Requires-Python` requirement of `>=3.11`.
+    error: The requested Python version `cpython@3.10` is incompatible with the project `requires-python` value of `>=3.11`.
     "###);
 
     // Request a complex version range that resolves to an incompatible version
@@ -271,7 +271,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     Pinned `.python-version` to `>3.8, <3.11`
 
     ----- stderr -----
-    warning: The requested Python version `>3.8, <3.11` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.11`.
+    warning: The requested Python version `>3.8, <3.11` resolves to `3.10.[X]` which  is incompatible with the project `requires-python` value of `>=3.11`.
     "###);
 
     uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
@@ -321,7 +321,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     cpython@3.11
 
     ----- stderr -----
-    warning: The pinned Python version `cpython@3.11` is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    warning: The pinned Python version `cpython@3.11` is incompatible with the project `requires-python` value of `>=3.12`.
     "###);
 
     // Request a implementation that resolves to a compatible version
@@ -332,7 +332,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     Updated `.python-version` from `cpython@3.11` -> `cpython`
 
     ----- stderr -----
-    warning: The requested Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    warning: The requested Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `requires-python` value of `>=3.12`.
     "###);
 
     uv_snapshot!(context.filters(), context.python_pin(), @r###"
@@ -342,7 +342,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     cpython
 
     ----- stderr -----
-    warning: The pinned Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    warning: The pinned Python version `cpython` resolves to `3.10.[X]` which  is incompatible with the project `requires-python` value of `>=3.12`.
     "###);
 
     // Request a complex version range that resolves to a compatible version
@@ -353,7 +353,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     Updated `.python-version` from `cpython` -> `>3.8, <3.12`
 
     ----- stderr -----
-    warning: The requested Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    warning: The requested Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `requires-python` value of `>=3.12`.
     "###);
 
     uv_snapshot!(context.filters(), context.python_pin(), @r###"
@@ -363,7 +363,7 @@ fn python_pin_compatible_with_requires_python() -> anyhow::Result<()> {
     >3.8, <3.12
 
     ----- stderr -----
-    warning: The pinned Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `Requires-Python` requirement of `>=3.12`.
+    warning: The pinned Python version `>3.8, <3.12` resolves to `3.10.[X]` which  is incompatible with the project `requires-python` value of `>=3.12`.
     "###);
 
     Ok(())

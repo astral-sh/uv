@@ -274,7 +274,7 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
     };
 
     Err(anyhow::anyhow!(
-        "The {given} Python version `{}`{resolved} is incompatible with the {} `Requires-Python` requirement of `{}`.",
+        "The {given} Python version `{}`{resolved} is incompatible with the {} `requires-python` value of `{}`.",
         pin.request.to_canonical_string(),
         project_type,
         requires_python

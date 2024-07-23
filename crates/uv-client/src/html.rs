@@ -173,7 +173,7 @@ impl SimpleHtml {
         let filename = urlencoding::decode(filename)
             .map_err(|_| Error::UnsupportedFilename(filename.to_string()))?;
 
-        // Extract the `requires-python` field, which should be set on the
+        // Extract the `requires-python` value, which should be set on the
         // `data-requires-python` attribute.
         let requires_python = if let Some(requires_python) =
             link.attributes().get("data-requires-python").flatten()

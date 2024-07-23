@@ -29,7 +29,7 @@ pub struct RequiresPython {
     /// The supported Python versions as provides by the user, usually through the `requires-python`
     /// field in `pyproject.toml`.
     ///
-    /// For a workspace, it's the union of all `requires-python` fields in the workspace. If no
+    /// For a workspace, it's the union of all `requires-python` values in the workspace. If no
     /// bound was provided by the user, it's greater equal the current Python version.
     specifiers: VersionSpecifiers,
     /// The lower bound from the `specifiers` field, i.e. greater or greater equal the lowest
