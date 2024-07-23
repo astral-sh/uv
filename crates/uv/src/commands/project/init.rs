@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 
 use pep508_rs::PackageName;
 use uv_configuration::PreviewMode;
-use uv_fs::Simplified;
+use uv_fs::{absolutize_path, Simplified};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
 use uv_workspace::{Workspace, WorkspaceError};
@@ -59,24 +59,8 @@ pub(crate) async fn init(
         );
     }
 
-    // Create the directory for the project.
-    let src_dir = path.join("src").join(&*name.as_dist_info_name());
-    fs_err::create_dir_all(&src_dir)?;
-
     // Canonicalize the path to the project.
-    let path = path.canonicalize()?;
-
-    // Discover the current workspace, if it exists.
-    let workspace = if isolated {
-        None
-    } else {
-        // Attempt to find a workspace root.
-        match Workspace::discover(&path, None).await {
-            Ok(workspace) => Some(workspace),
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(err) => return Err(err.into()),
-        }
-    };
+    let path = absolutize_path(&path)?;
 
     // Create the `pyproject.toml`.
     let pyproject = indoc::formatdoc! {r#"
@@ -92,11 +76,27 @@ pub(crate) async fn init(
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
     };
 
+    fs_err::create_dir_all(&path)?;
     fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
+    // Discover the current workspace, if it exists.
+    let workspace = if isolated {
+        None
+    } else {
+        // Attempt to find a workspace root.
+        let parent = path.parent().expect("Project path has no parent");
+        match Workspace::discover(parent, None).await {
+            Ok(workspace) => Some(workspace),
+            Err(WorkspaceError::MissingPyprojectToml) => None,
+            Err(err) => return Err(err.into()),
+        }
+    };
+
     // Create `src/{name}/__init__.py` if it does not already exist.
+    let src_dir = path.join("src").join(&*name.as_dist_info_name());
     let init_py = src_dir.join("__init__.py");
     if !init_py.try_exists()? {
+        fs_err::create_dir_all(&src_dir)?;
         fs_err::write(
             init_py,
             indoc::formatdoc! {r#"
