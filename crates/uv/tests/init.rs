@@ -176,6 +176,72 @@ fn current_dir() -> Result<()> {
 }
 
 #[test]
+fn init_dot_args() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let dir = context.temp_dir.join("foo");
+    fs_err::create_dir(&dir)?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&dir).arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(dir.join("pyproject.toml"))?;
+    let init_py = fs_err::read_to_string(dir.join("src/foo/__init__.py"))?;
+    let _ = fs_err::read_to_string(dir.join("README.md")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+        "###
+        );
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init_py, @r###"
+        def hello() -> str:
+            return "Hello from foo!"
+        "###
+        );
+    });
+
+    // Run `uv lock` in the new project.
+    uv_snapshot!(context.filters(), context.lock().current_dir(&dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: No `requires-python` field found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn init_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
 

@@ -34,19 +34,6 @@ pub(crate) async fn init(
         Some(ref path) => PathBuf::from(path),
     };
 
-    // Default to the directory name if a name was not provided.
-    let name = match name {
-        Some(name) => name,
-        None => {
-            let name = path
-                .file_name()
-                .and_then(|path| path.to_str())
-                .expect("Invalid package name");
-
-            PackageName::new(name.to_string())?
-        }
-    };
-
     // Make sure a project does not already exist in the given directory.
     if path.join("pyproject.toml").exists() {
         let path = path
@@ -61,6 +48,19 @@ pub(crate) async fn init(
 
     // Canonicalize the path to the project.
     let path = absolutize_path(&path)?;
+
+    // Default to the directory name if a name was not provided.
+    let name = match name {
+        Some(name) => name,
+        None => {
+            let name = path
+                .file_name()
+                .and_then(|path| path.to_str())
+                .expect("Invalid package name");
+
+            PackageName::new(name.to_string())?
+        }
+    };
 
     // Create the `pyproject.toml`.
     let pyproject = indoc::formatdoc! {r#"
