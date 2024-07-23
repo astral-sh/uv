@@ -676,7 +676,7 @@ impl CacheBucket {
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v2",
-            Self::Simple => "simple-v9",
+            Self::Simple => "simple-v10",
             Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
@@ -706,8 +706,8 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(name.to_string()))?;
 
-                // For alternate indices, we expect a directory for every index, followed by a
-                // directory per package (indexed by name).
+                // For alternate indices, we expect a directory for every index (under an `index`
+                // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root) {
                     summary += rm_rf(directory.join(name.to_string()))?;
@@ -725,8 +725,8 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(name.to_string()))?;
 
-                // For alternate indices, we expect a directory for every index, followed by a
-                // directory per package (indexed by name).
+                // For alternate indices, we expect a directory for every index (under an `index`
+                // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root) {
                     summary += rm_rf(directory.join(name.to_string()))?;
@@ -769,9 +769,9 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(format!("{name}.rkyv")))?;
 
-                // For alternate indices, we expect a directory for every index, followed by a
-                // MsgPack file per package, indexed by name.
-                let root = cache.bucket(self).join(WheelCacheKind::Url);
+                // For alternate indices, we expect a directory for every index (under an `index`
+                // subdirectory), followed by a directory per package (indexed by name).
+                let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root) {
                     summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
                 }

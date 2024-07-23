@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -268,11 +268,7 @@ impl RegistryClient {
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
-            Path::new(&match index {
-                IndexUrl::Pypi(_) => "pypi".to_string(),
-                IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
-                IndexUrl::Path(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
-            }),
+            WheelCache::Index(index).root(),
             format!("{package_name}.rkyv"),
         );
         let cache_control = match self.connectivity {
