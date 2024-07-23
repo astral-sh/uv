@@ -25,12 +25,12 @@ import asyncio
 import itertools
 import json
 import logging
-import re
 import os
-from enum import StrEnum
+import re
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import Iterable, Generator, NamedTuple, Self
+from typing import Generator, Iterable, NamedTuple, Self
 from urllib.parse import unquote
 
 import httpx
@@ -167,7 +167,7 @@ class CPythonFinder(Finder):
         results: dict[Version, list[PythonDownload]] = {}
 
         # Collect all available Python downloads
-        for page in range(1, pages):
+        for page in range(1, pages + 1):
             logging.info("Fetching CPython release page %d", page)
             resp = await self.client.get(self.RELEASE_URL, params={"page": page})
             resp.raise_for_status()
@@ -191,7 +191,7 @@ class CPythonFinder(Finder):
                 existing = flavors.get(choice.triple)
                 if existing:
                     _, existing_priority = existing
-                    # Skip if we have a flavor with higher priority already
+                    # Skip if we have a flavor with higher priority already (indicated by a smaller value)
                     if priority >= existing_priority:
                         continue
                 flavors[choice.triple] = (choice, priority)
@@ -249,9 +249,9 @@ class CPythonFinder(Finder):
         """Parse an indygreg download URL into a PythonDownload object."""
         # Ex)
         # https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
-        filename = unquote(url.rsplit("/", maxsplit=1)[-1])
-        if filename.endswith(".sha256"):
+        if url.endswith(".sha256"):
             return
+        filename = unquote(url.rsplit("/", maxsplit=1)[-1])
 
         match = self._filename_re.match(filename)
         if match is None:
@@ -313,9 +313,8 @@ class CPythonFinder(Finder):
     def _normalize_os(self, os: str) -> str:
         return os
 
-    def _get_flavor_priority(self, flavor: str) -> int:
-        """
-        Returns the priority of a flavor. Lower is better."""
+    def _get_flavor_priority(self, flavor: str | None) -> int:
+        """Returns the priority of a flavor. Lower is better."""
         try:
             pref = self.FLAVOR_PREFERENCES.index(flavor)
         except ValueError:
