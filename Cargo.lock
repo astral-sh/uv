@@ -200,9 +200,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd066d0b4ef8ecb03a55319dc13aa6910616d0f44008a045bb1835af830abff5"
+checksum = "fec134f64e2bc57411226dfc4e52dec859ddfc7e711fc5e07b612584f000e4aa"
 dependencies = [
  "brotli",
  "bzip2",
@@ -224,7 +224,7 @@ checksum = "6e0c28dcc82d7c8ead5cb13beb15405b57b8546e93215673ff8ca0349a028107"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -315,9 +315,9 @@ dependencies = [
 
 [[package]]
 name = "axoupdater"
-version = "0.6.8"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d51e87c9280d6f722419f783fdcef745dffd6b45d38d665380ae6b7f237d3b74"
+checksum = "720e671dc9dd9da3394476339a1f947d5af473fd106037e25218a59664c059be"
 dependencies = [
  "axoasset",
  "axoprocess",
@@ -745,7 +745,7 @@ dependencies = [
  "heck 0.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -1385,7 +1385,7 @@ checksum = "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -2144,7 +2144,7 @@ checksum = "dcf09caffaac8068c346b6df2a7fc27a177fd20b39421a39ce0a211bde679a6c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -2495,7 +2495,7 @@ dependencies = [
  "pest_meta",
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -2542,7 +2542,7 @@ checksum = "2f38a4412a78282e09a2cf38d195ea5420d15ba0602cb375210efbc877243965"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -2719,7 +2719,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.12.3",
+ "parking_lot 0.11.2",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -2767,7 +2767,7 @@ dependencies = [
  "proc-macro2",
  "pyo3-macros-backend",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -2780,7 +2780,7 @@ dependencies = [
  "proc-macro2",
  "pyo3-build-config",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -3441,7 +3441,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde_derive_internals",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -3502,7 +3502,7 @@ checksum = "e0cd7e117be63d3c3678776753929474f3b04a43a080c744d6b0ae2a8c28e222"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -3513,7 +3513,7 @@ checksum = "18d26a20a969b9e3fdf2fc2d9f21eda6c40e2de84c9408bb5d3b05d499aae711"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -3744,9 +3744,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.71"
+version = "2.0.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b146dcf730474b4bcd16c311627b31ede9ab149045db4d6088b3becaea046462"
+checksum = "dc4b9b9bf2add8093d3f2c0204471e951b2285580335de42f9d2534f3ae7a8af"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3842,7 +3842,7 @@ dependencies = [
  "cfg-if",
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -3853,7 +3853,7 @@ checksum = "5c89e72a01ed4c579669add59014b9a524d609c0c88c6a585ce37485879f6ffb"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
  "test-case-core",
 ]
 
@@ -3875,7 +3875,7 @@ checksum = "5999e24eaa32083191ba4e425deb75cdf25efefabe5aaccb7446dd0d4122a3f5"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -3900,22 +3900,22 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.62"
+version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2675633b1499176c2dff06b0856a27976a8f9d436737b4cf4f312d4d91d8bbb"
+checksum = "c0342370b38b6a11b6cc11d6a805569958d54cfa061a29969c3b5ce2ea405724"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.62"
+version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d20468752b09f49e909e55a5d338caa8bedf615594e9d80bc4c565d30faf798c"
+checksum = "a4558b58466b9ad7ca0f102865eccc95938dca1a74a856f2b57b6629050da261"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -4006,9 +4006,9 @@ checksum = "b130bd8a58c163224b44e217b4239ca7b927d82bf6cc2fea1fc561d15056e3f7"
 
 [[package]]
 name = "tokio"
-version = "1.38.0"
+version = "1.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba4f4a02a7a80d6f274636f0aa95c7e383b912d41fe721a31f29e29698585a4a"
+checksum = "eb2caba9f80616f438e09748d5acda951967e1ea58508ef53d9c6402485a46df"
 dependencies = [
  "backtrace",
  "bytes",
@@ -4031,7 +4031,7 @@ checksum = "5f5ae998a069d4b5aba8ee9dad856af7d520c3699e6159b185c2acd48155d39a"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -4088,9 +4088,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.8.14"
+version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f49eb2ab21d2f26bd6db7bf383edc527a7ebaee412d17af4d40fdccd442f335"
+checksum = "ac2caab0bf757388c6c0ae23b3293fdb463fee59434529014f85e3263b995c28"
 dependencies = [
  "serde",
  "serde_spanned",
@@ -4109,9 +4109,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.15"
+version = "0.22.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d59a3a72298453f564e2b111fa896f8d07fabb36f51f06d7e875fc5e0b5a3ef1"
+checksum = "278f3d518e152219c994ce877758516bca5e118eaed6996192a774fb9fbf0788"
 dependencies = [
  "indexmap",
  "serde",
@@ -4167,7 +4167,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -4428,7 +4428,7 @@ checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
-version = "0.2.26"
+version = "0.2.27"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4498,6 +4498,7 @@ dependencies = [
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
+ "uv-workspace",
  "which",
 ]
 
@@ -4707,7 +4708,6 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
- "uv-distribution",
  "uv-git",
  "uv-installer",
  "uv-macros",
@@ -4716,6 +4716,7 @@ dependencies = [
  "uv-resolver",
  "uv-settings",
  "uv-types",
+ "uv-workspace",
  "walkdir",
 ]
 
@@ -4750,34 +4751,27 @@ dependencies = [
  "anyhow",
  "distribution-filename",
  "distribution-types",
- "either",
  "fs-err",
  "futures",
- "glob",
  "indoc",
  "insta",
  "install-wheel-rs",
  "nanoid",
  "once_cell",
  "path-absolutize",
- "path-slash",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
- "regex",
  "reqwest",
  "reqwest-middleware",
  "rmp-serde",
  "rustc-hash 2.0.0",
- "schemars",
  "serde",
  "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
- "toml",
- "toml_edit",
  "tracing",
  "url",
  "uv-cache",
@@ -4786,11 +4780,10 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-git",
- "uv-macros",
  "uv-normalize",
- "uv-options-metadata",
  "uv-types",
  "uv-warnings",
+ "uv-workspace",
  "zip",
 ]
 
@@ -4874,11 +4867,9 @@ dependencies = [
  "rayon",
  "rustc-hash 2.0.0",
  "same-file",
- "serde",
  "tempfile",
  "thiserror",
  "tokio",
- "toml",
  "tracing",
  "url",
  "uv-cache",
@@ -4900,7 +4891,7 @@ version = "0.0.1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
  "textwrap",
 ]
 
@@ -4967,7 +4958,7 @@ dependencies = [
  "uv-warnings",
  "which",
  "winapi",
- "winsafe 0.0.21",
+ "winsafe",
 ]
 
 [[package]]
@@ -5001,6 +4992,7 @@ dependencies = [
  "uv-resolver",
  "uv-types",
  "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]
@@ -5052,6 +5044,7 @@ dependencies = [
  "uv-python",
  "uv-types",
  "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]
@@ -5164,7 +5157,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.26"
+version = "0.2.27"
 
 [[package]]
 name = "uv-virtualenv"
@@ -5190,6 +5183,36 @@ dependencies = [
  "once_cell",
  "owo-colors",
  "rustc-hash 2.0.0",
+]
+
+[[package]]
+name = "uv-workspace"
+version = "0.0.1"
+dependencies = [
+ "either",
+ "fs-err",
+ "glob",
+ "insta",
+ "path-slash",
+ "pep440_rs",
+ "pep508_rs",
+ "pypi-types",
+ "regex",
+ "rustc-hash 2.0.0",
+ "schemars",
+ "serde",
+ "thiserror",
+ "tokio",
+ "toml",
+ "toml_edit",
+ "tracing",
+ "url",
+ "uv-fs",
+ "uv-git",
+ "uv-macros",
+ "uv-normalize",
+ "uv-options-metadata",
+ "uv-warnings",
 ]
 
 [[package]]
@@ -5259,7 +5282,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
  "wasm-bindgen-shared",
 ]
 
@@ -5293,7 +5316,7 @@ checksum = "e94f17b526d0a461a191c78ea52bbce64071ed5c04c9ffe424dcb38f74171bb7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -5367,7 +5390,7 @@ dependencies = [
  "home",
  "regex",
  "rustix",
- "winsafe 0.0.19",
+ "winsafe",
 ]
 
 [[package]]
@@ -5459,7 +5482,7 @@ checksum = "12168c33176773b86799be25e2a2ba07c7aab9968b37541f1094dbd7a60c8946"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -5470,7 +5493,7 @@ checksum = "2bbd5b46c938e506ecbce286b6628a02171d56153ba733b6c741fc627ec9579b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -5481,7 +5504,7 @@ checksum = "9d8dc32e0095a7eeccebd0e3f09e9509365ecb3fc6ac4d6f5f14a3f6392942d1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -5492,7 +5515,7 @@ checksum = "053c4c462dc91d3b1504c6fe5a726dd15e216ba718e84a0e46a88fbe5ded3515"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.71",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -5677,12 +5700,6 @@ name = "winsafe"
 version = "0.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
-
-[[package]]
-name = "winsafe"
-version = "0.0.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c4afa7176f9fadc45817419f5fe481b9e8b90299c62af90e8c19486d0320274"
 
 [[package]]
 name = "wiremock"

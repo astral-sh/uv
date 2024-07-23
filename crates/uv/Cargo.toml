@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.2.26"
+version = "0.2.27"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -42,6 +42,7 @@ uv-tool = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }

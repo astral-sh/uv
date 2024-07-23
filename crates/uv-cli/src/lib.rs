@@ -2013,9 +2013,12 @@ pub struct AddArgs {
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
-    /// Add the requirements as editables.
-    #[arg(long, default_missing_value = "true", num_args(0..=1))]
-    pub editable: Option<bool>,
+    #[arg(long, overrides_with = "no_editable", hide = true)]
+    pub editable: bool,
+
+    /// Don't add the requirements as editables.
+    #[arg(long, overrides_with = "editable")]
+    pub no_editable: bool,
 
     /// Add source requirements to the `project.dependencies` section of the `pyproject.toml`.
     ///
@@ -2791,4 +2794,8 @@ pub struct DisplayTreeArgs {
     /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
+
+    /// Show the version constraint(s) imposed on each package.
+    #[arg(long)]
+    pub show_version_specifiers: bool,
 }

@@ -266,6 +266,18 @@ impl SitePackages {
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[Requirement],
     ) -> Result<SatisfiesResult> {
+        // Collect the constraints.
+        let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
+            constraints
+                .iter()
+                .fold(FxHashMap::default(), |mut constraints, requirement| {
+                    constraints
+                        .entry(&requirement.name)
+                        .or_default()
+                        .push(requirement);
+                    constraints
+                });
+
         let mut stack = Vec::with_capacity(requirements.len());
         let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
 
@@ -299,19 +311,17 @@ impl SitePackages {
                         distribution,
                         entry.requirement.source().as_ref(),
                     )? {
-                        RequirementSatisfaction::Mismatch
-                        | RequirementSatisfaction::OutOfDate
-                        | RequirementSatisfaction::Dynamic => {
+                        RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
                             return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))
                         }
                         RequirementSatisfaction::Satisfied => {}
                     }
+
                     // Validate that the installed version satisfies the constraints.
-                    for constraint in constraints {
+                    for constraint in constraints.get(&distribution.name()).into_iter().flatten() {
                         match RequirementSatisfaction::check(distribution, &constraint.source)? {
                             RequirementSatisfaction::Mismatch
-                            | RequirementSatisfaction::OutOfDate
-                            | RequirementSatisfaction::Dynamic => {
+                            | RequirementSatisfaction::OutOfDate => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     entry.requirement.to_string(),
                                 ))

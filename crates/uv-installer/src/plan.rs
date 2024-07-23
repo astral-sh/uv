@@ -123,9 +123,6 @@ impl<'a> Planner<'a> {
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {distribution}");
                             }
-                            RequirementSatisfaction::Dynamic => {
-                                debug!("Requirement installed, but dynamic: {distribution}");
-                            }
                         }
                         reinstalls.push(distribution.clone());
                     }

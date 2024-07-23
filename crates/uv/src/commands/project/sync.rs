@@ -6,13 +6,13 @@ use uv_configuration::{
     Concurrency, ExtrasSpecification, HashCheckingMode, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{VirtualProject, DEV_DEPENDENCIES};
+use uv_distribution::DEV_DEPENDENCIES;
 use uv_installer::SitePackages;
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
-
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
+use uv_workspace::VirtualProject;
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::do_safe_lock;

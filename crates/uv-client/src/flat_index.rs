@@ -228,8 +228,22 @@ impl<'a> FlatIndexClient<'a> {
         for entry in fs_err::read_dir(path)? {
             let entry = entry?;
             let metadata = entry.metadata()?;
-            if !metadata.is_file() {
+
+            if metadata.is_dir() {
                 continue;
+            }
+
+            if metadata.is_symlink() {
+                let Ok(target) = entry.path().read_link() else {
+                    warn!(
+                        "Skipping unreadable symlink in `--find-links` directory: {}",
+                        entry.path().display()
+                    );
+                    continue;
+                };
+                if target.is_dir() {
+                    continue;
+                }
             }
 
             let Ok(filename) = entry.file_name().into_string() else {

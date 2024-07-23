@@ -1,7 +1,7 @@
 site_name: uv
 theme:
   name: material
-  favicon: assets/favicon.ico
+  favicon: assets/favicon.svg
   features:
     - navigation.instant
     - navigation.instant.prefetch
@@ -10,6 +10,7 @@ theme:
     - navigation.tracking
     - content.code.annotate
     - toc.follow
+    - navigation.footer
     - navigation.path
     - navigation.top
     - content.code.copy
@@ -71,6 +72,7 @@ nav:
   - Getting started:
       - Installation: installation.md
       - First steps: first-steps.md
+      - Feature overview: features.md
   - Guides:
       - Installing Python: guides/install-python.md
       - Running scripts: guides/scripts.md
@@ -78,10 +80,10 @@ nav:
       - Working on projects: guides/projects.md
   - Concepts:
       - Projects: projects.md
+      - Dependencies: dependencies.md
+      - Workspaces: workspaces.md
       - Tools: tools.md
       - Python versions: python-versions.md
-      - Workspaces: preview/workspaces.md
-      - Dependency sources: preview/dependencies.md
       - Resolution: resolution.md
       - Caching: cache.md
       - Authentication: configuration/authentication.md

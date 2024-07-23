@@ -157,13 +157,13 @@ pub(crate) async fn run(
                     writeln!(
                         printer.stdout(),
                         "The executable `{}` was not found.",
-                        executable.to_string_lossy().red(),
+                        executable.to_string_lossy().cyan(),
                     )?;
                     if !entrypoints.is_empty() {
                         writeln!(
                             printer.stdout(),
                             "The following executables are provided by `{}`:",
-                            &from.name.green()
+                            from.name.green()
                         )?;
                         for (name, _) in entrypoints {
                             writeln!(printer.stdout(), "- {}", name.cyan())?;
@@ -228,8 +228,8 @@ fn warn_executable_not_provided_by_package(
             match packages.as_slice() {
                 [] => {
                     warn_user!(
-                        "A `{}` executable is not provided by package `{}`.",
-                        executable.green(),
+                        "An executable named `{}` is not provided by package `{}`.",
+                        executable.cyan(),
                         from_package.red()
                     );
                 }
@@ -240,11 +240,11 @@ fn warn_executable_not_provided_by_package(
                         executable
                     );
                     warn_user!(
-                        "A `{}` executable is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
-                        executable.green(),
-                        from_package.red(),
-                        package.name().green(),
-                        suggested_command.cyan()
+                        "An executable named `{}` is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
+                        executable.cyan(),
+                        from_package.cyan(),
+                        package.name().cyan(),
+                        suggested_command.green()
                     );
                 }
                 packages => {
@@ -255,11 +255,11 @@ fn warn_executable_not_provided_by_package(
                         .map(|name| format!("- {}", name.cyan()))
                         .join("\n");
                     warn_user!(
-                        "A `{}` executable is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
-                        executable.green(),
-                        from_package.red(),
+                        "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
+                        executable.cyan(),
+                        from_package.cyan(),
                         provided_by,
-                        suggested_command.cyan(),
+                        suggested_command.green(),
                     );
                 }
             }

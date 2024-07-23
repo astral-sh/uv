@@ -7,11 +7,10 @@ use tracing::instrument;
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    PythonRequirementKind, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::Version;
-use platform_tags::{TagCompatibility, Tags};
+use platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use pypi_types::{HashDigest, Yanked};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
@@ -511,10 +510,9 @@ impl VersionMapLazy {
         // Check if the wheel is compatible with the `requires-python` (i.e., the Python ABI tag
         // is not less than the `requires-python` minimum version).
         if let Some(requires_python) = self.requires_python.as_ref() {
-            if !filename.matches_requires_python(requires_python.specifiers()) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
-                    requires_python.specifiers().clone(),
-                    PythonRequirementKind::Target,
+            if !requires_python.matches_wheel_tag(filename) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                    IncompatibleTag::Abi,
                 ));
             }
         }

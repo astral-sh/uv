@@ -1409,7 +1409,7 @@ fn local_used_without_sdist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.2.3 has no wheels are available with a matching Python ABI and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because package-a==1.2.3 has no wheels with a matching Python ABI tag and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
@@ -1783,7 +1783,7 @@ fn local_transitive_confounding() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-b==2.0.0 has no wheels are available with a matching Python ABI and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because package-b==2.0.0 has no wheels with a matching Python ABI tag and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4194,7 +4194,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels are available with a matching platform, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4235,7 +4235,7 @@ fn no_sdist_no_wheels_with_matching_python() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels are available with a matching Python implementation, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4276,7 +4276,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels are available with a matching Python ABI, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -4358,7 +4358,7 @@ fn only_wheels_no_binary() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no available source distribution and using wheels is disabled, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no source distribution and using wheels is disabled, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 

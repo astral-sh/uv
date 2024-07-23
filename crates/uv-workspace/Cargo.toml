@@ -1,0 +1,45 @@
+[package]
+name = "uv-workspace"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+pypi-types = { workspace = true }
+uv-fs = { workspace = true, features = ["tokio"] }
+uv-git = { workspace = true }
+uv-macros = { workspace = true }
+uv-normalize = { workspace = true }
+uv-warnings = { workspace = true }
+uv-options-metadata = { workspace = true }
+
+either = { workspace = true }
+fs-err = { workspace = true }
+glob = { workspace = true }
+path-slash = { workspace = true }
+rustc-hash = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml =  { workspace = true }
+toml_edit =  { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.39.0", features = ["filters", "json", "redactions"] }
+regex = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["uv-options-metadata"]

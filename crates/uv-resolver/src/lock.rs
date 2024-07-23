@@ -34,14 +34,16 @@ use pypi_types::{
     HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
 };
 use uv_configuration::{ExtrasSpecification, Upgrade};
-use uv_distribution::{ArchiveMetadata, Metadata, VirtualProject};
+use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_workspace::VirtualProject;
 
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::resolver::FxOnceMap;
 use crate::{
-    InMemoryIndex, MetadataResponse, RequiresPython, ResolutionGraph, VersionMap, VersionsResponse,
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PreReleaseMode, RequiresPython, ResolutionGraph,
+    ResolutionMode, VersionMap, VersionsResponse,
 };
 
 /// The current version of the lock file format.
@@ -54,6 +56,12 @@ pub struct Lock {
     distributions: Vec<Distribution>,
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
+    /// The [`ResolutionMode`] used to generate this lock.
+    resolution_mode: ResolutionMode,
+    /// The [`PreReleaseMode`] used to generate this lock.
+    prerelease_mode: PreReleaseMode,
+    /// The [`ExcludeNewer`] used to generate this lock.
+    exclude_newer: Option<ExcludeNewer>,
     /// A map from distribution ID to index in `distributions`.
     ///
     /// This can be used to quickly lookup the full distribution for any ID
@@ -143,7 +151,15 @@ impl Lock {
 
         let distributions = locked_dists.into_values().collect();
         let requires_python = graph.requires_python.clone();
-        let lock = Self::new(VERSION, distributions, requires_python)?;
+        let options = graph.options;
+        let lock = Self::new(
+            VERSION,
+            distributions,
+            requires_python,
+            options.resolution_mode,
+            options.prerelease_mode,
+            options.exclude_newer,
+        )?;
         Ok(lock)
     }
 
@@ -152,6 +168,9 @@ impl Lock {
         version: u32,
         mut distributions: Vec<Distribution>,
         requires_python: Option<RequiresPython>,
+        resolution_mode: ResolutionMode,
+        prerelease_mode: PreReleaseMode,
+        exclude_newer: Option<ExcludeNewer>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each distribution in a canonical order and
         // check for duplicates.
@@ -203,11 +222,8 @@ impl Lock {
             // Remove wheels that don't match `requires-python` and can't be selected for
             // installation.
             if let Some(requires_python) = &requires_python {
-                dist.wheels.retain(|wheel| {
-                    wheel
-                        .filename
-                        .matches_requires_python(requires_python.specifiers())
-                });
+                dist.wheels
+                    .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
             }
         }
         distributions.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
@@ -306,10 +322,13 @@ impl Lock {
                 }
             }
         }
-        Ok(Lock {
+        Ok(Self {
             version,
             distributions,
             requires_python,
+            resolution_mode,
+            prerelease_mode,
+            exclude_newer,
             by_id,
         })
     }
@@ -327,6 +346,21 @@ impl Lock {
     /// Returns the supported Python version range for the lockfile, if present.
     pub fn requires_python(&self) -> Option<&RequiresPython> {
         self.requires_python.as_ref()
+    }
+
+    /// Returns the resolution mode used to generate this lock.
+    pub fn resolution_mode(&self) -> ResolutionMode {
+        self.resolution_mode
+    }
+
+    /// Returns the pre-release mode used to generate this lock.
+    pub fn prerelease_mode(&self) -> PreReleaseMode {
+        self.prerelease_mode
+    }
+
+    /// Returns the exclude newer setting used to generate this lock.
+    pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
+        self.exclude_newer
     }
 
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
@@ -416,6 +450,19 @@ impl Lock {
 
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
+        }
+
+        // Write the settings that were used to generate the resolution.
+        // This enables us to invalidate the lockfile if the user changes
+        // their settings.
+        if self.resolution_mode != ResolutionMode::default() {
+            doc.insert("resolution-mode", value(self.resolution_mode.to_string()));
+        }
+        if self.prerelease_mode != PreReleaseMode::default() {
+            doc.insert("prerelease-mode", value(self.prerelease_mode.to_string()));
+        }
+        if let Some(exclude_newer) = self.exclude_newer {
+            doc.insert("exclude-newer", value(exclude_newer.to_string()));
         }
 
         // Count the number of distributions for each package name. When
@@ -521,12 +568,18 @@ impl Lock {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
     #[serde(rename = "distribution")]
     distributions: Vec<DistributionWire>,
-    #[serde(rename = "requires-python")]
     requires_python: Option<RequiresPython>,
+    #[serde(default)]
+    resolution_mode: ResolutionMode,
+    #[serde(default)]
+    prerelease_mode: PreReleaseMode,
+    #[serde(default)]
+    exclude_newer: Option<ExcludeNewer>,
 }
 
 impl From<Lock> for LockWire {
@@ -539,6 +592,9 @@ impl From<Lock> for LockWire {
                 .map(DistributionWire::from)
                 .collect(),
             requires_python: lock.requires_python,
+            resolution_mode: lock.resolution_mode,
+            prerelease_mode: lock.prerelease_mode,
+            exclude_newer: lock.exclude_newer,
         }
     }
 }
@@ -569,7 +625,14 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|dist| dist.unwire(&unambiguous_dist_ids))
             .collect::<Result<Vec<_>, _>>()?;
-        Lock::new(wire.version, distributions, wire.requires_python)
+        Lock::new(
+            wire.version,
+            distributions,
+            wire.requires_python,
+            wire.resolution_mode,
+            wire.prerelease_mode,
+            wire.exclude_newer,
+        )
     }
 }
 
@@ -801,7 +864,7 @@ impl Distribution {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: None,
-                    url: FileLocation::AbsoluteUrl(file_url.clone().into()),
+                    url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
                 let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
@@ -1599,7 +1662,7 @@ struct SourceDistMetadata {
 #[serde(untagged)]
 enum SourceDist {
     Url {
-        url: Url,
+        url: UrlString,
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
@@ -1634,7 +1697,7 @@ impl SourceDist {
         }
     }
 
-    fn url(&self) -> Option<&Url> {
+    fn url(&self) -> Option<&UrlString> {
         match &self {
             SourceDist::Url { url, .. } => Some(url),
             SourceDist::Path { .. } => None,
@@ -1662,7 +1725,7 @@ impl SourceDist {
         let mut table = InlineTable::new();
         match &self {
             SourceDist::Url { url, .. } => {
-                table.insert("url", Value::from(url.as_str()));
+                table.insert("url", Value::from(url.as_ref()));
             }
             SourceDist::Path { path, .. } => {
                 table.insert("path", Value::from(serialize_path_with_dot(path).as_ref()));
@@ -1733,7 +1796,7 @@ impl SourceDist {
         let url = reg_dist
             .file
             .url
-            .to_url()
+            .to_url_string()
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
         let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
@@ -1758,7 +1821,7 @@ impl SourceDist {
             return Err(kind.into());
         };
         Ok(SourceDist::Url {
-            url: direct_dist.url.to_url(),
+            url: UrlString::from(direct_dist.url.to_url()),
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
@@ -1975,7 +2038,7 @@ struct WheelWire {
     /// against was found. The location does not need to exist in the future,
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
-    url: Url,
+    url: UrlString,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -2016,7 +2079,7 @@ impl TryFrom<WheelWire> for Wheel {
             .map_err(|err| format!("failed to parse `{filename}` as wheel filename: {err}"))?;
 
         Ok(Wheel {
-            url: wire.url.into(),
+            url: wire.url,
             hash: wire.hash,
             size: wire.size,
             filename,

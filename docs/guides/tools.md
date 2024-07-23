@@ -4,7 +4,7 @@ Many Python packages provide command-line interfaces which are useful as standal
 
 ## Using `uvx`
 
-The `uvx` command is an alias for `uv tool run`, which can be used to invoke a tool without installing it.
+The `uvx` command invokes a tool without installing it.
 
 For example, to run `ruff`:
 
@@ -12,13 +12,17 @@ For example, to run `ruff`:
 $ uvx ruff
 ```
 
-Note this is exactly equivalent to:
+!!! note
 
-```console
-$ uv tool run ruff
-```
+    This is exactly equivalent to:
 
-Arguments can be passed afted the tool name:
+    ```console
+    $ uv tool run ruff
+    ```
+
+    `uvx` is provided as a short alias since the operation is very common.
+
+Arguments can be provided after the tool name:
 
 ```console
 $ uvx pycowsay hello from uv
@@ -36,7 +40,7 @@ $ uvx pycowsay hello from uv
 
 ## Commands with different package names
 
-In `uvx ruff`, the `ruff` package is installed to provide the `ruff` command. However, sometimes the package name differs from the command name.
+When you invoke `uvx ruff`, uv installs the `ruff` package which provides the `ruff` command. However, sometimes the package and command names differ.
 
 The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is provided by `httpie`:
 

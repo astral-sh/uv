@@ -1,7 +1,5 @@
-use std::ffi::{CStr, CString};
-use std::mem::size_of;
-use std::mem::MaybeUninit;
-use std::ptr::addr_of;
+use std::ffi::{c_void, CStr, CString};
+use std::mem::{size_of, size_of_val};
 use std::vec::Vec;
 
 use windows::core::{s, PCSTR, PSTR};
@@ -25,7 +23,7 @@ use windows::Win32::{
     },
     System::Environment::GetCommandLineA,
     System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        AssignProcessToJobObject, CreateJobObjectA, JobObjectExtendedLimitInformation,
         QueryInformationJobObject, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
         JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
     },
@@ -41,7 +39,6 @@ use windows::Win32::{
     },
 };
 
-use crate::helpers::SizeOf;
 use crate::{eprintln, format};
 
 const MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
@@ -76,7 +73,7 @@ fn make_child_cmdline() -> CString {
 
     CString::from_vec_with_nul(child_cmdline).unwrap_or_else(|_| {
         eprintln!("Child command line is not correctly null terminated");
-        exit_with_status(1)
+        exit_with_status(1);
     })
 }
 
@@ -129,7 +126,7 @@ fn executable_filename() -> CString {
 
     CString::from_vec_with_nul(buffer).unwrap_or_else(|_| {
         eprintln!("Executable name is not correctly null terminated");
-        exit_with_status(1)
+        exit_with_status(1);
     })
 }
 
@@ -215,11 +212,11 @@ fn find_python_exe(executable_name: &CStr) -> CString {
             Some(path_len) => {
                 let path_len = u32::from_le_bytes(path_len.try_into().unwrap_or_else(|_| {
                     eprintln!("Slice length is not equal to 4 bytes");
-                    exit_with_status(1)
+                    exit_with_status(1);
                 }));
 
                 if path_len > MAX_PATH_LEN {
-                    eprintln!("Only paths with a length up to 32KBs are supported but the python path has a length of {}.", path_len);
+                    eprintln!("Only paths with a length up to 32KBs are supported but the python path has a length of {}", path_len);
                     exit_with_status(1);
                 }
 
@@ -241,7 +238,7 @@ fn find_python_exe(executable_name: &CStr) -> CString {
 
             break CString::from_vec_with_nul(buffer).unwrap_or_else(|_| {
                 eprintln!("Python executable path is not correctly null terminated");
-                exit_with_status(1)
+                exit_with_status(1);
             });
         } else {
             // SAFETY: Casting to u32 is safe because `path_len` is guaranteed to be less than 32KBs,
@@ -270,13 +267,13 @@ fn find_python_exe(executable_name: &CStr) -> CString {
             Some(parent_dir) => parent_dir,
             None => {
                 eprintln!("Script path has unknown separator characters");
-                exit_with_status(1)
+                exit_with_status(1);
             }
         };
         let final_path = [parent_dir, b"\\", path.as_bytes()].concat();
         CString::new(final_path).unwrap_or_else(|_| {
             eprintln!("Could not construct the absolute path to the Python executable");
-            exit_with_status(1)
+            exit_with_status(1);
         })
     }
 }
@@ -333,16 +330,16 @@ fn skip_one_argument(arguments: &[u8]) -> &[u8] {
 }
 
 fn make_job_object() -> HANDLE {
-    let job = unsafe { CreateJobObjectW(None, None) }
+    let job = unsafe { CreateJobObjectA(None, None) }
         .unwrap_or_else(|_| print_last_error_and_exit("Job creation failed"));
-    let mut job_info = MaybeUninit::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>::uninit();
+    let mut job_info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
     let mut retlen = 0u32;
     if unsafe {
         QueryInformationJobObject(
             job,
             JobObjectExtendedLimitInformation,
-            job_info.as_mut_ptr() as *mut _,
-            job_info.size_of(),
+            &mut job_info as *mut _ as *mut c_void,
+            size_of_val(&job_info) as u32,
             Some(&mut retlen),
         )
     }
@@ -350,15 +347,14 @@ fn make_job_object() -> HANDLE {
     {
         print_last_error_and_exit("Job information querying failed");
     }
-    let mut job_info = unsafe { job_info.assume_init() };
     job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
     job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
     if unsafe {
         SetInformationJobObject(
             job,
             JobObjectExtendedLimitInformation,
-            addr_of!(job_info) as *const _,
-            job_info.size_of(),
+            &job_info as *const _ as *const c_void,
+            size_of_val(&job_info) as u32,
         )
     }
     .is_err()
@@ -379,7 +375,7 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
         unsafe { SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
             .unwrap_or_else(|_| eprintln!("Making stderr inheritable failed"));
     }
-    let mut child_process_info = MaybeUninit::<PROCESS_INFORMATION>::uninit();
+    let mut child_process_info = PROCESS_INFORMATION::default();
     unsafe {
         CreateProcessA(
             None,
@@ -393,13 +389,12 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
             None,
             None,
             si,
-            child_process_info.as_mut_ptr(),
+            &mut child_process_info,
         )
     }
     .unwrap_or_else(|_| {
         print_last_error_and_exit("Failed to spawn the python child process");
     });
-    let child_process_info = unsafe { child_process_info.assume_init() };
     unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
         print_last_error_and_exit("Failed to close handle to python child process main thread");
     });
@@ -416,10 +411,10 @@ fn close_handles(si: &STARTUPINFOA) {
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
-                eprintln!("Failed to close standard device handle {}.", handle.0);
+                eprintln!("Failed to close standard device handle {}", handle.0 as u32);
             });
             unsafe { SetStdHandle(std_handle, INVALID_HANDLE_VALUE) }.unwrap_or_else(|_| {
-                eprintln!("Failed to modify standard device handle {}.", std_handle.0);
+                eprintln!("Failed to modify standard device handle {}", std_handle.0);
             });
         }
     }
@@ -435,7 +430,7 @@ fn close_handles(si: &STARTUPINFOA) {
         let handle_ptr = unsafe { handle_start.offset(i).read_unaligned() } as *const HANDLE;
         // Close all fds inherited from the parent, except for the standard I/O fds.
         unsafe { CloseHandle(*handle_ptr) }.unwrap_or_else(|_| {
-            eprintln!("Failed to close child file descriptors at {}.", i);
+            eprintln!("Failed to close child file descriptors at {}", i);
         });
     }
 }
@@ -460,13 +455,13 @@ fn close_handles(si: &STARTUPINFOA) {
     Is creating a window and calling PeekMessage the best way to do this? idk.
 */
 fn clear_app_starting_state(child_handle: HANDLE) {
-    let mut msg = MaybeUninit::<MSG>::uninit();
+    let mut msg = MSG::default();
     unsafe {
         // End the launcher's "app starting" cursor state.
         PostMessageA(None, 0, None, None).unwrap_or_else(|_| {
             eprintln!("Failed to post a message to specified window");
         });
-        if GetMessageA(msg.as_mut_ptr(), None, 0, 0) != TRUE {
+        if GetMessageA(&mut msg, None, 0, 0) != TRUE {
             eprintln!("Failed to retrieve posted window message");
         }
         // Proxy the child's input idle event.
@@ -476,7 +471,7 @@ fn clear_app_starting_state(child_handle: HANDLE) {
         // Signal the process input idle event by creating a window and pumping
         // sent messages. The window class isn't important, so just use the
         // system "STATIC" class.
-        let hwnd = CreateWindowExA(
+        if let Ok(hwnd) = CreateWindowExA(
             WINDOW_EX_STYLE(0),
             s!("STATIC"),
             s!("uv Python Trampoline"),
@@ -489,21 +484,21 @@ fn clear_app_starting_state(child_handle: HANDLE) {
             None,
             None,
             None,
-        );
-        // Process all sent messages and signal input idle.
-        _ = PeekMessageA(msg.as_mut_ptr(), hwnd, 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
-        DestroyWindow(hwnd).unwrap_or_else(|_| {
-            print_last_error_and_exit("Failed to destroy temporary window");
-        });
+        ) {
+            // Process all sent messages and signal input idle.
+            let _ = PeekMessageA(&mut msg, hwnd, 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
+            DestroyWindow(hwnd).unwrap_or_else(|_| {
+                print_last_error_and_exit("Failed to destroy temporary window");
+            });
+        }
     }
 }
 
 pub fn bounce(is_gui: bool) -> ! {
     let child_cmdline = make_child_cmdline();
 
-    let mut si = MaybeUninit::<STARTUPINFOA>::uninit();
-    unsafe { GetStartupInfoA(si.as_mut_ptr()) }
-    let si = unsafe { si.assume_init() };
+    let mut si = STARTUPINFOA::default();
+    unsafe { GetStartupInfoA(&mut si) }
 
     let child_handle = spawn_child(&si, child_cmdline);
     let job = make_job_object();
@@ -535,7 +530,7 @@ pub fn bounce(is_gui: bool) -> ! {
         clear_app_starting_state(child_handle);
     }
 
-    _ = unsafe { WaitForSingleObject(child_handle, INFINITE) };
+    let _ = unsafe { WaitForSingleObject(child_handle, INFINITE) };
     let mut exit_code = 0u32;
     if unsafe { GetExitCodeProcess(child_handle, &mut exit_code) }.is_err() {
         print_last_error_and_exit("Failed to get exit code of child process");

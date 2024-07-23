@@ -4,11 +4,11 @@ use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_distribution::pyproject::DependencyType;
-use uv_distribution::pyproject_mut::PyProjectTomlMut;
-use uv_distribution::{ProjectWorkspace, VirtualProject, Workspace};
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_warnings::{warn_user, warn_user_once};
+use uv_workspace::pyproject::DependencyType;
+use uv_workspace::pyproject_mut::PyProjectTomlMut;
+use uv_workspace::{ProjectWorkspace, VirtualProject, Workspace};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus, SharedState};

@@ -48,6 +48,7 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
@@ -125,6 +126,12 @@ pub(crate) async fn pip_compile(
         &client_builder,
     )
     .await?;
+
+    let constraints = constraints
+        .iter()
+        .cloned()
+        .chain(constraints_from_workspace.into_iter())
+        .collect();
 
     let overrides: Vec<UnresolvedRequirementSpecification> = overrides
         .iter()

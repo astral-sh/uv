@@ -1,18 +1,20 @@
 #![allow(clippy::single_match_else)]
 
-use anstream::eprint;
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
-use owo_colors::OwoColorize;
-use pep440_rs::Version;
-use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::BTreeSet;
 use std::{fmt::Write, path::Path};
+
+use anstream::eprint;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
+
+use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
+use pep440_rs::Version;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{Workspace, DEV_DEPENDENCIES};
+use uv_distribution::DEV_DEPENDENCIES;
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
@@ -22,6 +24,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
+use uv_workspace::Workspace;
 
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
 use crate::commands::{pip, ExitStatus};
@@ -208,7 +211,7 @@ pub(super) async fn do_lock(
         .into_iter()
         .map(UnresolvedRequirementSpecification::from)
         .collect::<Vec<_>>();
-    let constraints = vec![];
+    let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
 
@@ -263,6 +266,58 @@ pub(super) async fn do_lock(
         let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
+
+    // If any of the resolution-determining settings changed, invalidate the lock.
+    let existing_lock = existing_lock.filter(|lock| {
+        if lock.resolution_mode() != options.resolution_mode {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in resolution mode: `{}` vs. `{}`",
+                lock.resolution_mode().cyan(),
+                options.resolution_mode.cyan()
+            );
+            return false;
+        }
+        if lock.prerelease_mode() != options.prerelease_mode {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in prerelease mode: `{}` vs. `{}`",
+                lock.prerelease_mode().cyan(),
+                options.prerelease_mode.cyan()
+            );
+            return false;
+        }
+        match (lock.exclude_newer(), options.exclude_newer) {
+            (None, None) => (),
+            (Some(existing), Some(provided)) if existing == provided => (),
+            (Some(existing), Some(provided)) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to change in timestamp cutoff: `{}` vs. `{}`",
+                    existing.cyan(),
+                    provided.cyan()
+                );
+                return false;
+            }
+            (Some(existing), None) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to removal of timestamp cutoff: `{}`",
+                    existing.cyan(),
+                );
+                return false;
+            }
+            (None, Some(provided)) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to addition of timestamp cutoff: `{}`",
+                    provided.cyan()
+                );
+                return false;
+            }
+        }
+        true
+    });
 
     // If an existing lockfile exists, build up a set of preferences.
     let LockedRequirements { preferences, git } = existing_lock

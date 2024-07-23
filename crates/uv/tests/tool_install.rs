@@ -2,9 +2,10 @@
 
 use std::process::Command;
 
+use anyhow::Result;
 use assert_fs::{
     assert::PathAssert,
-    fixture::{FileTouch, PathChild},
+    fixture::{FileTouch, FileWriteStr, PathChild},
 };
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
@@ -187,7 +188,7 @@ fn tool_install_suggest_other_packages_with_executable() {
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by package `fastapi`.
+    No executables are provided by `fastapi`
     However, an executable with the name `fastapi` is available via dependency `fastapi-cli`.
     Did you mean `uv tool install fastapi-cli`?
 
@@ -443,7 +444,6 @@ fn tool_install_already_installed() {
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
             sys.exit(patched_main())
         "###);
-
     });
 
     insta::with_settings!({
@@ -976,7 +976,7 @@ fn tool_install_no_entrypoints() {
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by package `iniconfig`.
+    No executables are provided by `iniconfig`
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
@@ -1606,6 +1606,77 @@ fn tool_install_warn_path() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    warning: [TEMP_DIR]/bin is not on your PATH. To use installed tools, run export PATH="[TEMP_DIR]/bin:$PATH" or uv tool update-shell.
+    warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run `export PATH="[TEMP_DIR]/bin:$PATH"` or `uv tool update-shell`.
     "###);
+}
+
+/// Test installing and reinstalling with an invalid receipt.
+#[test]
+fn tool_install_bad_receipt() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    // Override the `uv-receipt.toml` file with an invalid receipt.
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .write_str("invalid")?;
+
+    // Reinstall `black`, which should remove the invalid receipt.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    warning: Removed existing `black` with invalid receipt
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    Ok(())
 }

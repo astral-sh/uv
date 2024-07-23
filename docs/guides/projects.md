@@ -1,6 +1,6 @@
 # Working on projects
 
-uv can manage the development of a Python project from the ground up.
+uv is capable of managing Python projects following the `pyproject.toml` standard.
 
 ## Creating a new project
 
@@ -14,6 +14,7 @@ $ cd hello-world
 Alternatively, you can initialize a project in the working directory:
 
 ```console
+$ mkdir hello-world
 $ cd hello-world
 $ uv init
 ```
@@ -33,13 +34,12 @@ This will create the following directory structure:
 
 If your project already contains a standard `pyproject.toml`, you can start
 using uv without any extra work. Commands like `uv add` and `uv run` will
-create the lockfile and virtual environment the first time they are run.
+create a lockfile and virtual environment the first time they are used.
 
 If you are migrating from an alternative Python package manager, you may need to
-edit your `pyproject.toml` manually to use uv. uv uses the `[tool.uv]` section
-of the `pyproject.toml` to support non-standard features, such as development
-dependencies. Alternative Python package managers may use different sections,
-or a custom format altogether.
+edit your `pyproject.toml` manually before using uv. uv uses a `[tool.uv]` section
+in the `pyproject.toml` to support features that are not yet included in the `pyproject.toml` standard, such as development dependencies. Alternative Python package managers may use 
+different sections or format.
 
 ## Project structure
 

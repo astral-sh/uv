@@ -30,6 +30,18 @@ pub enum PreReleaseMode {
     IfNecessaryOrExplicit,
 }
 
+impl std::fmt::Display for PreReleaseMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Disallow => write!(f, "disallow"),
+            Self::Allow => write!(f, "allow"),
+            Self::IfNecessary => write!(f, "if-necessary"),
+            Self::Explicit => write!(f, "explicit"),
+            Self::IfNecessaryOrExplicit => write!(f, "if-necessary-or-explicit"),
+        }
+    }
+}
+
 /// Like [`PreReleaseMode`], but with any additional information required to select a candidate,
 /// like the set of direct dependencies.
 #[derive(Debug, Clone)]

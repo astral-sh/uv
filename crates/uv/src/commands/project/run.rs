@@ -14,7 +14,6 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_distribution::{VirtualProject, Workspace, WorkspaceError};
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -22,9 +21,9 @@ use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
     PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
-
 use uv_requirements::RequirementsSource;
 use uv_warnings::warn_user_once;
+use uv_workspace::{VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::project::environment::CachedEnvironment;
@@ -62,8 +61,8 @@ pub(crate) async fn run(
         warn_user_once!("`uv run` is experimental and may change without warning");
     }
 
-    // These cases seem quite complex because it changes the current package — let's just
-    // ban it entirely for now
+    // These cases seem quite complex because (in theory) they should change the "current package".
+    // Let's ban them entirely for now.
     if requirements
         .iter()
         .any(|source| matches!(source, RequirementsSource::PyprojectToml(_)))

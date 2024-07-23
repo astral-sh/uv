@@ -62,6 +62,8 @@ pub struct Workspace {
     ///
     /// This table is overridden by the project sources.
     sources: BTreeMap<PackageName, Source>,
+    /// The `pyproject.toml` of the workspace root.
+    pyproject_toml: PyProjectToml,
 }
 
 impl Workspace {
@@ -195,7 +197,17 @@ impl Workspace {
                     .as_ref()
                     .map(|optional_dependencies| {
                         // It's a `BTreeMap` so the keys are sorted.
-                        optional_dependencies.keys().cloned().collect::<Vec<_>>()
+                        optional_dependencies
+                            .iter()
+                            .filter_map(|(name, dependencies)| {
+                                if dependencies.is_empty() {
+                                    None
+                                } else {
+                                    Some(name)
+                                }
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
 
@@ -254,6 +266,38 @@ impl Workspace {
             .collect()
     }
 
+    /// Returns the set of constraints for the workspace.
+    pub fn constraints(&self) -> Vec<Requirement> {
+        let Some(workspace_package) = self
+            .packages
+            .values()
+            .find(|workspace_package| workspace_package.root() == self.install_path())
+        else {
+            return vec![];
+        };
+
+        let Some(constraints) = workspace_package
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.constraint_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+
+        constraints
+            .iter()
+            .map(|requirement| {
+                Requirement::from(
+                    requirement
+                        .clone()
+                        .with_origin(RequirementOrigin::Workspace),
+                )
+            })
+            .collect()
+    }
+
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn install_path(&self) -> &PathBuf {
@@ -279,6 +323,33 @@ impl Workspace {
     /// The sources table from the workspace `pyproject.toml`.
     pub fn sources(&self) -> &BTreeMap<PackageName, Source> {
         &self.sources
+    }
+
+    /// The `pyproject.toml` of the workspace.
+    pub fn pyproject_toml(&self) -> &PyProjectToml {
+        &self.pyproject_toml
+    }
+
+    /// Returns `true` if the path is excluded by the workspace.
+    pub fn excludes(&self, project_path: &Path) -> Result<bool, WorkspaceError> {
+        if let Some(workspace) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+        {
+            is_excluded_from_workspace(project_path, &self.install_path, workspace)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Returns `true` if the path is a workspace member.
+    pub fn includes(&self, project_path: &Path) -> bool {
+        self.packages
+            .values()
+            .any(|member| project_path == member.root())
     }
 
     /// Collect the workspace member projects from the `members` and `excludes` entries.
@@ -398,6 +469,7 @@ impl Workspace {
         }
         let workspace_sources = workspace_pyproject_toml
             .tool
+            .clone()
             .and_then(|tool| tool.uv)
             .and_then(|uv| uv.sources)
             .unwrap_or_default();
@@ -409,6 +481,7 @@ impl Workspace {
             lock_path,
             packages: workspace_members,
             sources: workspace_sources,
+            pyproject_toml: workspace_pyproject_toml,
         })
     }
 }
@@ -711,6 +784,7 @@ impl ProjectWorkspace {
                     // There may be package sources, but we don't need to duplicate them into the
                     // workspace sources.
                     sources: BTreeMap::default(),
+                    pyproject_toml: project_pyproject_toml.clone(),
                 },
             });
         };
@@ -1108,7 +1182,15 @@ mod tests {
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
             },
-            "sources": {}
+            "sources": {},
+            "pyproject_toml": {
+              "project": {
+                "name": "bird-feeder",
+                "requires-python": ">=3.12",
+                "optional-dependencies": null
+              },
+              "tool": null
+            }
           }
         }
         "###);
@@ -1144,7 +1226,15 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
-                "sources": {}
+                "sources": {},
+                "pyproject_toml": {
+                  "project": {
+                    "name": "bird-feeder",
+                    "requires-python": ">=3.12",
+                    "optional-dependencies": null
+                  },
+                  "tool": null
+                }
               }
             }
             "###);
@@ -1202,6 +1292,33 @@ mod tests {
                     "workspace": true,
                     "editable": null
                   }
+                },
+                "pyproject_toml": {
+                  "project": {
+                    "name": "albatross",
+                    "requires-python": ">=3.12",
+                    "optional-dependencies": null
+                  },
+                  "tool": {
+                    "uv": {
+                      "sources": {
+                        "bird-feeder": {
+                          "workspace": true,
+                          "editable": null
+                        }
+                      },
+                      "workspace": {
+                        "members": [
+                          "packages/*"
+                        ],
+                        "exclude": null
+                      },
+                      "managed": null,
+                      "dev-dependencies": null,
+                      "override-dependencies": null,
+                      "constraint-dependencies": null
+                    }
+                  }
                 }
               }
             }
@@ -1256,7 +1373,25 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
-                "sources": {}
+                "sources": {},
+                "pyproject_toml": {
+                  "project": null,
+                  "tool": {
+                    "uv": {
+                      "sources": null,
+                      "workspace": {
+                        "members": [
+                          "packages/*"
+                        ],
+                        "exclude": null
+                      },
+                      "managed": null,
+                      "dev-dependencies": null,
+                      "override-dependencies": null,
+                      "constraint-dependencies": null
+                    }
+                  }
+                }
               }
             }
             "###);
@@ -1291,7 +1426,15 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
-                "sources": {}
+                "sources": {},
+                "pyproject_toml": {
+                  "project": {
+                    "name": "albatross",
+                    "requires-python": ">=3.12",
+                    "optional-dependencies": null
+                  },
+                  "tool": null
+                }
               }
             }
             "###);

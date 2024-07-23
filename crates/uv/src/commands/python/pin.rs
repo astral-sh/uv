@@ -3,11 +3,10 @@ use std::str::FromStr;
 
 use anyhow::{bail, Result};
 use owo_colors::OwoColorize;
-
 use tracing::debug;
+
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
-use uv_distribution::VirtualProject;
 use uv_fs::Simplified;
 use uv_python::{
     request_from_version_file, requests_from_version_file, write_version_file,
@@ -15,6 +14,7 @@ use uv_python::{
     PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
+use uv_workspace::VirtualProject;
 
 use crate::commands::{project::find_requires_python, ExitStatus};
 use crate::printer::Printer;

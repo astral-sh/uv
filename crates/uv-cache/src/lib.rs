@@ -371,7 +371,22 @@ impl Cache {
             }
         }
 
-        // Second, remove any unused archives (by searching for archives that are not symlinked).
+        // Second, remove any cached environments. These are never referenced by symlinks, so we can
+        // remove them directly.
+        match fs::read_dir(self.bucket(CacheBucket::Environments)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = fs_err::canonicalize(entry.path())?;
+                    debug!("Removing dangling cache entry: {}", path.display());
+                    summary += rm_rf(path)?;
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
+        }
+
+        // Third, remove any unused archives (by searching for archives that are not symlinked).
         // TODO(charlie): Remove any unused source distributions. This requires introspecting the
         // cache contents, e.g., reading and deserializing the manifests.
         let mut references = FxHashSet::default();
@@ -382,7 +397,9 @@ impl Cache {
                 for entry in walkdir::WalkDir::new(bucket) {
                     let entry = entry?;
                     if entry.file_type().is_symlink() {
-                        references.insert(entry.path().canonicalize()?);
+                        if let Ok(target) = fs_err::canonicalize(entry.path()) {
+                            references.insert(target);
+                        }
                     }
                 }
             }
@@ -392,26 +409,11 @@ impl Cache {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
-                    let path = entry.path().canonicalize()?;
+                    let path = fs_err::canonicalize(entry.path())?;
                     if !references.contains(&path) {
                         debug!("Removing dangling cache entry: {}", path.display());
                         summary += rm_rf(path)?;
                     }
-                }
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err),
-        }
-
-        // Third, remove any cached environments. These are never referenced by symlinks, so we can
-        // remove them directly.
-        match fs::read_dir(self.bucket(CacheBucket::Environments)) {
-            Ok(entries) => {
-                for entry in entries {
-                    let entry = entry?;
-                    let path = entry.path().canonicalize()?;
-                    debug!("Removing dangling cache entry: {}", path.display());
-                    summary += rm_rf(path)?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),

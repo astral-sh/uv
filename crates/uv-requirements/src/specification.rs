@@ -43,9 +43,9 @@ use pypi_types::VerbatimParsedUrl;
 use requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
-use uv_distribution::pyproject::PyProjectToml;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
+use uv_workspace::pyproject::PyProjectToml;
 
 use crate::RequirementsSource;
 

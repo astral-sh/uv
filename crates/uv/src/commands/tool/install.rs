@@ -88,7 +88,7 @@ pub(crate) async fn install(
         // Parse the positional name. If the user provided more than a package name, it's an error
         // (e.g., `uv install foo==1.0 --from foo`).
         let Ok(package) = PackageName::from_str(&package) else {
-            bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)")
+            bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)", from = from.cyan(), package = package.cyan())
         };
 
         let from_requirement = resolve_requirements(
@@ -112,8 +112,8 @@ pub(crate) async fn install(
             // Determine if it's an entirely different package (e.g., `uv install foo --from bar`).
             bail!(
                 "Package name (`{}`) provided with `--from` does not match install request (`{}`)",
-                from_requirement.name,
-                package
+                from_requirement.name.cyan(),
+                package.cyan()
             );
         }
 
@@ -160,20 +160,50 @@ pub(crate) async fn install(
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.acquire_lock()?;
-    let existing_tool_receipt = installed_tools.get_tool_receipt(&from.name)?;
+
+    // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
+    // remove the environment and continue with the install.
+    //
+    // Later on, we want to replace entrypoints if the tool already exists, regardless of whether
+    // the receipt was valid.
+    //
+    // (If we find existing entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing
+    // the external tool's entrypoints (without `--force`).)
+    let (existing_tool_receipt, reinstall_entry_points) =
+        match installed_tools.get_tool_receipt(&from.name) {
+            Ok(None) => (None, false),
+            Ok(Some(receipt)) => (Some(receipt), true),
+            Err(_) => {
+                // If the tool is not installed properly, remove the environment and continue.
+                match installed_tools.remove_environment(&from.name) {
+                    Ok(()) => {
+                        warn_user!(
+                            "Removed existing `{from}` with invalid receipt",
+                            from = from.name.cyan()
+                        );
+                    }
+                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                }
+                (None, true)
+            }
+        };
+
     let existing_environment =
         installed_tools
             .get_environment(&from.name, cache)?
             .filter(|environment| {
                 python_request.as_ref().map_or(true, |python_request| {
                     if python_request.satisfied(environment.interpreter(), cache) {
-                        debug!("Found existing environment for `{}`", from.name);
+                        debug!("Found existing environment for `{from}`", from = from.name.cyan());
                         true
                     } else {
                         let _ = writeln!(
                             printer.stderr(),
-                            "Existing environment for `{}` does not satisfy the requested Python interpreter",
-                            from.name,
+                            "Existing environment for `{from}` does not satisfy the requested Python interpreter",
+                            from = from.name.cyan(),
                         );
                         false
                     }
@@ -193,17 +223,16 @@ pub(crate) async fn install(
                 // And the user didn't request a reinstall or upgrade...
                 if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
                     // We're done.
-                    writeln!(printer.stderr(), "`{from}` is already installed")?;
+                    writeln!(
+                        printer.stderr(),
+                        "`{from}` is already installed",
+                        from = from.cyan()
+                    )?;
                     return Ok(ExitStatus::Success);
                 }
             }
         }
     }
-
-    // Replace entrypoints if the tool already exists (and we made it this far). If we find existing
-    // entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing the external tool's
-    // entrypoints (without `--force`).
-    let reinstall_entry_points = existing_tool_receipt.is_some();
 
     // Resolve the requirements.
     let state = SharedState::default();
@@ -302,8 +331,8 @@ pub(crate) async fn install(
     if target_entry_points.is_empty() {
         writeln!(
             printer.stdout(),
-            "No executables are provided by package `{}`.",
-            from.name.red()
+            "No executables are provided by `{from}`",
+            from = from.name.cyan()
         )?;
 
         hint_executable_from_dependency(&from, &environment, printer)?;
@@ -390,13 +419,13 @@ pub(crate) async fn install(
             if let Some(command) = shell.prepend_path(&executable_directory) {
                 if shell.configuration_files().is_empty() {
                     warn_user!(
-                        "{} is not on your PATH. To use installed tools, run {}.",
+                        "`{}` is not on your PATH. To use installed tools, run `{}`.",
                         executable_directory.simplified_display().cyan(),
                         command.green()
                     );
                 } else {
                     warn_user!(
-                        "{} is not on your PATH. To use installed tools, run {} or {}.",
+                        "`{}` is not on your PATH. To use installed tools, run `{}` or `{}`.",
                         executable_directory.simplified_display().cyan(),
                         command.green(),
                         "uv tool update-shell".green()
@@ -404,13 +433,13 @@ pub(crate) async fn install(
                 }
             } else {
                 warn_user!(
-                    "{} is not on your PATH. To use installed tools, add the directory to your PATH.",
+                    "`{}` is not on your PATH. To use installed tools, add the directory to your PATH.",
                     executable_directory.simplified_display().cyan(),
                 );
             }
         } else {
             warn_user!(
-                "{} is not on your PATH. To use installed tools, add the directory to your PATH.",
+                "`{}` is not on your PATH. To use installed tools, add the directory to your PATH.",
                 executable_directory.simplified_display().cyan(),
             );
         }
@@ -433,8 +462,8 @@ fn hint_executable_from_dependency(
                 writeln!(
                         printer.stdout(),
                         "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
-                        from.name.green(),
-                        package.name().green(),
+                        from.name.cyan(),
+                        package.name().cyan(),
                         command.bold(),
                     )?;
             }
@@ -442,7 +471,7 @@ fn hint_executable_from_dependency(
                 writeln!(
                     printer.stdout(),
                     "However, an executable with the name `{}` is available via the following dependencies::",
-                    from.name.green(),
+                    from.name.cyan(),
                 )?;
 
                 for package in packages {

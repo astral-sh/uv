@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Nathaniel J. Smith <njs@pobox.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-autotests = false
 
 # Need to optimize etc. or else build fails
 [profile.dev]
@@ -12,6 +11,10 @@ lto = true
 opt-level = 1
 panic = "abort"
 debug = true
+
+[profile.test]
+inherits = "dev"
+codegen-units = 1
 
 [profile.release]
 # Enable Link Time Optimization.
@@ -29,7 +32,8 @@ debug = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-windows = { version = "0.57.0", features = [
+windows = { version = "0.58.0", features = [
+  "std",
   "Win32_Foundation",
   "Win32_Security",
   "Win32_Storage_FileSystem",
@@ -45,9 +49,18 @@ windows = { version = "0.57.0", features = [
   "Win32_System_WindowsProgramming",
   "Win32_UI_WindowsAndMessaging",
 ] }
-
 ufmt-write = "0.1.0"
 ufmt = { version = "0.2.0", features = ["std"] }
 
 [build-dependencies]
 embed-manifest = "1.4.0"
+
+[dev-dependencies]
+anyhow = { version = "1.0.80" }
+assert_cmd = { version = "2.0.14" }
+assert_fs = { version = "1.1.1" }
+fs-err = { version = "2.11.0" }
+thiserror = { version = "1.0.56" }
+uv-fs = { path = "../uv-fs" }
+which = { version = "6.0.0" }
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }

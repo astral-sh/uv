@@ -6,8 +6,8 @@ use pretty_assertions::StrComparison;
 use schemars::{schema_for, JsonSchema};
 use serde::Deserialize;
 
-use uv_distribution::pyproject::ToolUv as WorkspaceOptions;
 use uv_settings::Options as SettingsOptions;
+use uv_workspace::pyproject::ToolUv as WorkspaceOptions;
 
 use crate::generate_all::Mode;
 use crate::ROOT_DIR;

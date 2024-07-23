@@ -26,33 +26,26 @@ uv-configuration = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
-uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
-uv-options-metadata = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
-glob = { workspace = true }
 nanoid = { workspace = true }
 once_cell = { workspace = true }
 path-absolutize = { workspace = true }
-path-slash = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
-schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
-toml =  { workspace = true }
-toml_edit =  { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true }
@@ -60,10 +53,3 @@ zip = { workspace = true }
 [dev-dependencies]
 indoc = { version = "2.0.5" }
 insta = { version = "1.39.0", features = ["filters", "json", "redactions"] }
-regex = { workspace = true }
-
-[features]
-schemars = ["dep:schemars"]
-
-[package.metadata.cargo-shear]
-ignored = ["uv-options-metadata"]

@@ -180,9 +180,6 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => match client.into_kind() {
                     uv_client::ErrorKind::Offline(_) => Ok(MetadataResponse::Offline),
-                    uv_client::ErrorKind::MetadataNotFound(_, _) => {
-                        Ok(MetadataResponse::MissingMetadata)
-                    }
                     uv_client::ErrorKind::MetadataParseError(_, _, err) => {
                         Ok(MetadataResponse::InvalidMetadata(err))
                     }

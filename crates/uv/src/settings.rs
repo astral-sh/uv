@@ -23,7 +23,6 @@ use uv_configuration::{
     IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
     TargetTriple, Upgrade,
 };
-use uv_distribution::pyproject::DependencyType;
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonFetch, PythonPreference, PythonVersion, Target};
 use uv_requirements::RequirementsSource;
@@ -31,6 +30,7 @@ use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode,
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
+use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::pip::operations::Modifications;
 
@@ -627,6 +627,7 @@ impl AddSettings {
             dev,
             optional,
             editable,
+            no_editable,
             extra,
             raw_sources,
             rev,
@@ -659,13 +660,13 @@ impl AddSettings {
             frozen,
             requirements,
             dependency_type,
-            editable,
             raw_sources,
             rev,
             tag,
             branch,
             package,
             python,
+            editable: flag(editable, no_editable),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -742,6 +743,7 @@ pub(crate) struct TreeSettings {
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
+    pub(crate) show_version_specifiers: bool,
     pub(crate) python: Option<String>,
     pub(crate) resolver: ResolverSettings,
 }
@@ -766,6 +768,7 @@ impl TreeSettings {
             package: tree.package,
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
+            show_version_specifiers: tree.show_version_specifiers,
             python,
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
@@ -778,6 +781,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
+    pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -839,6 +843,20 @@ impl PipCompileSettings {
             compat_args: _,
         } = args;
 
+        let constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let overrides_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .override_dependencies
@@ -863,6 +881,7 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            constraints_from_workspace,
             overrides_from_workspace,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
@@ -1003,6 +1022,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
     pub(crate) dry_run: bool,
+    pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -1051,6 +1071,20 @@ impl PipInstallSettings {
             compat_args: _,
         } = args;
 
+        let constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let overrides_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .override_dependencies
@@ -1078,6 +1112,7 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             dry_run,
+            constraints_from_workspace,
             overrides_from_workspace,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
@@ -1282,6 +1317,7 @@ pub(crate) struct PipTreeSettings {
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
+    pub(crate) show_version_specifiers: bool,
     // CLI-only settings.
     pub(crate) shared: PipSettings,
 }
@@ -1304,6 +1340,7 @@ impl PipTreeSettings {
             prune: tree.prune,
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
+            show_version_specifiers: tree.show_version_specifiers,
             package: tree.package,
             // Shared settings.
             shared: PipSettings::combine(

@@ -10,7 +10,7 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{MarkerEnvironment, MarkerTree};
-use pypi_types::{ParsedUrlError, Requirement, Yanked};
+use pypi_types::{ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use uv_configuration::{Constraints, Overrides};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -22,7 +22,7 @@ use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolver::{Resolution, ResolutionPackage};
 use crate::{
-    InMemoryIndex, MetadataResponse, PythonRequirement, RequiresPython, ResolveError,
+    InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
     VersionsResponse,
 };
 
@@ -42,6 +42,8 @@ pub struct ResolutionGraph {
     pub(crate) constraints: Constraints,
     /// The overrides that were used to build the graph.
     pub(crate) overrides: Overrides,
+    /// The options that were used to build the graph.
+    pub(crate) options: Options,
 }
 
 #[derive(Debug)]
@@ -53,6 +55,7 @@ pub(crate) enum ResolutionGraphNode {
 impl ResolutionGraph {
     /// Create a new graph from the resolved PubGrub state.
     pub(crate) fn from_state(
+        resolution: Resolution,
         requirements: &[Requirement],
         constraints: &Constraints,
         overrides: &Overrides,
@@ -60,26 +63,27 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
-        resolution: Resolution,
+        options: Options,
     ) -> Result<Self, ResolveError> {
         type NodeKey<'a> = (
             &'a PackageName,
             &'a Version,
+            Option<&'a VerbatimParsedUrl>,
             Option<&'a ExtraName>,
             Option<&'a GroupName>,
         );
 
         let mut petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed> =
-            Graph::with_capacity(resolution.packages.len(), resolution.packages.len());
+            Graph::with_capacity(resolution.nodes.len(), resolution.nodes.len());
         let mut inverse: FxHashMap<NodeKey, NodeIndex<u32>> =
-            FxHashMap::with_capacity_and_hasher(resolution.packages.len(), FxBuildHasher);
+            FxHashMap::with_capacity_and_hasher(resolution.nodes.len(), FxBuildHasher);
         let mut diagnostics = Vec::new();
 
         // Add the root node.
         let root_index = petgraph.add_node(ResolutionGraphNode::Root);
 
         // Add every package to the graph.
-        for (package, versions) in &resolution.packages {
+        for (package, versions) in &resolution.nodes {
             let ResolutionPackage {
                 name,
                 extra,
@@ -237,49 +241,51 @@ impl ResolutionGraph {
                 // Add the distribution to the graph.
                 let index = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
                     dist,
+                    version: version.clone(),
                     extra: extra.clone(),
                     dev: dev.clone(),
                     hashes,
                     metadata,
                 }));
-                inverse.insert((name, version, extra.as_ref(), dev.as_ref()), index);
+                inverse.insert(
+                    (name, version, url.as_ref(), extra.as_ref(), dev.as_ref()),
+                    index,
+                );
             }
         }
 
         // Add every edge to the graph.
-        for (names, version_set) in resolution.dependencies {
-            for versions in version_set {
-                let from_index = names.from.as_ref().map_or(root_index, |from| {
-                    inverse[&(
-                        from,
-                        &versions.from_version,
-                        versions.from_extra.as_ref(),
-                        versions.from_dev.as_ref(),
-                    )]
-                });
-                let to_index = inverse[&(
-                    &names.to,
-                    &versions.to_version,
-                    versions.to_extra.as_ref(),
-                    versions.to_dev.as_ref(),
-                )];
+        for edge in resolution.edges {
+            let from_index = edge.from.as_ref().map_or(root_index, |from| {
+                inverse[&(
+                    from,
+                    &edge.from_version,
+                    edge.from_url.as_ref(),
+                    edge.from_extra.as_ref(),
+                    edge.from_dev.as_ref(),
+                )]
+            });
+            let to_index = inverse[&(
+                &edge.to,
+                &edge.to_version,
+                edge.to_url.as_ref(),
+                edge.to_extra.as_ref(),
+                edge.to_dev.as_ref(),
+            )];
 
-                if let Some(edge) = petgraph
-                    .find_edge(from_index, to_index)
-                    .and_then(|edge| petgraph.edge_weight_mut(edge))
-                {
-                    // If either the existing marker or new marker is `None`, then the dependency is
-                    // included unconditionally, and so the combined marker should be `None`.
-                    if let (Some(marker), Some(ref version_marker)) =
-                        (edge.as_mut(), versions.marker)
-                    {
-                        marker.or(version_marker.clone());
-                    } else {
-                        *edge = None;
-                    }
+            if let Some(marker) = petgraph
+                .find_edge(from_index, to_index)
+                .and_then(|edge| petgraph.edge_weight_mut(edge))
+            {
+                // If either the existing marker or new marker is `None`, then the dependency is
+                // included unconditionally, and so the combined marker should be `None`.
+                if let (Some(marker), Some(ref version_marker)) = (marker.as_mut(), edge.marker) {
+                    marker.or(version_marker.clone());
                 } else {
-                    petgraph.update_edge(from_index, to_index, versions.marker.clone());
+                    *marker = None;
                 }
+            } else {
+                petgraph.update_edge(from_index, to_index, edge.marker.clone());
             }
         }
 
@@ -308,6 +314,7 @@ impl ResolutionGraph {
             requirements: requirements.to_vec(),
             constraints: constraints.clone(),
             overrides: overrides.clone(),
+            options,
         })
     }
 

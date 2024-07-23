@@ -104,6 +104,7 @@ pub struct ToolUv {
         )
     )]
     pub override_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
 }
 
 #[derive(Serialize, Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]

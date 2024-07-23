@@ -22,9 +22,9 @@ use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace};
 use uv_configuration::Concurrency;
-use uv_distribution::Workspace;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
+use uv_workspace::Workspace;
 
 use crate::commands::{ExitStatus, ToolRunCommand};
 use crate::printer::Printer;
@@ -200,6 +200,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 args.settings.extras,
                 args.settings.output_file.as_deref(),
@@ -349,6 +350,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 &args.settings.extras,
                 args.settings.resolution,
@@ -501,6 +503,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.package,
                 args.no_dedupe,
                 args.invert,
+                args.show_version_specifiers,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
@@ -831,6 +834,7 @@ async fn run_project(
                 args.path,
                 args.name,
                 args.no_readme,
+                globals.isolated,
                 globals.preview,
                 printer,
             )
@@ -1016,6 +1020,7 @@ async fn run_project(
                 args.package,
                 args.no_dedupe,
                 args.invert,
+                args.show_version_specifiers,
                 args.python,
                 args.resolver,
                 globals.python_preference,

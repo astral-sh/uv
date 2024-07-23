@@ -2429,6 +2429,46 @@ fn install_constraints_txt() -> Result<()> {
     Ok(())
 }
 
+/// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
+#[test]
+fn install_constraints_from_pyproject() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+    name = "example"
+    version = "0.0.0"
+    dependencies = [
+      "anyio==3.7.0"
+    ]
+
+    [tool.uv]
+    constraint-dependencies = [
+      "idna<3.4"
+    ]
+    "#,
+    )?;
+
+    uv_snapshot!(context.pip_install()
+            .arg("-r")
+            .arg("pyproject.toml"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a package from a `requirements.txt` file, with an inline constraint.
 #[test]
 fn install_constraints_inline() -> Result<()> {
@@ -3011,10 +3051,10 @@ requires-python = ">=3.8"
 }
 
 #[test]
-fn invalidate_editable_dynamic() -> Result<()> {
+fn editable_dynamic() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an editable package with dynamic metadata
+    // Create an editable package with dynamic metadata.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
@@ -3052,7 +3092,7 @@ dependencies = {file = ["requirements.txt"]}
     "###
     );
 
-    // Re-installing should re-install.
+    // Re-installing should not re-install, as we don't special-case dynamic metadata.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
@@ -3061,35 +3101,7 @@ dependencies = {file = ["requirements.txt"]}
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     - example==0.1.0 (from file://[TEMP_DIR]/editable)
-     + example==0.1.0 (from file://[TEMP_DIR]/editable)
-    "###
-    );
-
-    // Modify the requirements.
-    requirements_txt.write_str("anyio==3.7.1")?;
-
-    // Re-installing should update the package.
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--editable")
-        .arg(editable_dir.path()), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     - anyio==4.0.0
-     + anyio==3.7.1
-     - example==0.1.0 (from file://[TEMP_DIR]/editable)
-     + example==0.1.0 (from file://[TEMP_DIR]/editable)
+    Audited 1 package in [TIME]
     "###
     );
 

@@ -232,8 +232,20 @@ impl CandidateSelector {
                 Self::select_candidate(
                     version_maps
                         .iter()
-                        .map(|version_map| version_map.iter().rev())
-                        .kmerge_by(|(version1, _), (version2, _)| version1 > version2),
+                        .enumerate()
+                        .map(|(map_index, version_map)| {
+                            version_map.iter().rev().map(move |item| (map_index, item))
+                        })
+                        .kmerge_by(
+                            |(index1, (version1, _)), (index2, (version2, _))| match version1
+                                .cmp(version2)
+                            {
+                                std::cmp::Ordering::Equal => index1 < index2,
+                                std::cmp::Ordering::Less => false,
+                                std::cmp::Ordering::Greater => true,
+                            },
+                        )
+                        .map(|(_, item)| item),
                     package_name,
                     range,
                     allow_prerelease,
@@ -242,8 +254,20 @@ impl CandidateSelector {
                 Self::select_candidate(
                     version_maps
                         .iter()
-                        .map(VersionMap::iter)
-                        .kmerge_by(|(version1, _), (version2, _)| version1 < version2),
+                        .enumerate()
+                        .map(|(map_index, version_map)| {
+                            version_map.iter().map(move |item| (map_index, item))
+                        })
+                        .kmerge_by(
+                            |(index1, (version1, _)), (index2, (version2, _))| match version1
+                                .cmp(version2)
+                            {
+                                std::cmp::Ordering::Equal => index1 < index2,
+                                std::cmp::Ordering::Less => true,
+                                std::cmp::Ordering::Greater => false,
+                            },
+                        )
+                        .map(|(_, item)| item),
                     package_name,
                     range,
                     allow_prerelease,

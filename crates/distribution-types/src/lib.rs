@@ -743,10 +743,33 @@ impl RemoteSource for Url {
         // Identify the last segment of the URL as the filename.
         let path_segments = self
             .path_segments()
-            .ok_or_else(|| Error::MissingPathSegments(self.clone()))?;
+            .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
         let last = path_segments.last().expect("path segments is non-empty");
+
+        // Decode the filename, which may be percent-encoded.
+        let filename = urlencoding::decode(last)?;
+
+        Ok(filename)
+    }
+
+    fn size(&self) -> Option<u64> {
+        None
+    }
+}
+
+impl RemoteSource for UrlString {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        // Take the last segment, stripping any query or fragment.
+        let last = self
+            .as_ref()
+            .split_once(['#', '?'])
+            .map(|(path, _)| path)
+            .unwrap_or(self.as_ref())
+            .split('/')
+            .last()
+            .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // Decode the filename, which may be percent-encoded.
         let filename = urlencoding::decode(last)?;
@@ -1215,7 +1238,8 @@ impl Identifier for BuildableSource<'_> {
 
 #[cfg(test)]
 mod test {
-    use crate::{BuiltDist, Dist, SourceDist};
+    use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
+    use url::Url;
 
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
@@ -1235,5 +1259,22 @@ mod test {
             "{}",
             std::mem::size_of::<SourceDist>()
         );
+    }
+
+    #[test]
+    fn remote_source() {
+        for url in [
+            "https://example.com/foo-0.1.0.tar.gz",
+            "https://example.com/foo-0.1.0.tar.gz#fragment",
+            "https://example.com/foo-0.1.0.tar.gz?query",
+            "https://example.com/foo-0.1.0.tar.gz?query#fragment",
+            "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
+            "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
+        ] {
+            let url = Url::parse(url).unwrap();
+            assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
+            let url = UrlString::from(url.clone());
+            assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
+        }
     }
 }
