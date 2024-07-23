@@ -10,7 +10,7 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_warnings::warn_user_once;
-use uv_workspace::Workspace;
+use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::tree::DisplayDependencyGraph;
 use crate::commands::project::FoundInterpreter;
@@ -47,7 +47,8 @@ pub(crate) async fn tree(
     }
 
     // Find the project requirements.
-    let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
+    let workspace =
+        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(

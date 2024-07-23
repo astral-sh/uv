@@ -24,7 +24,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::Workspace;
+use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
 use crate::commands::{pip, ExitStatus};
@@ -51,7 +51,8 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let workspace = Workspace::discover(&std::env::current_dir()?, None).await?;
+    let workspace =
+        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(

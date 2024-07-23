@@ -42,6 +42,14 @@ pub enum WorkspaceError {
     Normalize(#[source] std::io::Error),
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct DiscoveryOptions<'a> {
+    /// The path to stop discovery at.
+    pub stop_discovery_at: Option<&'a Path>,
+    /// The set of member paths to ignore.
+    pub ignore: FxHashSet<&'a Path>,
+}
+
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(serde::Serialize))]
@@ -80,7 +88,7 @@ impl Workspace {
     ///   * If there is no explicit workspace: We have a single project workspace, we're done.
     pub async fn discover(
         path: &Path,
-        stop_discovery_at: Option<&Path>,
+        options: &DiscoveryOptions<'_>,
     ) -> Result<Workspace, WorkspaceError> {
         let path = absolutize_path(path)
             .map_err(WorkspaceError::Normalize)?
@@ -133,8 +141,7 @@ impl Workspace {
             } else if pyproject_toml.project.is_none() {
                 // Without a project, it can't be an implicit root
                 return Err(WorkspaceError::MissingProject(project_path));
-            } else if let Some(workspace) = find_workspace(&project_path, stop_discovery_at).await?
-            {
+            } else if let Some(workspace) = find_workspace(&project_path, options).await? {
                 // We have found an explicit root above.
                 workspace
             } else {
@@ -168,7 +175,7 @@ impl Workspace {
             workspace_definition,
             workspace_pyproject_toml,
             current_project,
-            stop_discovery_at,
+            options,
         )
         .await
     }
@@ -345,11 +352,19 @@ impl Workspace {
         }
     }
 
-    /// Returns `true` if the path is a workspace member.
-    pub fn includes(&self, project_path: &Path) -> bool {
-        self.packages
-            .values()
-            .any(|member| project_path == member.root())
+    /// Returns `true` if the path is included by the workspace.
+    pub fn includes(&self, project_path: &Path) -> Result<bool, WorkspaceError> {
+        if let Some(workspace) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+        {
+            is_included_in_workspace(project_path, &self.install_path, workspace)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Collect the workspace member projects from the `members` and `excludes` entries.
@@ -359,7 +374,7 @@ impl Workspace {
         workspace_definition: ToolUvWorkspace,
         workspace_pyproject_toml: PyProjectToml,
         current_project: Option<WorkspaceMember>,
-        stop_discovery_at: Option<&Path>,
+        options: &DiscoveryOptions<'_>,
     ) -> Result<Workspace, WorkspaceError> {
         let mut workspace_members = BTreeMap::new();
         // Avoid reading a `pyproject.toml` more than once.
@@ -421,6 +436,13 @@ impl Workspace {
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
+                if options.ignore.contains(member_root.as_path()) {
+                    debug!(
+                        "Ignoring workspace member: `{}`",
+                        member_root.simplified_display()
+                    );
+                    continue;
+                }
                 let member_root = absolutize_path(&member_root)
                     .map_err(WorkspaceError::Normalize)?
                     .to_path_buf();
@@ -474,7 +496,7 @@ impl Workspace {
             .and_then(|uv| uv.sources)
             .unwrap_or_default();
 
-        check_nested_workspaces(&workspace_root, stop_discovery_at);
+        check_nested_workspaces(&workspace_root, options);
 
         Ok(Workspace {
             install_path: workspace_root,
@@ -612,13 +634,14 @@ impl ProjectWorkspace {
     /// only directories between the current path and `stop_discovery_at` are considered.
     pub async fn discover(
         path: &Path,
-        stop_discovery_at: Option<&Path>,
+        options: &DiscoveryOptions<'_>,
     ) -> Result<Self, WorkspaceError> {
         let project_root = path
             .ancestors()
             .take_while(|path| {
                 // Only walk up the given directory, if any.
-                stop_discovery_at
+                options
+                    .stop_discovery_at
                     .map(|stop_discovery_at| stop_discovery_at != *path)
                     .unwrap_or(true)
             })
@@ -630,13 +653,13 @@ impl ProjectWorkspace {
             project_root.simplified_display()
         );
 
-        Self::from_project_root(project_root, stop_discovery_at).await
+        Self::from_project_root(project_root, options).await
     }
 
     /// Discover the workspace starting from the directory containing the `pyproject.toml`.
     async fn from_project_root(
         project_root: &Path,
-        stop_discovery_at: Option<&Path>,
+        options: &DiscoveryOptions<'_>,
     ) -> Result<Self, WorkspaceError> {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
@@ -655,7 +678,7 @@ impl ProjectWorkspace {
             Path::new(""),
             &project,
             &pyproject_toml,
-            stop_discovery_at,
+            options,
         )
         .await
     }
@@ -665,7 +688,7 @@ impl ProjectWorkspace {
     pub async fn from_maybe_project_root(
         install_path: &Path,
         lock_path: &Path,
-        stop_discovery_at: Option<&Path>,
+        options: &DiscoveryOptions<'_>,
     ) -> Result<Option<Self>, WorkspaceError> {
         // Read the `pyproject.toml`.
         let pyproject_path = install_path.join("pyproject.toml");
@@ -683,14 +706,7 @@ impl ProjectWorkspace {
         };
 
         Ok(Some(
-            Self::from_project(
-                install_path,
-                lock_path,
-                &project,
-                &pyproject_toml,
-                stop_discovery_at,
-            )
-            .await?,
+            Self::from_project(install_path, lock_path, &project, &pyproject_toml, options).await?,
         ))
     }
 
@@ -721,7 +737,7 @@ impl ProjectWorkspace {
         lock_path: &Path,
         project: &Project,
         project_pyproject_toml: &PyProjectToml,
-        stop_discovery_at: Option<&Path>,
+        options: &DiscoveryOptions<'_>,
     ) -> Result<Self, WorkspaceError> {
         let project_path = absolutize_path(install_path)
             .map_err(WorkspaceError::Normalize)?
@@ -756,7 +772,7 @@ impl ProjectWorkspace {
         if workspace.is_none() {
             // The project isn't an explicit workspace root, check if we're a regular workspace
             // member by looking for an explicit workspace root above.
-            workspace = find_workspace(&project_path, stop_discovery_at).await?;
+            workspace = find_workspace(&project_path, options).await?;
         }
 
         let current_project = WorkspaceMember {
@@ -819,7 +835,7 @@ impl ProjectWorkspace {
             workspace_definition,
             workspace_pyproject_toml,
             Some(current_project),
-            stop_discovery_at,
+            options,
         )
         .await?;
 
@@ -834,14 +850,15 @@ impl ProjectWorkspace {
 /// Find the workspace root above the current project, if any.
 async fn find_workspace(
     project_root: &Path,
-    stop_discovery_at: Option<&Path>,
+    options: &DiscoveryOptions<'_>,
 ) -> Result<Option<(PathBuf, ToolUvWorkspace, PyProjectToml)>, WorkspaceError> {
     // Skip 1 to ignore the current project itself.
     for workspace_root in project_root
         .ancestors()
         .take_while(|path| {
             // Only walk up the given directory, if any.
-            stop_discovery_at
+            options
+                .stop_discovery_at
                 .map(|stop_discovery_at| stop_discovery_at != *path)
                 .unwrap_or(true)
         })
@@ -919,12 +936,13 @@ async fn find_workspace(
 }
 
 /// Warn when the valid workspace is included in another workspace.
-fn check_nested_workspaces(inner_workspace_root: &Path, stop_discovery_at: Option<&Path>) {
+fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryOptions) {
     for outer_workspace_root in inner_workspace_root
         .ancestors()
         .take_while(|path| {
             // Only walk up the given directory, if any.
-            stop_discovery_at
+            options
+                .stop_discovery_at
                 .map(|stop_discovery_at| stop_discovery_at != *path)
                 .unwrap_or(true)
         })
@@ -1013,6 +1031,31 @@ fn is_excluded_from_workspace(
     Ok(false)
 }
 
+/// Check if we're in the `tool.uv.workspace.members` of a workspace.
+fn is_included_in_workspace(
+    project_path: &Path,
+    workspace_root: &Path,
+    workspace: &ToolUvWorkspace,
+) -> Result<bool, WorkspaceError> {
+    for member_glob in workspace.members.iter().flatten() {
+        let absolute_glob = workspace_root
+            .simplified()
+            .join(member_glob.as_str())
+            .to_string_lossy()
+            .to_string();
+        for member_root in glob(&absolute_glob)
+            .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
+        {
+            let member_root =
+                member_root.map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
+            if member_root == project_path {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 /// A project that can be synced.
 ///
 /// The project could be a package within a workspace, a real workspace root, or even a virtual
@@ -1035,7 +1078,7 @@ impl VirtualProject {
     /// discovering the main workspace.
     pub async fn discover(
         path: &Path,
-        stop_discovery_at: Option<&Path>,
+        options: &DiscoveryOptions<'_>,
     ) -> Result<Self, WorkspaceError> {
         assert!(
             path.is_absolute(),
@@ -1045,7 +1088,8 @@ impl VirtualProject {
             .ancestors()
             .take_while(|path| {
                 // Only walk up the given directory, if any.
-                stop_discovery_at
+                options
+                    .stop_discovery_at
                     .map(|stop_discovery_at| stop_discovery_at != *path)
                     .unwrap_or(true)
             })
@@ -1070,7 +1114,7 @@ impl VirtualProject {
                 Path::new(""),
                 project,
                 &pyproject_toml,
-                stop_discovery_at,
+                options,
             )
             .await?;
             Ok(Self::Project(project))
@@ -1091,7 +1135,7 @@ impl VirtualProject {
                 workspace.clone(),
                 pyproject_toml,
                 None,
-                stop_discovery_at,
+                options,
             )
             .await?;
 
@@ -1135,7 +1179,7 @@ mod tests {
 
     use insta::assert_json_snapshot;
 
-    use crate::workspace::ProjectWorkspace;
+    use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
 
     async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
         let root_dir = env::current_dir()
@@ -1146,9 +1190,10 @@ mod tests {
             .unwrap()
             .join("scripts")
             .join("workspaces");
-        let project = ProjectWorkspace::discover(&root_dir.join(folder), None)
-            .await
-            .unwrap();
+        let project =
+            ProjectWorkspace::discover(&root_dir.join(folder), &DiscoveryOptions::default())
+                .await
+                .unwrap();
         let root_escaped = regex::escape(root_dir.to_string_lossy().as_ref());
         (project, root_escaped)
     }

@@ -1,4 +1,3 @@
-use std::env;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
@@ -24,7 +23,7 @@ use uv_cli::{SelfCommand, SelfNamespace};
 use uv_configuration::Concurrency;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
-use uv_workspace::Workspace;
+use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::{ExitStatus, ToolRunCommand};
 use crate::printer::Printer;
@@ -74,12 +73,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Some(FilesystemOptions::from_file(config_file)?)
     } else if cli.global_args.isolated {
         None
-    } else if let Ok(project) = Workspace::discover(&env::current_dir()?, None).await {
+    } else if let Ok(project) =
+        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await
+    {
         let project = FilesystemOptions::from_directory(project.install_path())?;
         let user = FilesystemOptions::user()?;
         project.combine(user)
     } else {
-        let project = FilesystemOptions::find(env::current_dir()?)?;
+        let project = FilesystemOptions::find(std::env::current_dir()?)?;
         let user = FilesystemOptions::user()?;
         project.combine(user)
     };
@@ -130,7 +131,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .break_words(false)
                 .word_separator(textwrap::WordSeparator::AsciiSpace)
                 .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(env::var("UV_NO_WRAP").map(|_| false).unwrap_or(true))
+                .wrap_lines(std::env::var("UV_NO_WRAP").map(|_| false).unwrap_or(true))
                 .build(),
         )
     }))?;
@@ -834,8 +835,14 @@ async fn run_project(
                 args.path,
                 args.name,
                 args.no_readme,
+                args.python,
                 globals.isolated,
                 globals.preview,
+                globals.python_preference,
+                globals.python_fetch,
+                globals.connectivity,
+                globals.native_tls,
+                &cache,
                 printer,
             )
             .await
@@ -1100,7 +1107,7 @@ where
     // We support increasing the stack size to avoid stack overflows in debug mode on Windows. In
     // addition, we box types and futures in various places. This includes the `Box::pin(run())`
     // here, which prevents the large (non-send) main future alone from overflowing the stack.
-    let result = if let Ok(stack_size) = env::var("UV_STACK_SIZE") {
+    let result = if let Ok(stack_size) = std::env::var("UV_STACK_SIZE") {
         let stack_size = stack_size.parse().expect("Invalid stack size");
         let tokio_main = move || {
             let runtime = tokio::runtime::Builder::new_current_thread()

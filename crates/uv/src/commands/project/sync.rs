@@ -12,7 +12,7 @@ use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest}
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
-use uv_workspace::VirtualProject;
+use uv_workspace::{DiscoveryOptions, VirtualProject};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::do_safe_lock;
@@ -45,7 +45,8 @@ pub(crate) async fn sync(
     }
 
     // Identify the project
-    let project = VirtualProject::discover(&std::env::current_dir()?, None).await?;
+    let project =
+        VirtualProject::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?;
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(

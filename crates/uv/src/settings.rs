@@ -154,6 +154,7 @@ pub(crate) struct InitSettings {
     pub(crate) path: Option<String>,
     pub(crate) name: Option<PackageName>,
     pub(crate) no_readme: bool,
+    pub(crate) python: Option<String>,
 }
 
 impl InitSettings {
@@ -164,12 +165,14 @@ impl InitSettings {
             path,
             name,
             no_readme,
+            python,
         } = args;
 
         Self {
             path,
             name,
             no_readme,
+            python,
         }
     }
 }

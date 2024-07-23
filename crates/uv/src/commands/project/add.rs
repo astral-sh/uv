@@ -14,7 +14,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
-use uv_workspace::{ProjectWorkspace, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
@@ -54,12 +54,12 @@ pub(crate) async fn add(
 
     // Find the project in the workspace.
     let project = if let Some(package) = package {
-        Workspace::discover(&std::env::current_dir()?, None)
+        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
             .await?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?
     } else {
-        ProjectWorkspace::discover(&std::env::current_dir()?, None).await?
+        ProjectWorkspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?
     };
 
     // Discover or create the virtual environment.
