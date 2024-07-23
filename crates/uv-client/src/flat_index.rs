@@ -228,7 +228,7 @@ impl<'a> FlatIndexClient<'a> {
         for entry in fs_err::read_dir(path)? {
             let entry = entry?;
             let metadata = entry.metadata()?;
-            if !metadata.is_file() {
+            if !metadata.is_file() && !metadata.is_symlink() {
                 continue;
             }
 
