@@ -2389,8 +2389,8 @@ impl ForkState {
 #[derive(Debug, Default)]
 pub(crate) struct Resolution {
     pub(crate) nodes: FxHashMap<ResolutionPackage, FxHashSet<Version>>,
-    /// If `foo` requires `bar>=3` and `foo` requires `bar <3` in another fork, we'd store it as
-    /// `(foo, bar) -> {>=3, <3}`.
+    /// The directed connections between the nodes, where the marker is the node weight. We don't
+    /// store the requirement itself, but it can be retrieved from the package metadata.
     pub(crate) edges: FxHashSet<ResolutionDependencyEdge>,
     /// Map each package name, version tuple from `packages` to a distribution.
     pub(crate) pins: FilePins,
@@ -2408,7 +2408,7 @@ pub(crate) struct ResolutionPackage {
 }
 
 /// The `from_` fields and the `to_` fields allow mapping to the originating and target
-///  [`ResolutionPackage`] respectively.
+///  [`ResolutionPackage`] respectively. The `marker` is the edge weight.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionDependencyEdge {
     /// This value is `None` if the dependency comes from the root package.
