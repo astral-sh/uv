@@ -548,10 +548,18 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv clean` command.
+    /// Create a `uv cache clean` command.
     pub fn clean(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command.arg("clean");
+        command.arg("cache").arg("clean");
+        self.add_shared_args(&mut command);
+        command
+    }
+
+    /// Create a `uv cache prune` command.
+    pub fn prune(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("cache").arg("prune");
         self.add_shared_args(&mut command);
         command
     }
