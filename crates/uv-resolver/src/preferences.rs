@@ -1,4 +1,3 @@
-use std::collections::hash_map::Entry;
 use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
@@ -137,9 +136,9 @@ impl Preferences {
         Self(preferences)
     }
 
-    /// Return the [`Entry`] for a package in the preferences.
-    pub fn entry(&mut self, package_name: PackageName) -> Entry<PackageName, Pin> {
-        self.0.entry(package_name)
+    /// Insert or overwrite a preference.
+    pub(crate) fn insert(&mut self, package_name: PackageName, pin: Pin) -> Option<Pin> {
+        self.0.insert(package_name, pin)
     }
 
     /// Returns an iterator over the preferences.
@@ -173,7 +172,7 @@ impl std::fmt::Display for Preference {
 
 /// The pinned data associated with a package in a locked `requirements.txt` file (e.g., `flask==1.2.3`).
 #[derive(Debug, Clone)]
-pub struct Pin {
+pub(crate) struct Pin {
     version: Version,
     hashes: Vec<HashDigest>,
 }

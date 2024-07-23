@@ -1,7 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter, Write};
 use std::ops::Bound;
@@ -383,13 +382,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     let resolution = state.into_resolution();
 
-                    // Walk over the selected versions, and mark them as preferences.
+                    // Walk over the selected versions, and mark them as preferences. Overwrite
+                    // existing preferences to always prefer sibling forks.
                     for (package, versions) in &resolution.nodes {
-                        if let Entry::Vacant(entry) = preferences.entry(package.name.clone()) {
-                            if let Some(version) = versions.iter().next() {
-                                entry.insert(version.clone().into());
-                            }
-                        }
+                        debug_assert!(versions.len() == 1);
+                        preferences.insert(
+                            package.name.clone(),
+                            versions.iter().next().unwrap().clone().into(),
+                        );
                     }
 
                     // If another fork had the same resolution, merge into that fork instead.
