@@ -412,10 +412,35 @@ pub(crate) async fn resolve_environment<'a>(
         build_options,
     } = settings;
 
+    // Respect all requirements from the provided sources.
+    let RequirementsSpecification {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        source_trees,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+        no_binary,
+        no_build,
+        extras: _,
+    } = spec;
+
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
     let markers = interpreter.markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
+
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations
+            .clone()
+            .combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
+    let build_options = build_options.clone().combine(no_binary, no_build);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -453,7 +478,7 @@ pub(crate) async fn resolve_environment<'a>(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
     };
 
     // Create a build dispatch.
@@ -461,7 +486,7 @@ pub(crate) async fn resolve_environment<'a>(
         &client,
         cache,
         interpreter,
-        index_locations,
+        &index_locations,
         &flat_index,
         &state.index,
         &state.git,
@@ -471,7 +496,7 @@ pub(crate) async fn resolve_environment<'a>(
         config_setting,
         build_isolation,
         link_mode,
-        build_options,
+        &build_options,
         exclude_newer,
         concurrency,
         preview,
@@ -479,12 +504,12 @@ pub(crate) async fn resolve_environment<'a>(
 
     // Resolve the requirements.
     Ok(pip::operations::resolve(
-        spec.requirements,
-        spec.constraints,
-        spec.overrides,
+        requirements,
+        constraints,
+        overrides,
         dev,
-        spec.source_trees,
-        spec.project,
+        source_trees,
+        project,
         &extras,
         preferences,
         EmptyInstalledPackages,
@@ -643,14 +668,26 @@ pub(crate) async fn update_environment(
         build_options,
     } = settings;
 
+    // Respect all requirements from the provided sources.
+    let RequirementsSpecification {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        source_trees,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+        no_binary,
+        no_build,
+        extras: _,
+    } = spec;
+
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
-    if spec.source_trees.is_empty()
-        && reinstall.is_none()
-        && upgrade.is_none()
-        && spec.overrides.is_empty()
-    {
-        match site_packages.satisfies(&spec.requirements, &spec.constraints)? {
+    if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() && overrides.is_empty() {
+        match site_packages.satisfies(&requirements, &constraints)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -676,6 +713,15 @@ pub(crate) async fn update_environment(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
+
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations
+            .clone()
+            .combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
+    let build_options = build_options.clone().combine(no_binary, no_build);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -709,7 +755,7 @@ pub(crate) async fn update_environment(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
     };
 
     // Create a build dispatch.
@@ -717,7 +763,7 @@ pub(crate) async fn update_environment(
         &client,
         cache,
         interpreter,
-        index_locations,
+        &index_locations,
         &flat_index,
         &state.index,
         &state.git,
@@ -727,7 +773,7 @@ pub(crate) async fn update_environment(
         config_setting,
         build_isolation,
         *link_mode,
-        build_options,
+        &build_options,
         *exclude_newer,
         concurrency,
         preview,
@@ -735,12 +781,12 @@ pub(crate) async fn update_environment(
 
     // Resolve the requirements.
     let resolution = match pip::operations::resolve(
-        spec.requirements,
-        spec.constraints,
-        spec.overrides,
+        requirements,
+        constraints,
+        overrides,
         dev,
-        spec.source_trees,
-        spec.project,
+        source_trees,
+        project,
         &extras,
         preferences,
         site_packages.clone(),
@@ -772,10 +818,10 @@ pub(crate) async fn update_environment(
         site_packages,
         Modifications::Exact,
         reinstall,
-        build_options,
+        &build_options,
         *link_mode,
         *compile_bytecode,
-        index_locations,
+        &index_locations,
         &hasher,
         tags,
         &client,

@@ -718,3 +718,58 @@ fn run_requirements_txt() -> Result<()> {
 
     Ok(())
 }
+
+/// Respect (e.g.) the `--index-url` argument is a provided `requirements.txt`.
+///
+/// `idna` only exists at `2.7` on the test PyPI, and `typing-extensions` only exists at `0.0.1dev`.
+/// The resulting resolution should get `idna` from test PyPI, but `typing-extensions` from the
+/// default index, since any arguments in `--with-requirements` should only apply to those extra
+/// requirements.
+#[test]
+fn run_requirements_txt_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["typing_extensions"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import typing_extensions
+       "
+    })?;
+
+    // Requesting an unsatisfied requirement should install it.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! { r"
+        --index-url https://test.pypi.org/simple
+        idna
+        "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==2.7
+    "###);
+
+    Ok(())
+}

@@ -7,6 +7,7 @@ use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteStr, PathChild},
 };
+use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 
@@ -1372,6 +1373,71 @@ fn tool_install_requirements_txt() {
         "###);
     });
 }
+
+/// Respect (e.g.) the `--index-url` argument is a provided `requirements.txt`.
+///
+/// `idna` only exists at `2.7` on the test PyPI, and `typing-extensions` only exists at `0.0.1dev`.
+/// The resulting resolution should get `idna` from test PyPI, but `typing-extensions` from the
+/// default index, since any arguments in `--with-requirements` should only apply to those extra
+/// requirements.
+#[test]
+fn tool_install_requirements_txt_arguments()  {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! { r"
+        --index-url https://test.pypi.org/simple
+        idna
+        "
+    }).unwrap();
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with-requirements")
+        .arg("requirements.txt")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + idna==3.6
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            "black",
+            "iniconfig",
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+}
+
 
 /// Test upgrading an already installed tool.
 #[test]

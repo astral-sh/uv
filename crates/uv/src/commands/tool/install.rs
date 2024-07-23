@@ -238,7 +238,9 @@ pub(crate) async fn install(
 
     // Resolve the requirements.
     let state = SharedState::default();
-    let spec = RequirementsSpecification::from_requirements(requirements.clone());
+    let spec = RequirementsSpecification {
+        ..req
+    }
 
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
     // This lets us confirm the environment is valid before removing an existing install. However,
