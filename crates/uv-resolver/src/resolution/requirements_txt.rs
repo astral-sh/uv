@@ -5,6 +5,7 @@ use std::path::Path;
 use itertools::Itertools;
 
 use distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
+use pep440_rs::Version;
 use pep508_rs::{split_scheme, MarkerTree, Scheme};
 use pypi_types::HashDigest;
 use uv_normalize::{ExtraName, PackageName};
@@ -15,6 +16,7 @@ use crate::resolution::AnnotatedDist;
 /// A pinned package with its resolved distribution and all the extras that were pinned for it.
 pub(crate) struct RequirementsTxtDist {
     pub(crate) dist: ResolvedDist,
+    pub(crate) version: Version,
     pub(crate) extras: Vec<ExtraName>,
     pub(crate) hashes: Vec<HashDigest>,
     pub(crate) markers: Option<MarkerTree>,
@@ -133,7 +135,19 @@ impl RequirementsTxtDist {
             }
         }
 
-        RequirementsTxtComparator::Name(self.name())
+        if let VersionOrUrlRef::Url(url) = self.version_or_url() {
+            RequirementsTxtComparator::Name {
+                name: self.name(),
+                version: &self.version,
+                url: Some(url.verbatim()),
+            }
+        } else {
+            RequirementsTxtComparator::Name {
+                name: self.name(),
+                version: &self.version,
+                url: None,
+            }
+        }
     }
 }
 
@@ -141,6 +155,7 @@ impl From<&AnnotatedDist> for RequirementsTxtDist {
     fn from(annotated: &AnnotatedDist) -> Self {
         Self {
             dist: annotated.dist.clone(),
+            version: annotated.version.clone(),
             extras: if let Some(extra) = annotated.extra.clone() {
                 vec![extra]
             } else {
@@ -155,7 +170,13 @@ impl From<&AnnotatedDist> for RequirementsTxtDist {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum RequirementsTxtComparator<'a> {
     Url(Cow<'a, str>),
-    Name(&'a PackageName),
+    /// In universal mode, we can have multiple versions for a package, so we track the version and
+    /// the URL (for non-index packages) to have a stable sort for those, too.
+    Name {
+        name: &'a PackageName,
+        version: &'a Version,
+        url: Option<Cow<'a, str>>,
+    },
 }
 
 impl Name for RequirementsTxtDist {
