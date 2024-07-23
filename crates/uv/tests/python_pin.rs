@@ -1,7 +1,7 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
 use anyhow::Result;
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{FileWriteStr, PathChild};
 use common::{uv_snapshot, TestContext};
 use insta::assert_snapshot;
 use uv_python::{
@@ -635,12 +635,16 @@ fn python_pin_resolve() {
 fn python_pin_with_comments() -> Result<()> {
     let context = TestContext::new_with_versions(&[]);
 
-    let child = context.temp_dir.child("foo");
-    child.create_dir_all()?;
+    let content = indoc::indoc! {r"
+        3.12
 
-    let version_file = child.child(PYTHON_VERSION_FILENAME);
-    version_file.write_str("3.12\n\n# 3.11\n3.10\n\n")?;
-    uv_snapshot!(context.filters(), context.python_pin().current_dir(&child), @r###"
+        # 3.11
+        3.10
+    "};
+
+    let version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    version_file.write_str(content)?;
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -648,13 +652,11 @@ fn python_pin_with_comments() -> Result<()> {
 
     ----- stderr -----
     "###);
+    fs_err::remove_file(version_file)?;
 
-    let child = context.temp_dir.child("bar");
-    child.create_dir_all()?;
-
-    let versions_file = child.child(PYTHON_VERSIONS_FILENAME);
-    versions_file.write_str("3.12\n\n# 3.11\n3.10\n\n")?;
-    uv_snapshot!(context.filters(), context.python_pin().current_dir(&child), @r###"
+    let versions_file = context.temp_dir.child(PYTHON_VERSIONS_FILENAME);
+    versions_file.write_str(content)?;
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
