@@ -2295,7 +2295,7 @@ fn lock_requires_python() -> Result<()> {
               And because project==0.1.0 depends on pygls>=1.1.0, we can conclude that project==0.1.0 cannot be used.
               And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
 
-              hint: The `Requires-Python` requirement (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `Requires-Python` requirement (like >=3.7.9, <4).
+              hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
         "###);
     }
 
@@ -3119,7 +3119,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
 
         ----- stderr -----
         warning: `uv lock` is experimental and may change without warning
-        warning: The workspace `requires-python` field does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
+        warning: The workspace `requires-python` value does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
         Resolved 2 packages in [TIME]
         "###);
 

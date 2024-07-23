@@ -111,7 +111,7 @@ fn init_no_readme() -> Result<()> {
 }
 
 #[test]
-fn current_dir() -> Result<()> {
+fn init_current_dir() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let dir = context.temp_dir.join("foo");
