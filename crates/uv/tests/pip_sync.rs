@@ -105,12 +105,16 @@ fn install() -> Result<()> {
         .join("__init__.cpython-312.pyc")
         .exists());
 
-    context.assert_command("import markupsafe").success();
+    context
+        .assert_command("from markupsafe import Markup")
+        .success();
 
     // Removing the cache shouldn't invalidate the virtual environment.
     fs::remove_dir_all(context.cache_dir.path())?;
 
-    context.assert_command("import markupsafe").success();
+    context
+        .assert_command("from markupsafe import Markup")
+        .success();
 
     Ok(())
 }
@@ -140,12 +144,16 @@ fn install_copy() -> Result<()> {
     "###
     );
 
-    context.assert_command("import markupsafe").success();
+    context
+        .assert_command("from markupsafe import Markup")
+        .success();
 
     // Removing the cache shouldn't invalidate the virtual environment.
     fs::remove_dir_all(context.cache_dir.path())?;
 
-    context.assert_command("import markupsafe").success();
+    context
+        .assert_command("from markupsafe import Markup")
+        .success();
 
     Ok(())
 }
@@ -175,12 +183,55 @@ fn install_hardlink() -> Result<()> {
     "###
     );
 
-    context.assert_command("import markupsafe").success();
+    context
+        .assert_command("from markupsafe import Markup")
+        .success();
 
     // Removing the cache shouldn't invalidate the virtual environment.
     fs::remove_dir_all(context.cache_dir.path())?;
 
-    context.assert_command("import markupsafe").success();
+    context
+        .assert_command("from markupsafe import Markup")
+        .success();
+
+    Ok(())
+}
+
+/// Install a package into a virtual environment using symlink semantics.
+#[test]
+fn install_symlink() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("symlink")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
+    );
+
+    context
+        .assert_command("from markupsafe import Markup")
+        .success();
+
+    // Removing the cache _should_ invalidate the virtual environment.
+    fs::remove_dir_all(context.cache_dir.path())?;
+
+    context
+        .assert_command("from markupsafe import Markup")
+        .failure();
 
     Ok(())
 }
@@ -210,7 +261,7 @@ fn install_many() -> Result<()> {
     );
 
     context
-        .assert_command("import markupsafe; import tomli")
+        .assert_command("from markupsafe import Markup; import tomli")
         .success();
 
     Ok(())
@@ -244,7 +295,9 @@ fn noop() -> Result<()> {
     "###
     );
 
-    context.assert_command("import markupsafe").success();
+    context
+        .assert_command("from markupsafe import Markup")
+        .success();
 
     Ok(())
 }
