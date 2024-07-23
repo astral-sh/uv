@@ -2012,7 +2012,7 @@ pub struct AddArgs {
 
     /// Add source requirements to the `project.dependencies` section of the `pyproject.toml`.
     ///
-    /// Without this flag uv will try to use `tool.uv.sources` for any sources.
+    /// Without this flag, uv will try to use `tool.uv.sources` for any sources.
     #[arg(long)]
     pub raw_sources: bool,
 
