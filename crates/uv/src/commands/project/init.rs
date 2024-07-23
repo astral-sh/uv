@@ -16,7 +16,7 @@ use uv_python::{
 use uv_resolver::RequiresPython;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
-use uv_workspace::{Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
 use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
@@ -83,7 +83,15 @@ pub(crate) async fn init(
     } else {
         // Attempt to find a workspace root.
         let parent = path.parent().expect("Project path has no parent");
-        match Workspace::discover(parent, None).await {
+        match Workspace::discover(
+            parent,
+            &DiscoveryOptions {
+                ignore: std::iter::once(path.as_ref()).collect(),
+                ..DiscoveryOptions::default()
+            },
+        )
+        .await
+        {
             Ok(workspace) => Some(workspace),
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(err) => return Err(err.into()),
@@ -205,7 +213,7 @@ pub(crate) async fn init(
                 name.cyan(),
                 workspace.install_path().simplified_display().cyan()
             )?;
-        } else if workspace.includes(&path) {
+        } else if workspace.includes(&path)? {
             // If the member is already included in the workspace, skip the `members` addition.
             writeln!(
                 printer.stderr(),

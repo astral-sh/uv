@@ -23,7 +23,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
-use uv_workspace::{VirtualProject, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
@@ -144,13 +144,15 @@ pub(crate) async fn run(
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(&std::env::current_dir()?, None)
+                Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
-            match VirtualProject::discover(&std::env::current_dir()?, None).await {
+            match VirtualProject::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
+                .await
+            {
                 Ok(project) => Some(project),
                 Err(WorkspaceError::MissingPyprojectToml) => None,
                 Err(WorkspaceError::NonWorkspace(_)) => None,

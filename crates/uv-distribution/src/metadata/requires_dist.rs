@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 
 use uv_configuration::PreviewMode;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_workspace::ProjectWorkspace;
+use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
 use crate::metadata::lowering::lower_requirement;
 use crate::metadata::MetadataError;
@@ -52,8 +52,12 @@ impl RequiresDist {
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
-        let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, lock_path, None).await?
+        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+            install_path,
+            lock_path,
+            &DiscoveryOptions::default(),
+        )
+        .await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -155,7 +159,7 @@ mod test {
 
     use uv_configuration::PreviewMode;
     use uv_workspace::pyproject::PyProjectToml;
-    use uv_workspace::ProjectWorkspace;
+    use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
     use crate::RequiresDist;
 
@@ -170,7 +174,10 @@ mod test {
                 .as_ref()
                 .context("metadata field project not found")?,
             &pyproject_toml,
-            Some(path),
+            &DiscoveryOptions {
+                stop_discovery_at: Some(path),
+                ..DiscoveryOptions::default()
+            },
         )
         .await?;
         let requires_dist = pypi_types::RequiresDist::parse_pyproject_toml(contents)?;

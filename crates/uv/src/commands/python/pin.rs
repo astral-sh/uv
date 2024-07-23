@@ -14,7 +14,7 @@ use uv_python::{
     PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
-use uv_workspace::VirtualProject;
+use uv_workspace::{DiscoveryOptions, VirtualProject};
 
 use crate::commands::{project::find_requires_python, ExitStatus};
 use crate::printer::Printer;
@@ -33,14 +33,17 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning");
     }
 
-    let virtual_project = match VirtualProject::discover(&std::env::current_dir()?, None).await {
-        Ok(virtual_project) if !isolated => Some(virtual_project),
-        Ok(_) => None,
-        Err(err) => {
-            debug!("Failed to discover virtual project: {err}");
-            None
-        }
-    };
+    let virtual_project =
+        match VirtualProject::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
+            .await
+        {
+            Ok(virtual_project) if !isolated => Some(virtual_project),
+            Ok(_) => None,
+            Err(err) => {
+                debug!("Failed to discover virtual project: {err}");
+                None
+            }
+        };
 
     let Some(request) = request else {
         // Display the current pinned Python version

@@ -207,6 +207,7 @@ fn init_dot_args() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        requires-python = ">=3.12"
         dependencies = []
 
         [tool.uv]
@@ -235,7 +236,6 @@ fn init_dot_args() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    warning: No `requires-python` field found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
     "###);
 
@@ -354,7 +354,6 @@ fn init_workspace_relative_sub_package() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    fs_err::create_dir(&child)?;
 
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo"), @r###"
     success: true
@@ -450,7 +449,6 @@ fn init_workspace_outside() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    fs_err::create_dir(&child)?;
 
     // Run `uv init <path>` outside the workspace.
     uv_snapshot!(context.filters(), context.init().current_dir(&context.home_dir).arg(&child), @r###"
@@ -810,8 +808,11 @@ fn init_matches_members() -> Result<()> {
         ",
     })?;
 
+    // Create the parent directory (`packages`) and the child directory (`foo`), to ensure that
+    // the empty child directory does _not_ trigger a workspace discovery error despite being a
+    // valid member.
     let packages = context.temp_dir.join("packages");
-    fs_err::create_dir_all(packages)?;
+    fs_err::create_dir_all(packages.join("foo"))?;
 
     uv_snapshot!(context.filters(), context.init().current_dir(context.temp_dir.join("packages")).arg("foo"), @r###"
     success: true
