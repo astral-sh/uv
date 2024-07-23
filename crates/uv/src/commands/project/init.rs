@@ -115,22 +115,32 @@ pub(crate) async fn init(
     }
 
     if let Some(workspace) = workspace {
-        // Add the package to the workspace.
-        let mut pyproject = PyProjectTomlMut::from_toml(workspace.pyproject_toml())?;
-        pyproject.add_workspace(path.strip_prefix(workspace.install_path())?)?;
+        if workspace.excludes(&path)? {
+            // If the member is excluded by the workspace, ignore it.
+            writeln!(
+                printer.stderr(),
+                "Project `{}` is excluded by workspace `{}`",
+                name.cyan(),
+                workspace.install_path().simplified_display().cyan()
+            )?;
+        } else {
+            // Add the package to the workspace.
+            let mut pyproject = PyProjectTomlMut::from_toml(workspace.pyproject_toml())?;
+            pyproject.add_workspace(path.strip_prefix(workspace.install_path())?)?;
 
-        // Save the modified `pyproject.toml`.
-        fs_err::write(
-            workspace.install_path().join("pyproject.toml"),
-            pyproject.to_string(),
-        )?;
+            // Save the modified `pyproject.toml`.
+            fs_err::write(
+                workspace.install_path().join("pyproject.toml"),
+                pyproject.to_string(),
+            )?;
 
-        writeln!(
-            printer.stderr(),
-            "Adding `{}` as member of workspace `{}`",
-            name.cyan(),
-            workspace.install_path().simplified_display().cyan()
-        )?;
+            writeln!(
+                printer.stderr(),
+                "Adding `{}` as member of workspace `{}`",
+                name.cyan(),
+                workspace.install_path().simplified_display().cyan()
+            )?;
+        }
     }
 
     match explicit_path {

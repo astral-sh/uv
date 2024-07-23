@@ -727,7 +727,7 @@ fn init_virtual_workspace() -> Result<()> {
 
 /// Run `uv init` from within a workspace. The path is already included via `members`.
 #[test]
-fn init_matches_member() -> Result<()> {
+fn init_matches_members() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -760,6 +760,50 @@ fn init_matches_member() -> Result<()> {
             workspace, @r###"
         [tool.uv.workspace]
         members = ['packages/*', "packages/foo"]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init` from within a workspace. The path is already included via `members`.
+#[test]
+fn init_matches_exclude() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r"
+        [tool.uv.workspace]
+        exclude = ['packages/foo']
+        members = ['packages/*']
+        ",
+    })?;
+
+    let packages = context.temp_dir.join("packages");
+    fs_err::create_dir_all(packages)?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(context.temp_dir.join("packages")).arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Project `foo` is excluded by workspace `[TEMP_DIR]/`
+    Initialized project `foo` at `[TEMP_DIR]/packages/foo`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [tool.uv.workspace]
+        exclude = ['packages/foo']
+        members = ['packages/*']
         "###
         );
     });

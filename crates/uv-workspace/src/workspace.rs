@@ -330,6 +330,21 @@ impl Workspace {
         &self.pyproject_toml
     }
 
+    /// Returns `true` if the path is excluded by the workspace.
+    pub fn excludes(&self, project_path: &Path) -> Result<bool, WorkspaceError> {
+        if let Some(workspace) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.workspace.as_ref())
+        {
+            is_excluded_from_workspace(project_path, &self.install_path, workspace)
+        } else {
+            Ok(false)
+        }
+    }
+
     /// Collect the workspace member projects from the `members` and `excludes` entries.
     async fn collect_members(
         workspace_root: PathBuf,
