@@ -106,7 +106,11 @@
 
 /* Reducing spacing between nav items to fit more content */
 .md-nav__link {
-  margin-top: 0.3em;
+  margin-top: 0.25em;
+}
+/* Retain larger spacing for each top-level section in the nav */
+.md-nav__item--nested {
+  margin-top: 0.6em;
 }
 /* Retain larger spacing for the right-side table-of-contents nav */
 .md-nav--secondary .md-nav__link {
