@@ -94,8 +94,8 @@ jobs:
         run: |
           branch_name="${{ env.branch_name }}"
 
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          git config user.name "astral-docs-bot"
+          git config user.email "176161322+astral-docs-bot@users.noreply.github.com"
 
           git checkout -b $branch_name
           git add site/uv
