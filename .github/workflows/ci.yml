@@ -347,6 +347,9 @@ jobs:
         target-arch: ["x86_64", "i686", "aarch64"]
     steps:
       - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        run: rustup component add rust-src ${{ matrix.target-arch }}-pc-windows-msvc
       # It's so fast that caching isn't worth it.
       - name: "Test"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
