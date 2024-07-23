@@ -352,7 +352,9 @@ jobs:
         run: |
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
-      # It's so fast that caching isn't worth it.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ github.workspace }}/crates/uv-trampoline
       - name: "Test"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
         run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc
