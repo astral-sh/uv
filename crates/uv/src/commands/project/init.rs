@@ -123,6 +123,14 @@ pub(crate) async fn init(
                 name.cyan(),
                 workspace.install_path().simplified_display().cyan()
             )?;
+        } else if workspace.includes(&path) {
+            // If the member is already included in the workspace, skip the `members` addition.
+            writeln!(
+                printer.stderr(),
+                "Project `{}` is already a member of workspace `{}`",
+                name.cyan(),
+                workspace.install_path().simplified_display().cyan()
+            )?;
         } else {
             // Add the package to the workspace.
             let mut pyproject = PyProjectTomlMut::from_toml(workspace.pyproject_toml())?;

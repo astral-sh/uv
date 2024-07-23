@@ -748,7 +748,7 @@ fn init_matches_members() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Adding `foo` as member of workspace `[TEMP_DIR]/`
+    Project `foo` is already a member of workspace `[TEMP_DIR]/`
     Initialized project `foo` at `[TEMP_DIR]/packages/foo`
     "###);
 
@@ -759,7 +759,7 @@ fn init_matches_members() -> Result<()> {
         assert_snapshot!(
             workspace, @r###"
         [tool.uv.workspace]
-        members = ['packages/*', "packages/foo"]
+        members = ['packages/*']
         "###
         );
     });
