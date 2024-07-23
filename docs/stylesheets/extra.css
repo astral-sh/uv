@@ -103,3 +103,12 @@
   color: var(--md-code-fg-color);
   background-color: var(--md-code-bg-color);
 }
+
+/* Reducing spacing between nav items to fit more content */
+.md-nav__link {
+  margin-top: 0.3em;
+}
+/* Retain larger spacing for the right-side table-of-contents nav */
+.md-nav--secondary .md-nav__link {
+  margin-top: 0.5em;
+}
