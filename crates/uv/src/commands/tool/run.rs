@@ -157,13 +157,13 @@ pub(crate) async fn run(
                     writeln!(
                         printer.stdout(),
                         "The executable `{}` was not found.",
-                        executable.to_string_lossy().red(),
+                        executable.to_string_lossy().cyan(),
                     )?;
                     if !entrypoints.is_empty() {
                         writeln!(
                             printer.stdout(),
                             "The following executables are provided by `{}`:",
-                            &from.name.green()
+                            from.name.green()
                         )?;
                         for (name, _) in entrypoints {
                             writeln!(printer.stdout(), "- {}", name.cyan())?;

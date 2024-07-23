@@ -188,7 +188,7 @@ fn tool_install_suggest_other_packages_with_executable() {
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by package `fastapi`.
+    No executables are provided by `fastapi`
     However, an executable with the name `fastapi` is available via dependency `fastapi-cli`.
     Did you mean `uv tool install fastapi-cli`?
 
@@ -976,7 +976,7 @@ fn tool_install_no_entrypoints() {
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by package `iniconfig`.
+    No executables are provided by `iniconfig`
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
@@ -1606,7 +1606,7 @@ fn tool_install_warn_path() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
-    warning: [TEMP_DIR]/bin is not on your PATH. To use installed tools, run export PATH="[TEMP_DIR]/bin:$PATH" or uv tool update-shell.
+    warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run `export PATH="[TEMP_DIR]/bin:$PATH"` or `uv tool update-shell`.
     "###);
 }
 
