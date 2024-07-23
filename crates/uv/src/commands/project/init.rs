@@ -94,6 +94,7 @@ pub(crate) async fn init(
         {
             Ok(workspace) => Some(workspace),
             Err(WorkspaceError::MissingPyprojectToml) => None,
+            Err(WorkspaceError::NonWorkspace(_)) => None,
             Err(err) => return Err(err.into()),
         }
     };
