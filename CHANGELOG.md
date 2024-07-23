@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.28
+
+### Enhancements
+
+- Output stable ordering to `requirements.txt` in universal mode ([#5334](https://github.com/astral-sh/uv/pull/5334))
+- Allow symlinks with `--find-links` ([#5323](https://github.com/astral-sh/uv/pull/5323))
+- Add support for variations of `pythonw.exe` ([#5259](https://github.com/astral-sh/uv/pull/5259))
+
+### CLI
+
+- Stylize `Requires-Python` consistently in CLI output ([#5304](https://github.com/astral-sh/uv/pull/5304))
+- Add `--show-version-specifiers` to `tree` ([#5240](https://github.com/astral-sh/uv/pull/5240))
+
+### Performance
+
+- Avoid always rebuilding dynamic metadata ([#5206](https://github.com/astral-sh/uv/pull/5206))
+- Avoid URL parsing when deserializing wheels ([#5235](https://github.com/astral-sh/uv/pull/5235))
+
+### Bug fixes
+
+- Avoid cache prune failure due to removed interpreter ([#5286](https://github.com/astral-sh/uv/pull/5286))
+- Avoid including empty extras in resolution ([#5306](https://github.com/astral-sh/uv/pull/5306))
+- If multiple indices contain the same version, use the first index ([#5288](https://github.com/astral-sh/uv/pull/5288))
+- Include URLs on graph edges ([#5312](https://github.com/astral-sh/uv/pull/5312))
+- Match wheel tags against `Requires-Python` major-minor ([#5289](https://github.com/astral-sh/uv/pull/5289))
+- Remove Simple API cache files for alternative indexes in `cache clean` ([#5353](https://github.com/astral-sh/uv/pull/5353))
+- Remove extraneous `are` from wheel tag error messages ([#5303](https://github.com/astral-sh/uv/pull/5303))
+- Allow conflicting prerelease strategies when forking ([#5150](https://github.com/astral-sh/uv/pull/5150))
+- Use tag error rather than requires-python error for ABI filtering ([#5296](https://github.com/astral-sh/uv/pull/5296))
+
 ## 0.2.27
 
 ### Enhancements
