@@ -7250,13 +7250,13 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via torch
     tbb==2021.11.0 ; platform_machine != 'x86_64' and platform_system == 'Windows'
         # via mkl
-    torch==2.3.0 ; platform_machine != 'x86_64'
-        # via -r requirements.in
     torch==2.0.0+cu118 ; platform_machine == 'x86_64'
         # via
         #   -r requirements.in
         #   example
         #   triton
+    torch==2.3.0 ; platform_machine != 'x86_64'
+        # via -r requirements.in
     triton==2.0.0 ; platform_machine == 'x86_64' and platform_system == 'Linux'
         # via torch
     typing-extensions==4.10.0
@@ -7324,13 +7324,13 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via torch
     tbb==2021.11.0 ; platform_machine != 'x86_64' and platform_system == 'Windows'
         # via mkl
-    torch==2.3.0 ; platform_machine != 'x86_64'
-        # via -r requirements.in
     torch==2.0.0+cu118 ; platform_machine == 'x86_64'
         # via
         #   -r requirements.in
         #   example
         #   triton
+    torch==2.3.0 ; platform_machine != 'x86_64'
+        # via -r requirements.in
     triton==2.0.0 ; platform_machine == 'x86_64' and platform_system == 'Linux'
         # via torch
     typing-extensions==4.10.0
@@ -7440,6 +7440,10 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via torch
     tbb==2021.11.0 ; os_name != 'Linux' and platform_system == 'Windows'
         # via mkl
+    torch==2.0.0+cpu ; os_name == 'Linux'
+        # via
+        #   -r requirements.in
+        #   example
     torch==2.0.0+cu118 ; os_name == 'Linux'
         # via
         #   -r requirements.in
@@ -7447,10 +7451,6 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         #   triton
     torch==2.3.0 ; os_name != 'Linux'
         # via -r requirements.in
-    torch==2.0.0+cpu ; os_name == 'Linux'
-        # via
-        #   -r requirements.in
-        #   example
     triton==2.0.0 ; os_name == 'Linux' and platform_machine == 'x86_64' and platform_system == 'Linux'
         # via torch
     typing-extensions==4.10.0

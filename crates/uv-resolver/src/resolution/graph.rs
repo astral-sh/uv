@@ -241,6 +241,7 @@ impl ResolutionGraph {
                 // Add the distribution to the graph.
                 let index = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
                     dist,
+                    version: version.clone(),
                     extra: extra.clone(),
                     dev: dev.clone(),
                     hashes,
