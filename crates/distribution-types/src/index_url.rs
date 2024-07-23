@@ -386,6 +386,11 @@ impl<'a> IndexLocations {
         self.flat_index.iter()
     }
 
+    /// Return the `--no-index` flag.
+    pub fn no_index(&self) -> bool {
+        self.no_index
+    }
+
     /// Clone the index locations into a [`IndexUrls`] instance.
     pub fn index_urls(&'a self) -> IndexUrls {
         IndexUrls {

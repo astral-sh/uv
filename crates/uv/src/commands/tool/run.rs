@@ -28,7 +28,8 @@ use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::resolve_requirements;
+
+use crate::commands::project::resolve_names;
 use crate::commands::{
     project, project::environment::CachedEnvironment, tool::common::matching_packages,
 };
@@ -332,13 +333,21 @@ async fn get_or_create_environment(
         .unwrap()
     };
 
-    // Combine the `from` and `with` requirements.
+    // Read the `--with` requirements.
+    let spec = {
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
+    };
+
+    // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
         requirements.push(from.clone());
         requirements.extend(
-            resolve_requirements(
-                with,
+            resolve_names(
+                spec.requirements.clone(),
                 &interpreter,
                 settings,
                 &state,
@@ -388,11 +397,20 @@ async fn get_or_create_environment(
         }
     }
 
+    // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
+    let spec = RequirementsSpecification {
+        requirements: requirements
+            .into_iter()
+            .map(UnresolvedRequirementSpecification::from)
+            .collect(),
+        ..spec
+    };
+
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
     let environment = CachedEnvironment::get_or_create(
-        requirements,
+        spec,
         interpreter,
         settings,
         &state,

@@ -25,7 +25,7 @@ use uv_resolver::{
     FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::Workspace;
 
 use crate::commands::pip::operations::Modifications;
@@ -399,6 +399,8 @@ pub(crate) async fn resolve_environment<'a>(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ResolutionGraph> {
+    warn_on_requirements_txt_setting(&spec, settings);
+
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
@@ -419,28 +421,13 @@ pub(crate) async fn resolve_environment<'a>(
         constraints,
         overrides,
         source_trees,
-        index_url,
-        extra_index_urls,
-        no_index,
-        find_links,
-        no_binary,
-        no_build,
-        extras: _,
+        ..
     } = spec;
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
     let markers = interpreter.markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations
-            .clone()
-            .combine(index_url, extra_index_urls, find_links, no_index);
-
-    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
-    let build_options = build_options.clone().combine(no_binary, no_build);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -478,7 +465,7 @@ pub(crate) async fn resolve_environment<'a>(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -486,7 +473,7 @@ pub(crate) async fn resolve_environment<'a>(
         &client,
         cache,
         interpreter,
-        &index_locations,
+        index_locations,
         &flat_index,
         &state.index,
         &state.git,
@@ -496,7 +483,7 @@ pub(crate) async fn resolve_environment<'a>(
         config_setting,
         build_isolation,
         link_mode,
-        &build_options,
+        build_options,
         exclude_newer,
         concurrency,
         preview,
@@ -653,6 +640,8 @@ pub(crate) async fn update_environment(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<PythonEnvironment> {
+    warn_on_requirements_txt_setting(&spec, settings.as_ref().into());
+
     let ResolverInstallerSettings {
         index_locations,
         index_strategy,
@@ -675,13 +664,7 @@ pub(crate) async fn update_environment(
         constraints,
         overrides,
         source_trees,
-        index_url,
-        extra_index_urls,
-        no_index,
-        find_links,
-        no_binary,
-        no_build,
-        extras: _,
+        ..
     } = spec;
 
     // Check if the current environment satisfies the requirements
@@ -713,15 +696,6 @@ pub(crate) async fn update_environment(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations
-            .clone()
-            .combine(index_url, extra_index_urls, find_links, no_index);
-
-    // Combine the `--no-binary` and `--no-build` flags from the requirements files.
-    let build_options = build_options.clone().combine(no_binary, no_build);
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -755,7 +729,7 @@ pub(crate) async fn update_environment(
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -763,7 +737,7 @@ pub(crate) async fn update_environment(
         &client,
         cache,
         interpreter,
-        &index_locations,
+        index_locations,
         &flat_index,
         &state.index,
         &state.git,
@@ -773,7 +747,7 @@ pub(crate) async fn update_environment(
         config_setting,
         build_isolation,
         *link_mode,
-        &build_options,
+        build_options,
         *exclude_newer,
         concurrency,
         preview,
@@ -818,10 +792,10 @@ pub(crate) async fn update_environment(
         site_packages,
         Modifications::Exact,
         reinstall,
-        &build_options,
+        build_options,
         *link_mode,
         *compile_bytecode,
-        &index_locations,
+        index_locations,
         &hasher,
         tags,
         &client,
@@ -840,4 +814,63 @@ pub(crate) async fn update_environment(
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     Ok(venv)
+}
+
+/// Warn if the user provides (e.g.) an `--index-url` in a requirements file.
+fn warn_on_requirements_txt_setting(
+    spec: &RequirementsSpecification,
+    settings: ResolverSettingsRef<'_>,
+) {
+    let RequirementsSpecification {
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+        no_binary,
+        no_build,
+        ..
+    } = spec;
+
+    if settings.index_locations.no_index() {
+        // Nothing to do, we're ignoring the URLs anyway.
+    } else if *no_index {
+        warn_user_once!("Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file.");
+    } else {
+        if let Some(index_url) = index_url {
+            if settings.index_locations.index() != Some(index_url) {
+                warn_user_once!(
+                    "Ignoring `--index-url` from requirements file: `{}`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.",
+                    index_url
+                );
+            }
+        }
+        for extra_index_url in extra_index_urls {
+            if !settings
+                .index_locations
+                .extra_index()
+                .contains(extra_index_url)
+            {
+                warn_user_once!(
+                    "Ignoring `--extra-index-url` from requirements file: `{}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`",
+                    extra_index_url
+                );
+            }
+        }
+        for find_link in find_links {
+            if !settings.index_locations.flat_index().contains(find_link) {
+                warn_user_once!(
+                    "Ignoring `--find-links` from requirements file: `{}`. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file.`",
+                    find_link
+                );
+            }
+        }
+    }
+
+    if !no_binary.is_none() && settings.build_options.no_binary() != no_binary {
+        warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-binary` command-line argument, or set `no-binary` in a `uv.toml` or `pyproject.toml` file.");
+    }
+
+    if !no_build.is_none() && settings.build_options.no_build() != no_build {
+        warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file.");
+    }
 }

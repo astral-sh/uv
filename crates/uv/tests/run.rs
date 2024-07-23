@@ -719,12 +719,7 @@ fn run_requirements_txt() -> Result<()> {
     Ok(())
 }
 
-/// Respect (e.g.) the `--index-url` argument is a provided `requirements.txt`.
-///
-/// `idna` only exists at `2.7` on the test PyPI, and `typing-extensions` only exists at `0.0.1dev`.
-/// The resulting resolution should get `idna` from test PyPI, but `typing-extensions` from the
-/// default index, since any arguments in `--with-requirements` should only apply to those extra
-/// requirements.
+/// Ignore and warn when (e.g.) the `--index-url` argument is a provided `requirements.txt`.
 #[test]
 fn run_requirements_txt_arguments() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -765,10 +760,11 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Installed 2 packages in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + typing-extensions==4.10.0
+    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + idna==2.7
+     + idna==3.6
     "###);
 
     Ok(())

@@ -1478,7 +1478,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) build_options: BuildOptions,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,

@@ -3,7 +3,6 @@ use tracing::debug;
 
 use cache_key::digest;
 use distribution_types::Resolution;
-use pypi_types::Requirement;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
@@ -30,7 +29,7 @@ impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements and a base
     /// interpreter.
     pub(crate) async fn get_or_create(
-        requirements: Vec<Requirement>,
+        spec: RequirementsSpecification,
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
         state: &SharedState,
@@ -41,8 +40,6 @@ impl CachedEnvironment {
         cache: &Cache,
         printer: Printer,
     ) -> anyhow::Result<Self> {
-        let spec = RequirementsSpecification::from_requirements(requirements);
-
         // When caching, always use the base interpreter, rather than that of the virtual
         // environment.
         let interpreter = if let Some(interpreter) = interpreter.to_base_interpreter(cache)? {
