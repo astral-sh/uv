@@ -1,24 +1,14 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::process::Command;
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext};
+use crate::common::TestContext;
 
 mod common;
-
-/// Create a `cache prune` command with options shared across scenarios.
-fn prune_command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
-    command.arg("cache").arg("prune");
-    context.add_shared_args(&mut command);
-    command
-}
 
 /// `cache prune` should be a no-op if there's nothing out-of-date in the cache.
 #[test]
@@ -35,7 +25,7 @@ fn prune_no_op() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), prune_command(&context).arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -68,7 +58,7 @@ fn prune_stale_directory() -> Result<()> {
     let simple = context.cache_dir.child("simple-v4");
     simple.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), prune_command(&context).arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -123,7 +113,7 @@ fn prune_cached_env() {
         ])
         .collect();
 
-    uv_snapshot!(filters, prune_command(&context).arg("--verbose"), @r###"
+    uv_snapshot!(filters, context.prune().arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -167,7 +157,7 @@ fn prune_stale_symlink() -> Result<()> {
         ])
         .collect();
 
-    uv_snapshot!(filters, prune_command(&context).arg("--verbose"), @r###"
+    uv_snapshot!(filters, context.prune().arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
