@@ -56,7 +56,17 @@ async fn read_versions_file() -> Result<Option<Vec<String>>, std::io::Error> {
     match fs::tokio::read_to_string(PYTHON_VERSIONS_FILENAME).await {
         Ok(content) => {
             debug!("Reading requests from `{PYTHON_VERSIONS_FILENAME}`");
-            Ok(Some(content.lines().map(ToString::to_string).collect()))
+            Ok(Some(
+                content
+                    .lines()
+                    .filter(|line| {
+                        // Skip comments and empty lines.
+                        let trimmed = line.trim();
+                        !(trimmed.is_empty() || trimmed.starts_with('#'))
+                    })
+                    .map(ToString::to_string)
+                    .collect(),
+            ))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err),
@@ -67,7 +77,14 @@ async fn read_version_file() -> Result<Option<String>, std::io::Error> {
     match fs::tokio::read_to_string(PYTHON_VERSION_FILENAME).await {
         Ok(content) => {
             debug!("Reading requests from `{PYTHON_VERSION_FILENAME}`");
-            Ok(content.lines().next().map(ToString::to_string))
+            Ok(content
+                .lines()
+                .find(|line| {
+                    // Skip comments and empty lines.
+                    let trimmed = line.trim();
+                    !(trimmed.is_empty() || trimmed.starts_with('#'))
+                })
+                .map(ToString::to_string))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err),

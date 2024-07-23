@@ -1,11 +1,12 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use assert_fs::fixture::{FileWriteStr as _, PathChild as _};
+use anyhow::Result;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 use common::{uv_snapshot, TestContext};
 use insta::assert_snapshot;
 use uv_python::{
     platform::{Arch, Os},
-    PYTHON_VERSION_FILENAME,
+    PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
 };
 
 mod common;
@@ -628,4 +629,42 @@ fn python_pin_resolve() {
         [PYTHON-3.12]
         "###);
     });
+}
+
+#[test]
+fn python_pin_with_comments() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let content = indoc::indoc! {r"
+        3.12
+
+        # 3.11
+        3.10
+    "};
+
+    let version_file = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    version_file.write_str(content)?;
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    "###);
+    fs_err::remove_file(version_file)?;
+
+    let versions_file = context.temp_dir.child(PYTHON_VERSIONS_FILENAME);
+    versions_file.write_str(content)?;
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+    3.10
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
 }
