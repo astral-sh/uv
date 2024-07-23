@@ -370,7 +370,7 @@ fn update_requirement(old: &mut Requirement, new: Requirement, has_source: bool)
 
     // Clear the requirement source if we are going to add to `tool.uv.sources`.
     if has_source {
-        old.version_or_url = None;
+        old.clear_url();
     }
 
     // Update the source if a new one was specified.
