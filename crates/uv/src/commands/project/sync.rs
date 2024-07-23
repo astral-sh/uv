@@ -1,5 +1,5 @@
 use anyhow::Result;
-
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -165,6 +165,11 @@ pub(super) async fn do_sync(
 
     // Read the lockfile.
     let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

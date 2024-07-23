@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 
 use pep508_rs::ExtraName;
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
@@ -95,6 +96,11 @@ pub(crate) async fn add(
     // Determine the environment for the resolution.
     let (tags, markers) =
         resolution_environment(python_version, python_platform, venv.interpreter())?;
+
+    // Add all authenticated sources to the cache.
+    for url in settings.index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::from(client_builder)
