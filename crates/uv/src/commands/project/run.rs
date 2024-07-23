@@ -515,6 +515,7 @@ pub(crate) async fn run(
             {
                 use nix::sys::signal::{kill, Signal};
                 use nix::unistd::Pid;
+                #[allow(clippy::cast_possible_wrap)]
                 let pid = Pid::from_raw(handle.id().unwrap() as i32);
                 kill(pid, Signal::SIGTERM).expect("Failed to send SIGTERM");
             }
@@ -523,7 +524,7 @@ pub(crate) async fn run(
             {
                 use winapi::um::wincon::GenerateConsoleCtrlEvent;
                 unsafe {
-                    GenerateConsoleCtrlEvent(winapi::um::wincon::CTRL_C_EVENT, child.id()).expect("Failed to send Ctrl-C event");
+                    GenerateConsoleCtrlEvent(winapi::um::wincon::CTRL_C_EVENT, handle.id()).expect("Failed to send Ctrl-C event");
                 }
             }
             Ok(ExitStatus::Success)
