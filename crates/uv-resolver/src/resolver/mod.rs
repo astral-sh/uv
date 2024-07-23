@@ -19,7 +19,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, instrument, trace, warn, Level};
+use tracing::{debug, info, instrument, trace, warn, Level};
 
 use distribution_types::{
     BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
@@ -392,6 +392,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                     }
 
+                    // If another fork had the same resolution, merge into that fork instead.
+                    if let Some(existing_resolution) = resolutions
+                        .iter_mut()
+                        .find(|existing_resolution| resolution.same_graph(existing_resolution))
+                    {
+                        let ResolverMarkers::Fork(existing_markers) = &existing_resolution.markers
+                        else {
+                            panic!("A non-forking resolution exists in forking mode")
+                        };
+                        let mut new_markers = existing_markers.clone();
+                        new_markers.or(resolution
+                            .markers
+                            .fork_markers()
+                            .expect("A non-forking resolution exists in forking mode")
+                            .clone());
+                        existing_resolution.markers = normalize(new_markers, None)
+                            .map(ResolverMarkers::Fork)
+                            .unwrap_or(ResolverMarkers::Universal);
+                        continue 'FORK;
+                    }
+
                     resolutions.push(resolution);
                     continue 'FORK;
                 };
@@ -574,8 +595,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
         }
-        let mut combined = Resolution::default();
+        let mut combined = Resolution::universal();
+        if resolutions.len() > 1 {
+            info!(
+                "Solved your requirements for {} environments",
+                resolutions.len()
+            );
+        }
         for resolution in resolutions {
+            if let Some(markers) = resolution.markers.fork_markers() {
+                debug!(
+                    "Distinct solution for ({markers}) with {} packages",
+                    resolution.nodes.len()
+                );
+            }
             combined.union(resolution);
         }
         Self::trace_resolution(&combined);
@@ -2378,6 +2411,7 @@ impl ForkState {
             nodes: packages,
             edges: dependencies,
             pins: self.pins,
+            markers: self.markers,
         }
     }
 }
@@ -2386,7 +2420,7 @@ impl ForkState {
 ///
 /// Each package can have multiple versions and each edge between two packages can have multiple
 /// version specifiers to support diverging versions and requirements in different forks.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Resolution {
     pub(crate) nodes: FxHashMap<ResolutionPackage, FxHashSet<Version>>,
     /// The directed connections between the nodes, where the marker is the node weight. We don't
@@ -2394,6 +2428,8 @@ pub(crate) struct Resolution {
     pub(crate) edges: FxHashSet<ResolutionDependencyEdge>,
     /// Map each package name, version tuple from `packages` to a distribution.
     pub(crate) pins: FilePins,
+    /// The marker setting this resolution was found under.
+    pub(crate) markers: ResolverMarkers,
 }
 
 /// Package representation we used during resolution where each extra and also the dev-dependencies
@@ -2426,6 +2462,30 @@ pub(crate) struct ResolutionDependencyEdge {
 }
 
 impl Resolution {
+    fn universal() -> Self {
+        Self {
+            nodes: FxHashMap::default(),
+            edges: FxHashSet::default(),
+            pins: FilePins::default(),
+            markers: ResolverMarkers::Universal,
+        }
+    }
+}
+
+impl Resolution {
+    /// Whether we got two identical resolutions in two separate forks.
+    ///
+    /// Ignores pins since the which distribution we prioritized for each version doesn't matter.
+    fn same_graph(&self, other: &Self) -> bool {
+        // TODO(konsti): The edges being equal is not a requirement for the graph being equal. While
+        // an exact solution is too much here, we should ignore different in edges that point to
+        // nodes that are always installed. Example: root requires foo, root requires bar. bar
+        // forks, and one for the branches has bar -> foo while the other doesn't. The resolution
+        // is still the same graph since the presence or absence of the bar -> foo edge cannot
+        // change which packages and versions are installed.
+        self.nodes == other.nodes && self.edges == other.edges
+    }
+
     fn union(&mut self, other: Resolution) {
         for (other_package, other_versions) in other.nodes {
             self.nodes
