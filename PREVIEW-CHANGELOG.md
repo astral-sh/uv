@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.28
+
+### Preview features
+
+- Add `requires-python` to `uv init` ([#5322](https://github.com/astral-sh/uv/pull/5322))
+- Add `uv add --no-editable` ([#5246](https://github.com/astral-sh/uv/pull/5246))
+- Add constraint dependencies to pyproject.toml ([#5248](https://github.com/astral-sh/uv/pull/5248))
+- Add support for requirements files in `uv run` ([#4973](https://github.com/astral-sh/uv/pull/4973))
+- Avoid redundant members update in `uv init` ([#5321](https://github.com/astral-sh/uv/pull/5321))
+- Create member `pyproject.toml` prior to workspace discovery ([#5317](https://github.com/astral-sh/uv/pull/5317))
+- Fix `uv init .` ([#5330](https://github.com/astral-sh/uv/pull/5330))
+- Fix `uv init` creation of a sub-package by path ([#5247](https://github.com/astral-sh/uv/pull/5247))
+- Fix colors in `uv tool run` suggestion ([#5267](https://github.com/astral-sh/uv/pull/5267))
+- Improve consistency of `tool` CLI ([#5326](https://github.com/astral-sh/uv/pull/5326))
+- Make tool install robust to malformed receipts ([#5305](https://github.com/astral-sh/uv/pull/5305))
+- Reduce spacing between nav items ([#5310](https://github.com/astral-sh/uv/pull/5310))
+- Respect exclusions in `uv init` ([#5318](https://github.com/astral-sh/uv/pull/5318))
+- Store resolution options in lockfile ([#5264](https://github.com/astral-sh/uv/pull/5264))
+- Use backticks in project init message ([#5302](https://github.com/astral-sh/uv/pull/5302))
+- Ignores workspace when `--isolated` flag is used in `uv init` ([#5290](https://github.com/astral-sh/uv/pull/5290))
+- Normalize directory names in `uv init` ([#5292](https://github.com/astral-sh/uv/pull/5292))
+- Avoid project discovery in `uv python pin` if `--isolated` is provided ([#5354](https://github.com/astral-sh/uv/pull/5354))
+- Show symbolic links in `uv python list` ([#5343](https://github.com/astral-sh/uv/pull/5343))
+- Discover workspace from target path in `uv init` ([#5250](https://github.com/astral-sh/uv/pull/5250))
+- Do not create nested workspace in `uv init`  ([#5293](https://github.com/astral-sh/uv/pull/5293))
+
 ## 0.2.27
 
 ### Preview features
@@ -33,7 +59,6 @@
 - Fix reference to `projects.md` ([#5154](https://github.com/astral-sh/uv/pull/5154))
 - Fixes to the settings documentation ([#5177](https://github.com/astral-sh/uv/pull/5177))
 - Set exact version specifiers when resolving from lockfile ([#5193](https://github.com/astral-sh/uv/pull/5193))
-
 
 ## 0.2.26
 

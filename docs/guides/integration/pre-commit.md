@@ -7,7 +7,7 @@ To compile requirements via pre-commit, add the following to the `.pre-commit-co
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
-  rev: 0.2.27
+  rev: 0.2.28
   hooks:
     # Compile requirements
     - id: pip-compile
@@ -19,7 +19,7 @@ To compile alternative files, modify `args` and `files`:
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
-  rev: 0.2.27
+  rev: 0.2.28
   hooks:
     # Compile requirements
     - id: pip-compile
@@ -32,7 +32,7 @@ To run the hook over multiple files at the same time:
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
   # uv version.
-  rev: 0.2.27
+  rev: 0.2.28
   hooks:
     # Compile requirements
     - id: pip-compile
