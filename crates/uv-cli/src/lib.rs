@@ -2010,10 +2010,18 @@ pub struct AddArgs {
     #[arg(long, overrides_with = "editable")]
     pub no_editable: bool,
 
-    /// Add source requirements to the `project.dependencies` section of the `pyproject.toml`.
+    /// Add source requirements to `project.dependencies`, rather than `tool.uv.sources`.
     ///
-    /// Without this flag, uv will try to use `tool.uv.sources` for any sources.
-    #[arg(long)]
+    /// By default, uv will use the `tool.uv.sources` section to record source information for Git,
+    /// local, editable, and direct URL requirements.
+    #[arg(
+        long,
+        conflicts_with = "editable",
+        conflicts_with = "no_editable",
+        conflicts_with = "rev",
+        conflicts_with = "tag",
+        conflicts_with = "branch"
+    )]
     pub raw_sources: bool,
 
     /// Specific commit to use when adding from Git.

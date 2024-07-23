@@ -490,6 +490,37 @@ fn add_git_raw() -> Result<()> {
     Ok(())
 }
 
+/// `--raw-sources` should be considered conflicting with sources-specific arguments, like `--tag`.
+#[test]
+fn add_raw_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Provide a tag without a Git source.
+    uv_snapshot!(context.filters(), context.add(&[]).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources").arg("--preview"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
+
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+
+    For more information, try '--help'.
+    "###);
+
+    Ok(())
+}
+
 /// Add an unnamed requirement.
 #[test]
 fn add_unnamed() -> Result<()> {
