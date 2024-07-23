@@ -278,8 +278,8 @@ jobs:
           uv venv
           uv pip install ruff
 
-  # Separate job for the nightly crate
-  windows-trampoline:
+  # Separate jobs for the nightly crate
+  windows-trampoline-check:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -335,12 +335,22 @@ jobs:
           XWIN_ARCH: "x86_64"
           XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
 
-      - name: "Build"
+  # Separate jobs for the nightly crate
+  windows-trampoline-test:
+    needs: determine_changes
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on: windows-latest
+    name: "test windows trampoline | ${{ matrix.target-arch }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        target-arch: ["x86_64", "i686", "aarch64"]
+    steps:
+      - uses: actions/checkout@v4
+      # It's so fast that caching isn't worth it.
+      - name: "Test"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: cargo xwin build --release --target ${{ matrix.target-arch }}-pc-windows-msvc
-        env:
-          XWIN_ARCH: "${{ matrix.target-arch == 'i686' && 'x86' || matrix.target-arch }}"
-          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+        run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc
 
   typos:
     runs-on: ubuntu-latest
