@@ -133,8 +133,9 @@ pub(crate) async fn run(
                 .into_iter()
                 .map(Requirement::from)
                 .collect();
+            let spec = RequirementsSpecification::from_requirements(requirements);
             let environment = CachedEnvironment::get_or_create(
-                requirements,
+                spec,
                 interpreter,
                 &settings,
                 &state,

@@ -26,7 +26,7 @@ use uv_resolver::{
     FlatIndex, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::Workspace;
 
 use crate::commands::pip::operations::Modifications;
@@ -405,6 +405,8 @@ pub(crate) async fn resolve_environment<'a>(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ResolutionGraph> {
+    warn_on_requirements_txt_setting(&spec, settings);
+
     let ResolverSettingsRef {
         index_locations,
         index_strategy,
@@ -417,6 +419,16 @@ pub(crate) async fn resolve_environment<'a>(
         upgrade: _,
         build_options,
     } = settings;
+
+    // Respect all requirements from the provided sources.
+    let RequirementsSpecification {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        source_trees,
+        ..
+    } = spec;
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
@@ -490,12 +502,12 @@ pub(crate) async fn resolve_environment<'a>(
 
     // Resolve the requirements.
     Ok(pip::operations::resolve(
-        spec.requirements,
-        spec.constraints,
-        spec.overrides,
+        requirements,
+        constraints,
+        overrides,
         dev,
-        spec.source_trees,
-        spec.project,
+        source_trees,
+        project,
         &extras,
         preferences,
         EmptyInstalledPackages,
@@ -644,6 +656,8 @@ pub(crate) async fn update_environment(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<PythonEnvironment> {
+    warn_on_requirements_txt_setting(&spec, settings.as_ref().into());
+
     let ResolverInstallerSettings {
         index_locations,
         index_strategy,
@@ -659,14 +673,20 @@ pub(crate) async fn update_environment(
         build_options,
     } = settings;
 
+    // Respect all requirements from the provided sources.
+    let RequirementsSpecification {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        source_trees,
+        ..
+    } = spec;
+
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
-    if spec.source_trees.is_empty()
-        && reinstall.is_none()
-        && upgrade.is_none()
-        && spec.overrides.is_empty()
-    {
-        match site_packages.satisfies(&spec.requirements, &spec.constraints)? {
+    if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() && overrides.is_empty() {
+        match site_packages.satisfies(&requirements, &constraints)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -756,12 +776,12 @@ pub(crate) async fn update_environment(
 
     // Resolve the requirements.
     let resolution = match pip::operations::resolve(
-        spec.requirements,
-        spec.constraints,
-        spec.overrides,
+        requirements,
+        constraints,
+        overrides,
         dev,
-        spec.source_trees,
-        spec.project,
+        source_trees,
+        project,
         &extras,
         preferences,
         site_packages.clone(),
@@ -815,4 +835,63 @@ pub(crate) async fn update_environment(
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     Ok(venv)
+}
+
+/// Warn if the user provides (e.g.) an `--index-url` in a requirements file.
+fn warn_on_requirements_txt_setting(
+    spec: &RequirementsSpecification,
+    settings: ResolverSettingsRef<'_>,
+) {
+    let RequirementsSpecification {
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+        no_binary,
+        no_build,
+        ..
+    } = spec;
+
+    if settings.index_locations.no_index() {
+        // Nothing to do, we're ignoring the URLs anyway.
+    } else if *no_index {
+        warn_user_once!("Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file.");
+    } else {
+        if let Some(index_url) = index_url {
+            if settings.index_locations.index() != Some(index_url) {
+                warn_user_once!(
+                    "Ignoring `--index-url` from requirements file: `{}`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.",
+                    index_url
+                );
+            }
+        }
+        for extra_index_url in extra_index_urls {
+            if !settings
+                .index_locations
+                .extra_index()
+                .contains(extra_index_url)
+            {
+                warn_user_once!(
+                    "Ignoring `--extra-index-url` from requirements file: `{}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`",
+                    extra_index_url
+                );
+            }
+        }
+        for find_link in find_links {
+            if !settings.index_locations.flat_index().contains(find_link) {
+                warn_user_once!(
+                    "Ignoring `--find-links` from requirements file: `{}`. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file.`",
+                    find_link
+                );
+            }
+        }
+    }
+
+    if !no_binary.is_none() && settings.build_options.no_binary() != no_binary {
+        warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-binary` command-line argument, or set `no-binary` in a `uv.toml` or `pyproject.toml` file.");
+    }
+
+    if !no_build.is_none() && settings.build_options.no_build() != no_build {
+        warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file.");
+    }
 }

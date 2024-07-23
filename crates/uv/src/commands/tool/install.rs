@@ -8,7 +8,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
-use distribution_types::Name;
+use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -28,7 +28,7 @@ use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool,
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::resolve_requirements;
+
 use crate::commands::{
     project::{resolve_environment, resolve_names, sync_environment, update_environment},
     tool::common::matching_packages,
@@ -138,13 +138,21 @@ pub(crate) async fn install(
         .unwrap()
     };
 
-    // Combine the `from` and `with` requirements.
+    // Read the `--with` requirements.
+    let spec = {
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
+    };
+
+    // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
         requirements.push(from.clone());
         requirements.extend(
-            resolve_requirements(
-                with,
+            resolve_names(
+                spec.requirements.clone(),
                 &interpreter,
                 &settings,
                 &state,
@@ -236,9 +244,15 @@ pub(crate) async fn install(
         }
     }
 
-    // Resolve the requirements.
-    let state = SharedState::default();
-    let spec = RequirementsSpecification::from_requirements(requirements.clone());
+    // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
+    let spec = RequirementsSpecification {
+        requirements: requirements
+            .iter()
+            .cloned()
+            .map(UnresolvedRequirementSpecification::from)
+            .collect(),
+        ..spec
+    };
 
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
     // This lets us confirm the environment is valid before removing an existing install. However,
