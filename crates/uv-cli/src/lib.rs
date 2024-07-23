@@ -1836,8 +1836,6 @@ pub struct RunArgs {
     /// Run with all packages listed in the given `requirements.txt` files.
     ///
     /// Using `pyproject.toml`, `setup.py`, or `setup.cfg` files is not allowed.
-    ///
-    /// If `-` is provided, then requirements will be read from stdin.
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 

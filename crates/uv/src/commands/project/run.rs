@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
@@ -71,6 +71,11 @@ pub(crate) async fn run(
             }
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
+            }
+            RequirementsSource::RequirementsTxt(path) => {
+                if path == Path::new("-") {
+                    bail!("Reading requirements from stdin is not supported in `uv run`");
+                }
             }
             _ => {}
         }
@@ -307,14 +312,6 @@ pub(crate) async fn run(
         };
 
         if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
-            return false;
-        }
-
-        // `SitePackages::satisfies` doesn't handle overrides yet, and constraints are only enforced
-        // on `--with` requirements instead of the project requirements, so we perform a full
-        // resolution to ensure things are up-to-date.
-        // TODO(charlie): Support constraints and overrides in `uv run`.
-        if !(spec.constraints.is_empty() && spec.overrides.is_empty()) {
             return false;
         }
 

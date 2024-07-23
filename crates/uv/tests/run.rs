@@ -700,5 +700,21 @@ fn run_requirements_txt() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
+    // But reject `-` as a requirements file.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg("-")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    error: Reading requirements from stdin is not supported in `uv run`
+    "###);
+
     Ok(())
 }
