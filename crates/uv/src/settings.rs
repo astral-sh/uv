@@ -187,6 +187,7 @@ pub(crate) struct RunSettings {
     pub(crate) dev: bool,
     pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
+    pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
@@ -207,6 +208,7 @@ impl RunSettings {
             no_dev,
             command,
             with,
+            with_requirements,
             installer,
             build,
             refresh,
@@ -224,6 +226,10 @@ impl RunSettings {
             dev: flag(dev, no_dev).unwrap_or(true),
             command,
             with,
+            with_requirements: with_requirements
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             package,
             python,
             refresh: Refresh::from(refresh),

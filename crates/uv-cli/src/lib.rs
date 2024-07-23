@@ -1847,6 +1847,12 @@ pub struct RunArgs {
     #[arg(long)]
     pub with: Vec<String>,
 
+    /// Run with all packages listed in the given `requirements.txt` files.
+    ///
+    /// Using `pyproject.toml`, `setup.py`, or `setup.cfg` files is not allowed.
+    #[arg(long, value_parser = parse_maybe_file_path)]
+    pub with_requirements: Vec<Maybe<PathBuf>>,
+
     /// Assert that the `uv.lock` will remain unchanged.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,

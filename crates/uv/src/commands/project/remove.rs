@@ -132,7 +132,7 @@ pub(crate) async fn remove(
         &VirtualProject::Project(project),
         &venv,
         &lock,
-        extras,
+        &extras,
         dev,
         Modifications::Exact,
         settings.as_ref().into(),

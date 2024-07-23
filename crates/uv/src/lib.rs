@@ -859,6 +859,11 @@ async fn run_project(
                 .with
                 .into_iter()
                 .map(RequirementsSource::from_package)
+                .chain(
+                    args.with_requirements
+                        .into_iter()
+                        .map(RequirementsSource::from_requirements_file),
+                )
                 .collect::<Vec<_>>();
 
             commands::run(

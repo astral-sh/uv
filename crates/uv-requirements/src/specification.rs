@@ -336,4 +336,9 @@ impl RequirementsSpecification {
             ..Self::default()
         }
     }
+
+    /// Return true if the specification does not include any requirements to install.
+    pub fn is_empty(&self) -> bool {
+        self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
+    }
 }

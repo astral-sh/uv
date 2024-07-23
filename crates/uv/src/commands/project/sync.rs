@@ -96,7 +96,7 @@ pub(crate) async fn sync(
         &project,
         &venv,
         &lock,
-        extras,
+        &extras,
         dev,
         modifications,
         settings.as_ref().into(),
@@ -118,7 +118,7 @@ pub(super) async fn do_sync(
     project: &VirtualProject,
     venv: &PythonEnvironment,
     lock: &Lock,
-    extras: ExtrasSpecification,
+    extras: &ExtrasSpecification,
     dev: bool,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
@@ -164,7 +164,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(project, markers, tags, &extras, &dev)?;
+    let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

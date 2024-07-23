@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::prelude::*;
+use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::indoc;
 
 use common::{uv_snapshot, TestContext};
@@ -537,6 +537,183 @@ fn run_frozen() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_empty_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    let requirements_txt =
+        ChildPath::new(context.temp_dir.canonicalize()?.join("requirements.txt"));
+    requirements_txt.touch()?;
+
+    // The project environment is synced on the first invocation.
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    warning: Requirements file requirements.txt does not contain any dependencies
+    "###);
+
+    // Then reused in subsequent invocations
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    warning: Requirements file requirements.txt does not contain any dependencies
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    // Requesting an unsatisfied requirement should install it.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Requesting a satisfied requirement should use the base environment.
+    requirements_txt.write_str("sniffio")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "###);
+
+    // Unless the user requests a different version.
+    requirements_txt.write_str("sniffio<1.3.1")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.0
+    "###);
+
+    // Or includes an unsatisfied requirement via `--with`.
+    requirements_txt.write_str("sniffio")?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg(requirements_txt.as_os_str())
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "###);
+
+    // But reject `-` as a requirements file.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg("-")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    error: Reading requirements from stdin is not supported in `uv run`
     "###);
 
     Ok(())
