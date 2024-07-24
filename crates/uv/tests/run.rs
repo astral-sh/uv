@@ -107,7 +107,7 @@ fn run_with_python_version() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtualenv at: .venv
     Resolved 5 packages in [TIME]
-    Prepared 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.6.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)

@@ -2198,7 +2198,8 @@ fn refresh_package() -> Result<()> {
 fn sync_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let poetry_editable = context.temp_dir.child("poetry_editable");
-    // Copy into the temporary directory so we can mutate it
+
+    // Copy into the temporary directory so we can mutate it.
     copy_dir_all(
         context
             .workspace_root
@@ -2216,7 +2217,7 @@ fn sync_editable() -> Result<()> {
         poetry_editable = poetry_editable.display()
     })?;
 
-    // Install the editable packages.
+    // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg(requirements_txt.path()), @r###"
     success: true
@@ -2233,7 +2234,20 @@ fn sync_editable() -> Result<()> {
     "###
     );
 
-    // Reinstall the editable packages.
+    // Re-install the editable package. This is a no-op.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg(requirements_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###
+    );
+
+    // Reinstall the editable package. This won't trigger a rebuild, but it will trigger an install.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg(requirements_txt.path())
         .arg("--reinstall-package")
@@ -2244,7 +2258,6 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
@@ -2260,7 +2273,7 @@ fn sync_editable() -> Result<()> {
    "#};
     context.assert_command(check_installed).success();
 
-    // Edit the sources and make sure the changes are respected without syncing again
+    // Edit the sources and make sure the changes are respected without syncing again.
     let python_version_1 = indoc::indoc! {r"
         version = 1
    "};
@@ -2285,6 +2298,8 @@ fn sync_editable() -> Result<()> {
    "};
     context.assert_command(check_installed).success();
 
+    // Reinstall the editable package. This won't trigger a rebuild or reinstall, since we only
+    // detect changes to metadata files (like `pyproject.toml`).
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg(requirements_txt.path()), @r###"
     success: true
@@ -2293,7 +2308,35 @@ fn sync_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+    "###
+    );
+
+    // Modify the `pyproject.toml` file.
+    let pyproject_toml = poetry_editable.path().join("pyproject.toml");
+    let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
+    fs_err::write(
+        &pyproject_toml,
+        pyproject_toml_contents.replace("0.1.0", "0.1.1"),
+    )?;
+
+    // Reinstall the editable package. This will trigger a rebuild and reinstall.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg(requirements_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
@@ -2486,7 +2529,6 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
