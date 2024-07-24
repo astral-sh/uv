@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.29
+
+### Enhancements
+
+- Add `--ci` mode to `uv cache prune` ([#5391](https://github.com/astral-sh/uv/pull/5391))
+- Display Python installation key for discovered interpreters ([#5365](https://github.com/astral-sh/uv/pull/5365))
+
+### Bug fixes
+
+- Allow symlinks to files in scripts directory ([#5380](https://github.com/astral-sh/uv/pull/5380))
+- Always accept already-installed pre-releases ([#5419](https://github.com/astral-sh/uv/pull/5419))
+- Validate successful metadata fetch for direct dependencies ([#5392](https://github.com/astral-sh/uv/pull/5392))
+
+### Documentation
+
+- Add warning to `--link-mode=symlink` documentation ([#5387](https://github.com/astral-sh/uv/pull/5387))
+
 ## 0.2.28
 
 ### Enhancements
