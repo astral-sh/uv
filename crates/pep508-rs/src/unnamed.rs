@@ -6,7 +6,7 @@ use std::str::FromStr;
 use uv_fs::normalize_url_path;
 use uv_normalize::ExtraName;
 
-use crate::marker::parse_markers_cursor;
+use crate::marker::parse;
 use crate::{
     expand_env_vars, parse_extras_cursor, split_extras, split_scheme, strip_host, Cursor,
     MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -172,7 +172,7 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        Some(parse_markers_cursor(cursor, reporter)?)
+        Some(parse::parse_markers_cursor(cursor, reporter)?)
     } else {
         None
     };
