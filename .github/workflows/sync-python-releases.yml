@@ -1,7 +1,7 @@
-# Sync Python releases from `python-build-standalone`.
+# Sync Python releases and create a pull request.
 #
 # Based on: https://github.com/astral-sh/rye/blob/57b7c089e494138aae29a130afb2e17f447970bf/.github/workflows/sync-python-releases.yml
-name: python-build-standalone
+name: "Sync Python Releases"
 on:
   workflow_dispatch:
   schedule:
@@ -29,9 +29,11 @@ jobs:
       - name: "Create Pull Request"
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "Sync latest python-build-standalone releases"
-          add-paths: "crates/uv-python/src/downloads.inc"
-          branch: "sync-python-build-standalone"
-          title: "Sync python-build-standalone downloads"
-          body: "Automated update for python-build-standalone downloads."
+          commit-message: "Sync latest Python releases"
+          add-paths: |
+            crates/uv-python/download-metadata.json
+            crates/uv-python/src/downloads.inc"
+          branch: "sync-python-releases"
+          title: "Sync latest Python releases"
+          body: "Automated update for Python releases."
           base: "main"
