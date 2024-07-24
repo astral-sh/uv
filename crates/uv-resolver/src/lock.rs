@@ -1080,8 +1080,13 @@ impl Distribution {
         &self.id.name
     }
 
+    /// Returns the [`Version`] of the distribution.
+    pub fn version(&self) -> &Version {
+        &self.id.version
+    }
+
     /// Returns a [`VersionId`] for this package that can be used for resolution.
-    pub fn version_id(&self, workspace_root: &Path) -> Result<VersionId, LockError> {
+    fn version_id(&self, workspace_root: &Path) -> Result<VersionId, LockError> {
         match &self.id.source {
             Source::Registry(_) => Ok(VersionId::NameVersion(
                 self.name().clone(),
