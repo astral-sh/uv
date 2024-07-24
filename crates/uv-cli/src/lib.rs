@@ -13,7 +13,7 @@ use pypi_types::VerbatimParsedUrl;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    TargetTriple, TrustedHost,
+    TargetTriple, TrustedHost, VersionControl,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -2309,6 +2309,13 @@ pub struct InitArgs {
     /// A library is a project that is intended to be built and distributed as a Python package.
     #[arg(long, alias = "library", conflicts_with = "app")]
     pub r#lib: bool,
+
+    /// Initialize a new repository for the given version control system.
+    ///
+    /// By default, uv will try to initialize a Git repository (`git`).
+    /// Use `none` to skip repository initialization.
+    #[arg(long, value_enum)]
+    pub vcs: Option<VersionControl>,
 
     /// Do not create a `README.md` file.
     #[arg(long)]

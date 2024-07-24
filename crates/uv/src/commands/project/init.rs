@@ -3,17 +3,20 @@ use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
 use owo_colors::OwoColorize;
+
 use pep440_rs::Version;
 use pep508_rs::PackageName;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
+use uv_configuration::{existing_vcs_repo, VersionControl};
 use uv_fs::{Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersionFile, VersionRequest,
 };
 use uv_resolver::RequiresPython;
+use uv_warnings::warn_user;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
@@ -33,6 +36,7 @@ pub(crate) async fn init(
     no_pin_python: bool,
     python: Option<String>,
     no_workspace: bool,
+    version_control: Option<VersionControl>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -92,6 +96,26 @@ pub(crate) async fn init(
         if !readme.exists() {
             fs_err::write(readme, String::new())?;
         }
+    }
+
+    // Initialize the version control system.
+    let in_existing_vcs = existing_vcs_repo(path.parent().unwrap_or(&path));
+    let vcs = match (version_control, in_existing_vcs) {
+        (None, false) => VersionControl::default(),
+        (None, true) => VersionControl::None,
+        (Some(vcs), false) => vcs,
+        (Some(vcs), true) => {
+            warn_user!(
+                "The project is already in a version control system, `--vcs {vcs}` is ignored",
+            );
+            VersionControl::None
+        }
+    };
+    if let Err(err) = vcs.init(&path) {
+        if version_control.is_some() {
+            return Err(err);
+        }
+        debug!("Failed to initialize version control: {:#}", err);
     }
 
     match explicit_path {

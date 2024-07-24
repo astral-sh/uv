@@ -14,6 +14,7 @@ pub use preview::*;
 pub use sources::*;
 pub use target_triple::*;
 pub use trusted_host::*;
+pub use vcs_options::*;
 
 mod authentication;
 mod build_options;
@@ -31,3 +32,4 @@ mod preview;
 mod sources;
 mod target_triple;
 mod trusted_host;
+mod vcs_options;

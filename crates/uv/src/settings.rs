@@ -24,7 +24,7 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExportFormat, ExtrasSpecification, HashCheckingMode,
     IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
-    SourceStrategy, TargetTriple, TrustedHost, Upgrade,
+    SourceStrategy, TargetTriple, TrustedHost, Upgrade, VersionControl,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -156,6 +156,7 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) package: bool,
     pub(crate) kind: InitProjectKind,
+    pub(crate) version_control: Option<VersionControl>,
     pub(crate) no_readme: bool,
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
@@ -174,6 +175,7 @@ impl InitSettings {
             no_package,
             app,
             lib,
+            vcs,
             no_readme,
             no_pin_python,
             no_workspace,
@@ -194,6 +196,7 @@ impl InitSettings {
             name,
             package,
             kind,
+            version_control: vcs,
             no_readme,
             no_pin_python,
             no_workspace,

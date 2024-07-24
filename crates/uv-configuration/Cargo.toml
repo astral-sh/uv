@@ -19,10 +19,15 @@ platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
+uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
+uv-warnings = { workspace = true }
 
+anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 either = { workspace = true }
+fs-err = { workspace = true }
+indoc = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
@@ -30,6 +35,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+which = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

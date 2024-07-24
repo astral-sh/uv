@@ -1076,6 +1076,7 @@ async fn run_project(
                 args.no_pin_python,
                 args.python,
                 args.no_workspace,
+                args.version_control,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
