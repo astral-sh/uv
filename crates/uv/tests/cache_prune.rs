@@ -180,6 +180,7 @@ fn prune_unzipped() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! { r"
         source-distribution==0.0.1
+        iniconfig
     " })?;
 
     // Install a requirement, to populate the cache.
@@ -189,9 +190,10 @@ fn prune_unzipped() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
      + source-distribution==0.0.1
     "###);
 
@@ -202,11 +204,14 @@ fn prune_unzipped() -> Result<()> {
 
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 151 files ([SIZE])
+    Removed 163 files ([SIZE])
     "###);
 
     // Reinstalling the source distribution should not require re-downloading the source
     // distribution.
+    requirements_txt.write_str(indoc! { r"
+        source-distribution==0.0.1
+    " })?;
     uv_snapshot!(context.filters(), context.pip_sync().env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--reinstall").arg("--offline"), @r###"
     success: true
     exit_code: 0
@@ -215,10 +220,34 @@ fn prune_unzipped() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
+     - iniconfig==2.0.0
      - source-distribution==0.0.1
      + source-distribution==0.0.1
+    "###);
+
+    requirements_txt.write_str(indoc! { r"
+        iniconfig
+    " })?;
+    uv_snapshot!(context.filters(), context.pip_sync().env_remove("UV_EXCLUDE_NEWER").arg("requirements.txt").arg("--reinstall").arg("--offline"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of iniconfig are available:
+              iniconfig<=0.1
+              iniconfig>=1.0.0
+          and iniconfig==0.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<1.0.0 cannot be used.
+          And because iniconfig==1.0.0 network connectivity is disabled, but the metadata wasn't found in the cache and iniconfig==1.0.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<1.1.0 cannot be used.
+          And because iniconfig==1.1.0 network connectivity is disabled, but the metadata wasn't found in the cache and iniconfig==1.1.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<2.0.0 cannot be used.
+          And because iniconfig==2.0.0 network connectivity is disabled, but the metadata wasn't found in the cache and you require iniconfig, we can conclude that the requirements are unsatisfiable.
+
+          hint: Pre-releases are available for iniconfig in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
+
+          hint: Packages were unavailable because the network was disabled
     "###);
 
     Ok(())
