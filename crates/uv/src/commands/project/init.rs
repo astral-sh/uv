@@ -259,9 +259,6 @@ async fn init_project(
         description = "Add your description here"{readme}
         requires-python = "{requires_python}"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         requires_python = requires_python.specifiers(),

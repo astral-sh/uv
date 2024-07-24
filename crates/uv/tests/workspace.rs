@@ -690,3 +690,167 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that workspace discovery errors if a member is missing a `pyproject.toml`.
+#[test]
+fn workspace_empty_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and an empty c.
+    fs_err::create_dir_all(workspace.join("packages").join("c"))?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace member `[TEMP_DIR]/workspace/packages/c` is missing a `pyproject.toml` (matches: `packages/*`)
+    "###
+    );
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery ignores hidden directories.
+#[test]
+fn workspace_hidden_files() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a hidden c.
+    fs_err::create_dir_all(workspace.join("packages").join(".c"))?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "a": {
+        "editable": "packages/a"
+      },
+      "b": {
+        "editable": "packages/b"
+      }
+    }
+    "###);
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery accepts valid hidden directories.
+#[test]
+fn workspace_hidden_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r#"
+        dependencies = ["c"]
+
+        [tool.uv.sources]
+        c = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a hidden (but valid) .c.
+    let deps = indoc! {r"
+        dependencies = []
+    "};
+    make_project(&workspace.join("packages").join(".c"), "c", deps)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r###"
+    {
+      "a": {
+        "editable": "packages/a"
+      },
+      "b": {
+        "editable": "packages/b"
+      },
+      "c": {
+        "editable": "packages/.c"
+      }
+    }
+    "###);
+
+    Ok(())
+}

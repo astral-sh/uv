@@ -39,9 +39,6 @@ fn init() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -100,9 +97,6 @@ fn init_no_readme() -> Result<()> {
         description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -143,9 +137,6 @@ fn init_current_dir() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -209,9 +200,6 @@ fn init_dot_args() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -288,9 +276,6 @@ fn init_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -383,9 +368,6 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -479,9 +461,6 @@ fn init_workspace_outside() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -560,9 +539,6 @@ fn init_invalid_names() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -695,9 +671,6 @@ fn init_project_inside_project() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -996,9 +969,6 @@ fn init_requires_python_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.10"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -1049,9 +1019,6 @@ fn init_requires_python_version() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.8"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -1103,9 +1070,6 @@ fn init_requires_python_specifiers() -> Result<()> {
         readme = "README.md"
         requires-python = "==3.8.*"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -1149,4 +1113,19 @@ fn init_unmanaged() -> Result<()> {
     });
 
     Ok(())
+}
+
+#[test]
+fn init_hidden() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg(".foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    "###);
 }

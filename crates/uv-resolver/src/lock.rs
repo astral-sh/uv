@@ -1080,8 +1080,13 @@ impl Distribution {
         &self.id.name
     }
 
+    /// Returns the [`Version`] of the distribution.
+    pub fn version(&self) -> &Version {
+        &self.id.version
+    }
+
     /// Returns a [`VersionId`] for this package that can be used for resolution.
-    pub fn version_id(&self, workspace_root: &Path) -> Result<VersionId, LockError> {
+    fn version_id(&self, workspace_root: &Path) -> Result<VersionId, LockError> {
         match &self.id.source {
             Source::Registry(_) => Ok(VersionId::NameVersion(
                 self.name().clone(),
@@ -1137,13 +1142,13 @@ struct DistributionWire {
     id: DistributionId,
     #[serde(default)]
     sdist: Option<SourceDist>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     wheels: Vec<Wheel>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     dependencies: Vec<DependencyWire>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     dev_dependencies: BTreeMap<GroupName, Vec<DependencyWire>>,
 }
 

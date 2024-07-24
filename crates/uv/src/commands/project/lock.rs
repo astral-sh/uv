@@ -1,14 +1,14 @@
 #![allow(clippy::single_match_else)]
 
 use std::collections::BTreeSet;
-use std::{fmt::Write, path::Path};
+use std::fmt::Write;
 
 use anstream::eprint;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
+use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -31,6 +31,15 @@ use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectEr
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
+
+/// The result of running a lock operation.
+#[derive(Debug, Clone)]
+pub(crate) struct LockResult {
+    /// The previous lock, if any.
+    pub(crate) previous: Option<Lock>,
+    /// The updated lock.
+    pub(crate) lock: Lock,
+}
 
 /// Resolve the project requirements into a lockfile.
 pub(crate) async fn lock(
@@ -86,7 +95,12 @@ pub(crate) async fn lock(
     )
     .await
     {
-        Ok(_) => Ok(ExitStatus::Success),
+        Ok(lock) => {
+            if let Some(previous) = lock.previous.as_ref() {
+                report_upgrades(previous, &lock.lock, printer)?;
+            }
+            Ok(ExitStatus::Success)
+        }
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -112,12 +126,16 @@ pub(super) async fn do_safe_lock(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Lock, ProjectError> {
+) -> Result<LockResult, ProjectError> {
     if frozen {
         // Read the existing lockfile, but don't attempt to lock the project.
-        read(workspace)
+        let existing = read(workspace)
             .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)
+            .ok_or_else(|| ProjectError::MissingLockfile)?;
+        Ok(LockResult {
+            previous: None,
+            lock: existing,
+        })
     } else if locked {
         // Read the existing lockfile.
         let existing = read(workspace)
@@ -145,7 +163,10 @@ pub(super) async fn do_safe_lock(
             return Err(ProjectError::LockMismatch);
         }
 
-        Ok(lock)
+        Ok(LockResult {
+            previous: Some(existing),
+            lock,
+        })
     } else {
         // Read the existing lockfile.
         let existing = read(workspace).await?;
@@ -166,16 +187,19 @@ pub(super) async fn do_safe_lock(
         )
         .await?;
 
-        if !existing.is_some_and(|existing| existing == lock) {
+        if !existing.as_ref().is_some_and(|existing| *existing == lock) {
             commit(&lock, workspace).await?;
         }
 
-        Ok(lock)
+        Ok(LockResult {
+            previous: existing,
+            lock,
+        })
     }
 }
 
 /// Lock the project requirements into a lockfile.
-pub(super) async fn do_lock(
+async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     existing_lock: Option<&Lock>,
@@ -506,16 +530,7 @@ pub(super) async fn do_lock(
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    let new_lock = Lock::from_resolution_graph(&resolution)?;
-
-    // Notify the user of any dependency updates
-    if !upgrade.is_none() {
-        if let Some(existing_lock) = existing_lock {
-            report_upgrades(existing_lock, &new_lock, workspace.install_path(), printer)?;
-        }
-    }
-
-    Ok(new_lock)
+    Ok(Lock::from_resolution_graph(&resolution)?)
 }
 
 /// Write the lockfile to disk.
@@ -543,56 +558,83 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
 }
 
 /// Reports on the versions that were upgraded in the new lockfile.
-fn report_upgrades(
-    existing_lock: &Lock,
-    new_lock: &Lock,
-    workspace_root: &Path,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let existing_distributions: FxHashMap<PackageName, BTreeSet<Version>> =
+fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> anyhow::Result<()> {
+    let existing_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
         existing_lock.distributions().iter().fold(
             FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
             |mut acc, distribution| {
-                if let Ok(VersionId::NameVersion(name, version)) =
-                    distribution.version_id(workspace_root)
-                {
-                    acc.entry(name).or_default().insert(version);
-                }
+                acc.entry(distribution.name())
+                    .or_default()
+                    .insert(distribution.version());
                 acc
             },
         );
 
-    let new_distribution_names: FxHashMap<PackageName, BTreeSet<Version>> =
+    let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
         new_lock.distributions().iter().fold(
             FxHashMap::with_capacity_and_hasher(new_lock.distributions().len(), FxBuildHasher),
             |mut acc, distribution| {
-                if let Ok(VersionId::NameVersion(name, version)) =
-                    distribution.version_id(workspace_root)
-                {
-                    acc.entry(name).or_default().insert(version);
-                }
+                acc.entry(distribution.name())
+                    .or_default()
+                    .insert(distribution.version());
                 acc
             },
         );
 
-    for (name, new_versions) in new_distribution_names {
-        if let Some(existing_versions) = existing_distributions.get(&name) {
-            if new_versions != *existing_versions {
+    for name in existing_distributions
+        .keys()
+        .chain(new_distributions.keys())
+        .collect::<BTreeSet<_>>()
+    {
+        match (
+            existing_distributions.get(name),
+            new_distributions.get(name),
+        ) {
+            (Some(existing_versions), Some(new_versions)) => {
+                if existing_versions != new_versions {
+                    let existing_versions = existing_versions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let new_versions = new_versions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    writeln!(
+                        printer.stderr(),
+                        "{} {name} {existing_versions} -> {new_versions}",
+                        "Updated".green().bold()
+                    )?;
+                }
+            }
+            (Some(existing_versions), None) => {
                 let existing_versions = existing_versions
                     .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let new_versions = new_versions
-                    .iter()
-                    .map(ToString::to_string)
+                    .map(|version| format!("v{version}"))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
                     printer.stderr(),
-                    "{} {name} v{existing_versions} -> v{new_versions}",
-                    "Updating".green().bold()
+                    "{} {name} {existing_versions}",
+                    "Removed".red().bold()
                 )?;
+            }
+            (None, Some(new_versions)) => {
+                let new_versions = new_versions
+                    .iter()
+                    .map(|version| format!("v{version}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {name} {new_versions}",
+                    "Added".green().bold()
+                )?;
+            }
+            (None, None) => {
+                unreachable!("The key `{name}` should exist in at least one of the maps");
             }
         }
     }
