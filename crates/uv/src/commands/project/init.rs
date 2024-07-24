@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
@@ -16,7 +16,7 @@ use uv_python::{
 use uv_resolver::RequiresPython;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
+use uv_workspace::{check_nested_workspaces, DiscoveryOptions, Workspace, WorkspaceError};
 
 use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
@@ -24,10 +24,11 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::single_match_else)]
+#[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
     explicit_path: Option<String>,
     name: Option<PackageName>,
+    r#virtual: bool,
     no_readme: bool,
     python: Option<String>,
     isolated: bool,
@@ -46,7 +47,7 @@ pub(crate) async fn init(
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
         None => std::env::current_dir()?.canonicalize()?,
-        Some(ref path) => PathBuf::from(path),
+        Some(ref path) => absolutize_path(Path::new(path))?.to_path_buf(),
     };
 
     // Make sure a project does not already exist in the given directory.
@@ -61,9 +62,6 @@ pub(crate) async fn init(
         );
     }
 
-    // Canonicalize the path to the project.
-    let path = absolutize_path(&path)?;
-
     // Default to the directory name if a name was not provided.
     let name = match name {
         Some(name) => name,
@@ -77,6 +75,96 @@ pub(crate) async fn init(
         }
     };
 
+    if r#virtual {
+        init_virtual_workspace(&path, isolated)?;
+    } else {
+        init_project(
+            &path,
+            &name,
+            no_readme,
+            python,
+            isolated,
+            python_preference,
+            python_fetch,
+            connectivity,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?;
+    }
+
+    // Create the `README.md` if it does not already exist.
+    if !no_readme {
+        let readme = path.join("README.md");
+        if !readme.exists() {
+            fs_err::write(readme, String::new())?;
+        }
+    }
+
+    let project = if r#virtual { "workspace" } else { "project" };
+    match explicit_path {
+        // Initialized a project in the current directory.
+        None => {
+            writeln!(
+                printer.stderr(),
+                "Initialized {} `{}`",
+                project,
+                name.cyan()
+            )?;
+        }
+        // Initialized a project in the given directory.
+        Some(path) => {
+            let path = path
+                .simple_canonicalize()
+                .unwrap_or_else(|_| path.simplified().to_path_buf());
+
+            writeln!(
+                printer.stderr(),
+                "Initialized {} `{}` at `{}`",
+                project,
+                name.cyan(),
+                path.display().cyan()
+            )?;
+        }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+/// Initialize a virtual workspace at the given path.
+fn init_virtual_workspace(path: &Path, isolated: bool) -> Result<()> {
+    // Ensure that we aren't creating a nested workspace.
+    if !isolated {
+        check_nested_workspaces(path, &DiscoveryOptions::default());
+    }
+
+    // Create the `pyproject.toml`.
+    let pyproject = indoc::indoc! {r"
+        [tool.uv.workspace]
+        members = []
+    "};
+
+    fs_err::create_dir_all(path)?;
+    fs_err::write(path.join("pyproject.toml"), pyproject)?;
+
+    Ok(())
+}
+
+/// Initialize a project (and, implicitly, a workspace root) at the given path.
+async fn init_project(
+    path: &Path,
+    name: &PackageName,
+    no_readme: bool,
+    python: Option<String>,
+    isolated: bool,
+    python_preference: PythonPreference,
+    python_fetch: PythonFetch,
+    connectivity: Connectivity,
+    native_tls: bool,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<()> {
     // Discover the current workspace, if it exists.
     let workspace = if isolated {
         None
@@ -86,7 +174,7 @@ pub(crate) async fn init(
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
-                ignore: std::iter::once(path.as_ref()).collect(),
+                ignore: std::iter::once(path).collect(),
                 ..DiscoveryOptions::default()
             },
         )
@@ -173,14 +261,12 @@ pub(crate) async fn init(
         description = "Add your description here"{readme}
         requires-python = "{requires_python}"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         requires_python = requires_python.specifiers(),
     };
-    fs_err::create_dir_all(&path)?;
+
+    fs_err::create_dir_all(path)?;
     fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
     // Create `src/{name}/__init__.py` if it does not already exist.
@@ -197,16 +283,8 @@ pub(crate) async fn init(
         )?;
     }
 
-    // Create the `README.md` if it does not already exist.
-    if !no_readme {
-        let readme = path.join("README.md");
-        if !readme.exists() {
-            fs_err::write(readme, String::new())?;
-        }
-    }
-
     if let Some(workspace) = workspace {
-        if workspace.excludes(&path)? {
+        if workspace.excludes(path)? {
             // If the member is excluded by the workspace, ignore it.
             writeln!(
                 printer.stderr(),
@@ -214,7 +292,7 @@ pub(crate) async fn init(
                 name.cyan(),
                 workspace.install_path().simplified_display().cyan()
             )?;
-        } else if workspace.includes(&path)? {
+        } else if workspace.includes(path)? {
             // If the member is already included in the workspace, skip the `members` addition.
             writeln!(
                 printer.stderr(),
@@ -242,26 +320,5 @@ pub(crate) async fn init(
         }
     }
 
-    match explicit_path {
-        // Initialized a project in the current directory.
-        None => {
-            writeln!(printer.stderr(), "Initialized project `{}`", name.cyan())?;
-        }
-
-        // Initialized a project in the given directory.
-        Some(path) => {
-            let path = path
-                .simple_canonicalize()
-                .unwrap_or_else(|_| path.simplified().to_path_buf());
-
-            writeln!(
-                printer.stderr(),
-                "Initialized project `{}` at `{}`",
-                name.cyan(),
-                path.display().cyan()
-            )?;
-        }
-    }
-
-    Ok(ExitStatus::Success)
+    Ok(())
 }

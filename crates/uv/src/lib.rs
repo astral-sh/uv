@@ -538,8 +538,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::cache_clean(&args.package, &cache, printer)
         }
         Commands::Cache(CacheNamespace {
-            command: CacheCommand::Prune,
-        }) => commands::cache_prune(&cache, printer),
+            command: CacheCommand::Prune(args),
+        }) => {
+            show_settings!(args);
+            commands::cache_prune(args.ci, &cache, printer)
+        }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
         }) => {
@@ -857,6 +860,7 @@ async fn run_project(
             commands::init(
                 args.path,
                 args.name,
+                args.r#virtual,
                 args.no_readme,
                 args.python,
                 globals.isolated,

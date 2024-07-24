@@ -161,21 +161,9 @@ impl WheelFilename {
             name,
             version,
             build_tag,
-            python_tag: python_tag
-                .split('.')
-                .map(String::from)
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            abi_tag: abi_tag
-                .split('.')
-                .map(String::from)
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            platform_tag: platform_tag
-                .split('.')
-                .map(String::from)
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
+            python_tag: python_tag.split('.').map(String::from).collect(),
+            abi_tag: abi_tag.split('.').map(String::from).collect(),
+            platform_tag: platform_tag.split('.').map(String::from).collect(),
         })
     }
 }

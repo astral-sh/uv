@@ -13,12 +13,12 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct GroupName(String);
+pub struct GroupName(Box<str>);
 
 impl GroupName {
     /// Create a validated, normalized extra name.
     pub fn new(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_owned(name).map(Self)
+        validate_and_normalize_owned(name).map(|name| Self(name.into_boxed_str()))
     }
 }
 
@@ -26,7 +26,7 @@ impl FromStr for GroupName {
     type Err = InvalidNameError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        validate_and_normalize_ref(name).map(Self)
+        validate_and_normalize_ref(name).map(|name| Self(name.into_boxed_str()))
     }
 }
 

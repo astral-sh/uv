@@ -95,7 +95,7 @@ pub(crate) async fn sync(
     do_sync(
         &project,
         &venv,
-        &lock,
+        &lock.lock,
         &extras,
         dev,
         modifications,
