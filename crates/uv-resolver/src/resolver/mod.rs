@@ -1165,26 +1165,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dev,
                 marker,
             } => {
-                // If we're excluding transitive dependencies, short-circuit.
-                if self.dependency_mode.is_direct() {
-                    // If an extra is provided, wait for the metadata to be available, since it's
-                    // still required for generating the lock file.
-                    let dist = match url {
-                        Some(url) => PubGrubDistribution::from_url(name, url),
-                        None => PubGrubDistribution::from_registry(name, version),
-                    };
-
-                    // Wait for the metadata to be available.
-                    self.index
-                        .distributions()
-                        .wait_blocking(&dist.version_id())
-                        .ok_or_else(|| {
-                            ResolveError::UnregisteredTask(dist.version_id().to_string())
-                        })?;
-
-                    return Ok(Dependencies::Available(Vec::default()));
-                }
-
                 // Determine the distribution to lookup.
                 let dist = match url {
                     Some(url) => PubGrubDistribution::from_url(name, url),
@@ -1193,7 +1173,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let version_id = dist.version_id();
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
-                if self.unavailable_packages.get(name).is_some()
+                if self.dependency_mode.is_transitive()
+                    && self.unavailable_packages.get(name).is_some()
                     && self.installed_packages.get_packages(name).is_empty()
                 {
                     debug_assert!(
@@ -1270,6 +1251,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ));
                     }
                 };
+
+                // If we're excluding transitive dependencies, short-circuit. (It's important that
+                // we fetched the metadata, though, since we need it to validate extras.)
+                if self.dependency_mode.is_direct() {
+                    return Ok(Dependencies::Available(Vec::default()));
+                }
 
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
