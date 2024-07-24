@@ -877,7 +877,7 @@ pub fn run_and_format<T: AsRef<str>>(
     // cause the set of dependencies to be the same across platforms.
     if cfg!(windows) {
         if let Some(windows_filters) = windows_filters {
-            // The optional leading +/- is for install logs, the optional next line is for lock files
+            // The optional leading +/- is for install logs, the optional next line is for lockfiles
             let windows_only_deps = [
                 ("( [+-] )?colorama==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
                 ("( [+-] )?colorama==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),

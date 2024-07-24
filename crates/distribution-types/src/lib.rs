@@ -223,9 +223,9 @@ pub struct RegistrySourceDist {
     /// available wheels too. There are many reasons why a wheel might not
     /// have been chosen (maybe none available are compatible with the
     /// current environment), but we still want to track that they exist. In
-    /// particular, for generating a universal lock file, we do not want to
-    /// skip emitting wheels to the lock file just because the host generating
-    /// the lock file didn't have any compatible wheels available.
+    /// particular, for generating a universal lockfile, we do not want to
+    /// skip emitting wheels to the lockfile just because the host generating
+    /// the lockfile didn't have any compatible wheels available.
     pub wheels: Vec<RegistryBuiltWheel>,
 }
 

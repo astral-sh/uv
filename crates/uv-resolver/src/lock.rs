@@ -46,7 +46,7 @@ use crate::{
     ResolutionMode, VersionMap, VersionsResponse,
 };
 
-/// The current version of the lock file format.
+/// The current version of the lockfile format.
 const VERSION: u32 = 1;
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -72,7 +72,7 @@ pub struct Lock {
     /// It is guaranteed that every distribution in this lock has an entry in
     /// this map, and that every dependency for every distribution has an ID
     /// that exists in this map. That is, there are no dependencies that don't
-    /// have a corresponding locked distribution entry in the same lock file.
+    /// have a corresponding locked distribution entry in the same lockfile.
     by_id: FxHashMap<DistributionId, usize>,
 }
 
@@ -441,7 +441,7 @@ impl Lock {
         Ok(Resolution::new(map, hashes, diagnostics))
     }
 
-    /// Returns the TOML representation of this lock file.
+    /// Returns the TOML representation of this lockfile.
     pub fn to_toml(&self) -> anyhow::Result<String> {
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
@@ -1302,7 +1302,7 @@ impl From<DistributionId> for DistributionIdForDependency {
 ///
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
 /// variants should be added without changing the relative ordering of other
-/// variants. Otherwise, this could cause the lock file to have a different
+/// variants. Otherwise, this could cause the lockfile to have a different
 /// canonical ordering of distributions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(try_from = "SourceWire")]
@@ -1318,7 +1318,7 @@ enum Source {
 /// A [`PathBuf`], but we show `.` instead of an empty path.
 ///
 /// We also normalize backslashes to forward slashes on Windows, to ensure
-/// that the lock file contains portable paths.
+/// that the lockfile contains portable paths.
 fn serialize_path_with_dot(path: &Path) -> Cow<str> {
     let path = path.to_slash_lossy();
     if path.is_empty() {
@@ -1593,7 +1593,7 @@ struct DirectSource {
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
 /// variants should be added without changing the relative ordering of other
-/// variants. Otherwise, this could cause the lock file to have a different
+/// variants. Otherwise, this could cause the lockfile to have a different
 /// canonical ordering of distributions.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
@@ -1788,7 +1788,7 @@ impl SourceDist {
             distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 SourceDist::from_direct_dist(id, direct_dist, hashes).map(Some)
             }
-            // An actual sdist entry in the lock file is only required when
+            // An actual sdist entry in the lockfile is only required when
             // it's from a registry or a direct URL. Otherwise, it's strictly
             // redundant with the information in all other kinds of `source`.
             distribution_types::SourceDist::Git(_)
@@ -2092,7 +2092,7 @@ impl TryFrom<WheelWire> for Wheel {
     }
 }
 
-/// A single dependency of a distribution in a lock file.
+/// A single dependency of a distribution in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 struct Dependency {
     distribution_id: DistributionId,
@@ -2232,7 +2232,7 @@ impl std::fmt::Display for Dependency {
     }
 }
 
-/// A single dependency of a distribution in a lock file.
+/// A single dependency of a distribution in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct DependencyWire {
     #[serde(flatten)]
@@ -2265,7 +2265,7 @@ impl From<Dependency> for DependencyWire {
     }
 }
 
-/// A single hash for a distribution artifact in a lock file.
+/// A single hash for a distribution artifact in a lockfile.
 ///
 /// A hash is encoded as a single TOML string in the format
 /// `{algorithm}:{digest}`.
@@ -2394,7 +2394,7 @@ enum LockErrorKind {
     ),
     /// An error that occurs when there's an unrecognized dependency.
     ///
-    /// That is, a dependency for a distribution that isn't in the lock file.
+    /// That is, a dependency for a distribution that isn't in the lockfile.
     #[error(
         "for distribution `{id}`, found dependency `{dependency}` with no locked distribution"
     )]
