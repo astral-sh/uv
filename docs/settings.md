@@ -672,7 +672,7 @@ those that are downloaded and installed by uv.
 
 #### [`reinstall`](#reinstall) {: #reinstall }
 
-Reinstall all packages, regardless of whether they're already installed.
+Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
 
 **Default value**: `false`
 
@@ -697,7 +697,8 @@ Reinstall all packages, regardless of whether they're already installed.
 
 #### [`reinstall-package`](#reinstall-package) {: #reinstall-package }
 
-Reinstall a specific package, regardless of whether it's already installed.
+Reinstall a specific package, regardless of whether it's already installed. Implies
+`refresh-package`.
 
 **Default value**: `[]`
 
@@ -2062,7 +2063,7 @@ mapped to `3.8.0`.
 #### [`reinstall`](#pip_reinstall) {: #pip_reinstall }
 <span id="reinstall"></span>
 
-Reinstall all packages, regardless of whether they're already installed.
+Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
 
 **Default value**: `false`
 
@@ -2088,7 +2089,8 @@ Reinstall all packages, regardless of whether they're already installed.
 #### [`reinstall-package`](#pip_reinstall-package) {: #pip_reinstall-package }
 <span id="reinstall-package"></span>
 
-Reinstall a specific package, regardless of whether it's already installed.
+Reinstall a specific package, regardless of whether it's already installed. Implies
+`refresh-package`.
 
 **Default value**: `[]`
 

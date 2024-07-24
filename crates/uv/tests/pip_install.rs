@@ -585,6 +585,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - flask==3.0.2
@@ -1816,6 +1817,7 @@ fn reinstall_no_binary() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - anyio==4.3.0
@@ -4489,6 +4491,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4587,6 +4590,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4716,6 +4720,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -4972,6 +4977,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
