@@ -4,6 +4,8 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
+use std::process::Command;
 
 use common::{uv_snapshot, TestContext};
 
@@ -1128,4 +1130,151 @@ fn init_hidden() {
     warning: `uv init` is experimental and may change without warning
     error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "###);
+}
+
+#[test]
+fn init_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.init().arg(child.as_ref()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let gitignore = fs_err::read_to_string(child.join(".gitignore"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            gitignore, @r###"
+        # Python generated files
+        __pycache__/
+        *.py[oc]
+        build/
+        dist/
+        wheels/
+        *.egg-info
+
+        # venv
+        .venv
+        "###
+        );
+    });
+
+    child.child(".git").assert(predicate::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
+fn init_vcs_none() {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.init().arg(child.as_ref()).arg("--vcs").arg("none"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    child.child(".gitignore").assert(predicate::path::missing());
+    child.child(".git").assert(predicate::path::missing());
+}
+
+/// Run `uv init` from within a Git repository. Do not try to reinitialize one.
+#[test]
+fn init_inside_git_repo() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    Command::new("git")
+        .arg("init")
+        .current_dir(&context.temp_dir)
+        .status()?;
+
+    let child = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.init().arg(child.as_ref()).arg("--vcs").arg("git"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    warning: The project is already in a version control system, `--vcs git` is ignored
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    child.child(".gitignore").assert(predicate::path::missing());
+
+    let child = context.temp_dir.child("bar");
+    uv_snapshot!(context.filters(), context.init().arg(child.as_ref()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized project `bar` at `[TEMP_DIR]/bar`
+    "###);
+
+    child.child(".gitignore").assert(predicate::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn init_git_not_installed() {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+
+    // Without explicit `--vcs git`, `uv init` succeeds without initializing a Git repository.
+    uv_snapshot!(context.filters(), context.init().env("PATH", &*child).arg(child.as_ref()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    // With explicit `--vcs git`, `uv init` will fail.
+    let child = context.temp_dir.child("bar");
+    if cfg!(windows) {
+        // Set `PATH` to child to make `git` command fail.
+        uv_snapshot!(context.filters(), context.init().env("PATH", &*child).arg(child.as_ref()).arg("--vcs").arg("git"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv init` is experimental and may change without warning
+        error: failed to run `git init`
+          Caused by: program not found
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), context.init().env("PATH", &*child).arg(child.as_ref()).arg("--vcs").arg("git"), @r###"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv init` is experimental and may change without warning
+        error: failed to run `git init`
+          Caused by: No such file or directory (os error 2)
+        "###);
+    }
 }

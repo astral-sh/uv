@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::str::FromStr;
 
-///
+/// The version control system to use.
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -22,7 +22,7 @@ impl FromStr for VersionControl {
         match s {
             "git" => Ok(VersionControl::Git),
             "none" => Ok(VersionControl::None),
-            other => Err(format!("unknown vcs specification: `{}`", other)),
+            other => Err(format!("unknown vcs specification: `{other}`")),
         }
     }
 }

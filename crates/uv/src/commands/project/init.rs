@@ -1,11 +1,13 @@
-use anyhow::{Context, Result};
-use owo_colors::OwoColorize;
-use pep440_rs::Version;
-use pep508_rs::PackageName;
 use std::fmt::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
+
+use anyhow::{Context, Result};
+use owo_colors::OwoColorize;
 use tracing::debug;
+
+use pep440_rs::Version;
+use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{PreviewMode, VersionControl};
@@ -108,8 +110,8 @@ pub(crate) async fn init(
     let in_existing_vcs = existing_vcs_repo(path.parent().unwrap_or(&path));
     let vcs = match (version_control, in_existing_vcs) {
         (None, false) => VersionControl::default(),
-        (Some(vcs), false) => vcs,
         (None, true) => VersionControl::None,
+        (Some(vcs), false) => vcs,
         (Some(vcs), true) => {
             warn_user!(
                 "The project is already in a version control system, `--vcs {vcs}` is ignored",
@@ -349,15 +351,21 @@ async fn init_project(
 fn init_vcs(path: &Path, vcs: VersionControl) -> Result<()> {
     match vcs {
         VersionControl::Git => {
-            if !path.join(".git").exists() {
+            if path.join(".git").try_exists()? {
+                warn_user!(
+                    "Git repository already exists at `{}`",
+                    path.simplified_display()
+                );
+            } else {
                 init_git_repo(path)?;
+            }
 
-                // Create the `.gitignore` if it does not already exist.
-                let gitignore = path.join(".gitignore");
-                if !gitignore.exists() {
-                    fs_err::write(
-                        gitignore,
-                        indoc::indoc! {r"
+            // Create the `.gitignore` if it does not already exist.
+            let gitignore = path.join(".gitignore");
+            if !gitignore.try_exists()? {
+                fs_err::write(
+                    gitignore,
+                    indoc::indoc! {r"
                         # Python generated files
                         __pycache__/
                         *.py[oc]
@@ -369,8 +377,7 @@ fn init_vcs(path: &Path, vcs: VersionControl) -> Result<()> {
                         # venv
                         .venv
                     "},
-                    )?;
-                }
+                )?;
             }
         }
         VersionControl::None => {}
@@ -379,9 +386,10 @@ fn init_vcs(path: &Path, vcs: VersionControl) -> Result<()> {
     Ok(())
 }
 
-// Check if we are in an existing repo.
+/// Check if the path is inside a VCS repository.
+///
+/// Currently only supports Git.
 fn existing_vcs_repo(dir: &Path) -> bool {
-    // Check git repo only for now.
     is_inside_git_work_tree(dir)
 }
 
@@ -402,16 +410,14 @@ fn is_inside_git_work_tree(dir: &Path) -> bool {
 fn init_git_repo(dir: &Path) -> Result<()> {
     if !Command::new("git")
         .arg("init")
-        .current_dir(&dir)
+        .current_dir(dir)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status()?
+        .status()
+        .context("failed to run `git init`")?
         .success()
     {
-        anyhow::bail!(
-            "Run `git init` failed at `{}`",
-            dir.simplified_display()
-        );
+        anyhow::bail!("`git init` failed at `{}`", dir.simplified_display());
     }
 
     Ok(())
