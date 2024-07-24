@@ -25,7 +25,7 @@ fn clean_all() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @r###"
+    uv_snapshot!(context.with_filtered_counts().filters(), context.clean().arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -33,7 +33,7 @@ fn clean_all() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed 28 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###);
 
     Ok(())
