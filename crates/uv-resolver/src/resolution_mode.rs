@@ -1,7 +1,5 @@
-use rustc_hash::FxHashSet;
-
 use pep508_rs::MarkerEnvironment;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedSet, PackageName};
 
 use crate::{DependencyMode, Manifest};
 
@@ -40,7 +38,7 @@ pub(crate) enum ResolutionStrategy {
     Lowest,
     /// Resolve the lowest compatible version of any direct dependencies, and the highest
     /// compatible version of any transitive dependencies.
-    LowestDirect(FxHashSet<PackageName>),
+    LowestDirect(InternedSet<PackageName>),
 }
 
 impl ResolutionStrategy {

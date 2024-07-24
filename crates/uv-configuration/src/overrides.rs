@@ -1,21 +1,20 @@
 use std::borrow::Cow;
 
 use either::Either;
-use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use pep508_rs::MarkerTree;
 use pypi_types::Requirement;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]
-pub struct Overrides(FxHashMap<PackageName, Vec<Requirement>>);
+pub struct Overrides(InternedMap<PackageName, Vec<Requirement>>);
 
 impl Overrides {
     /// Create a new set of overrides from a set of requirements.
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
-        let mut overrides: FxHashMap<PackageName, Vec<Requirement>> =
-            FxHashMap::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
+        let mut overrides: InternedMap<PackageName, Vec<Requirement>> =
+            InternedMap::with_capacity_and_hasher(requirements.len(), Default::default());
         for requirement in requirements {
             overrides
                 .entry(requirement.name.clone())

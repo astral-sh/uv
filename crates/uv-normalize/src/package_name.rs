@@ -1,8 +1,12 @@
 use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasherDefault, Hasher};
 use std::str::FromStr;
 
+use byteorder::{ByteOrder, NativeEndian};
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::string::InternedString;
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
 
 /// The normalized name of a package.
@@ -24,15 +28,16 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
-pub struct PackageName(String);
+pub struct PackageName(InternedString);
 
 impl PackageName {
     /// Create a validated, normalized package name.
     pub fn new(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_owned(name).map(Self)
+        validate_and_normalize_owned(name)
+            .map(InternedString::from)
+            .map(Self)
     }
 
     /// Escape this name with underscores (`_`) instead of dashes (`-`)
@@ -77,7 +82,9 @@ impl FromStr for PackageName {
     type Err = InvalidNameError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        validate_and_normalize_ref(name).map(Self)
+        validate_and_normalize_ref(name)
+            .map(InternedString::from)
+            .map(Self)
     }
 }
 
@@ -100,5 +107,39 @@ impl std::fmt::Display for PackageName {
 impl AsRef<str> for PackageName {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PackageName {
+    fn schema_name() -> String {
+        <String as schemars::JsonSchema>::schema_name()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        <String as schemars::JsonSchema>::json_schema(gen)
+    }
+}
+
+pub type InternedMap<K, V> = HashMap<K, V, BuildHasherDefault<IdentityHasher>>;
+
+pub type InternedSet<K> = HashSet<K, BuildHasherDefault<IdentityHasher>>;
+
+#[derive(Default)]
+pub struct IdentityHasher {
+    hash: u64,
+}
+
+impl Hasher for IdentityHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        if bytes.len() == 8 {
+            self.hash = NativeEndian::read_u64(bytes);
+        }
+    }
+
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.hash
     }
 }

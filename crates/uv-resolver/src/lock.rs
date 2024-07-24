@@ -36,7 +36,7 @@ use pypi_types::{
 use uv_configuration::{ExtrasSpecification, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, InternedMap, PackageName};
 use uv_workspace::VirtualProject;
 
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
@@ -469,7 +469,7 @@ impl Lock {
         // there's only one distribution for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
         // version) on dependency edges since it is strictly redundant.
-        let mut dist_count_by_name: FxHashMap<PackageName, u64> = FxHashMap::default();
+        let mut dist_count_by_name: InternedMap<PackageName, u64> = InternedMap::default();
         for dist in &self.distributions {
             *dist_count_by_name.entry(dist.id.name.clone()).or_default() += 1;
         }
@@ -607,7 +607,8 @@ impl TryFrom<LockWire> for Lock {
         // there's only one distribution for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
         // version) on dependency edges since it is strictly redundant.
-        let mut unambiguous_dist_ids: FxHashMap<PackageName, DistributionId> = FxHashMap::default();
+        let mut unambiguous_dist_ids: InternedMap<PackageName, DistributionId> =
+            InternedMap::default();
         let mut ambiguous = FxHashSet::default();
         for dist in &wire.distributions {
             if ambiguous.contains(&dist.id.name) {
@@ -929,7 +930,7 @@ impl Distribution {
         let version = self.id.version.clone();
         let provides_extras = self.optional_dependencies.keys().cloned().collect();
 
-        let mut dependency_extras = FxHashMap::default();
+        let mut dependency_extras = InternedMap::default();
         let mut requires_dist = self
             .dependencies
             .iter()
@@ -969,7 +970,7 @@ impl Distribution {
             .dev_dependencies
             .iter()
             .map(|(group, deps)| {
-                let mut dependency_extras = FxHashMap::default();
+                let mut dependency_extras = InternedMap::default();
                 let mut deps = deps
                     .iter()
                     .filter_map(|dep| {
@@ -999,7 +1000,7 @@ impl Distribution {
         })
     }
 
-    fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> anyhow::Result<Table> {
+    fn to_toml(&self, dist_count_by_name: &InternedMap<PackageName, u64>) -> anyhow::Result<Table> {
         let mut table = Table::new();
 
         self.id.to_toml(None, &mut table);
@@ -1150,7 +1151,7 @@ struct DistributionWire {
 impl DistributionWire {
     fn unwire(
         self,
-        unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
+        unambiguous_dist_ids: &InternedMap<PackageName, DistributionId>,
     ) -> Result<Distribution, LockError> {
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
@@ -1227,7 +1228,11 @@ impl DistributionId {
     /// (i.e., it has a count of 1 in the map), then the `version` and `source`
     /// fields are omitted. In all other cases, including when a map is not
     /// given, the `version` and `source` fields are written.
-    fn to_toml(&self, dist_count_by_name: Option<&FxHashMap<PackageName, u64>>, table: &mut Table) {
+    fn to_toml(
+        &self,
+        dist_count_by_name: Option<&InternedMap<PackageName, u64>>,
+        table: &mut Table,
+    ) {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
         if count.map(|count| count > 1).unwrap_or(true) {
@@ -1253,7 +1258,7 @@ struct DistributionIdForDependency {
 impl DistributionIdForDependency {
     fn unwire(
         self,
-        unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
+        unambiguous_dist_ids: &InternedMap<PackageName, DistributionId>,
     ) -> Result<DistributionId, LockError> {
         let unambiguous_dist_id = unambiguous_dist_ids.get(&self.name);
         let version = self.version.map(Ok::<_, LockError>).unwrap_or_else(|| {
@@ -2114,7 +2119,7 @@ impl Dependency {
     pub(crate) fn to_requirement(
         &self,
         workspace_root: &Path,
-        extras: &mut FxHashMap<PackageName, Vec<ExtraName>>,
+        extras: &mut InternedMap<PackageName, Vec<ExtraName>>,
     ) -> Result<Option<Requirement>, LockError> {
         // Keep track of extras, these will be denormalized later.
         if !self.extra.is_empty() {
@@ -2184,7 +2189,7 @@ impl Dependency {
     }
 
     /// Returns the TOML representation of this dependency.
-    fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> Table {
+    fn to_toml(&self, dist_count_by_name: &InternedMap<PackageName, u64>) -> Table {
         let mut table = Table::new();
         self.distribution_id
             .to_toml(Some(dist_count_by_name), &mut table);
@@ -2240,7 +2245,7 @@ struct DependencyWire {
 impl DependencyWire {
     fn unwire(
         self,
-        unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
+        unambiguous_dist_ids: &InternedMap<PackageName, DistributionId>,
     ) -> Result<Dependency, LockError> {
         Ok(Dependency {
             distribution_id: self.distribution_id.unwire(unambiguous_dist_ids)?,

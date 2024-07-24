@@ -1,17 +1,17 @@
 use pypi_types::RequirementSource;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use std::sync::Arc;
 
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 
 use crate::{DependencyMode, Manifest};
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
 #[derive(Debug, Default, Clone)]
-pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
+pub struct AllowedYanks(Arc<InternedMap<PackageName, FxHashSet<Version>>>);
 
 impl AllowedYanks {
     pub fn from_manifest(
@@ -19,7 +19,7 @@ impl AllowedYanks {
         markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
     ) -> Self {
-        let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
+        let mut allowed_yanks = InternedMap::<PackageName, FxHashSet<Version>>::default();
 
         // Allow yanks for any pinned input requirements.
         for requirement in manifest.requirements(markers, dependencies) {

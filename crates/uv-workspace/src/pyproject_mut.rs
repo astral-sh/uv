@@ -306,7 +306,7 @@ impl PyProjectTomlMut {
                     let Some(dependencies) = dependencies.as_array() else {
                         continue;
                     };
-                    let Ok(extra) = ExtraName::new(extra.to_string()) else {
+                    let Ok(extra) = ExtraName::from_str(extra) else {
                         continue;
                     };
 

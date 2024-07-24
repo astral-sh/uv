@@ -14,7 +14,7 @@ use rustc_hash::FxHashMap;
 
 use distribution_types::IndexLocations;
 use pep440_rs::Version;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::fork_urls::ForkUrls;
@@ -405,8 +405,8 @@ impl PubGrubReportFormatter<'_> {
         derivation_tree: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
-        unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        unavailable_packages: &InternedMap<PackageName, UnavailablePackage>,
+        incomplete_packages: &InternedMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
         markers: &ResolverMarkers,
     ) -> IndexSet<PubGrubHint> {
@@ -490,8 +490,8 @@ impl PubGrubReportFormatter<'_> {
         name: &PackageName,
         set: &Range<Version>,
         index_locations: &IndexLocations,
-        unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        unavailable_packages: &InternedMap<PackageName, UnavailablePackage>,
+        incomplete_packages: &InternedMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let no_find_links = index_locations.flat_index().peekable().peek().is_none();

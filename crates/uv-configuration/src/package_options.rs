@@ -2,7 +2,7 @@ use either::Either;
 use pep508_rs::PackageName;
 
 use pypi_types::Requirement;
-use rustc_hash::FxHashMap;
+use uv_normalize::InternedMap;
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone)]
@@ -56,7 +56,7 @@ pub enum Upgrade {
     All,
 
     /// Allow package upgrades, but only for the specified packages.
-    Packages(FxHashMap<PackageName, Vec<Requirement>>),
+    Packages(InternedMap<PackageName, Vec<Requirement>>),
 }
 
 impl Upgrade {
@@ -70,7 +70,7 @@ impl Upgrade {
                     Self::None
                 } else {
                     Self::Packages(upgrade_package.into_iter().fold(
-                        FxHashMap::default(),
+                        InternedMap::default(),
                         |mut map, requirement| {
                             map.entry(requirement.name.clone())
                                 .or_default()

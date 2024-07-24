@@ -1,25 +1,36 @@
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-pub use extra_name::ExtraName;
-pub use group_name::GroupName;
-pub use package_name::PackageName;
+pub use extra_name::*;
+pub use group_name::*;
+pub use package_name::*;
 
 mod extra_name;
 mod group_name;
 mod package_name;
+mod string;
 
 /// Validate and normalize an owned package or extra name.
 pub(crate) fn validate_and_normalize_owned(name: String) -> Result<String, InvalidNameError> {
     if is_normalized(&name)? {
         Ok(name)
     } else {
-        validate_and_normalize_ref(name)
+        validate_and_normalize_name(name)
     }
 }
 
 /// Validate and normalize an unowned package or extra name.
-pub(crate) fn validate_and_normalize_ref(
+pub(crate) fn validate_and_normalize_ref(name: &str) -> Result<Cow<str>, InvalidNameError> {
+    if is_normalized(name)? {
+        Ok(Cow::Borrowed(name))
+    } else {
+        Ok(Cow::Owned(validate_and_normalize_name(name)?))
+    }
+}
+
+/// Validate and normalize an unowned package or extra name.
+pub(crate) fn validate_and_normalize_name(
     name: impl AsRef<str>,
 ) -> Result<String, InvalidNameError> {
     let mut normalized = String::with_capacity(name.as_ref().len());
@@ -92,7 +103,7 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
     Ok(true)
 }
 
-/// Invalid [`crate::PackageName`] or [`crate::ExtraName`].
+/// Invalid [`PackageName`] or [`ExtraName`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidNameError(String);
 

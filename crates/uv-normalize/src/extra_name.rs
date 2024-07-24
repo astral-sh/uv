@@ -2,9 +2,9 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use serde::{Deserialize, Deserializer, Serialize};
-
+use crate::string::InternedString;
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// The normalized name of an extra dependency.
 ///
@@ -15,13 +15,14 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// - <https://peps.python.org/pep-0685/#specification/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ExtraName(String);
+pub struct ExtraName(InternedString);
 
 impl ExtraName {
     /// Create a validated, normalized extra name.
     pub fn new(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_owned(name).map(Self)
+        validate_and_normalize_owned(name)
+            .map(InternedString::from)
+            .map(Self)
     }
 }
 
@@ -29,7 +30,9 @@ impl FromStr for ExtraName {
     type Err = InvalidNameError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        validate_and_normalize_ref(name).map(Self)
+        validate_and_normalize_ref(name)
+            .map(InternedString::from)
+            .map(Self)
     }
 }
 
@@ -51,6 +54,17 @@ impl Display for ExtraName {
 
 impl AsRef<str> for ExtraName {
     fn as_ref(&self) -> &str {
-        &self.0
+        self.0.as_ref()
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ExtraName {
+    fn schema_name() -> String {
+        <String as schemars::JsonSchema>::schema_name()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        <String as schemars::JsonSchema>::json_schema(gen)
     }
 }

@@ -8,6 +8,8 @@ description = "Normalization for distribution, package and extra names."
 workspace = true
 
 [dependencies]
+byteorder = { workspace = true }
 rkyv = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+ustr = { workspace = true }

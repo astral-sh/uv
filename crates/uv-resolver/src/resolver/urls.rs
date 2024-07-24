@@ -1,6 +1,5 @@
 use std::iter;
 
-use rustc_hash::FxHashMap;
 use same_file::is_same_file;
 use tracing::debug;
 
@@ -9,7 +8,7 @@ use distribution_types::Verbatim;
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_git::GitResolver;
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 
 use crate::{DependencyMode, Manifest, ResolveError};
 
@@ -27,10 +26,10 @@ pub(crate) struct Urls {
     /// URL requirements in overrides. There can only be a single URL per package in overrides
     /// (since it replaces all other URLs), and an override URL replaces all requirements and
     /// constraints URLs.
-    overrides: FxHashMap<PackageName, VerbatimParsedUrl>,
+    overrides: InternedMap<PackageName, VerbatimParsedUrl>,
     /// URLs from regular requirements or from constraints. There can be multiple URLs for the same
     /// package as long as they are in different forks.
-    regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
+    regular: InternedMap<PackageName, Vec<VerbatimParsedUrl>>,
 }
 
 impl Urls {
@@ -40,8 +39,8 @@ impl Urls {
         git: &GitResolver,
         dependencies: DependencyMode,
     ) -> Result<Self, ResolveError> {
-        let mut urls: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
-        let mut overrides: FxHashMap<PackageName, VerbatimParsedUrl> = FxHashMap::default();
+        let mut urls: InternedMap<PackageName, Vec<VerbatimParsedUrl>> = InternedMap::default();
+        let mut overrides: InternedMap<PackageName, VerbatimParsedUrl> = InternedMap::default();
 
         // Add all direct regular requirements and constraints URL.
         for requirement in manifest.requirements_no_overrides(markers, dependencies) {

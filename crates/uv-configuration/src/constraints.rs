@@ -1,20 +1,19 @@
 use std::borrow::Cow;
 
 use either::Either;
-use rustc_hash::FxHashMap;
 
 use pep508_rs::MarkerTree;
 use pypi_types::{Requirement, RequirementSource};
-use uv_normalize::PackageName;
+use uv_normalize::{InternedMap, PackageName};
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
-pub struct Constraints(FxHashMap<PackageName, Vec<Requirement>>);
+pub struct Constraints(InternedMap<PackageName, Vec<Requirement>>);
 
 impl Constraints {
     /// Create a new set of constraints from a set of requirements.
     pub fn from_requirements(requirements: impl Iterator<Item = Requirement>) -> Self {
-        let mut constraints: FxHashMap<PackageName, Vec<Requirement>> = FxHashMap::default();
+        let mut constraints: InternedMap<PackageName, Vec<Requirement>> = InternedMap::default();
         for requirement in requirements {
             // Skip empty constraints.
             if let RequirementSource::Registry { specifier, .. } = &requirement.source {
