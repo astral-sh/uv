@@ -1794,7 +1794,11 @@ pub struct InitArgs {
     #[arg(long)]
     pub name: Option<PackageName>,
 
-    /// Do not create a readme file.
+    /// Create a virtual workspace instead of a project.
+    #[arg(long)]
+    pub r#virtual: bool,
+
+    /// Do not create a `README.md` file.
     #[arg(long)]
     pub no_readme: bool,
 

@@ -160,6 +160,8 @@ impl Workspace {
             workspace_root.simplified_display()
         );
 
+        check_nested_workspaces(&workspace_root, options);
+
         // Unlike in `ProjectWorkspace` discovery, we might be in a virtual workspace root without
         // being in any specific project.
         let current_project = pyproject_toml
@@ -170,6 +172,7 @@ impl Workspace {
                 project,
                 pyproject_toml,
             });
+
         Self::collect_members(
             workspace_root.clone(),
             // This method supports only absolute paths.
@@ -525,8 +528,6 @@ impl Workspace {
             .and_then(|tool| tool.uv)
             .and_then(|uv| uv.sources)
             .unwrap_or_default();
-
-        check_nested_workspaces(&workspace_root, options);
 
         Ok(Workspace {
             install_path: workspace_root,
@@ -966,7 +967,7 @@ async fn find_workspace(
 }
 
 /// Warn when the valid workspace is included in another workspace.
-fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryOptions) {
+pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryOptions) {
     for outer_workspace_root in inner_workspace_root
         .ancestors()
         .take_while(|path| {
@@ -1025,8 +1026,9 @@ fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryOptio
             };
             if !is_excluded {
                 warn_user!(
-                    "Nested workspaces are not supported, but outer workspace includes existing workspace: `{}`",
-                    pyproject_toml_path.user_display().cyan(),
+                    "Nested workspaces are not supported, but outer workspace (`{}`) includes `{}`",
+                    outer_workspace_root.simplified_display().cyan(),
+                    inner_workspace_root.simplified_display().cyan()
                 );
             }
         }
@@ -1158,6 +1160,8 @@ impl VirtualProject {
             let project_path = absolutize_path(project_root)
                 .map_err(WorkspaceError::Normalize)?
                 .to_path_buf();
+
+            check_nested_workspaces(&project_path, options);
 
             let workspace = Workspace::collect_members(
                 project_path,
