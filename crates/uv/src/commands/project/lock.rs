@@ -1,14 +1,14 @@
 #![allow(clippy::single_match_else)]
 
 use std::collections::BTreeSet;
-use std::{fmt::Write, path::Path};
+use std::fmt::Write;
 
 use anstream::eprint;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
+use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -511,7 +511,7 @@ pub(super) async fn do_lock(
     // Notify the user of any dependency updates
     if !upgrade.is_none() {
         if let Some(existing_lock) = existing_lock {
-            report_upgrades(existing_lock, &new_lock, workspace.install_path(), printer)?;
+            report_upgrades(existing_lock, &new_lock, printer)?;
         }
     }
 
@@ -543,56 +543,83 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
 }
 
 /// Reports on the versions that were upgraded in the new lockfile.
-fn report_upgrades(
-    existing_lock: &Lock,
-    new_lock: &Lock,
-    workspace_root: &Path,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let existing_distributions: FxHashMap<PackageName, BTreeSet<Version>> =
+fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> anyhow::Result<()> {
+    let existing_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
         existing_lock.distributions().iter().fold(
             FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
             |mut acc, distribution| {
-                if let Ok(VersionId::NameVersion(name, version)) =
-                    distribution.version_id(workspace_root)
-                {
-                    acc.entry(name).or_default().insert(version);
-                }
+                acc.entry(distribution.name())
+                    .or_default()
+                    .insert(distribution.version());
                 acc
             },
         );
 
-    let new_distribution_names: FxHashMap<PackageName, BTreeSet<Version>> =
+    let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
         new_lock.distributions().iter().fold(
             FxHashMap::with_capacity_and_hasher(new_lock.distributions().len(), FxBuildHasher),
             |mut acc, distribution| {
-                if let Ok(VersionId::NameVersion(name, version)) =
-                    distribution.version_id(workspace_root)
-                {
-                    acc.entry(name).or_default().insert(version);
-                }
+                acc.entry(distribution.name())
+                    .or_default()
+                    .insert(distribution.version());
                 acc
             },
         );
 
-    for (name, new_versions) in new_distribution_names {
-        if let Some(existing_versions) = existing_distributions.get(&name) {
-            if new_versions != *existing_versions {
+    for name in existing_distributions
+        .keys()
+        .chain(new_distributions.keys())
+        .collect::<BTreeSet<_>>()
+    {
+        match (
+            existing_distributions.get(name),
+            new_distributions.get(name),
+        ) {
+            (Some(existing_versions), Some(new_versions)) => {
+                if existing_versions != new_versions {
+                    let existing_versions = existing_versions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let new_versions = new_versions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    writeln!(
+                        printer.stderr(),
+                        "{} {name} {existing_versions} -> {new_versions}",
+                        "Updated".green().bold()
+                    )?;
+                }
+            }
+            (Some(existing_versions), None) => {
                 let existing_versions = existing_versions
                     .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let new_versions = new_versions
-                    .iter()
-                    .map(ToString::to_string)
+                    .map(|version| format!("v{version}"))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
                     printer.stderr(),
-                    "{} {name} v{existing_versions} -> v{new_versions}",
-                    "Updating".green().bold()
+                    "{} {name} {existing_versions}",
+                    "Removed".red().bold()
                 )?;
+            }
+            (None, Some(new_versions)) => {
+                let new_versions = new_versions
+                    .iter()
+                    .map(|version| format!("v{version}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {name} {new_versions}",
+                    "Added".green().bold()
+                )?;
+            }
+            (None, None) => {
+                unreachable!("The key `{name}` should exist in at least one of the maps");
             }
         }
     }
