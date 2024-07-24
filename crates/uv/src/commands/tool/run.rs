@@ -185,6 +185,11 @@ pub(crate) async fn run(
     }
     .with_context(|| format!("Failed to spawn: `{}`", executable.to_string_lossy()))?;
 
+    // Ignore signals in the parent process, deferring them to the child. This is safe as long as
+    // the command is the last thing that runs in this process; otherwise, we'd need to restore the
+    // signal handlers after the command completes.
+    let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
+
     let status = handle.wait().await.context("Child process disappeared")?;
 
     // Exit based on the result of the command
