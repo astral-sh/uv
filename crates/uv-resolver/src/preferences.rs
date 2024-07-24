@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
@@ -21,7 +22,11 @@ pub enum PreferenceError {
 pub struct Preference {
     name: PackageName,
     version: Version,
+    /// The markers on the requirement itself (those after the semicolon).
     marker: Option<MarkerTree>,
+    /// If coming from a package with diverging versions, the markers of the forks this preference
+    /// is part of, otherwise `None`.
+    fork_markers: Option<BTreeSet<MarkerTree>>,
     hashes: Vec<HashDigest>,
 }
 
@@ -52,6 +57,8 @@ impl Preference {
             name: requirement.name,
             version: specifier.version().clone(),
             marker: requirement.marker,
+            // requirements.txt doesn't have fork annotations.
+            fork_markers: None,
             hashes: entry
                 .hashes
                 .iter()
@@ -71,6 +78,8 @@ impl Preference {
             name: dist.name().clone(),
             version: version.clone(),
             marker: None,
+            // Installed distributions don't have fork annotations.
+            fork_markers: None,
             hashes: Vec::new(),
         }
     }
@@ -81,6 +90,7 @@ impl Preference {
             name: dist.id.name.clone(),
             version: dist.id.version.clone(),
             marker: None,
+            fork_markers: dist.fork_markers().cloned(),
             hashes: Vec::new(),
         }
     }
@@ -98,7 +108,7 @@ impl Preference {
 
 /// A set of pinned packages that should be preserved during resolution, if possible.
 #[derive(Debug, Clone, Default)]
-pub struct Preferences(FxHashMap<PackageName, Pin>);
+pub struct Preferences(FxHashMap<PackageName, Vec<(Option<MarkerTree>, Pin)>>);
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
@@ -110,45 +120,101 @@ impl Preferences {
         preferences: PreferenceIterator,
         markers: Option<&MarkerEnvironment>,
     ) -> Self {
-        // TODO(zanieb): We should explicitly ensure that when a package name is seen multiple times
-        // that the newest or oldest version is preferred depending on the resolution strategy;
-        // right now, the order is dependent on the given iterator.
-        let preferences = preferences
-            .into_iter()
-            .filter_map(|preference| {
-                if preference.marker.as_ref().map_or(true, |marker| {
-                    marker.evaluate_optional_environment(markers, &[])
-                }) {
-                    Some((
-                        preference.name,
-                        Pin {
-                            version: preference.version,
-                            hashes: preference.hashes,
-                        },
-                    ))
-                } else {
+        let mut slf = Self::default();
+        for preference in preferences {
+            // Filter non-matching preferences when resolving for an environment.
+            if let Some(markers) = markers {
+                if !preference
+                    .marker
+                    .as_ref()
+                    .map_or(true, |marker| marker.evaluate(markers, &[]))
+                {
                     trace!("Excluding {preference} from preferences due to unmatched markers");
-                    None
+                    continue;
                 }
-            })
-            .collect();
 
-        Self(preferences)
+                if !preference
+                    .fork_markers
+                    .as_ref()
+                    .map(|fork_markers| {
+                        fork_markers
+                            .iter()
+                            .any(|marker| marker.evaluate(markers, &[]))
+                    })
+                    .unwrap_or(true)
+                {
+                    trace!("Excluding {preference} from preferences due to unmatched fork markers");
+                    continue;
+                }
+            }
+
+            // Flatten the list of markers into individual entries.
+            // TODO(konsti): It feels wrong to flatten them out this way.
+            if let Some(fork_markers) = &preference.fork_markers {
+                for fork_marker in fork_markers {
+                    slf.insert(
+                        preference.name.clone(),
+                        Some(fork_marker.clone()),
+                        Pin {
+                            version: preference.version.clone(),
+                            hashes: preference.hashes.clone(),
+                        },
+                    );
+                }
+            } else {
+                slf.insert(
+                    preference.name,
+                    None,
+                    Pin {
+                        version: preference.version,
+                        hashes: preference.hashes,
+                    },
+                );
+            }
+        }
+
+        slf
     }
 
-    /// Insert or overwrite a preference.
-    pub(crate) fn insert(&mut self, package_name: PackageName, pin: Pin) -> Option<Pin> {
-        self.0.insert(package_name, pin)
+    /// Insert a preference at the back.
+    pub(crate) fn insert(
+        &mut self,
+        package_name: PackageName,
+        markers: Option<MarkerTree>,
+        pin: Pin,
+    ) {
+        self.0.entry(package_name).or_default().push((markers, pin));
     }
 
     /// Returns an iterator over the preferences.
-    pub fn iter(&self) -> impl Iterator<Item = (&PackageName, &Version)> {
-        self.0.iter().map(|(name, pin)| (name, pin.version()))
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &PackageName,
+            impl Iterator<Item = (Option<&MarkerTree>, &Version)>,
+        ),
+    > {
+        self.0.iter().map(|(name, preferences)| {
+            (
+                name,
+                preferences
+                    .iter()
+                    .map(|(markers, pin)| (markers.as_ref(), pin.version())),
+            )
+        })
     }
 
     /// Return the pinned version for a package, if any.
-    pub(crate) fn version(&self, package_name: &PackageName) -> Option<&Version> {
-        self.0.get(package_name).map(Pin::version)
+    pub(crate) fn get(
+        &self,
+        package_name: &PackageName,
+    ) -> impl Iterator<Item = (Option<&MarkerTree>, &Version)> {
+        self.0
+            .get(package_name)
+            .into_iter()
+            .flatten()
+            .map(|(markers, pin)| (markers.as_ref(), pin.version()))
     }
 
     /// Return the hashes for a package, if the version matches that of the pin.
@@ -159,8 +225,10 @@ impl Preferences {
     ) -> Option<&[HashDigest]> {
         self.0
             .get(package_name)
-            .filter(|pin| pin.version() == version)
-            .map(Pin::hashes)
+            .into_iter()
+            .flatten()
+            .find(|(_markers, pin)| pin.version() == version)
+            .map(|(_markers, pin)| pin.hashes())
     }
 }
 

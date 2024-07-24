@@ -1130,6 +1130,10 @@ impl Distribution {
         &self.id.name
     }
 
+    pub fn fork_markers(&self) -> Option<&BTreeSet<MarkerTree>> {
+        self.fork_markers.as_ref()
+    }
+
     /// Returns a [`VersionId`] for this package that can be used for resolution.
     pub fn version_id(&self, workspace_root: &Path) -> Result<VersionId, LockError> {
         match &self.id.source {

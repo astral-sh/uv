@@ -41,11 +41,11 @@ impl AllowedYanks {
         }
 
         // Allow yanks for any packages that are already pinned in the lockfile.
-        for (name, version) in manifest.preferences.iter() {
+        for (name, preferences) in manifest.preferences.iter() {
             allowed_yanks
                 .entry(name.clone())
                 .or_default()
-                .insert(version.clone());
+                .extend(preferences.map(|(_markers, version)| version.clone()));
         }
 
         Self(Arc::new(allowed_yanks))

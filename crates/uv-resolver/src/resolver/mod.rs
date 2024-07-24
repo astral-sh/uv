@@ -392,10 +392,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     let resolution = state.into_resolution();
 
-                    // Walk over the selected versions, and mark them as preferences. Overwrite
-                    // existing preferences to always prefer sibling forks.
+                    // Walk over the selected versions, and mark them as preferences. We have to
+                    // add forks back as to not override the preferences from the lockfile for
+                    // the next fork
                     for (package, version) in &resolution.nodes {
-                        preferences.insert(package.name.clone(), version.clone().into());
+                        preferences.insert(
+                            package.name.clone(),
+                            resolution.markers.fork_markers().cloned(),
+                            version.clone().into(),
+                        );
                     }
 
                     // If another fork had the same resolution, merge into that fork instead.
