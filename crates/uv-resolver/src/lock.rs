@@ -1137,13 +1137,13 @@ struct DistributionWire {
     id: DistributionId,
     #[serde(default)]
     sdist: Option<SourceDist>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     wheels: Vec<Wheel>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     dependencies: Vec<DependencyWire>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     dev_dependencies: BTreeMap<GroupName, Vec<DependencyWire>>,
 }
 
