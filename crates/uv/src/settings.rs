@@ -153,6 +153,7 @@ impl CacheSettings {
 pub(crate) struct InitSettings {
     pub(crate) path: Option<String>,
     pub(crate) name: Option<PackageName>,
+    pub(crate) r#virtual: bool,
     pub(crate) no_readme: bool,
     pub(crate) python: Option<String>,
 }
@@ -164,6 +165,7 @@ impl InitSettings {
         let InitArgs {
             path,
             name,
+            r#virtual,
             no_readme,
             python,
         } = args;
@@ -171,6 +173,7 @@ impl InitSettings {
         Self {
             path,
             name,
+            r#virtual,
             no_readme,
             python,
         }

@@ -1,5 +1,6 @@
 pub use workspace::{
-    DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace, WorkspaceError, WorkspaceMember,
+    check_nested_workspaces, DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace,
+    WorkspaceError, WorkspaceMember,
 };
 
 pub mod pyproject;

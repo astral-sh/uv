@@ -857,6 +857,7 @@ async fn run_project(
             commands::init(
                 args.path,
                 args.name,
+                args.r#virtual,
                 args.no_readme,
                 args.python,
                 globals.isolated,
