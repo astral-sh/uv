@@ -166,14 +166,6 @@ jobs:
     ...
 ```
 
-Or using a shell command:
-
-```yaml title="example.yml"
-steps:
-  - name: Allow uv to use the system Python by default
-    run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
-```
-
 iii. Step-specific Environment Variables
 
 Set the variable for a specific step:
