@@ -1798,7 +1798,7 @@ pub struct InitArgs {
     #[arg(long)]
     pub r#virtual: bool,
 
-    /// Do not create a readme file.
+    /// Do not create a `README.md` file.
     #[arg(long)]
     pub no_readme: bool,
 

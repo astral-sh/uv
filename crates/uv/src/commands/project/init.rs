@@ -132,8 +132,9 @@ pub(crate) async fn init(
     Ok(ExitStatus::Success)
 }
 
+/// Initialize a virtual workspace at the given path.
 fn init_virtual_workspace(path: &Path, isolated: bool) -> Result<()> {
-    // Check nested workspaces.
+    // Ensure that we aren't creating a nested workspace.
     if !isolated {
         check_nested_workspaces(path, &DiscoveryOptions::default());
     }
@@ -150,6 +151,7 @@ fn init_virtual_workspace(path: &Path, isolated: bool) -> Result<()> {
     Ok(())
 }
 
+/// Initialize a project (and, implicitly, a workspace root) at the given path.
 async fn init_project(
     path: &Path,
     name: &PackageName,

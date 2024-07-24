@@ -806,7 +806,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    warning: Nested workspaces are not supported, but outer workspace includes existing workspace: `[TEMP_DIR]/`
+    warning: Nested workspaces are not supported, but outer workspace (`[TEMP_DIR]/`) includes `[TEMP_DIR]/foo`
     Initialized workspace `foo` at `[TEMP_DIR]/foo`
     "###);
 
