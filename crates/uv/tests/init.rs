@@ -1045,3 +1045,18 @@ fn init_unmanaged() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn init_hidden() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg(".foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    "###);
+}
