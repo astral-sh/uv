@@ -23,30 +23,30 @@ An extremely fast Python package and project manager, written in Rust.
 ## Highlights
 
 - 🐍 [Installs and manages](./guides/install-python.md) Python versions.
-- 🛠️ [Executes and installs](./guides/tools.md) commands provided by Python packages.
-- ❇️ [Runs scripts](./guides/scripts.md) with [inline dependency metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
-- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a multi-platform lock file.
-- 🏢 Supports Cargo-style [workspaces](./workspaces.md) for large projects.
+- 🛠️ [Runs and installs](./guides/tools.md) Python applications.
+- ❇️ [Runs scripts](./guides/scripts.md), with support for [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
+- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a [universal lockfile](./projects.md#lock-file).
+- 🏢 Supports Cargo-style [workspaces](./workspaces.md) for scalable projects.
 - 🚀 A replacement for `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`
   and `pip-tools` (`pip-compile` and `pip-sync`).
-- 🧪 Tested at-scale against the top 10,000 PyPI packages.
 - 💾 Disk-space efficient, with a [global cache](./cache.md) for dependency deduplication.
-- ⁉️ Best-in-class error messages with a conflict-tracking resolver.
-- ⏬ A static binary that can be installed without Rust or Python via `curl` or `pip`.
-- 🖥️ Support for macOS, Linux, and Windows.
+- ⏬ Installable without Rust or Python via `curl` or `pip`.
+- 🖥️ Supports macOS, Linux, and Windows.
 
 uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
 
 ## Getting started
 
-Install uv with our official standalone installer:
+Install uv with our official standalone installer, on macOS and Linux:
 
 ```bash
-# On macOS and Linux.
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-# On Windows.
+Or, on Windows:
+
+```bash
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
@@ -54,7 +54,7 @@ Then, check out the [first steps](./first-steps.md), see more [installation meth
 
 ## Project management
 
-uv can manage project dependencies and environments:
+uv manages project dependencies and environments:
 
 ```console
 $ uv init example
@@ -71,7 +71,7 @@ Installed 2 packages in 1ms
  + example==0.1.0 (from file:///home/user/example)
  + ruff==0.5.4
 
-$ uv run -- ruff check
+$ uv run ruff check
 All checks passed!
 ```
 
@@ -79,7 +79,7 @@ See the [project guide](./guides/projects.md) to get started.
 
 ## Tool management
 
-uv provides an interface for executing and installing command-line tools provided by Python packages, similar to `pipx`. 
+uv executes and installs command-line tools provided by Python packages, similar to `pipx`. 
 
 Run a tool in an ephemeral environment with `uvx`:
 
@@ -117,7 +117,7 @@ See the [tools guide](./guides/tools.md) to get started.
 
 ## Python management
 
-uv supports installing Python and managing multiple Python versions.
+uv installs Python and allows quickly switching between Python versions.
 
 Install the Python versions your project requires:
 
@@ -137,8 +137,22 @@ Or, fetch Python versions on demand:
 
 ```console
 $ uv venv --python 3.12.0
+Using Python 3.12.0
 Creating virtualenv at: .venv
 Activate with: source .venv/bin/activate
+
+$ uv run --python pypy@3.8 -- python --version
+Python 3.8.16 (a9dbdca6fc3286b0addd2240f11d97d8e8de187a, Dec 29 2022, 11:45:30)
+[PyPy 7.3.11 with GCC Apple LLVM 13.1.6 (clang-1316.0.21.2.5)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+>>>> 
+```
+
+Use a specific Python version in the current directory:
+
+```
+$ uv python pin pypy@3.11
+Pinned `.python-version` to `pypy@3.11`
 ```
 
 See the [installing Python guide](./guides/install-python.md) to get started.
@@ -161,7 +175,7 @@ Create a virtual environment:
 
 ```console
 $ uv venv
-Using Python 3.12.3 interpreter at: /opt/homebrew/opt/python@3.12/bin/python3.12
+Using Python 3.12.3
 Creating virtualenv at: .venv
 Activate with: source .venv/bin/activate
 ```
@@ -182,4 +196,4 @@ See the [uv pip documentation](./pip/environments.md) to get started.
 
 ## Next steps
 
-See the [documentation overview](./overview.md) to learn more about uv.
+See the [first steps](./first-steps.md) or jump straight into the [guides](./guides/overview.md) to start using uv.

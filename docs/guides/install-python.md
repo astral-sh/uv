@@ -2,6 +2,10 @@
 
 If Python is already installed on your system, uv will [detect and use](#using-an-existing-python-installation) it without configuration. However, uv can also install and manage Python versions for you.
 
+!!! tip
+
+    uv will [automatically fetch Python versions](#automatic-python-downloads) as needed — you don't need to install Python to get started.
+
 To install the latest Python version:
 
 ```console
@@ -59,10 +63,10 @@ Note that Python does not need to be explicitly installed to use uv. By default,
 $ uv run --python 3.12 python -c 'print("hello world")'
 ```
 
-Even if a specific Python version is not requested, uv will download the latest version on demand. For example, the following will create a new virtual environment and download a managed Python version if one hasn't been installed yet:
+Even if a specific Python version is not requested, uv will download the latest version on demand. For example, the following will create a new virtual environment and download a managed Python version if Python is not found:
 
 ```console
-$ uv venv --python-preference only-managed
+$ uv venv
 ```
 
 <!-- TODO(zanieb): Restore when Python shim management is added

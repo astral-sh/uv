@@ -56,4 +56,4 @@ When using the long help menu, uv will attempt to use `less` or `more` to "page"
 
 ## Next steps
 
-Now that you've confirmed uv is installed and know how to get help, check out the [feature overview](./features.md) to start using uv.
+Now that you've confirmed uv is installed and know how to get help, check out an [overview of features](./features.md) or jump straight into the [guides](./guides/overview.md) to start using uv.
