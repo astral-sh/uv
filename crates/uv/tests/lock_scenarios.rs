@@ -83,6 +83,11 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -264,6 +269,11 @@ fn fork_basic() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -525,6 +535,11 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -676,6 +691,11 @@ fn fork_incomplete_markers() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "python_version < '3.10'",
+            "python_version >= '3.11'",
+            "python_version < '3.11' and python_version >= '3.10'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -992,6 +1012,13 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -1136,6 +1163,13 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -1269,6 +1303,13 @@ fn fork_marker_inherit_combined() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -1396,6 +1437,11 @@ fn fork_marker_inherit_isolated() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -1518,6 +1564,11 @@ fn fork_marker_inherit_transitive() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -1647,6 +1698,11 @@ fn fork_marker_inherit() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -1757,6 +1813,11 @@ fn fork_marker_limited_inherit() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -1886,6 +1947,11 @@ fn fork_marker_selection() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
@@ -2014,6 +2080,11 @@ fn fork_marker_track() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"

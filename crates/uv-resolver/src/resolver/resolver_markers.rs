@@ -35,6 +35,7 @@ impl ResolverMarkers {
             ResolverMarkers::SpecificEnvironment(env) => Some(env),
         }
     }
+
     /// If solving a fork, return that fork's markers.
     pub fn fork_markers(&self) -> Option<&MarkerTree> {
         match self {
