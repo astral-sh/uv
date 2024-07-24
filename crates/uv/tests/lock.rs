@@ -1500,6 +1500,10 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "sys_platform == 'win32'",
+                "sys_platform != 'win32'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2876,6 +2880,16 @@ fn lock_python_version_marker_complement() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.8"
+            environment-markers = [
+                "python_full_version <= '3.10' and python_version == '3.10'",
+                "python_full_version <= '3.10' and python_version < '3.10'",
+                "python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version > '3.10'",
+                "python_full_version > '3.10' and python_version == '3.10'",
+                "python_full_version > '3.10' and python_version < '3.10'",
+                "python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10'",
+                "python_full_version > '3.10' and python_version > '3.10'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -4029,6 +4043,10 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin'",
+        ]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]

@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use indexmap::IndexSet;
 use petgraph::{
     graph::{Graph, NodeIndex},
@@ -25,7 +27,7 @@ use crate::resolution::AnnotatedDist;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
-    VersionsResponse,
+    ResolverMarkers, VersionsResponse,
 };
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
@@ -36,6 +38,9 @@ pub struct ResolutionGraph {
     pub(crate) petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: Option<RequiresPython>,
+    /// If the resolution had non-identical forks, store the forks in the lockfile so we can
+    /// recreate them in subsequent resolutions.
+    pub(crate) fork_markers: Option<BTreeSet<MarkerTree>>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
@@ -138,6 +143,28 @@ impl ResolutionGraph {
             }
         }
 
+        let fork_markers = if let [resolution] = resolutions {
+            match resolution.markers {
+                ResolverMarkers::Universal | ResolverMarkers::SpecificEnvironment(_) => None,
+                ResolverMarkers::Fork(_) => {
+                    panic!("A single fork must be universal");
+                }
+            }
+        } else {
+            Some(
+                resolutions
+                    .iter()
+                    .map(|resolution| {
+                        resolution
+                            .markers
+                            .fork_markers()
+                            .expect("A non-forking resolution exists in forking mode")
+                            .clone()
+                    })
+                    .collect(),
+            )
+        };
+
         Ok(Self {
             petgraph,
             requires_python,
@@ -146,6 +173,7 @@ impl ResolutionGraph {
             constraints: constraints.clone(),
             overrides: overrides.clone(),
             options,
+            fork_markers,
         })
     }
 

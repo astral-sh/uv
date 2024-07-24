@@ -53,7 +53,10 @@ const VERSION: u32 = 1;
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     version: u32,
-    distributions: Vec<Distribution>,
+    /// If this lockfile was built from a forking resolution with non-identical forks, store the
+    /// forks in the lockfile so we can recreate them in subsequent resolutions.
+    #[serde(rename = "environment-markers")]
+    fork_markers: Option<BTreeSet<MarkerTree>>,
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
     /// The [`ResolutionMode`] used to generate this lock.
@@ -62,6 +65,8 @@ pub struct Lock {
     prerelease_mode: PreReleaseMode,
     /// The [`ExcludeNewer`] used to generate this lock.
     exclude_newer: Option<ExcludeNewer>,
+    /// The actual locked version and their metadata.
+    distributions: Vec<Distribution>,
     /// A map from distribution ID to index in `distributions`.
     ///
     /// This can be used to quickly lookup the full distribution for any ID
@@ -159,6 +164,7 @@ impl Lock {
             options.resolution_mode,
             options.prerelease_mode,
             options.exclude_newer,
+            graph.fork_markers.clone(),
         )?;
         Ok(lock)
     }
@@ -171,6 +177,7 @@ impl Lock {
         resolution_mode: ResolutionMode,
         prerelease_mode: PreReleaseMode,
         exclude_newer: Option<ExcludeNewer>,
+        fork_markers: Option<BTreeSet<MarkerTree>>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each distribution in a canonical order and
         // check for duplicates.
@@ -324,11 +331,12 @@ impl Lock {
         }
         Ok(Self {
             version,
-            distributions,
+            fork_markers,
             requires_python,
             resolution_mode,
             prerelease_mode,
             exclude_newer,
+            distributions,
             by_id,
         })
     }
@@ -451,6 +459,11 @@ impl Lock {
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
+        if let Some(ref fork_markers) = self.fork_markers {
+            let fork_markers =
+                each_element_on_its_line_array(fork_markers.iter().map(ToString::to_string));
+            doc.insert("environment-markers", value(fork_markers));
+        }
 
         // Write the settings that were used to generate the resolution.
         // This enables us to invalidate the lockfile if the user changes
@@ -571,31 +584,36 @@ impl Lock {
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
-    #[serde(rename = "distribution", default)]
-    distributions: Vec<DistributionWire>,
     #[serde(default)]
     requires_python: Option<RequiresPython>,
+    /// If this lockfile was built from a forking resolution with non-identical forks, store the
+    /// forks in the lockfile so we can recreate them in subsequent resolutions.
+    #[serde(rename = "environment-markers")]
+    fork_markers: Option<BTreeSet<MarkerTree>>,
     #[serde(default)]
     resolution_mode: ResolutionMode,
     #[serde(default)]
     prerelease_mode: PreReleaseMode,
     #[serde(default)]
     exclude_newer: Option<ExcludeNewer>,
+    #[serde(rename = "distribution", default)]
+    distributions: Vec<DistributionWire>,
 }
 
 impl From<Lock> for LockWire {
     fn from(lock: Lock) -> LockWire {
         LockWire {
             version: lock.version,
+            requires_python: lock.requires_python,
+            fork_markers: lock.fork_markers,
+            resolution_mode: lock.resolution_mode,
+            prerelease_mode: lock.prerelease_mode,
+            exclude_newer: lock.exclude_newer,
             distributions: lock
                 .distributions
                 .into_iter()
                 .map(DistributionWire::from)
                 .collect(),
-            requires_python: lock.requires_python,
-            resolution_mode: lock.resolution_mode,
-            prerelease_mode: lock.prerelease_mode,
-            exclude_newer: lock.exclude_newer,
         }
     }
 }
@@ -633,6 +651,7 @@ impl TryFrom<LockWire> for Lock {
             wire.resolution_mode,
             wire.prerelease_mode,
             wire.exclude_newer,
+            wire.fork_markers,
         )
     }
 }
@@ -2546,12 +2565,13 @@ impl std::fmt::Display for HashParseError {
 ///     { name = "sniffio" },
 /// ]
 /// ```
-fn each_element_on_its_line_array(elements: impl Iterator<Item = InlineTable>) -> Array {
+fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value>>) -> Array {
     let mut array = elements
-        .map(|mut inline_table| {
+        .map(|item| {
+            let mut value = item.into();
             // Each dependency is on its own line and indented.
-            inline_table.decor_mut().set_prefix("\n    ");
-            inline_table
+            value.decor_mut().set_prefix("\n    ");
+            value
         })
         .collect::<Array>();
     // With a trailing comma, inserting another entry doesn't change the preceding line,

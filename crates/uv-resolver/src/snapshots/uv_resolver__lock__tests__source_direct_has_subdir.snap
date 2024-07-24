@@ -5,6 +5,11 @@ expression: result
 Ok(
     Lock {
         version: 1,
+        fork_markers: None,
+        requires_python: None,
+        resolution_mode: Highest,
+        prerelease_mode: IfNecessaryOrExplicit,
+        exclude_newer: None,
         distributions: [
             Distribution {
                 id: DistributionId {
@@ -42,10 +47,6 @@ Ok(
                 dev_dependencies: {},
             },
         ],
-        requires_python: None,
-        resolution_mode: Highest,
-        prerelease_mode: IfNecessaryOrExplicit,
-        exclude_newer: None,
         by_id: {
             DistributionId {
                 name: PackageName(
