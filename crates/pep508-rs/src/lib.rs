@@ -1804,8 +1804,11 @@ mod tests {
 
     #[test]
     fn no_space_after_operator() {
+        let requirement = Requirement::<Url>::from_str("pytest;python_version<='4.0'").unwrap();
+        assert_eq!(requirement.to_string(), "pytest ; python_version <= '4.0'");
+
         let requirement = Requirement::<Url>::from_str("pytest;'4.0'>=python_version").unwrap();
-        assert_eq!(requirement.to_string(), "pytest ; '4.0' >= python_version");
+        assert_eq!(requirement.to_string(), "pytest ; python_version <= '4.0'");
     }
 
     #[test]

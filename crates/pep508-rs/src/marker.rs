@@ -234,6 +234,16 @@ pub enum MarkerOperator {
     In,
     /// `not in`
     NotIn,
+    /// The inverse of the `in` operator.
+    ///
+    /// This is not a valid operator when parsing but is used for normalizing
+    /// marker trees.
+    Contains,
+    /// The inverse of the `not in` operator.
+    ///
+    /// This is not a valid operator when parsing but is used for normalizing
+    /// marker trees.
+    NotContains,
 }
 
 impl MarkerOperator {
@@ -247,8 +257,7 @@ impl MarkerOperator {
             Self::LessThan => Some(pep440_rs::Operator::LessThan),
             Self::LessEqual => Some(pep440_rs::Operator::LessThanEqual),
             Self::TildeEqual => Some(pep440_rs::Operator::TildeEqual),
-            Self::In => None,
-            Self::NotIn => None,
+            _ => None,
         }
     }
 
@@ -267,7 +276,26 @@ impl MarkerOperator {
             Self::GreaterEqual => Self::LessThan,
             Self::In => Self::NotIn,
             Self::NotIn => Self::In,
+            Self::Contains => Self::NotContains,
+            Self::NotContains => Self::Contains,
         })
+    }
+
+    /// Inverts this marker operator.
+    fn invert(self) -> MarkerOperator {
+        match self {
+            Self::LessThan => Self::GreaterThan,
+            Self::LessEqual => Self::GreaterEqual,
+            Self::GreaterThan => Self::LessThan,
+            Self::GreaterEqual => Self::LessEqual,
+            Self::Equal => Self::Equal,
+            Self::NotEqual => Self::NotEqual,
+            Self::TildeEqual => Self::TildeEqual,
+            Self::In => Self::Contains,
+            Self::NotIn => Self::NotContains,
+            Self::Contains => Self::In,
+            Self::NotContains => Self::NotIn,
+        }
     }
 }
 
@@ -312,8 +340,8 @@ impl Display for MarkerOperator {
             Self::LessThan => "<",
             Self::LessEqual => "<=",
             Self::TildeEqual => "~=",
-            Self::In => "in",
-            Self::NotIn => "not in",
+            Self::In | Self::Contains => "in",
+            Self::NotIn | Self::NotContains => "not in",
         })
     }
 }
@@ -931,30 +959,22 @@ impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
 #[allow(missing_docs)]
 pub enum MarkerExpression {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
+    ///
+    /// Inverted version expressions, such as `<version> <version op> <version key>`, are also
+    /// normalized to this form.
     Version {
         key: MarkerValueVersion,
         specifier: VersionSpecifier,
     },
-    /// An inverted version expression, e.g `<quoted PEP 440 version> <version op> <version key>`.
-    VersionInverted {
-        /// No star allowed here, `'3.*' == python_version` is not a valid PEP 440 comparison.
-        version: Version,
-        operator: pep440_rs::Operator,
-        key: MarkerValueVersion,
-    },
     /// An string marker comparison, e.g. `sys_platform == '...'`.
+    ///
+    /// Inverted string expressions, e.g `'...' == sys_platform`, are also normalized to this form.
     String {
         key: MarkerValueString,
         operator: MarkerOperator,
         value: String,
     },
-    /// An inverted string marker comparison, e.g. `'...' == sys_platform`.
-    StringInverted {
-        value: String,
-        operator: MarkerOperator,
-        key: MarkerValueString,
-    },
-    /// `extra <extra op> '...'` or `'...' <extra op> extra`
+    /// `extra <extra op> '...'` or `'...' <extra op> extra`.
     Extra {
         operator: ExtraOperator,
         name: ExtraName,
@@ -1133,9 +1153,10 @@ impl MarkerExpression {
                         }
                     }
                     // '...' == <env key>
-                    MarkerValue::MarkerEnvString(key) => MarkerExpression::StringInverted {
+                    MarkerValue::MarkerEnvString(key) => MarkerExpression::String {
                         key,
-                        operator,
+                        // Invert the operator to normalize the expression order.
+                        operator: operator.invert(),
                         value: l_string,
                     },
                     // `'...' == extra`
@@ -1187,7 +1208,7 @@ impl MarkerExpression {
     /// Creates an instance of [`MarkerExpression::Version`] with the given values.
     ///
     /// Reports a warning on failure, and returns `None`.
-    pub fn version(
+    fn version(
         key: MarkerValueVersion,
         marker_operator: MarkerOperator,
         value: &str,
@@ -1211,11 +1232,9 @@ impl MarkerExpression {
             reporter.report(
                 MarkerWarningKind::Pep440Error,
                 format!(
-                    "Expected PEP 440 version operator to compare {} with '{}',
-                    found '{}', will evaluate to false",
-                    key,
-                    pattern.version(),
-                    marker_operator
+                    "Expected PEP 440 version operator to compare {key} with '{version}',
+                    found '{marker_operator}', will evaluate to false",
+                    version = pattern.version()
                 ),
             );
 
@@ -1236,7 +1255,7 @@ impl MarkerExpression {
         Some(MarkerExpression::Version { key, specifier })
     }
 
-    /// Creates an instance of [`MarkerExpression::VersionInverted`] with the given values.
+    /// Creates an instance of [`MarkerExpression::Version`] from an inverted expression.
     ///
     /// Reports a warning on failure, and returns `None`.
     fn version_inverted(
@@ -1245,6 +1264,10 @@ impl MarkerExpression {
         key: MarkerValueVersion,
         reporter: &mut impl Reporter,
     ) -> Option<MarkerExpression> {
+        // Invert the operator to normalize the expression order.
+        let marker_operator = marker_operator.invert();
+
+        // Not star allowed here, `'3.*' == python_version` is not a valid PEP 440 comparison.
         let version = match value.parse::<Version>() {
             Ok(version) => version,
             Err(err) => {
@@ -1271,11 +1294,18 @@ impl MarkerExpression {
             return None;
         };
 
-        Some(MarkerExpression::VersionInverted {
-            version,
-            operator,
-            key,
-        })
+        let specifier = match VersionSpecifier::from_version(operator, version) {
+            Ok(specifier) => specifier,
+            Err(err) => {
+                reporter.report(
+                    MarkerWarningKind::Pep440Error,
+                    format!("Invalid operator/version combination: {err}"),
+                );
+                return None;
+            }
+        };
+
+        Some(MarkerExpression::Version { key, specifier })
     }
 
     /// Creates an instance of [`MarkerExpression::Extra`] with the given values, falling back to
@@ -1342,24 +1372,6 @@ impl MarkerExpression {
                     }
                 }
             }
-            MarkerExpression::VersionInverted {
-                ref version,
-                ref operator,
-                ref key,
-            } => {
-                let version = version.clone();
-                match operator.negate() {
-                    None => negate_compatible_version(key.clone(), version),
-                    Some(op) => {
-                        let expr = MarkerExpression::VersionInverted {
-                            version: version.without_local(),
-                            operator: op,
-                            key: key.clone(),
-                        };
-                        MarkerTree::Expression(expr)
-                    }
-                }
-            }
             MarkerExpression::String {
                 ref key,
                 ref operator,
@@ -1372,21 +1384,6 @@ impl MarkerExpression {
                     // it as-is.
                     operator: operator.negate().unwrap_or(MarkerOperator::TildeEqual),
                     value: value.clone(),
-                };
-                MarkerTree::Expression(expr)
-            }
-            MarkerExpression::StringInverted {
-                ref value,
-                ref operator,
-                ref key,
-            } => {
-                let expr = MarkerExpression::StringInverted {
-                    value: value.clone(),
-                    // negating ~= doesn't make sense in this context, but
-                    // I believe it is technically allowed, so we just leave
-                    // it as-is.
-                    operator: operator.negate().unwrap_or(MarkerOperator::TildeEqual),
-                    key: key.clone(),
                 };
                 MarkerTree::Expression(expr)
             }
@@ -1436,28 +1433,6 @@ impl MarkerExpression {
             MarkerExpression::Version { key, specifier } => env
                 .map(|env| specifier.contains(env.get_version(key)))
                 .unwrap_or(true),
-            MarkerExpression::VersionInverted {
-                key,
-                operator,
-                version,
-            } => env
-                .map(|env| {
-                    let r_version = VersionPattern::verbatim(env.get_version(key).clone());
-                    let specifier = match VersionSpecifier::from_pattern(*operator, r_version) {
-                        Ok(specifier) => specifier,
-                        Err(err) => {
-                            reporter.report(
-                                MarkerWarningKind::Pep440Error,
-                                format!("Invalid operator/version combination: {err}"),
-                            );
-
-                            return false;
-                        }
-                    };
-
-                    specifier.contains(version)
-                })
-                .unwrap_or(true),
             MarkerExpression::String {
                 key,
                 operator,
@@ -1466,16 +1441,6 @@ impl MarkerExpression {
                 .map(|env| {
                     let l_string = env.get_string(key);
                     Self::compare_strings(l_string, *operator, value, reporter)
-                })
-                .unwrap_or(true),
-            MarkerExpression::StringInverted {
-                key,
-                operator,
-                value,
-            } => env
-                .map(|env| {
-                    let r_string = env.get_string(key);
-                    Self::compare_strings(value, *operator, r_string, reporter)
                 })
                 .unwrap_or(true),
             MarkerExpression::Extra {
@@ -1533,24 +1498,6 @@ impl MarkerExpression {
             } => python_versions
                 .iter()
                 .any(|l_version| specifier.contains(l_version)),
-            MarkerExpression::VersionInverted {
-                key: MarkerValueVersion::PythonVersion,
-                operator,
-                version,
-            } => {
-                python_versions.iter().any(|r_version| {
-                    // operator and right hand side make the specifier and in this case the
-                    // right hand is `python_version` so changes every iteration
-                    let Ok(specifier) = VersionSpecifier::from_pattern(
-                        *operator,
-                        VersionPattern::verbatim(r_version.clone()),
-                    ) else {
-                        return true;
-                    };
-
-                    specifier.contains(version)
-                })
-            }
             MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
                 name,
@@ -1610,6 +1557,8 @@ impl MarkerExpression {
             }
             MarkerOperator::In => r_string.contains(l_string),
             MarkerOperator::NotIn => !r_string.contains(l_string),
+            MarkerOperator::Contains => l_string.contains(r_string),
+            MarkerOperator::NotContains => !l_string.contains(r_string),
         }
     }
 }
@@ -1633,30 +1582,19 @@ impl Display for MarkerExpression {
                 }
                 write!(f, "{key} {op} '{version}'")
             }
-            MarkerExpression::VersionInverted {
-                version,
-                operator: op,
-                key,
-            } => {
-                if op == &pep440_rs::Operator::EqualStar || op == &pep440_rs::Operator::NotEqualStar
-                {
-                    return write!(f, "'{version}.*' {op} {key}");
-                }
-                write!(f, "'{version}' {op} {key}")
-            }
             MarkerExpression::String {
                 key,
                 operator,
                 value,
             } => {
+                if matches!(
+                    operator,
+                    MarkerOperator::Contains | MarkerOperator::NotContains
+                ) {
+                    return write!(f, "'{value}' {} {key}", operator.invert());
+                }
+
                 write!(f, "{key} {operator} '{value}'")
-            }
-            MarkerExpression::StringInverted {
-                value,
-                operator,
-                key,
-            } => {
-                write!(f, "'{value}' {operator} {key}")
             }
             MarkerExpression::Extra { operator, name } => {
                 write!(f, "extra {operator} '{name}'")
@@ -2469,7 +2407,7 @@ mod test {
         };
 
         assert_eq!(neg("python_version > '3.6'"), "python_version <= '3.6'");
-        assert_eq!(neg("'3.6' < python_version"), "'3.6' >= python_version");
+        assert_eq!(neg("'3.6' < python_version"), "python_version <= '3.6'");
 
         assert_eq!(
             neg("python_version == '3.6.*'"),
@@ -2494,7 +2432,7 @@ mod test {
         );
 
         assert_eq!(neg("sys_platform == 'linux'"), "sys_platform != 'linux'");
-        assert_eq!(neg("'linux' == sys_platform"), "'linux' != sys_platform");
+        assert_eq!(neg("'linux' == sys_platform"), "sys_platform != 'linux'");
 
         // ~= is nonsense on string markers. Evaluation always returns false
         // in this case, so technically negation would be an expression that
@@ -2633,6 +2571,12 @@ mod test {
             .evaluate_collect_warnings(&env37, &[]);
         assert_eq!(warnings, &[]);
         assert!(!result);
+
+        let (result, warnings) = MarkerTree::from_str("'3.*' == python_version")
+            .unwrap()
+            .evaluate_collect_warnings(&env37, &[]);
+        assert_eq!(warnings, &[]);
+        assert!(!result);
     }
 
     #[test]
@@ -2714,15 +2658,18 @@ mod test {
             )
             .unwrap(),
             MarkerTree::And(vec![
-                MarkerTree::Expression(MarkerExpression::StringInverted {
+                MarkerTree::Expression(MarkerExpression::String {
                     value: "nt".to_string(),
-                    operator: MarkerOperator::In,
+                    operator: MarkerOperator::Contains,
                     key: MarkerValueString::OsName,
                 }),
-                MarkerTree::Expression(MarkerExpression::VersionInverted {
+                MarkerTree::Expression(MarkerExpression::Version {
                     key: MarkerValueVersion::PythonVersion,
-                    operator: pep440_rs::Operator::GreaterThanEqual,
-                    version: "3.7".parse().unwrap(),
+                    specifier: VersionSpecifier::from_pattern(
+                        pep440_rs::Operator::LessThanEqual,
+                        "3.7".parse().unwrap()
+                    )
+                    .unwrap()
                 }),
                 MarkerTree::Expression(MarkerExpression::Version {
                     key: MarkerValueVersion::PythonFullVersion,

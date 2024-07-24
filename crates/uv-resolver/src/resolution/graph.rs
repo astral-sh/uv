@@ -391,16 +391,10 @@ impl ResolutionGraph {
         /// Add all marker parameters from the given tree to the given set.
         fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut IndexSet<MarkerParam>) {
             match marker_tree {
-                MarkerTree::Expression(
-                    MarkerExpression::Version { key, .. }
-                    | MarkerExpression::VersionInverted { key, .. },
-                ) => {
+                MarkerTree::Expression(MarkerExpression::Version { key, .. }) => {
                     set.insert(MarkerParam::Version(key.clone()));
                 }
-                MarkerTree::Expression(
-                    MarkerExpression::String { key, .. }
-                    | MarkerExpression::StringInverted { key, .. },
-                ) => {
+                MarkerTree::Expression(MarkerExpression::String { key, .. }) => {
                     set.insert(MarkerParam::String(key.clone()));
                 }
                 MarkerTree::And(ref exprs) | MarkerTree::Or(ref exprs) => {
