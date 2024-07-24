@@ -137,12 +137,45 @@ steps:
 
 ## Using `uv pip`
 
-If using the `uv pip` interface instead of the uv project interface, uv requires a virtual environment by default. To allow installing packages into the system environment, use the `--system` flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable, e.g.:
+If using the `uv pip` interface instead of the uv project interface, uv requires a virtual environment by default. To allow installing packages into the system environment, use the `--system` flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
+
+### Setting `UV_SYSTEM_PYTHON`
+
+`UV_SYSTEM_PYTHON` variable can be defined in various scopes:
+
+i. Workflow-wide Environment Variables
+
+Set the variable for the entire workflow by defining it at the top level:
+
+```yaml title="example.yml"
+env:
+  UV_SYSTEM_PYTHON: 1
+
+jobs: ...
+```
+
+ii. Job-specific Environment Variables
+
+Set the variable for a specific job within the workflow:
+
+```yaml title="example.yml"
+jobs:
+  install_job:
+    env:
+      UV_SYSTEM_PYTHON: 1
+    ...
+```
+
+iii. Step-specific Environment Variables
+
+Set the variable for a specific step:
 
 ```yaml title="example.yml"
 steps:
-  - name: Allow uv to use the system Python by default
-    run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
+  - name: Install requirements
+    run: uv pip install -r requirements.txt
+    env:
+      UV_SYSTEM_PYTHON: 1
 ```
 
 Now, `uv pip` can modify the system environment without creating and activating a virtual environment.
