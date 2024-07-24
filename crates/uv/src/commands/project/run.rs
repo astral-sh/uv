@@ -373,7 +373,6 @@ pub(crate) async fn run(
             .into_interpreter()
         };
 
-        // TODO(charlie): If the environment satisfies the requirements, skip creation.
         // TODO(charlie): Pass the already-installed versions as preferences, or even as the
         // "installed" packages, so that we can skip re-installing them in the ephemeral
         // environment.
