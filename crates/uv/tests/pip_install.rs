@@ -6105,3 +6105,46 @@ fn local_index_fallback() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn accept_existing_prerelease() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask==2.0.0rc1")?;
+
+    // Install a pre-release version of `flask`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("Flask==2.0.0rc1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + click==8.1.7
+     + flask==2.0.0rc1
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    // Install `flask-login`, without enabling pre-releases. The existing version of `flask` should
+    // still be accepted.
+    uv_snapshot!(context.filters(), context.pip_install().arg("flask-login==0.6.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + flask-login==0.6.0
+    "###
+    );
+
+    Ok(())
+}

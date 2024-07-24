@@ -120,14 +120,6 @@ impl CandidateSelector {
                     break 'preference;
                 }
 
-                // Respect the pre-release strategy for this fork.
-                if version.any_prerelease()
-                    && self.prerelease_strategy.allows(package_name, markers)
-                        != AllowPreRelease::Yes
-                {
-                    break 'preference;
-                }
-
                 // Check for a locally installed distribution that matches the preferred version
                 if !exclusions.contains(package_name) {
                     let installed_dists = installed_packages.get_packages(package_name);
@@ -155,6 +147,14 @@ impl CandidateSelector {
                     }
                 }
 
+                // Respect the pre-release strategy for this fork.
+                if version.any_prerelease()
+                    && self.prerelease_strategy.allows(package_name, markers)
+                        != AllowPreRelease::Yes
+                {
+                    break 'preference;
+                }
+
                 // Check for a remote distribution that matches the preferred version
                 if let Some(file) = version_maps
                     .iter()
@@ -180,14 +180,6 @@ impl CandidateSelector {
 
                     // Respect the version range for this requirement.
                     if !range.contains(version) {
-                        return None;
-                    }
-
-                    // Respect the pre-release strategy for this fork.
-                    if version.any_prerelease()
-                        && self.prerelease_strategy.allows(package_name, markers)
-                            != AllowPreRelease::Yes
-                    {
                         return None;
                     }
 
