@@ -327,7 +327,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             requires_python: self.requires_python.clone(),
         };
         let mut preferences = self.preferences.clone();
-        let mut forked_states = vec![state];
+        let mut forked_states = if let ResolverMarkers::Universal {
+            fork_preferences: Some(fork_preferences),
+        } = &self.markers
+        {
+            fork_preferences
+                .iter()
+                .map(|fork_preference| state.clone().with_markers(fork_preference.clone()))
+                .collect()
+        } else {
+            vec![state]
+        };
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
@@ -694,31 +704,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let forks_len = forks.len();
         forks.into_iter().enumerate().map(move |(i, fork)| {
             let is_last = i == forks_len - 1;
-            let mut forked_state = cur_state.take().unwrap();
+            let forked_state = cur_state.take().unwrap();
             if !is_last {
                 cur_state = Some(forked_state.clone());
             }
 
-            let combined_markers = forked_state.markers.and(fork.markers);
-            let combined_markers =
-                normalize(combined_markers, None).expect("Fork markers are universal");
-
-            // If the fork contains a narrowed Python requirement, apply it.
-            let python_requirement = requires_python_marker(&combined_markers)
-                .and_then(|marker| forked_state.python_requirement.narrow(&marker));
-            if let Some(python_requirement) = python_requirement {
-                if let Some(target) = python_requirement.target() {
-                    debug!("Narrowed `requires-python` bound to: {target}");
-                }
-                forked_state.requires_python = if forked_state.requires_python.is_some() {
-                    python_requirement.to_marker_tree()
-                } else {
-                    None
-                };
-                forked_state.python_requirement = python_requirement;
-            }
-
-            forked_state.markers = ResolverMarkers::Fork(combined_markers);
+            let mut forked_state = forked_state.with_markers(fork.markers);
             forked_state.add_package_version_dependencies(
                 for_package,
                 version,
@@ -2224,6 +2215,32 @@ impl ForkState {
                 UnavailableReason::Version(reason),
             ));
         Ok(())
+    }
+
+    /// Subset the current markers with the new markers and update the python requirements fields
+    /// accordingly.
+    fn with_markers(mut self, markers: MarkerTree) -> Self {
+        let combined_markers = self.markers.and(markers);
+        let combined_markers =
+            normalize(combined_markers, None).expect("Fork markers are universal");
+
+        // If the fork contains a narrowed Python requirement, apply it.
+        let python_requirement = requires_python_marker(&combined_markers)
+            .and_then(|marker| self.python_requirement.narrow(&marker));
+        if let Some(python_requirement) = python_requirement {
+            if let Some(target) = python_requirement.target() {
+                debug!("Narrowed `requires-python` bound to: {target}");
+            }
+            self.requires_python = if self.requires_python.is_some() {
+                python_requirement.to_marker_tree()
+            } else {
+                None
+            };
+            self.python_requirement = python_requirement;
+        }
+
+        self.markers = ResolverMarkers::Fork(combined_markers);
+        self
     }
 
     fn into_resolution(self) -> Resolution {
