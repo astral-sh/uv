@@ -1,7 +1,7 @@
 # Sync Python releases and create a pull request.
 #
 # Based on: https://github.com/astral-sh/rye/blob/57b7c089e494138aae29a130afb2e17f447970bf/.github/workflows/sync-python-releases.yml
-name: "Sync Python Releases"
+name: "Sync Python downloads"
 on:
   workflow_dispatch:
   schedule:
