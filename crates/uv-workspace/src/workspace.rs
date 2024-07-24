@@ -21,6 +21,8 @@ pub enum WorkspaceError {
     // Workspace structure errors.
     #[error("No `pyproject.toml` found in current directory or any parent directory")]
     MissingPyprojectToml,
+    #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{1}`)", _0.simplified_display())]
+    MissingPyprojectTomlMember(PathBuf, String),
     #[error("No `project` table found in: `{}`", _0.simplified_display())]
     MissingProject(PathBuf),
     #[error("No workspace found for: `{}`", _0.simplified_display())]
@@ -394,7 +396,7 @@ impl Workspace {
                     .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
 
                 debug!(
-                    "Adding root workspace member: {}",
+                    "Adding root workspace member: `{}`",
                     workspace_root.simplified_display()
                 );
 
@@ -413,7 +415,7 @@ impl Workspace {
         // The current project is a workspace member, especially in a single project workspace.
         if let Some(root_member) = current_project {
             debug!(
-                "Adding current workspace member: {}",
+                "Adding current workspace member: `{}`",
                 root_member.root.simplified_display()
             );
 
@@ -436,6 +438,11 @@ impl Workspace {
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
+                let member_root = absolutize_path(&member_root)
+                    .map_err(WorkspaceError::Normalize)?
+                    .to_path_buf();
+
+                // If the directory is explicitly ignored, skip it.
                 if options.ignore.contains(member_root.as_path()) {
                     debug!(
                         "Ignoring workspace member: `{}`",
@@ -443,15 +450,38 @@ impl Workspace {
                     );
                     continue;
                 }
-                let member_root = absolutize_path(&member_root)
-                    .map_err(WorkspaceError::Normalize)?
-                    .to_path_buf();
 
-                trace!("Processing workspace member {}", member_root.user_display());
+                trace!(
+                    "Processing workspace member: `{}`",
+                    member_root.user_display()
+                );
 
                 // Read the member `pyproject.toml`.
                 let pyproject_path = member_root.join("pyproject.toml");
-                let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
+                let contents = match fs_err::tokio::read_to_string(&pyproject_path).await {
+                    Ok(contents) => contents,
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        // If the directory is hidden, skip it.
+                        if member_root
+                            .file_name()
+                            .map(|name| name.as_encoded_bytes().starts_with(b"."))
+                            .unwrap_or(false)
+                        {
+                            debug!(
+                                "Ignoring hidden workspace member: `{}`",
+                                member_root.simplified_display()
+                            );
+                            continue;
+                        }
+
+                        return Err(WorkspaceError::MissingPyprojectTomlMember(
+                            member_root,
+                            member_glob.to_string(),
+                        ));
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+
                 let pyproject_toml = PyProjectToml::from_string(contents)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))?;
 
@@ -476,7 +506,7 @@ impl Workspace {
                 };
 
                 debug!(
-                    "Adding discovered workspace member: {}",
+                    "Adding discovered workspace member: `{}`",
                     member_root.simplified_display()
                 );
                 workspace_members.insert(
@@ -869,7 +899,7 @@ async fn find_workspace(
             continue;
         }
         trace!(
-            "Found pyproject.toml: {}",
+            "Found `pyproject.toml` at: `{}`",
             pyproject_path.simplified_display()
         );
 
@@ -886,7 +916,7 @@ async fn find_workspace(
         {
             if is_excluded_from_workspace(project_root, workspace_root, workspace)? {
                 debug!(
-                    "Found workspace root `{}`, but project is excluded.",
+                    "Found workspace root `{}`, but project is excluded",
                     workspace_root.simplified_display()
                 );
                 return Ok(None);
@@ -925,7 +955,7 @@ async fn find_workspace(
         } else {
             // We require that a `project.toml` file either declares a workspace or a project.
             warn!(
-                "pyproject.toml does not contain `project` table: `{}`",
+                "`pyproject.toml` does not contain a `project` table: `{}`",
                 pyproject_path.simplified_display()
             );
             Ok(None)
