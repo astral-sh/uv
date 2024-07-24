@@ -294,15 +294,21 @@ pub struct CleanArgs {
 #[derive(Args, Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PruneArgs {
-    /// Whether to remove unzipped wheels from the cache, leaving only zipped wheel entries.
+    /// Optimize the cache for persistence in a continuous integration environment, like GitHub
+    /// Actions.
     ///
-    /// By default, uv stores unzipped wheels in the cache, which enables high-performance package
-    /// installation. In some scenarios, though, persisting unzipped wheels may be undesirable. For
-    /// example, in GitHub Actions or other CI environments, uploading unzipped wheels to a remote
-    /// cache may have a negative impact on cache performance. Pruning unzipped wheels will leave
-    /// the cache with any built wheels in their zipped form.
+    /// By default, uv caches both the wheels that it builds from source and the pre-built wheels
+    /// that it downloads directly, to enable high-performance package installation. In some
+    /// scenarios, though, persisting pre-built wheels may be undesirable. For example, in GitHub
+    /// Actions, it's faster to omit pre-built wheels from the cache and instead have re-download
+    /// them on each run. However, it typically _is_ faster to cache wheels that are built from
+    /// source, since the wheel building process can be expensive, especially for extension
+    /// modules.
+    ///
+    /// In `--ci` mode, uv will prune any pre-built wheels from the cache, but retain any wheels
+    /// that were built from source.
     #[arg(long)]
-    pub all_unzipped: bool,
+    pub ci: bool,
 }
 
 #[derive(Args)]

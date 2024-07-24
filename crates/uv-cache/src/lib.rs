@@ -340,7 +340,7 @@ impl Cache {
     }
 
     /// Run the garbage collector on the cache, removing any dangling entries.
-    pub fn prune(&self, all_unzipped: bool) -> Result<Removal, io::Error> {
+    pub fn prune(&self, ci: bool) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
 
         // First, remove any top-level directories that are unused. These typically represent
@@ -387,7 +387,7 @@ impl Cache {
         }
 
         // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
-        if all_unzipped {
+        if ci {
             // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
             match fs::read_dir(self.bucket(CacheBucket::Wheels)) {
                 Ok(entries) => {

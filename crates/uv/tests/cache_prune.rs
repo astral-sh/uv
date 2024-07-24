@@ -172,7 +172,7 @@ fn prune_stale_symlink() -> Result<()> {
     Ok(())
 }
 
-/// `cache prune --all-unzips` should remove all unzipped archives.
+/// `cache prune --ci` should remove all unzipped archives.
 #[test]
 fn prune_unzipped() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -195,7 +195,7 @@ fn prune_unzipped() -> Result<()> {
      + source-distribution==0.0.1
     "###);
 
-    uv_snapshot!(context.filters(), context.prune().arg("--all-unzipped"), @r###"
+    uv_snapshot!(context.filters(), context.prune().arg("--ci"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
