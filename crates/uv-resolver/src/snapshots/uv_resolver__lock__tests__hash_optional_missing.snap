@@ -61,6 +61,7 @@ Ok(
                         },
                     },
                 ],
+                fork_markers: None,
                 dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
