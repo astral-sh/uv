@@ -74,8 +74,8 @@ nav:
       - Installation: installation.md
       - First steps: first-steps.md
       - Features: features.md
-      - Overview: overview.md
   - Guides:
+      - Overview: guides/overview.md
       - Installing Python: guides/install-python.md
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md

@@ -1,6 +1,6 @@
 # Using tools
 
-Many Python packages provide command-line interfaces which are useful as standalone tools. uv has specialized support for easily invoking and installing tools.
+Many Python packages provide applications that can be used as tools. uv has specialized support for easily invoking and installing tools.
 
 ## Using `uvx`
 
@@ -90,7 +90,7 @@ $ uvx --with mkdocs-material mkdocs --help
 
 ## Installing tools
 
-If a tool is used often, it can be useful to install it to a persistent environment instead of invoking `uvx` repeatedly.
+If a tool is used often, it can be useful to install it to a persistent environment and add it to the `PATH` instead of invoking `uvx` repeatedly.
 
 To install `ruff`:
 

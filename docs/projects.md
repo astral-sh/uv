@@ -2,7 +2,7 @@
 
 Python projects are help manage Python applications spanning multiple files.
 
-!!! note
+!!! tip
 
     Looking for an introduction to creating a project with uv? See the [projects guide](./guides/projects.md) first.
 
@@ -32,7 +32,9 @@ This Python version requirement determines what syntax is valid in the project a
 
 The `pyproject.toml` also lists dependencies of the project. uv supports modifying the standard dependency list from the command line with `uv add` and `uv remove`. uv also supports [extended package sources](./dependencies.md) for advanced users.
 
-See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with a `pyproject.toml`.
+!!! tip
+
+    See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with a `pyproject.toml`.
 
 ## Project environments
 

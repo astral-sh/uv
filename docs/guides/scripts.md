@@ -102,7 +102,7 @@ Note that if `uv run` is used in a _project_, these dependencies will be include
 
 Python recently added a standard format for [inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata). This allows the dependencies for a script to be declared in the script itself.
 
-To use inline script metadata, include a `script` section at the top of the script:
+To use inline script metadata, include a `script` section at the top of the script and declare the dependencies using TOML:
 
 ```python title="example.py"
 # /// script
