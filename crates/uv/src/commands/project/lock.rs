@@ -379,6 +379,14 @@ async fn do_lock(
         }
     });
 
+    // When we run the same resolution from the lockfile again, we could get a different result the
+    // second time due to the preferences causing us to skip a fork point (see
+    // "preferences-dependent-forking" packse scenario). To avoid this, we store the forks in the
+    // lockfile. We read those after all the lockfile filters, to allow the forks to change when
+    // the environment changed, e.g. the python bound check above can lead to different forking.
+    let resolver_markers =
+        ResolverMarkers::universal(existing_lock.and_then(|lock| lock.fork_markers().clone()));
+
     let resolution = match existing_lock {
         None => None,
 
@@ -432,7 +440,7 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                ResolverMarkers::Universal,
+                resolver_markers,
                 python_requirement.clone(),
                 &client,
                 &flat_index,
@@ -508,7 +516,7 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                ResolverMarkers::Universal,
+                ResolverMarkers::universal(None),
                 python_requirement,
                 &client,
                 &flat_index,

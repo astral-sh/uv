@@ -376,6 +376,12 @@ impl Lock {
         self.exclude_newer
     }
 
+    /// If this lockfile was built from a forking resolution with non-identical forks, return the
+    /// markers of those forks, otherwise `None`.
+    pub fn fork_markers(&self) -> &Option<BTreeSet<MarkerTree>> {
+        &self.fork_markers
+    }
+
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub fn to_resolution(
         &self,

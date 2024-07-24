@@ -131,7 +131,7 @@ pub struct NoSolutionError {
 impl NoSolutionError {
     pub fn header(&self) -> String {
         match &self.markers {
-            ResolverMarkers::Universal | ResolverMarkers::SpecificEnvironment(_) => {
+            ResolverMarkers::Universal { .. } | ResolverMarkers::SpecificEnvironment(_) => {
                 "No solution found when resolving dependencies:".to_string()
             }
             ResolverMarkers::Fork(markers) => {

@@ -403,7 +403,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .clone());
                         existing_resolution.markers = normalize(new_markers, None)
                             .map(ResolverMarkers::Fork)
-                            .unwrap_or(ResolverMarkers::Universal);
+                            .unwrap_or(ResolverMarkers::universal(None));
                         continue 'FORK;
                     }
 
@@ -1155,7 +1155,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             }),
-            ResolverMarkers::Universal | ResolverMarkers::Fork(_) => Ok(result?.fork()),
+            ResolverMarkers::Universal { .. } | ResolverMarkers::Fork(_) => Ok(result?.fork()),
         }
     }
 
@@ -1770,7 +1770,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     // We don't have access to the fork state when prefetching, so assume that
                     // pre-release versions are allowed.
-                    &ResolverMarkers::Universal,
+                    &ResolverMarkers::universal(None),
                 ) else {
                     return Ok(None);
                 };

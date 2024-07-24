@@ -78,7 +78,7 @@ impl<T> ForkMap<T> {
                 .collect(),
 
             // If we haven't forked yet, all values are potentially compatible.
-            ResolverMarkers::Universal => values.iter().map(|entry| &entry.value).collect(),
+            ResolverMarkers::Universal { .. } => values.iter().map(|entry| &entry.value).collect(),
         }
     }
 }
