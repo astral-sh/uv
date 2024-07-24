@@ -1,20 +1,21 @@
-use std::fmt::Write;
-use std::path::Path;
-
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use pep440_rs::Version;
 use pep508_rs::PackageName;
+use std::fmt::Write;
+use std::path::Path;
+use std::process::{Command, Stdio};
+use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::PreviewMode;
+use uv_configuration::{PreviewMode, VersionControl};
 use uv_fs::{absolutize_path, Simplified};
 use uv_python::{
     EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
     VersionRequest,
 };
 use uv_resolver::RequiresPython;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
 use uv_workspace::{check_nested_workspaces, DiscoveryOptions, Workspace, WorkspaceError};
 
@@ -31,6 +32,7 @@ pub(crate) async fn init(
     r#virtual: bool,
     no_readme: bool,
     python: Option<String>,
+    version_control: Option<VersionControl>,
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
@@ -100,6 +102,26 @@ pub(crate) async fn init(
         if !readme.exists() {
             fs_err::write(readme, String::new())?;
         }
+    }
+
+    // Initialize the version control system.
+    let in_existing_vcs = existing_vcs_repo(path.parent().unwrap_or(&path));
+    let vcs = match (version_control, in_existing_vcs) {
+        (None, false) => VersionControl::default(),
+        (Some(vcs), false) => vcs,
+        (None, true) => VersionControl::None,
+        (Some(vcs), true) => {
+            warn_user!(
+                "The project is already in a version control system, `--vcs {vcs}` is ignored",
+            );
+            VersionControl::None
+        }
+    };
+    if let Err(err) = init_vcs(&path, vcs) {
+        if version_control.is_some() {
+            return Err(err);
+        }
+        debug!("Failed to initialize version control: {:#}", err);
     }
 
     let project = if r#virtual { "workspace" } else { "project" };
@@ -318,6 +340,78 @@ async fn init_project(
                 workspace.install_path().simplified_display().cyan()
             )?;
         }
+    }
+
+    Ok(())
+}
+
+/// Initializes the correct VCS system based on the provided config.
+fn init_vcs(path: &Path, vcs: VersionControl) -> Result<()> {
+    match vcs {
+        VersionControl::Git => {
+            if !path.join(".git").exists() {
+                init_git_repo(path)?;
+
+                // Create the `.gitignore` if it does not already exist.
+                let gitignore = path.join(".gitignore");
+                if !gitignore.exists() {
+                    fs_err::write(
+                        gitignore,
+                        indoc::indoc! {r"
+                        # Python generated files
+                        __pycache__/
+                        *.py[oc]
+                        build/
+                        dist/
+                        wheels/
+                        *.egg-info
+
+                        # venv
+                        .venv
+                    "},
+                    )?;
+                }
+            }
+        }
+        VersionControl::None => {}
+    };
+
+    Ok(())
+}
+
+// Check if we are in an existing repo.
+fn existing_vcs_repo(dir: &Path) -> bool {
+    // Check git repo only for now.
+    is_inside_git_work_tree(dir)
+}
+
+/// Check if the path is inside a Git work tree.
+fn is_inside_git_work_tree(dir: &Path) -> bool {
+    Command::new("git")
+        .arg("rev-parse")
+        .arg("--is-inside-work-tree")
+        .current_dir(dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+/// Run `git init` in the given directory.
+fn init_git_repo(dir: &Path) -> Result<()> {
+    if !Command::new("git")
+        .arg("init")
+        .current_dir(&dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?
+        .success()
+    {
+        anyhow::bail!(
+            "Run `git init` failed at `{}`",
+            dir.simplified_display()
+        );
     }
 
     Ok(())

@@ -12,6 +12,7 @@ use pypi_types::VerbatimParsedUrl;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+    VersionControl,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonFetch, PythonPreference, PythonVersion};
@@ -1822,6 +1823,13 @@ pub struct InitArgs {
     /// Create a virtual workspace instead of a project.
     #[arg(long)]
     pub r#virtual: bool,
+
+    /// Initialize a new repository for the given version control system.
+    ///
+    /// By default, uv will try to initialize a Git repository (`git`).
+    /// Use `none` to skip repository initialization.
+    #[arg(long, value_enum)]
+    pub vcs: Option<VersionControl>,
 
     /// Do not create a `README.md` file.
     #[arg(long)]
