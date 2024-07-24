@@ -238,7 +238,7 @@ pub(crate) async fn run(
             project::sync::do_sync(
                 &project,
                 &venv,
-                &lock,
+                &lock.lock,
                 &extras,
                 dev,
                 Modifications::Sufficient,

@@ -244,7 +244,7 @@ pub(crate) async fn add(
     project::sync::do_sync(
         &VirtualProject::Project(project),
         &venv,
-        &lock,
+        &lock.lock,
         &extras,
         dev,
         Modifications::Sufficient,
