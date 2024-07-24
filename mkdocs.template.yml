@@ -1,6 +1,7 @@
 site_name: uv
 theme:
   name: material
+  logo: assets/logo-letter.svg
   favicon: assets/favicon.svg
   features:
     - navigation.instant
