@@ -1510,12 +1510,18 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             name = "markupsafe"
             version = "1.1.1"
             source = { registry = "https://pypi.org/simple" }
+            environment-markers = [
+                "sys_platform != 'win32'",
+            ]
             sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
 
             [[distribution]]
             name = "markupsafe"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
+            environment-markers = [
+                "sys_platform == 'win32'",
+            ]
             sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466 }
 
             [[distribution]]
@@ -4053,6 +4059,9 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
+        environment-markers = [
+            "sys_platform != 'darwin'",
+        ]
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -4066,6 +4075,9 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "anyio"
         version = "3.7.0"
         source = { registry = "https://pypi.org/simple" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -4079,6 +4091,9 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v1" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
         dependencies = [
             { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" } },
         ]
@@ -4087,6 +4102,9 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v2" }
+        environment-markers = [
+            "sys_platform != 'darwin'",
+        ]
         dependencies = [
             { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" } },
         ]

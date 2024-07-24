@@ -2479,6 +2479,12 @@ impl Resolution {
     }
 }
 
+impl ResolutionPackage {
+    pub(crate) fn is_base(&self) -> bool {
+        self.extra.is_none() && self.dev.is_none()
+    }
+}
+
 /// Fetch the metadata for an item
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]

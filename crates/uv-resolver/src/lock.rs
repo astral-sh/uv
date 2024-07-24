@@ -20,10 +20,10 @@ use cache_key::RepositoryUrl;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, PathBuiltDist,
-    PathSourceDist, PrioritizedDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Resolution, ResolvedDist, SourceDistCompatibility, ToUrlError, UrlString,
-    VersionId, WheelCompatibility,
+    DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, PrioritizedDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, SourceDistCompatibility,
+    ToUrlError, UrlString, VersionId, WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{
@@ -92,7 +92,12 @@ impl Lock {
                 continue;
             };
             if dist.is_base() {
-                let mut locked_dist = Distribution::from_annotated_dist(dist)?;
+                let fork_markers = graph
+                    .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
+                    .cloned();
+                let mut locked_dist = Distribution::from_annotated_dist(dist, fork_markers)?;
+
+                // Add all dependencies
                 for edge in graph.petgraph.edges(node_index) {
                     let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
                     else {
@@ -661,13 +666,22 @@ pub struct Distribution {
     pub(crate) id: DistributionId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
+    /// If there are multiple distributions for the same package name, we add the markers of the
+    /// fork(s) that contained this distribution, so we can set the correct preferences in the next
+    /// resolution.
+    ///
+    /// Named `environment-markers` in `uv.lock`.
+    fork_markers: Option<BTreeSet<MarkerTree>>,
     dependencies: Vec<Dependency>,
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
     dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
 }
 
 impl Distribution {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Self, LockError> {
+    fn from_annotated_dist(
+        annotated_dist: &AnnotatedDist,
+        fork_markers: Option<BTreeSet<MarkerTree>>,
+    ) -> Result<Self, LockError> {
         let id = DistributionId::from_annotated_dist(annotated_dist);
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
@@ -675,6 +689,7 @@ impl Distribution {
             id,
             sdist,
             wheels,
+            fork_markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dev_dependencies: BTreeMap::default(),
@@ -1024,6 +1039,12 @@ impl Distribution {
 
         self.id.to_toml(None, &mut table);
 
+        if let Some(ref fork_markers) = self.fork_markers {
+            let wheels =
+                each_element_on_its_line_array(fork_markers.iter().map(ToString::to_string));
+            table.insert("environment-markers", value(wheels));
+        }
+
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(
                 self.dependencies
@@ -1164,6 +1185,8 @@ struct DistributionWire {
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
+    #[serde(default, rename = "environment-markers")]
+    fork_markers: BTreeSet<MarkerTree>,
     #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
@@ -1186,6 +1209,7 @@ impl DistributionWire {
             id: self.id,
             sdist: self.sdist,
             wheels: self.wheels,
+            fork_markers: (!self.fork_markers.is_empty()).then_some(self.fork_markers),
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
                 .optional_dependencies
@@ -1210,6 +1234,7 @@ impl From<Distribution> for DistributionWire {
             id: dist.id,
             sdist: dist.sdist,
             wheels: dist.wheels,
+            fork_markers: dist.fork_markers.unwrap_or_default(),
             dependencies: wire_deps(dist.dependencies),
             optional_dependencies: dist
                 .optional_dependencies

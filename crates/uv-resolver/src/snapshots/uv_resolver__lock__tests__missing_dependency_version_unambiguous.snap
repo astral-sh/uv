@@ -56,6 +56,7 @@ Ok(
                     },
                 ),
                 wheels: [],
+                fork_markers: None,
                 dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
@@ -105,6 +106,7 @@ Ok(
                     },
                 ),
                 wheels: [],
+                fork_markers: None,
                 dependencies: [
                     Dependency {
                         distribution_id: DistributionId {
