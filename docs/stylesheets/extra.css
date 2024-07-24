@@ -124,3 +124,7 @@ This is a consequence of the reduced nav spacing below. */
 .md-nav--secondary .md-nav__link {
   margin-top: 0.5em;
 }
+/* See: https://mkdocstrings.github.io/recipes/#prevent-selection-of-prompts-and-output-in-python-code-blocks */
+.highlight .gp, .highlight .go { /* Generic.Prompt, Generic.Output */
+    user-select: none;
+}
