@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+use rkyv::with::Skip;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
@@ -21,6 +22,8 @@ pub struct WheelFilename {
     pub python_tag: Vec<String>,
     pub abi_tag: Vec<String>,
     pub platform_tag: Vec<String>,
+    #[with(Skip)]
+    _c: countme::Count<Self>,
 }
 
 impl FromStr for WheelFilename {
@@ -176,6 +179,7 @@ impl WheelFilename {
             python_tag: python_tag.split('.').map(String::from).collect(),
             abi_tag: abi_tag.split('.').map(String::from).collect(),
             platform_tag: platform_tag.split('.').map(String::from).collect(),
+            _c: countme::Count::new(),
         })
     }
 }

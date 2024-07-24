@@ -30,6 +30,7 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
 
     let metadata = client
         .wheel_metadata(&BuiltDist::DirectUrl(DirectUrlBuiltDist {
+            _c: countme::Count::new(),
             filename,
             location: archive.url,
             url: args.url,

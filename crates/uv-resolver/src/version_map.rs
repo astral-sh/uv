@@ -373,6 +373,7 @@ impl VersionMapLazy {
                             upload_time,
                         );
                         let dist = RegistryBuiltWheel {
+                            _c: countme::Count::new(),
                             filename,
                             file: Box::new(file),
                             index: self.index.clone(),
@@ -389,6 +390,7 @@ impl VersionMapLazy {
                             upload_time,
                         );
                         let dist = RegistrySourceDist {
+                            _c: countme::Count::new(),
                             name: filename.name.clone(),
                             version: filename.version.clone(),
                             file: Box::new(file),

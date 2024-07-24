@@ -266,6 +266,7 @@ fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution
                 git_url = git_url.with_precise(*precise);
             }
             Dist::Source(SourceDist::Git(GitSourceDist {
+                _c: countme::Count::new(),
                 name: requirement.name.clone(),
                 git: Box::new(git_url),
                 subdirectory: subdirectory.clone(),

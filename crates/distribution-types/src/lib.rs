@@ -155,6 +155,8 @@ pub enum SourceDist {
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone)]
 pub struct RegistryBuiltWheel {
+    pub _c: countme::Count<Self>,
+
     pub filename: WheelFilename,
     pub file: Box<File>,
     pub index: IndexUrl,
@@ -163,6 +165,8 @@ pub struct RegistryBuiltWheel {
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone)]
 pub struct RegistryBuiltDist {
+    pub _c: countme::Count<Self>,
+
     /// All wheels associated with this distribution. It is guaranteed
     /// that there is at least one wheel.
     pub wheels: Vec<RegistryBuiltWheel>,
@@ -193,6 +197,8 @@ pub struct RegistryBuiltDist {
 /// A built distribution (wheel) that exists at an arbitrary URL.
 #[derive(Debug, Clone)]
 pub struct DirectUrlBuiltDist {
+    pub _c: countme::Count<Self>,
+
     /// We require that wheel urls end in the full wheel filename, e.g.
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
@@ -205,6 +211,8 @@ pub struct DirectUrlBuiltDist {
 /// A built distribution (wheel) that exists in a local directory.
 #[derive(Debug, Clone)]
 pub struct PathBuiltDist {
+    pub _c: countme::Count<Self>,
+
     pub filename: WheelFilename,
     /// The path to the wheel.
     pub path: PathBuf,
@@ -215,6 +223,8 @@ pub struct PathBuiltDist {
 /// A source distribution that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone)]
 pub struct RegistrySourceDist {
+    pub _c: countme::Count<Self>,
+
     pub name: PackageName,
     pub version: Version,
     pub file: Box<File>,
@@ -232,6 +242,8 @@ pub struct RegistrySourceDist {
 /// A source distribution that exists at an arbitrary URL.
 #[derive(Debug, Clone)]
 pub struct DirectUrlSourceDist {
+    pub _c: countme::Count<Self>,
+
     /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
@@ -246,6 +258,8 @@ pub struct DirectUrlSourceDist {
 /// A source distribution that exists in a Git repository.
 #[derive(Debug, Clone)]
 pub struct GitSourceDist {
+    pub _c: countme::Count<Self>,
+
     pub name: PackageName,
     /// The URL without the revision and subdirectory fragment.
     pub git: Box<GitUrl>,
@@ -258,6 +272,8 @@ pub struct GitSourceDist {
 /// A source distribution that exists in a local archive (e.g., a `.tar.gz` file).
 #[derive(Debug, Clone)]
 pub struct PathSourceDist {
+    pub _c: countme::Count<Self>,
+
     pub name: PackageName,
     /// The resolved, absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
@@ -272,6 +288,8 @@ pub struct PathSourceDist {
 /// A source distribution that exists in a local directory.
 #[derive(Debug, Clone)]
 pub struct DirectorySourceDist {
+    pub _c: countme::Count<Self>,
+
     pub name: PackageName,
     /// The resolved, absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
@@ -309,12 +327,14 @@ impl Dist {
             }
 
             Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                _c: countme::Count::new(),
                 filename,
                 location,
                 url,
             })))
         } else {
             Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
+                _c: countme::Count::new(),
                 name,
                 location,
                 subdirectory,
@@ -354,12 +374,14 @@ impl Dist {
                 ));
             }
             Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
+                _c: countme::Count::new(),
                 filename,
                 path: canonicalized_path,
                 url,
             })))
         } else {
             Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                _c: countme::Count::new(),
                 name,
                 install_path: canonicalized_path.clone(),
                 lock_path: lock_path.to_path_buf(),
@@ -387,6 +409,7 @@ impl Dist {
 
         // Determine whether the path represents an archive or a directory.
         Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
+            _c: countme::Count::new(),
             name,
             install_path: canonicalized_path.clone(),
             lock_path: lock_path.to_path_buf(),
@@ -403,6 +426,7 @@ impl Dist {
         subdirectory: Option<PathBuf>,
     ) -> Result<Dist, Error> {
         Ok(Self::Source(SourceDist::Git(GitSourceDist {
+            _c: countme::Count::new(),
             name,
             git: Box::new(git),
             subdirectory,

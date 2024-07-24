@@ -8,6 +8,7 @@ description = "Normalization for distribution, package and extra names."
 workspace = true
 
 [dependencies]
+countme = "3.0.1"
 rkyv = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }

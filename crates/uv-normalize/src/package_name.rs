@@ -4,6 +4,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
+use rkyv::with::Skip;
 
 /// The normalized name of a package.
 ///
@@ -27,12 +28,17 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
-pub struct PackageName(String);
+pub struct PackageName(
+    String,
+    #[with(Skip)]
+    #[serde(skip)]
+    countme::Count<Self>,
+);
 
 impl PackageName {
     /// Create a validated, normalized package name.
     pub fn new(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_owned(name).map(Self)
+        validate_and_normalize_owned(name).map(|x| Self(x, countme::Count::new()))
     }
 
     /// Escape this name with underscores (`_`) instead of dashes (`-`)
@@ -77,7 +83,7 @@ impl FromStr for PackageName {
     type Err = InvalidNameError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        validate_and_normalize_ref(name).map(Self)
+        validate_and_normalize_ref(name).map(|x| Self(x, countme::Count::new()))
     }
 }
 

@@ -16,6 +16,7 @@ pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 /// [`PrioritizedDist`] is boxed because [`Dist`] is large.
 #[derive(Debug, Default, Clone)]
 struct PrioritizedDistInner {
+    _c: countme::Count<Self>,
     /// The highest-priority source distribution. Between compatible source distributions this priority is arbitrary.
     source: Option<(RegistrySourceDist, SourceDistCompatibility)>,
     /// The highest-priority wheel index. When present, it is
@@ -192,6 +193,7 @@ impl PrioritizedDist {
         compatibility: WheelCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
+            _c: countme::Count::new(),
             best_wheel_index: Some(0),
             wheels: vec![(dist, compatibility)],
             source: None,
@@ -206,6 +208,7 @@ impl PrioritizedDist {
         compatibility: SourceDistCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
+            _c: countme::Count::new(),
             best_wheel_index: None,
             wheels: vec![],
             source: Some((dist, compatibility)),
@@ -351,6 +354,7 @@ impl PrioritizedDist {
             .collect();
         let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone());
         Some(RegistryBuiltDist {
+            _c: countme::Count::new(),
             wheels,
             best_wheel_index,
             sdist,

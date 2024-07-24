@@ -58,6 +58,7 @@ tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-subscriber = { workspace = true }
 walkdir = { workspace = true }
+countme = "3.0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = { version = "0.1.39" }

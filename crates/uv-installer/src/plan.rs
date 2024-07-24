@@ -173,6 +173,7 @@ impl<'a> Planner<'a> {
                         }
 
                         let wheel = DirectUrlBuiltDist {
+                            _c: countme::Count::new(),
                             filename,
                             location: location.clone(),
                             url: url.clone(),
@@ -219,6 +220,7 @@ impl<'a> Planner<'a> {
                         }
                     } else {
                         let sdist = DirectUrlSourceDist {
+                            _c: countme::Count::new(),
                             name: requirement.name.clone(),
                             location: location.clone(),
                             subdirectory: subdirectory.clone(),
@@ -246,6 +248,7 @@ impl<'a> Planner<'a> {
                         git = git.with_precise(*precise);
                     }
                     let sdist = GitSourceDist {
+                        _c: countme::Count::new(),
                         name: requirement.name.clone(),
                         git: Box::new(git),
                         subdirectory: subdirectory.clone(),
@@ -277,6 +280,7 @@ impl<'a> Planner<'a> {
                     };
 
                     let sdist = DirectorySourceDist {
+                        _c: countme::Count::new(),
                         name: requirement.name.clone(),
                         url: url.clone(),
                         install_path: path,
@@ -325,6 +329,7 @@ impl<'a> Planner<'a> {
                         }
 
                         let wheel = PathBuiltDist {
+                            _c: countme::Count::new(),
                             filename,
                             url: url.clone(),
                             path,
@@ -373,6 +378,7 @@ impl<'a> Planner<'a> {
                         }
                     } else {
                         let sdist = PathSourceDist {
+                            _c: countme::Count::new(),
                             name: requirement.name.clone(),
                             url: url.clone(),
                             install_path: path,

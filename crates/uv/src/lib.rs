@@ -1067,6 +1067,7 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    countme::enable(true);
     // `std::env::args` is not `Send` so we parse before passing to our runtime
     // https://github.com/rust-lang/rust/pull/48005
     let cli = match Cli::try_parse_from(args) {
@@ -1169,6 +1170,9 @@ where
         runtime.shutdown_background();
         result
     };
+
+    let counts = countme::get::<distribution_filename::WheelFilename>();
+    eprintln!("{}", countme::get_all());
 
     match result {
         Ok(code) => code.into(),

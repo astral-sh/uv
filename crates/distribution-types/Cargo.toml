@@ -35,3 +35,4 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
+countme = "3.0.1"

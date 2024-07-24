@@ -852,6 +852,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
 
 [[package]]
+name = "countme"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7704b5fdd17b18ae31c4c1da5a2e0305a2bf17b5249300a9ee9ed7b72114c636"
+dependencies = [
+ "dashmap 5.5.3",
+ "once_cell",
+ "rustc-hash 1.1.0",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -979,6 +990,19 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
+version = "5.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
+dependencies = [
+ "cfg-if",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core 0.9.10",
+]
+
+[[package]]
+name = "dashmap"
 version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
@@ -1079,6 +1103,7 @@ dependencies = [
 name = "distribution-filename"
 version = "0.0.1"
 dependencies = [
+ "countme",
  "insta",
  "pep440_rs",
  "platform-tags",
@@ -1095,6 +1120,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
+ "countme",
  "distribution-filename",
  "fs-err",
  "itertools 0.13.0",
@@ -2289,7 +2315,7 @@ dependencies = [
 name = "once-map"
 version = "0.0.1"
 dependencies = [
- "dashmap",
+ "dashmap 6.0.1",
  "futures",
  "tokio",
 ]
@@ -2719,7 +2745,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.3",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -4440,6 +4466,8 @@ dependencies = [
  "cache-key",
  "chrono",
  "clap",
+ "countme",
+ "distribution-filename",
  "distribution-types",
  "filetime",
  "flate2",
@@ -4680,6 +4708,7 @@ dependencies = [
  "anstream",
  "anyhow",
  "clap",
+ "countme",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -4837,7 +4866,7 @@ dependencies = [
  "anyhow",
  "cache-key",
  "cargo-util",
- "dashmap",
+ "dashmap 6.0.1",
  "fs-err",
  "reqwest",
  "reqwest-middleware",
@@ -4855,6 +4884,7 @@ dependencies = [
  "anyhow",
  "async-channel",
  "cache-key",
+ "countme",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -4899,6 +4929,7 @@ dependencies = [
 name = "uv-normalize"
 version = "0.0.1"
 dependencies = [
+ "countme",
  "rkyv",
  "schemars",
  "serde",
@@ -4969,6 +5000,7 @@ dependencies = [
  "cache-key",
  "configparser",
  "console",
+ "countme",
  "ctrlc",
  "distribution-filename",
  "distribution-types",
@@ -5003,7 +5035,8 @@ dependencies = [
  "cache-key",
  "chrono",
  "clap",
- "dashmap",
+ "countme",
+ "dashmap 6.0.1",
  "derivative",
  "distribution-filename",
  "distribution-types",

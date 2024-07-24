@@ -712,6 +712,7 @@ impl Distribution {
                         .map(|wheel| wheel.to_registry_dist(url))
                         .collect();
                     let reg_built_dist = RegistryBuiltDist {
+                        _c: countme::Count::new(),
                         wheels,
                         best_wheel_index,
                         sdist: None,
@@ -721,6 +722,7 @@ impl Distribution {
                 Source::Path(path) => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let path_dist = PathBuiltDist {
+                        _c: countme::Count::new(),
                         filename,
                         url: verbatim_url(workspace_root.join(path), &self.id)?,
                         path: path.clone(),
@@ -735,6 +737,7 @@ impl Distribution {
                         subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                     });
                     let direct_dist = DirectUrlBuiltDist {
+                        _c: countme::Count::new(),
                         filename,
                         location: url.clone(),
                         url: VerbatimUrl::from_url(url),
@@ -781,6 +784,7 @@ impl Distribution {
         let sdist = match &self.id.source {
             Source::Path(path) => {
                 let path_dist = PathSourceDist {
+                    _c: countme::Count::new(),
                     name: self.id.name.clone(),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
@@ -790,6 +794,7 @@ impl Distribution {
             }
             Source::Directory(path) => {
                 let dir_dist = DirectorySourceDist {
+                    _c: countme::Count::new(),
                     name: self.id.name.clone(),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
@@ -800,6 +805,7 @@ impl Distribution {
             }
             Source::Editable(path) => {
                 let dir_dist = DirectorySourceDist {
+                    _c: countme::Count::new(),
                     name: self.id.name.clone(),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
@@ -821,6 +827,7 @@ impl Distribution {
                 });
 
                 let git_dist = GitSourceDist {
+                    _c: countme::Count::new(),
                     name: self.id.name.clone(),
                     url: VerbatimUrl::from_url(url),
                     git: Box::new(git_url),
@@ -834,6 +841,7 @@ impl Distribution {
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                 });
                 let direct_dist = DirectUrlSourceDist {
+                    _c: countme::Count::new(),
                     name: self.id.name.clone(),
                     location: url.clone(),
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
@@ -870,6 +878,7 @@ impl Distribution {
                 let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
 
                 let reg_dist = RegistrySourceDist {
+                    _c: countme::Count::new(),
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
                     file,
@@ -2025,6 +2034,7 @@ impl Wheel {
         });
         let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
         RegistryBuiltWheel {
+            _c: countme::Count::new(),
             filename,
             file,
             index,

@@ -21,6 +21,7 @@ rkyv = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+countme = "3.0.1"
 
 [dev-dependencies]
 insta = { version = "1.36.1" }

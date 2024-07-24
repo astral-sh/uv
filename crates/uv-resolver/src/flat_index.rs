@@ -77,6 +77,7 @@ impl FlatIndex {
                 let compatibility =
                     Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, build_options);
                 let dist = RegistryBuiltWheel {
+                    _c: countme::Count::new(),
                     filename,
                     file: Box::new(file),
                     index,
@@ -94,6 +95,7 @@ impl FlatIndex {
                 let compatibility =
                     Self::source_dist_compatibility(&filename, &file.hashes, hasher, build_options);
                 let dist = RegistrySourceDist {
+                    _c: countme::Count::new(),
                     name: filename.name.clone(),
                     version: filename.version.clone(),
                     file: Box::new(file),
