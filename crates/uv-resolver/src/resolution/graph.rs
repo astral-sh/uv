@@ -170,7 +170,7 @@ impl ResolutionGraph {
 
         let fork_markers = if let [resolution] = resolutions {
             match resolution.markers {
-                ResolverMarkers::Universal | ResolverMarkers::SpecificEnvironment(_) => None,
+                ResolverMarkers::Universal { .. } | ResolverMarkers::SpecificEnvironment(_) => None,
                 ResolverMarkers::Fork(_) => {
                     panic!("A single fork must be universal");
                 }
