@@ -32,6 +32,15 @@ use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
+/// The result of running a lock operation.
+#[derive(Debug, Clone)]
+pub(crate) struct LockResult {
+    /// The previous lock, if any.
+    pub(crate) previous: Option<Lock>,
+    /// The updated lock.
+    pub(crate) lock: Lock,
+}
+
 /// Resolve the project requirements into a lockfile.
 pub(crate) async fn lock(
     locked: bool,
@@ -86,7 +95,12 @@ pub(crate) async fn lock(
     )
     .await
     {
-        Ok(_) => Ok(ExitStatus::Success),
+        Ok(lock) => {
+            if let Some(previous) = lock.previous.as_ref() {
+                report_upgrades(previous, &lock.lock, printer)?;
+            }
+            Ok(ExitStatus::Success)
+        }
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -112,12 +126,16 @@ pub(super) async fn do_safe_lock(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Lock, ProjectError> {
+) -> Result<LockResult, ProjectError> {
     if frozen {
         // Read the existing lockfile, but don't attempt to lock the project.
-        read(workspace)
+        let existing = read(workspace)
             .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)
+            .ok_or_else(|| ProjectError::MissingLockfile)?;
+        Ok(LockResult {
+            previous: None,
+            lock: existing,
+        })
     } else if locked {
         // Read the existing lockfile.
         let existing = read(workspace)
@@ -145,7 +163,10 @@ pub(super) async fn do_safe_lock(
             return Err(ProjectError::LockMismatch);
         }
 
-        Ok(lock)
+        Ok(LockResult {
+            previous: Some(existing),
+            lock,
+        })
     } else {
         // Read the existing lockfile.
         let existing = read(workspace).await?;
@@ -166,16 +187,19 @@ pub(super) async fn do_safe_lock(
         )
         .await?;
 
-        if !existing.is_some_and(|existing| existing == lock) {
+        if !existing.as_ref().is_some_and(|existing| *existing == lock) {
             commit(&lock, workspace).await?;
         }
 
-        Ok(lock)
+        Ok(LockResult {
+            previous: existing,
+            lock,
+        })
     }
 }
 
 /// Lock the project requirements into a lockfile.
-pub(super) async fn do_lock(
+async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     existing_lock: Option<&Lock>,
@@ -506,16 +530,7 @@ pub(super) async fn do_lock(
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    let new_lock = Lock::from_resolution_graph(&resolution)?;
-
-    // Notify the user of any dependency updates
-    if !upgrade.is_none() {
-        if let Some(existing_lock) = existing_lock {
-            report_upgrades(existing_lock, &new_lock, printer)?;
-        }
-    }
-
-    Ok(new_lock)
+    Ok(Lock::from_resolution_graph(&resolution)?)
 }
 
 /// Write the lockfile to disk.

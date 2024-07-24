@@ -131,7 +131,7 @@ pub(crate) async fn remove(
     project::sync::do_sync(
         &VirtualProject::Project(project),
         &venv,
-        &lock,
+        &lock.lock,
         &extras,
         dev,
         Modifications::Exact,

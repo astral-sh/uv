@@ -3569,23 +3569,23 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    deterministic! { context =>
-        uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
+        Added pysocks v1.7.1
         "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
             version = 1
             requires-python = ">=3.12"
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -3678,9 +3678,8 @@ fn lock_new_extras() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
             ]
             "###
-            );
-        });
-    }
+        );
+    });
 
     Ok(())
 }
@@ -3863,14 +3862,15 @@ fn lock_resolution_mode() -> Result<()> {
 
     // Locking with `lowest-direct` should ignore the existing lockfile.
     uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
-        Resolved 4 packages in [TIME]
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
+    Resolved 4 packages in [TIME]
+    Updated anyio v4.3.0 -> v3.0.0
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
