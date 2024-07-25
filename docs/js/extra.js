@@ -5,9 +5,14 @@ function cleanupClipboardText(targetSelector) {
   const excludedClasses = ["gp", "go"];
 
   const clipboardText = Array.from(targetElement.childNodes)
-    .filter(node => !excludedClasses.some((className) => node?.classList?.contains(className)))
-    .map(node => node.textContent)
-    .filter(s => s != "");
+    .filter(
+      (node) =>
+        !excludedClasses.some((className) =>
+          node?.classList?.contains(className),
+        ),
+    )
+    .map((node) => node.textContent)
+    .filter((s) => s != "");
   return clipboardText.join("").trim();
 }
 
@@ -15,21 +20,26 @@ function cleanupClipboardText(targetSelector) {
 function setCopyText() {
   // The `data-clipboard-text` attribute allows for customized content in the copy
   // See: https://www.npmjs.com/package/clipboard#copy-text-from-attribute
-  const attr = 'clipboardText';
+  const attr = "clipboardText";
   // all "copy" buttons whose target selector is a <code> element
   const elements = document.querySelectorAll(
-      'button.md-clipboard[data-clipboard-target$="code"]'
+    'button.md-clipboard[data-clipboard-target$="code"]',
   );
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
       // target in the viewport that have not been patched
-      if (entry.intersectionRatio > 0 && entry.target.dataset[attr] === undefined) {
-        entry.target.dataset[attr] = cleanupClipboardText(entry.target.dataset.clipboardTarget);
+      if (
+        entry.intersectionRatio > 0 &&
+        entry.target.dataset[attr] === undefined
+      ) {
+        entry.target.dataset[attr] = cleanupClipboardText(
+          entry.target.dataset.clipboardTarget,
+        );
       }
     });
   });
 
-  elements.forEach(elt => {
+  elements.forEach((elt) => {
     observer.observe(elt);
   });
 }
@@ -38,6 +48,6 @@ function setCopyText() {
 // it will not result in a page refresh in the browser
 // See `How to integrate with third-party JavaScript libraries` guideline:
 // https://squidfunk.github.io/mkdocs-material/customization/?h=javascript#additional-javascript
-document$.subscribe(function() {
+document$.subscribe(function () {
   setCopyText();
-})
+});
