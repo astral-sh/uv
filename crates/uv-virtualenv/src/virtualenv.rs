@@ -82,6 +82,13 @@ pub(crate) fn create(
         unimplemented!("Only Windows and Unix are supported")
     };
 
+    println!("base_python: {:?}", base_python);
+    println!("sys_executable: {:?}", interpreter.sys_executable());
+    println!(
+        "sys_base_executable: {:?}",
+        interpreter.sys_base_executable()
+    );
+
     // Validate the existing location.
     match location.metadata() {
         Ok(metadata) => {

@@ -262,12 +262,12 @@ pub fn absolutize_path(path: &Path) -> Result<Cow<Path>, std::io::Error> {
 /// ```
 ///
 /// Attempting to canonicalize this path will fail with `ErrorKind::Uncategorized`.
-pub fn canonicalize_executable(path: impl AsRef<Path>) -> io::Result<PathBuf> {
+pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let path = path.as_ref();
     if is_windows_store_python(path) {
         Ok(path.to_path_buf())
     } else {
-        dunce::canonicalize(path)
+        fs_err::canonicalize(path)
     }
 }
 
