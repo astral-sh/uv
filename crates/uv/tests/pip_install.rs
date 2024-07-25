@@ -4491,6 +4491,7 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4589,6 +4590,7 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4718,6 +4720,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
