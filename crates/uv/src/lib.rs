@@ -179,6 +179,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
+
             let cache = cache.init()?.with_refresh(args.refresh);
 
             let requirements = args
@@ -262,7 +263,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             let requirements = args
                 .src_file
@@ -324,7 +327,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+
             let requirements = args
                 .package
                 .into_iter()
@@ -880,7 +886,9 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             let requirements = args
                 .with
@@ -921,7 +929,9 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             commands::sync(
                 args.locked,
@@ -948,7 +958,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache.init()?;
 
             commands::lock(
                 args.locked,
@@ -972,7 +982,9 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             commands::add(
                 args.locked,
@@ -1005,7 +1017,9 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             commands::remove(
                 args.locked,

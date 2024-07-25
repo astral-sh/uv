@@ -380,7 +380,7 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    /// Reinstall all packages, regardless of whether they're already installed.
+    /// Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
     #[option(
         default = "false",
         value_type = "bool",
@@ -389,7 +389,8 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub reinstall: Option<bool>,
-    /// Reinstall a specific package, regardless of whether it's already installed.
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `refresh-package`.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -1056,7 +1057,7 @@ pub struct PipOptions {
         "#
     )]
     pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    /// Reinstall all packages, regardless of whether they're already installed.
+    /// Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
     #[option(
         default = "false",
         value_type = "bool",
@@ -1065,7 +1066,8 @@ pub struct PipOptions {
         "#
     )]
     pub reinstall: Option<bool>,
-    /// Reinstall a specific package, regardless of whether it's already installed.
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `refresh-package`.
     #[option(
         default = "[]",
         value_type = "list[str]",

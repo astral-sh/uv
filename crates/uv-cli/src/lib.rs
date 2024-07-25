@@ -2548,14 +2548,16 @@ pub struct InstallerArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Reinstall all packages, regardless of whether they're already installed.
+    /// Reinstall all packages, regardless of whether they're already installed. Implies
+    /// `--refresh`.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub reinstall: bool,
 
     #[arg(long, overrides_with("reinstall"), hide = true)]
     pub no_reinstall: bool,
 
-    /// Reinstall a specific package, regardless of whether it's already installed.
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `--refresh-package`.
     #[arg(long)]
     pub reinstall_package: Vec<PackageName>,
 
@@ -2712,14 +2714,16 @@ pub struct ResolverInstallerArgs {
     #[arg(long, short = 'P')]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
-    /// Reinstall all packages, regardless of whether they're already installed.
+    /// Reinstall all packages, regardless of whether they're already installed. Implies
+    /// `--refresh`.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub reinstall: bool,
 
     #[arg(long, overrides_with("reinstall"), hide = true)]
     pub no_reinstall: bool,
 
-    /// Reinstall a specific package, regardless of whether it's already installed.
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `--refresh-package`.
     #[arg(long)]
     pub reinstall_package: Vec<PackageName>,
 

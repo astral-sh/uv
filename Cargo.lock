@@ -4668,6 +4668,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "uv-auth",
+ "uv-cache",
  "uv-normalize",
 ]
 
