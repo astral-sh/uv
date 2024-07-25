@@ -571,8 +571,9 @@ impl Lock {
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
-    #[serde(rename = "distribution")]
+    #[serde(rename = "distribution", default)]
     distributions: Vec<DistributionWire>,
+    #[serde(default)]
     requires_python: Option<RequiresPython>,
     #[serde(default)]
     resolution_mode: ResolutionMode,
