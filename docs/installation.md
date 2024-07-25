@@ -30,6 +30,15 @@ uv is installed to `~/.cargo/bin`.
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
+!!! tip
+
+    Setting only specific environment variables enable custom install directories:
+    ```bash
+    # On macOS and Linux.
+    $ curl --proto '=https' --tlsv1.2 -OLsSf https://github.com/astral-sh/uv/releases/download/0.2.29/uv-installer.sh
+    $ env -i CARGO_HOME=/tmp/foo/cargo HOME=/tmp/foo/home /usr/bin/bash uv-installer.sh --no-modify-path
+    ```
+
 A specific release can be requested by including the version in the URL:
 
 ```bash
