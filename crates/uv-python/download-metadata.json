@@ -7,8 +7,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz",
-    "sha256": "1c0e0fe57200fc7787e3a11a56e641a08a853d31860aa2c21483ffbe1261c115"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "72dd8279ef671033fa766590168091ae82b2b65e031da855e5a4f6725dc4b8c4"
   },
   "cpython-3.12.4-linux-aarch64-gnu": {
     "name": "cpython",
@@ -18,8 +18,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "c152d5c82272cc66f183dd00c5e9883148a25bb8a91a66d5b3e9c8a11289b2eb"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "723ef3059201e0018144e3ffb712b69a536911dd85b8ff85280ce3ca20e7ade6"
   },
   "cpython-3.12.4-linux-armv7-gnueabi": {
     "name": "cpython",
@@ -29,8 +29,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-armv7-unknown-linux-gnueabi-install_only.tar.gz",
-    "sha256": "4b6aca1560560c9381693d047aab42a1c2c23605b4c69b285f6c54d27a717509"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+    "sha256": "d14875f0da5b253bb88f664955026aea4bf8aae29c8142062ab3f1d24d605521"
   },
   "cpython-3.12.4-linux-armv7-gnueabihf": {
     "name": "cpython",
@@ -40,8 +40,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-armv7-unknown-linux-gnueabihf-install_only.tar.gz",
-    "sha256": "9e12a309e99f06d28b49816d6e9ab6506fc43719b9a765d52913966f37e5111b"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+    "sha256": "ee7ee02f050c982b038512c9cdbedd2639d819e182ea7513a4a605837fe8d920"
   },
   "cpython-3.12.4-windows-i686-none": {
     "name": "cpython",
@@ -51,8 +51,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-i686-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "0b0c3f6b6c2ef50df0b459d11716f5859647713e43777966d9aee8e03c697b84"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "63f3305b9e8b788cc7fd822abcbad193a360e24749bc21623e5e3a24d93a4563"
   },
   "cpython-3.12.4-linux-powerpc64le-gnu": {
     "name": "cpython",
@@ -62,8 +62,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-ppc64le-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "f053b3953b99045e536eb15147e2cd0eaebf46fcf7aeba7db37e93ae9884bdcd"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "373a095413970e33b55619c42e5b7754810a72f5c0afcad7fe84564c6c213b27"
   },
   "cpython-3.12.4-linux-s390x-gnu": {
     "name": "cpython",
@@ -73,8 +73,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-s390x-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "9eb6cb22758851aad1b85bc348e697140261df47df36aca77790cb14ceaa6bd0"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "ab33ed2086efffea4b9d125ef46fee289f49bc74e3b24a0cbbeca279e9a288be"
   },
   "cpython-3.12.4-darwin-x86_64-none": {
     "name": "cpython",
@@ -84,8 +84,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-apple-darwin-install_only.tar.gz",
-    "sha256": "6713765cf6b16e55d8b36dc304a34c9dfcd9365d02ad78e2801c49d0e91266ef"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-x86_64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "cd7601f4137c3c16c90f7de64223ee5adb425b73d27f3256ce68f02ddfe3bdb8"
   },
   "cpython-3.12.4-linux-x86_64-gnu": {
     "name": "cpython",
@@ -95,8 +95,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "eb5f83bfcd16391a5c010356e82708a0f1e6b7d4d8106f21e545a858f7d5f409"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "d491e01f71e9bf97877a8009353fdf0f749e9038c7e67a7be866717a6bcdfd1c"
   },
   "cpython-3.12.4-linux-x86_64-musl": {
     "name": "cpython",
@@ -106,8 +106,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "93126e3298cd338756e3a40222b0d1fdb068769377930e2aeb9a6a81d8d4ca9d"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "6c4f60048f7c0eeb05a77c46bee2c6519498cb5887ea192187a1f7bc3a4f601d"
   },
   "cpython-3.12.4-windows-x86_64-none": {
     "name": "cpython",
@@ -117,8 +117,8 @@
     "major": 3,
     "minor": 12,
     "patch": 4,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-x86_64-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "fd3f9d23975e61406190444078355794944a9535323d84fa37d3fde1b73ea8f5"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.12.4%2B20240725-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "b008ab7911f70e147fe4114d322436bff2d10f2f8fc59205c509252639632543"
   },
   "cpython-3.12.3-darwin-aarch64-none": {
     "name": "cpython",
@@ -546,8 +546,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-aarch64-apple-darwin-install_only.tar.gz",
-    "sha256": "a25a23802821699fae913dacd123033998ed745dfed692c8c7079590d2153d8d"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "672b17e5c41e2c7dbce4cf7f2fbd0a972895bc781f4e7adca927629e9be993ad"
   },
   "cpython-3.11.9-linux-aarch64-gnu": {
     "name": "cpython",
@@ -557,8 +557,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-aarch64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "32f70725d45dc5affd8d3eb132671eaea02695e6d072dc5591f2d7418dee6fc1"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "01d2bbe3edb46188656db4a4c7e2292072e34bb8aa4849576c34dbe58718c078"
   },
   "cpython-3.11.9-linux-armv7-gnueabi": {
     "name": "cpython",
@@ -568,8 +568,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-armv7-unknown-linux-gnueabi-install_only.tar.gz",
-    "sha256": "2c6abd081084407e4d8b0aea919bc41faf2bc160af51a61e14744a454acc8e3f"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+    "sha256": "56d8c22eea53e55ebea9e751e7cd2d5820e6793d963dedddeb14410e9e6ef2e3"
   },
   "cpython-3.11.9-linux-armv7-gnueabihf": {
     "name": "cpython",
@@ -579,8 +579,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-armv7-unknown-linux-gnueabihf-install_only.tar.gz",
-    "sha256": "2b22bba1e2b04b2bae10bf4e01026b737445428b61f6ccefeaa5dacba9092dbf"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+    "sha256": "ca9c62c89fdaf564551c2fbbbdff5393966088c68ece749dbee0e8ed2956b3b3"
   },
   "cpython-3.11.9-windows-i686-none": {
     "name": "cpython",
@@ -590,8 +590,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-i686-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "8c56ac133e55ccb2cc690b586cc302a72fe8d6f98558955258806e9fa1785cd2"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "6f0af1a7f210370d615db19a5a92e3f8f04daf0047a5616f6ceb5dbad09ea957"
   },
   "cpython-3.11.9-linux-powerpc64le-gnu": {
     "name": "cpython",
@@ -601,8 +601,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-ppc64le-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "33a3e57cf572fac3844a4f70c228bb002279377eeeba2656388dad12806833ee"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "95ab6a1e64d4db1cd6960bab9daf0897fe5205186638d49ce2e4aa415dd8eed5"
   },
   "cpython-3.11.9-linux-s390x-gnu": {
     "name": "cpython",
@@ -612,8 +612,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-s390x-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "74f1124514ff870e4d017d0d2bfde5eea9b0c7b3b2c8686cec227d41d059bffe"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "6a2fa0e4fa01a4c90b1ed824e711a73f05e0a89696f41350ccb2a1cdf2b299d4"
   },
   "cpython-3.11.9-darwin-x86_64-none": {
     "name": "cpython",
@@ -623,8 +623,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-x86_64-apple-darwin-install_only.tar.gz",
-    "sha256": "9b56b0d2e301de0f5f94be9d5b7bd3f318c88d7897f9b183269ccada6356ac45"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-x86_64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "013941df52f7957058e3459c9d85c0587374f0541ac881733f63d00e6cee1b6a"
   },
   "cpython-3.11.9-linux-x86_64-gnu": {
     "name": "cpython",
@@ -634,8 +634,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "1f91c44febc850376a35ae77e1d45f7c823994b0c80293bbbc17e647eb893853"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "34ea39bca968c63c1a8e45dd2114a52b3dc9b5473300278c0bceeb793dba90db"
   },
   "cpython-3.11.9-linux-x86_64-musl": {
     "name": "cpython",
@@ -645,8 +645,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "ce92dcbfe6ddb0411e2270de47d1b5c82cb9104b3bdad3d063a04327e88fa7a8"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "d400cf97b05cb71175439ad7645e8c40b98d8aeb8021e027ebae25165f2a6d7a"
   },
   "cpython-3.11.9-windows-x86_64-none": {
     "name": "cpython",
@@ -656,8 +656,8 @@
     "major": 3,
     "minor": 11,
     "patch": 9,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.11.9%2B20240713-x86_64-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "12b640394be0d37301885d554adff94fce0fd595d8590a5ed3aca16ce38ca287"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.11.9%2B20240725-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "31b6d5591527b8213f8d4f8087451331bdf0c18343dd7d30ce1c87f1323c7061"
   },
   "cpython-3.11.8-darwin-aarch64-none": {
     "name": "cpython",
@@ -1371,8 +1371,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-aarch64-apple-darwin-install_only.tar.gz",
-    "sha256": "cb3e18229e4d2cb0d5c5903dd9d52dd47da8a22328e3cab5401cb8f7a184b73b"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "4651ccef9d2418ce9d971e91aa8cb7f14381d85eb00dc2d86c3061c9de2a07fe"
   },
   "cpython-3.10.14-linux-aarch64-gnu": {
     "name": "cpython",
@@ -1382,8 +1382,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-aarch64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "f58ab2cadc7dc955c8ac2dbb7920207591e56ea22aab60b9a527d5473522f0bc"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "def6e1104e332921c6b624c100ecf2549aa597507a45f649d07314fa0e24d7cf"
   },
   "cpython-3.10.14-linux-armv7-gnueabi": {
     "name": "cpython",
@@ -1393,8 +1393,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-armv7-unknown-linux-gnueabi-install_only.tar.gz",
-    "sha256": "6b27928cfa47b8edd0dbb99fcf42e70a3d48fb76a4f145f6977b3e208c280b75"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+    "sha256": "88d59313da53a6698a1321b4860e3bf6062a6d626bf6db37f3a7d6c644dabaf3"
   },
   "cpython-3.10.14-linux-armv7-gnueabihf": {
     "name": "cpython",
@@ -1404,8 +1404,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-armv7-unknown-linux-gnueabihf-install_only.tar.gz",
-    "sha256": "812a301ce68127e0f83dcd02bfed94056ddfecefba6087eec53650a21931aa7b"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+    "sha256": "28aea1c13c4381f4ef2bb192e9831e510ef7075ca887c9a43a278ca6145fe079"
   },
   "cpython-3.10.14-windows-i686-none": {
     "name": "cpython",
@@ -1415,8 +1415,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-i686-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "49fab4ceb7b8037a31b6616f92e9a83695b8188f3c9a97e171f2bd0193ded5ce"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "d14a151b290dca3add85853fa9424c38aac8cab170aca7ad0fc052880caaa985"
   },
   "cpython-3.10.14-linux-powerpc64le-gnu": {
     "name": "cpython",
@@ -1426,8 +1426,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-ppc64le-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "f2f6fba348406ee51a26a97bbfed920e5fb1b729a5ab7305148c8f38f7bc338f"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "b7877e5a9bedf1f9ca0a0ae8a32c98039f2c4ca69c984ced1aed8a5d5ca4c88c"
   },
   "cpython-3.10.14-linux-s390x-gnu": {
     "name": "cpython",
@@ -1437,8 +1437,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-s390x-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "0f5b669c9301f560ad940ed93cd0f86111b091d7e20d4be434836f7edf1d9fa8"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "6b72f9aa43084fc7a5d83b9d402264884d3f449991346c1e7870fec4c8c1aa8d"
   },
   "cpython-3.10.14-darwin-x86_64-none": {
     "name": "cpython",
@@ -1448,8 +1448,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-x86_64-apple-darwin-install_only.tar.gz",
-    "sha256": "a8a7f6d6efb18ff3c068ef311abad48a778aadbb958aaacb2193bfb374cbebf5"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-x86_64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "0f6331419c1c93eac657dad33541df882497af33474dad960021db91315c551e"
   },
   "cpython-3.10.14-linux-x86_64-gnu": {
     "name": "cpython",
@@ -1459,8 +1459,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "6e90e30d1b2af67ddb65739df0e86f8b096f0d8e1e17feee8c70483760b0dc38"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "4878e0e1d791c87a888e211ec725e9a6d3e4fd386aeae4d892547093245d1dd4"
   },
   "cpython-3.10.14-linux-x86_64-musl": {
     "name": "cpython",
@@ -1470,8 +1470,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "e239889b1f609724fb967ed7bcd6832f20f6ae7796beab39e776a3f5d37369db"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "7174febd4c06a01e6c1612b38541f3fee18733788a9b2756f2d372976f14f0de"
   },
   "cpython-3.10.14-windows-x86_64-none": {
     "name": "cpython",
@@ -1481,8 +1481,8 @@
     "major": 3,
     "minor": 10,
     "patch": 14,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.10.14%2B20240713-x86_64-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "2b0fd29d8f8dddaedb96ac1b50febe2f0cef301aaf3ac7a0c76118e07cc22855"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.10.14%2B20240725-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "d57aa1399a925efc66ebdcc26bfe1948b1446afb50750696650815999d607219"
   },
   "cpython-3.10.13-darwin-aarch64-none": {
     "name": "cpython",
@@ -2603,8 +2603,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-aarch64-apple-darwin-install_only.tar.gz",
-    "sha256": "780a36bb0c0b0600561d225537d55b26a6a84fc4e7e593b3ec50126c5c79019f"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "8840ac5d2c98926ea7397d6f10ef3d23ea83a7e942480eb30d6c9dc4f998d70d"
   },
   "cpython-3.9.19-linux-aarch64-gnu": {
     "name": "cpython",
@@ -2614,8 +2614,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-aarch64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "f70b404a297a607405d6f2eb6ac4cb6160a7be0ae594983637da4e48b5c7cc26"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "a5efe24931ab137ec0cafcbebc25f1a77281f864e08e9dbc745edcf90f562300"
   },
   "cpython-3.9.19-linux-armv7-gnueabi": {
     "name": "cpython",
@@ -2625,8 +2625,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-armv7-unknown-linux-gnueabi-install_only.tar.gz",
-    "sha256": "0801fe8b8aa841c2b735ec0515de83c2c530ac7547ef0b149b35d692e5684957"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+    "sha256": "3d65db466aeb89c373d049e19d96dae0c54f2b3a888b06717018207b1f701270"
   },
   "cpython-3.9.19-linux-armv7-gnueabihf": {
     "name": "cpython",
@@ -2636,8 +2636,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-armv7-unknown-linux-gnueabihf-install_only.tar.gz",
-    "sha256": "e3a4beeb4dedc4bae9c6a59ab0413075704d203cb99ab0df94d1dfca5f8ed270"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+    "sha256": "bb59b25cd5a38d1037976f63e56c66bb23807adabb296f9bf952259b0a89c0fe"
   },
   "cpython-3.9.19-windows-i686-none": {
     "name": "cpython",
@@ -2647,8 +2647,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-i686-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "a4e0e64dd1035e94ca57f05d4eeb7f3fc431af41c0d431698a52bf6c2efdc298"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "c2a20a49939e07c738c99dbfe79e3d0fe863f490904f49ac9bd5231300f798dc"
   },
   "cpython-3.9.19-linux-powerpc64le-gnu": {
     "name": "cpython",
@@ -2658,8 +2658,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-ppc64le-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "2d2a45ebefc8b37b41a9a5449c941735fa6c9e740f6f5ded0ecf6f760388ecdd"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "bc30e20cdafd79da38bc5cd7166908cb432a6af58cbe43836523a62afb3eb25f"
   },
   "cpython-3.9.19-linux-s390x-gnu": {
     "name": "cpython",
@@ -2669,8 +2669,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-s390x-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "8747e8bb9c768c7b169aed7b86a822027fb333403ab361dab32721c7b40ea115"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "ae72d9922d6bb60782a824b624e18051c428a001e30a85167f182ecaa8484b9e"
   },
   "cpython-3.9.19-darwin-x86_64-none": {
     "name": "cpython",
@@ -2680,8 +2680,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-x86_64-apple-darwin-install_only.tar.gz",
-    "sha256": "2d812e5d1c6608430391ef603f37cc2b8e78bde54e49f29f575f6558e8cde2e7"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-x86_64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "df4346fbb2c91e79310460608c6e9cb9569a8973c7ee0e51c1f4f4574aa28726"
   },
   "cpython-3.9.19-linux-x86_64-gnu": {
     "name": "cpython",
@@ -2691,8 +2691,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "046db998b28373f69c55611e58a6611e5bb4e17997d0265beddad7c61e19f602"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "cce7ae7270caf42ec45ece981f43186cd20f3236c079259682855624ac833eb7"
   },
   "cpython-3.9.19-linux-x86_64-musl": {
     "name": "cpython",
@@ -2702,8 +2702,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "4856f201876cbee32943e97a7be8d85c51257b855d20d4c08698bbd8e2811b6b"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "b7e788a9956f516ead93b88532cb8702d9f606ce09ccc8eccb72edab2a2c31a1"
   },
   "cpython-3.9.19-windows-x86_64-none": {
     "name": "cpython",
@@ -2713,8 +2713,8 @@
     "major": 3,
     "minor": 9,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.9.19%2B20240713-x86_64-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "3279b5ad474f3ae7017411b8204ff441d18ca14d4ae5585ff3c4d7f8b035aca4"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.9.19%2B20240725-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "56c973fb571c7b776ce376dba234bf6713321de7f5c705b5baa6980ca5fb1783"
   },
   "cpython-3.9.18-darwin-aarch64-none": {
     "name": "cpython",
@@ -4154,8 +4154,8 @@
     "major": 3,
     "minor": 8,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.8.19%2B20240713-aarch64-apple-darwin-install_only.tar.gz",
-    "sha256": "0be10f265da68c9be2bb4d66228eabc72a8e60bd62e3950012771a1227a33775"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.8.19%2B20240725-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "4e481beb11d9faa7938aed201508d28506f9b73fe740e55048aa5113e02c9a7a"
   },
   "cpython-3.8.19-linux-aarch64-gnu": {
     "name": "cpython",
@@ -4165,8 +4165,8 @@
     "major": 3,
     "minor": 8,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.8.19%2B20240713-aarch64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "915fda01a8530c7f68eec70f00b60b61ea23e9210db44435bc5702d2b2ce3a5b"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.8.19%2B20240725-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "292c416f244152bfca4ce1de7b706aa6e64cb6f2188c07fc1be7dbe47504d21e"
   },
   "cpython-3.8.19-windows-i686-none": {
     "name": "cpython",
@@ -4176,8 +4176,8 @@
     "major": 3,
     "minor": 8,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.8.19%2B20240713-i686-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "d7a908fe815db0cb643974c25edf85082f0fa9bd995c477fbd427f8e40b83ff3"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.8.19%2B20240725-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "65e1dd90806748a75d55829e2add9517dba62415aa05d3080c4b42a5377ecdbc"
   },
   "cpython-3.8.19-darwin-x86_64-none": {
     "name": "cpython",
@@ -4187,8 +4187,8 @@
     "major": 3,
     "minor": 8,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.8.19%2B20240713-x86_64-apple-darwin-install_only.tar.gz",
-    "sha256": "6750756db0b1d3e9f874465d98467b66fc720e693437baf8a7e29fdef1e0674d"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.8.19%2B20240725-x86_64-apple-darwin-install_only_stripped.tar.gz",
+    "sha256": "f6be36c5a5c984c00c205ada6c2373dbffe1c694dba8c5a5abaecb9234bdda72"
   },
   "cpython-3.8.19-linux-x86_64-gnu": {
     "name": "cpython",
@@ -4198,8 +4198,8 @@
     "major": 3,
     "minor": 8,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.8.19%2B20240713-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "974075f112347cd3c2ef680de0d54dd865b63471c4e0f5dbf7951c8f7c4317c2"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.8.19%2B20240725-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "15db6196d8a0ac26f0fbf8e05b1d1ebe64424722eb0dd8f5c63670f99adb2aa2"
   },
   "cpython-3.8.19-linux-x86_64-musl": {
     "name": "cpython",
@@ -4209,8 +4209,8 @@
     "major": 3,
     "minor": 8,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.8.19%2B20240713-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "657a9dedbadf5d7997843efc47a98dba7f3438fb884838bf1397e73ea1f1cfba"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.8.19%2B20240725-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "a492b364e387ed6f682965df8e5e70f543b0372fa60923c947415affb7b0d9f6"
   },
   "cpython-3.8.19-windows-x86_64-none": {
     "name": "cpython",
@@ -4220,8 +4220,8 @@
     "major": 3,
     "minor": 8,
     "patch": 19,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.8.19%2B20240713-x86_64-pc-windows-msvc-install_only.tar.gz",
-    "sha256": "175e6fddc729a50f09f58fb9d6f4d9ab94b39b735f1c03684c5e1a216a300e17"
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240725/cpython-3.8.19%2B20240725-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "fad033c6f60fd9354b4acecc9f88a7475261155fcc854c5b79634845b64fb7d1"
   },
   "cpython-3.8.18-darwin-aarch64-none": {
     "name": "cpython",
