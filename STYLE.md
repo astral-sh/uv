@@ -21,6 +21,10 @@ Just uv, please.
 1. Do not capitalize, e.g., "Uv", even at the beginning of a sentence.
 1. Do not uppercase, e.g., "UV", unless referring to an environment variable, e.g., `UV_PYTHON`.
 
+## Terminology
+
+1. Use "lockfile" not "lock file".
+
 ## Documentation
 
 1. Use periods at the end of all sentences, including lists unless they enumerate single items.

@@ -1377,7 +1377,7 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Always remove color codes from output file ([#2018](https://github.com/astral-sh/uv/pull/2018))
 - Support recursive extras in direct `pyproject.toml` files ([#1990](https://github.com/astral-sh/uv/pull/1990))
 - Un-cache editable requirements with dynamic metadata ([#2029](https://github.com/astral-sh/uv/pull/2029))
-- Use a non-local lock file for locking system interpreters ([#2045](https://github.com/astral-sh/uv/pull/2045))
+- Use a non-local lockfile for locking system interpreters ([#2045](https://github.com/astral-sh/uv/pull/2045))
 - Surface the `EXTERNALLY-MANAGED` message to users ([#2032](https://github.com/astral-sh/uv/pull/2032))
 
 ## 0.1.11

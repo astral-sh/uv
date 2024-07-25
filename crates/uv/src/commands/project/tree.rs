@@ -64,7 +64,7 @@ pub(crate) async fn tree(
     .await?
     .into_interpreter();
 
-    // Update the lock file, if necessary.
+    // Update the lockfile, if necessary.
     let lock = project::lock::do_safe_lock(
         locked,
         frozen,
