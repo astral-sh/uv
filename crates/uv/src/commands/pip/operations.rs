@@ -471,6 +471,22 @@ pub(crate) async fn install(
             .install_blocking(wheels)?;
 
         let s = if wheels.len() == 1 { "" } else { "s" };
+
+        let python_executable = venv.python_executable();
+        let venv_dir = PathBuf::from(".venv");
+        let venv_dir_canonical = venv_dir.canonicalize().unwrap_or(venv_dir);
+        let is_outside_working_directory = !(python_executable.starts_with(venv_dir_canonical));
+        if is_outside_working_directory {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Installing to environment at {}",
+                    python_executable.user_display()
+                )
+                .dimmed()
+            )?;
+        }
         writeln!(
             printer.stderr(),
             "{}",

@@ -1090,6 +1090,7 @@ fn install_editable_bare_cli() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -1116,6 +1117,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Installed 1 package in [TIME]
      + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
@@ -3139,6 +3141,7 @@ requires-python = ">=3.8"
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from file://[TEMP_DIR]/editable)
@@ -3184,6 +3187,7 @@ requires-python = ">=3.8"
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
@@ -4287,6 +4291,7 @@ fn deptry_gitignore() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
+    Installing to environment at [VENV]/bin/python3
     Installed 3 packages in [TIME]
      + cffi==1.16.0
      + deptry-reproducer==0.1.0 (from file://[WORKSPACE]/scripts/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
