@@ -71,7 +71,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //    search for `pyproject.toml` files, since we're not in a workspace.
     let filesystem = if let Some(config_file) = cli.config_file.as_ref() {
         Some(FilesystemOptions::from_file(config_file)?)
-    } else if cli.global_args.isolated {
+    } else if cli.global_args.isolated || cli.no_config {
         None
     } else if let Ok(project) =
         Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await
