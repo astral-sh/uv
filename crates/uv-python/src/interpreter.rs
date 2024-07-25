@@ -709,24 +709,27 @@ impl InterpreterInfo {
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+        let absolute = uv_fs::absolutize_path(executable)?;
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             "",
-            // We use the absolute path for the cache entry to avoid cache collisions for relative paths
-            // but we do not want to query the executable with symbolic links resolved
-            format!("{}.msgpack", digest(&uv_fs::absolutize_path(executable)?)),
+            // We use the absolute path for the cache entry to avoid cache collisions for relative
+            // paths. But we don't to query the executable with symbolic links resolved.
+            format!("{}.msgpack", digest(&absolute)),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
-        // interpreter has been modified
-        let modified =
-            Timestamp::from_path(uv_fs::canonicalize_executable(executable).map_err(|err| {
+        // interpreter has been modified.
+        let modified = uv_fs::canonicalize_executable(&absolute)
+            .and_then(Timestamp::from_path)
+            .map_err(|err| {
                 if err.kind() == io::ErrorKind::NotFound {
                     Error::NotFound(executable.to_path_buf())
                 } else {
                     err.into()
                 }
-            })?)?;
+            })?;
 
         // Read from the cache.
         if cache
