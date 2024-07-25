@@ -4,7 +4,7 @@ Tools are Python packages that provide command-line interfaces. Tools can be inv
 
 !!! note
 
-    See the [tools guide](./guides/tools.md) for an introduction to working with the tools interface — this document discusses details of tool management.
+    See the [tools guide](../guides/tools.md) for an introduction to working with the tools interface — this document discusses details of tool management.
 
 ## Tool environments
 

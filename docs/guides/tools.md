@@ -142,4 +142,4 @@ $ uv tool install mkdocs --with mkdocs-material
 
 ## Next steps
 
-See the [tools concept](../tools.md) documentation for more details on how tools are managed.
+See the [tools concept](../concepts/tools.md) documentation for more details on how tools are managed.

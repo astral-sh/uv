@@ -151,7 +151,7 @@ type Point = tuple[float, float]
 print(Point)
 ```
 
-uv will fetch the required Python version if it is not installed — see the documentation on [Python versions](../python-versions.md) for more details. Note that the `dependencies` field must be provided even if empty.
+uv will fetch the required Python version if it is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for more details. Note that the `dependencies` field must be provided even if empty.
 
 Note that when using inline script metadata, even if `uv run` is used in a _project_, the project's dependencies will be ignored. The `--isolated` flag is not required.
 
@@ -177,4 +177,4 @@ $ uv run --python 3.10 example.py
 3.10.13
 ```
 
-See the [Python version request](../python-versions.md#requesting-a-version) documentation for more details on requesting Python versions.
+See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation for more details on requesting Python versions.

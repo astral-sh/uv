@@ -27,7 +27,7 @@ uv venv --python 3.11
 
 Note this requires the requested Python version to be available on the system.
 However, if available, uv will download Python for you.
-See the [Python version](../python-versions.md) documentation for more details.
+See the [Python version](../concepts/python-versions.md) documentation for more details.
 
 ## Using a virtual environment
 
@@ -115,4 +115,4 @@ If a specific Python version is requested, e.g., `--python 3.7`, additional exec
 
 When running a command that does not mutate the environment such as `uv pip compile`, uv does not
 _require_ a virtual environment. Instead, it needs a Python toolchain to create ephemeral environments.
-See the documentation on [toolchain discovery](../python-versions.md#discovery-order) for details on discovery.
+See the documentation on [toolchain discovery](../concepts/python-versions.md#discovery-order) for details on discovery.

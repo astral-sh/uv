@@ -1,6 +1,6 @@
-# Using uv commercial package indexes
+# Using alternative package indexes
 
-While uv uses the official Python Package Index (PyPI) by default, it also supports commercial package indexes. Most commercial indexes require various forms of authentication, which requires some initial setup.
+While uv uses the official Python Package Index (PyPI) by default, it also supports alternative package indexes. Most alternative indexes require various forms of authentication, which requires some initial setup.
 
 ## Azure Artifacts
 
