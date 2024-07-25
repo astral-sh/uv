@@ -40,6 +40,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Install a tool.
 pub(crate) async fn install(
     package: String,
+    editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
     python: Option<String>,
@@ -82,6 +83,9 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
 
     // Resolve the `from` requirement.
     let from = if let Some(from) = from {
@@ -121,8 +125,19 @@ pub(crate) async fn install(
 
         from_requirement
     } else {
+        let requirements = if editable {
+            RequirementsSpecification::from_source(
+                &RequirementsSource::Editable(package),
+                &client_builder,
+            )
+            .await?
+            .requirements
+        } else {
+            vec![RequirementsSpecification::parse_package(&package)?]
+        };
+
         resolve_names(
-            vec![RequirementsSpecification::parse_package(&package)?],
+            requirements,
             &interpreter,
             &settings,
             &state,
@@ -139,12 +154,7 @@ pub(crate) async fn install(
     };
 
     // Read the `--with` requirements.
-    let spec = {
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
-        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
-    };
+    let spec = RequirementsSpecification::from_simple_sources(with, &client_builder).await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {

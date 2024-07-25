@@ -319,6 +319,34 @@ fn tool_install_version() {
     "###);
 }
 
+/// Test an editable install of a tool
+#[test]
+fn tool_install_editable() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    No executables are provided by `black`
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###);
+}
+
 /// Test installing a tool with `uv tool install --from`
 #[test]
 fn tool_install_from() {

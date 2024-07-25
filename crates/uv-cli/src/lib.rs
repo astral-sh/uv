@@ -2254,10 +2254,13 @@ pub struct ToolInstallArgs {
     /// The package to install commands from.
     pub package: String,
 
+    #[arg(short, long, conflicts_with("from"))]
+    pub editable: bool,
+
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, conflicts_with("editable"))]
     pub from: Option<String>,
 
     /// Include the following extra requirements.

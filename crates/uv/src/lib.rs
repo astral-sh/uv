@@ -672,6 +672,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             commands::tool_install(
                 args.package,
+                args.editable,
                 args.from,
                 &requirements,
                 args.python,

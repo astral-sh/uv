@@ -299,6 +299,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) force: bool,
+    pub(crate) editable: bool,
 }
 
 impl ToolInstallSettings {
@@ -307,6 +308,7 @@ impl ToolInstallSettings {
     pub(crate) fn resolve(args: ToolInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ToolInstallArgs {
             package,
+            editable,
             from,
             with,
             with_requirements,
@@ -327,6 +329,7 @@ impl ToolInstallSettings {
                 .collect(),
             python,
             force,
+            editable,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
