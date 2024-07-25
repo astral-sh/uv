@@ -1096,6 +1096,16 @@ impl PythonRequest {
         if value_as_path.is_file() {
             return Self::File(value_as_path);
         }
+
+        // e.g. path/to/python on Windows, where path/to/python is the true path
+        #[cfg(windows)]
+        if value_as_path.extension().is_none() {
+            let value_as_path = value_as_path.with_extension(EXE_SUFFIX);
+            if value_as_path.is_file() {
+                return Self::File(value_as_path);
+            }
+        }
+
         // During unit testing, we cannot change the working directory used by std
         // so we perform a check relative to the mock working directory. Ideally we'd
         // remove this code and use tests at the CLI level so we can change the real
