@@ -20,6 +20,7 @@ crate-type = ["cdylib", "rlib"]
 workspace = true
 
 [dependencies]
+boxcar = "0.2.5"
 derivative = { workspace = true }
 once_cell = { workspace = true }
 pep440_rs = { workspace = true }
