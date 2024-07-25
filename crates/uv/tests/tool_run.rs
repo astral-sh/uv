@@ -630,7 +630,6 @@ fn tool_run_requirements_txt() {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig").unwrap();
 
-    // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with-requirements")
         .arg("requirements.txt")
@@ -680,7 +679,6 @@ fn tool_run_requirements_txt_arguments() {
         })
         .unwrap();
 
-    // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with-requirements")
         .arg("requirements.txt")

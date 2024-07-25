@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_fs::Simplified;
+use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -412,6 +412,30 @@ pub(crate) async fn run(
         }
     };
 
+    // If we're running in an ephemeral environment, add a `sitecustomize.py` to enable loading of
+    // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
+    // resolve `.pth` files in the base environment.
+    if let Some(ephemeral_env) = ephemeral_env.as_ref() {
+        if let Some(base_interpreter) = base_interpreter.as_ref() {
+            let ephemeral_site_packages = ephemeral_env
+                .site_packages()
+                .next()
+                .ok_or_else(|| anyhow!("Ephemeral environment has no site packages directory"))?;
+            let base_site_packages = base_interpreter
+                .site_packages()
+                .next()
+                .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
+
+            fs_err::write(
+                ephemeral_site_packages.join("sitecustomize.py"),
+                format!(
+                    "import site; site.addsitedir(\"{}\")",
+                    base_site_packages.escape_for_python()
+                ),
+            )?;
+        }
+    }
+
     debug!("Running `{command}`");
     let mut process = Command::from(&command);
 
@@ -436,30 +460,6 @@ pub(crate) async fn run(
             ),
     )?;
     process.env("PATH", new_path);
-
-    // Construct the `PYTHONPATH` environment variable.
-    let new_python_path = std::env::join_paths(
-        ephemeral_env
-            .as_ref()
-            .map(PythonEnvironment::site_packages)
-            .into_iter()
-            .flatten()
-            .chain(
-                base_interpreter
-                    .as_ref()
-                    .map(Interpreter::site_packages)
-                    .into_iter()
-                    .flatten(),
-            )
-            .map(PathBuf::from)
-            .chain(
-                std::env::var_os("PYTHONPATH")
-                    .as_ref()
-                    .iter()
-                    .flat_map(std::env::split_paths),
-            ),
-    )?;
-    process.env("PYTHONPATH", new_python_path);
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited

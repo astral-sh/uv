@@ -123,17 +123,6 @@ pub(crate) async fn run(
     )?;
     process.env("PATH", new_path);
 
-    // Construct the `PYTHONPATH` environment variable.
-    let new_python_path = std::env::join_paths(
-        environment.site_packages().map(PathBuf::from).chain(
-            std::env::var_os("PYTHONPATH")
-                .as_ref()
-                .iter()
-                .flat_map(std::env::split_paths),
-        ),
-    )?;
-    process.env("PYTHONPATH", new_python_path);
-
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
