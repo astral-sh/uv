@@ -1,3 +1,4 @@
+#[cfg(feature = "pyo3")]
 use std::str::FromStr;
 use std::sync::Arc;
 
