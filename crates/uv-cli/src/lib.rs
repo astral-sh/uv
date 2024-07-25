@@ -75,6 +75,11 @@ pub struct Cli {
     #[arg(global = true, long, env = "UV_CONFIG_FILE")]
     pub config_file: Option<PathBuf>,
 
+    /// Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current directory,
+    /// parent directories, or user configuration directories.
+    #[arg(global = true, long, env = "UV_NO_CONFIG", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_config: bool,
+
     /// Print help.
     #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]
     help: Option<bool>,

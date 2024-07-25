@@ -55,6 +55,9 @@ fn help() {
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories [env: UV_NO_CONFIG=]
       -h, --help
               Print help
       -V, --version
@@ -118,6 +121,9 @@ fn help_flag() {
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories [env: UV_NO_CONFIG=]
       -h, --help
               Print help
       -V, --version
@@ -180,6 +186,9 @@ fn help_short_flag() {
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories [env: UV_NO_CONFIG=]
       -h, --help
               Print help
       -V, --version
@@ -296,6 +305,12 @@ fn help_subcommand() {
               The path to a `uv.toml` file to use for configuration
               
               [env: UV_CONFIG_FILE=]
+
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories
+              
+              [env: UV_NO_CONFIG=]
 
       -h, --help
               Print help
@@ -419,6 +434,12 @@ fn help_subsubcommand() {
               
               [env: UV_CONFIG_FILE=]
 
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories
+              
+              [env: UV_NO_CONFIG=]
+
       -h, --help
               Print help
 
@@ -481,6 +502,9 @@ fn help_flag_subcommand() {
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories [env: UV_NO_CONFIG=]
       -h, --help
               Print help
       -V, --version
@@ -540,6 +564,9 @@ fn help_flag_subsubcommand() {
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories [env: UV_NO_CONFIG=]
       -h, --help
               Print help
       -V, --version
@@ -656,6 +683,9 @@ fn help_with_global_option() {
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories [env: UV_NO_CONFIG=]
       -h, --help
               Print help
       -V, --version
@@ -752,6 +782,9 @@ fn test_with_no_pager() {
               Path to the cache directory [env: UV_CACHE_DIR=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
+              directory, parent directories, or user configuration directories [env: UV_NO_CONFIG=]
       -h, --help
               Print help
       -V, --version

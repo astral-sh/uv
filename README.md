@@ -587,6 +587,9 @@ uv accepts the following command-line arguments as environment variables:
   will use this value as the keyring provider.
 - `UV_CONFIG_FILE`: Equivalent to the `--config-file` command-line argument. Expects a path to a
   local `uv.toml` file to use as the configuration file.
+- `UV_NO_CONFIG`: Equivalent to the `--no-config` command-line argument. If set, uv will not read
+  any configuration files from the current directory, parent directories, or user configuration
+  directories.
 - `UV_CONCURRENT_DOWNLOADS`: Sets the maximum number of in-flight concurrent downloads that `uv`
   will perform at any given time.
 - `UV_CONCURRENT_BUILDS`: Sets the maximum number of source distributions that `uv` will build
