@@ -101,10 +101,28 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     }
 }
 
+/// Return a [`NamedTempFile`] in the specified directory.
+///
+/// Sets the permissions of the temporary file to `0o644`, to match the non-temporary file default.
+/// ([`NamedTempfile`] defaults to `0o600`.)
+#[cfg(unix)]
+pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
+    use std::os::unix::fs::PermissionsExt;
+    tempfile::Builder::new()
+        .permissions(std::fs::Permissions::from_mode(0o644))
+        .tempfile_in(path)
+}
+
+/// Return a [`NamedTempFile`] in the specified directory.
+#[cfg(not(unix))]
+pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
+    tempfile::Builder::new().tempfile_in(path)
+}
+
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let temp_file = NamedTempFile::new_in(
+    let temp_file = tempfile_in(
         path.as_ref()
             .parent()
             .expect("Write path must have a parent"),
@@ -125,7 +143,7 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let temp_file = NamedTempFile::new_in(
+    let temp_file = tempfile_in(
         path.as_ref()
             .parent()
             .expect("Write path must have a parent"),
