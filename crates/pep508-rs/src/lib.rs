@@ -1043,7 +1043,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        Some(marker::parse_markers_cursor(cursor, reporter)?)
+        Some(marker::parse::parse_markers_cursor(cursor, reporter)?)
     } else {
         None
     };
@@ -1124,8 +1124,7 @@ mod tests {
 
     use crate::cursor::Cursor;
     use crate::marker::{
-        parse_markers_cursor, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
-        MarkerValueVersion,
+        parse, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
     };
     use crate::{Requirement, TracingReporter, VerbatimUrl, VersionOrUrl};
 
@@ -1460,9 +1459,11 @@ mod tests {
     #[test]
     fn test_marker_parsing() {
         let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
-        let actual =
-            parse_markers_cursor::<VerbatimUrl>(&mut Cursor::new(marker), &mut TracingReporter)
-                .unwrap();
+        let actual = parse::parse_markers_cursor::<VerbatimUrl>(
+            &mut Cursor::new(marker),
+            &mut TracingReporter,
+        )
+        .unwrap();
         let expected = MarkerTree::And(vec![
             MarkerTree::Expression(MarkerExpression::Version {
                 key: MarkerValueVersion::PythonVersion,
