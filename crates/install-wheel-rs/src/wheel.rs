@@ -498,7 +498,7 @@ fn install_script(
             .as_bytes()
             .to_vec();
 
-        let mut target = tempfile::NamedTempFile::new_in(&layout.scheme.scripts)?;
+        let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
         target.persist(&script_absolute).map_err(|err| {
             io::Error::new(
