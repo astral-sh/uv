@@ -22,8 +22,7 @@ use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata23, ParsedArchiveUrl};
 use uv_cache::{
-    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, Timestamp,
-    WheelCache,
+    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Timestamp, WheelCache,
 };
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -903,7 +902,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self.source_tree_revision(resource, &cache_shard).await?;
+        let revision = self
+            .source_tree_revision(source, resource, &cache_shard)
+            .await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -972,7 +973,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self.source_tree_revision(resource, &cache_shard).await?;
+        let revision = self
+            .source_tree_revision(source, resource, &cache_shard)
+            .await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -1053,6 +1056,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`Revision`] for a local source tree, refreshing it if necessary.
     async fn source_tree_revision(
         &self,
+        source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         cache_shard: &CacheShard,
     ) -> Result<Revision, Error> {
@@ -1070,17 +1074,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             ));
         };
 
-        // Read the existing metadata from the cache. We treat source trees as if `--refresh` is
-        // always set, since they're mutable.
+        // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);
-        let is_fresh = self
-            .build_context
-            .cache()
-            .is_fresh(&entry)
-            .map_err(Error::CacheRead)?;
 
         // If the revision is fresh, return it.
-        if is_fresh {
+        if self
+            .build_context
+            .cache()
+            .freshness(&entry, source.name())
+            .map_err(Error::CacheRead)?
+            .is_fresh()
+        {
             if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
                 if pointer.timestamp == modified.timestamp() {
                     return Ok(pointer.into_revision());
@@ -1243,7 +1247,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .build_context
             .cache()
             .freshness(&metadata_entry, source.name())
-            .is_ok_and(Freshness::is_fresh)
+            .map_err(Error::CacheRead)?
+            .is_fresh()
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for: {source}");

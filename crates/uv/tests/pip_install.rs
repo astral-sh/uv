@@ -4489,7 +4489,6 @@ fn already_installed_dependent_editable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4588,7 +4587,6 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
@@ -4673,6 +4671,7 @@ fn already_installed_local_version_of_remote_package() {
     );
 
     // Request install with a different version
+    //
     // We should attempt to pull from the index since the installed version does not match
     // but we disable it here to preserve this dependency for future tests
     uv_snapshot!(context.filters(), context.pip_install()
@@ -4705,8 +4704,8 @@ fn already_installed_local_version_of_remote_package() {
     "###
     );
 
-    // Request reinstall with the full path, this should reinstall from the path
-    // and not pull from the index
+    // Request reinstall with the full path, this should reinstall from the path and not pull from
+    // the index (or rebuild).
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("anyio_local"))
         .arg("--reinstall")
@@ -4717,7 +4716,6 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
@@ -4755,7 +4753,6 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
