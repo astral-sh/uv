@@ -162,3 +162,46 @@ fn frozen() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn empty() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r"
+        [tool.uv.workspace]
+        members = []
+        ",
+    )?;
+
+    // Running `uv sync` should generate an empty lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 0 packages in [TIME]
+    Audited 0 packages in [TIME]
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    // Running `uv sync` again should succeed.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 0 packages in [TIME]
+    Audited 0 packages in [TIME]
+    "###);
+
+    Ok(())
+}
