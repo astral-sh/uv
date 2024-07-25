@@ -10,11 +10,11 @@ non-workspace dependencies.
 
 ## Configuration
 
-A workspace can be created by adding a `tool.uv.workspace` to a pyproject.toml that is the workspace
+A workspace can be created by adding a `tool.uv.workspace` to a `pyproject.toml` that is the workspace
 root. This table contains `members` (mandatory) and `exclude` (optional), with lists of globs of
 directories:
 
-```toml
+```toml title="pyproject.toml"
 [tool.uv.workspace]
 members = ["packages/*", "examples/*"]
 exclude = ["example/excluded_example"]

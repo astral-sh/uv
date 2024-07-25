@@ -80,13 +80,13 @@ When installing with `uv pip install`, packages that are already installed will 
 
 To sync an environment with a `requirements.txt` file:
 
-```shell
+```bash
 uv pip sync requirements.txt
 ```
 
 To sync an environment with a `pyproject.toml` file:
 
-```shell
+```bash
 uv pip sync pyproject.toml
 ```
 
@@ -95,15 +95,15 @@ uv pip sync pyproject.toml
 Constraints files are `requirements.txt`-like files that only control the _version_ of a requirement that's installed. However,
 including a package in a constraints file will _not_ trigger the installation of that package. Constraints can be used to add bounds to dependencies that are not dependencies of the current project.
 
-To define an constraint, define a bound for a package:
+To define a constraint, define a bound for a package:
 
-```text title="constraints.txt
+```text title="constraints.txt"
 pydantic<2.0
 ```
 
 To use a constraints file:
 
-```shell
+```bash
 uv pip compile requirements.in --constraint constraints.txt
 ```
 
@@ -121,13 +121,13 @@ Overrides are most often used to remove upper bounds from a transtive dependency
 
 To define an override, define the new requirement for the problematic package:
 
-```text overrides.txt
+```text title="overrides.txt"
 c>=2.0
 ```
 
 To use an overrides file:
 
-```shell
+```bash
 uv pip compile requirements.in --override overrides.txt
 ```
 
