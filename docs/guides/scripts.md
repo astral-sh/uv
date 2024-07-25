@@ -20,7 +20,7 @@ Hello world
 
 Similarly, if your script depends on a module in the standard library, there's nothing more to do:
 
-```python
+```python title="example.py"
 import os
 
 print(os.path.expanduser("~"))
@@ -90,7 +90,7 @@ For example: ━━━━━━━━━━━━━━━━━━━━━━�
 
 Constraints can be added to the requested dependency if specific versions are needed:
 
-```consoleq
+```console
 $ uv run --with 'rich>12,<13' example.py
 ```
 

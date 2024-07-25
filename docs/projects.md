@@ -154,7 +154,7 @@ Scripts that declare inline metadata are automatically executed in environments 
 
 For example, given a script:
 
-```python  title="example.py"
+```python title="example.py"
 # /// script
 # dependencies = [
 #   "httpx",
