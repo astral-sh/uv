@@ -28,11 +28,18 @@ impl ResolverMarkers {
         }
     }
 
-    /// If solving for a specific environment, return this environment
+    /// If solving for a specific environment, return this environment.
     pub fn marker_environment(&self) -> Option<&MarkerEnvironment> {
         match self {
             ResolverMarkers::Universal | ResolverMarkers::Fork(_) => None,
             ResolverMarkers::SpecificEnvironment(env) => Some(env),
+        }
+    }
+    /// If solving a fork, return that fork's markers.
+    pub fn fork_markers(&self) -> Option<&MarkerTree> {
+        match self {
+            ResolverMarkers::SpecificEnvironment(_) | ResolverMarkers::Universal => None,
+            ResolverMarkers::Fork(markers) => Some(markers),
         }
     }
 }
