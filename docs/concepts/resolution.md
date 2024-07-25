@@ -80,7 +80,7 @@ to model, and are a frequent source of bugs in other packaging tools. uv's pre-r
 is _intentionally_ limited and _intentionally_ requires user opt-in for pre-releases, to ensure
 correctness.
 
-For more, see ["Pre-release compatibility"](./pip/compatibility.md#pre-release-compatibility)
+For more, see ["Pre-release compatibility"](../pip/compatibility.md#pre-release-compatibility)
 
 ## Dependency overrides
 
@@ -116,7 +116,7 @@ architectures, and Python implementations. In universal mode, the current Python
 will be treated as a lower bound. For example, `--universal --python-version 3.7` would produce a universal resolution 
 for Python 3.7 and later.
 
-If using uv's [project](./guides/projects.md) interface, the machine agnostic resolution will be used
+If using uv's [project](../guides/projects.md) interface, the machine agnostic resolution will be used
 automatically and a `uv.lock` file will be created. The lock file can also be created with an explicit `uv lock`
 invocation.
 

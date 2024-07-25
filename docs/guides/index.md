@@ -1,4 +1,4 @@
-# Overview
+# Guides overview
 
 Check out one of the core guides to get started: 
 
@@ -12,15 +12,6 @@ Learn how to integrate uv with other software:
 - [Using in Docker images](./integration/docker.md)
 - [Using with pre-commit](./integration/pre-commit.md)
 - [Using in GitHub Actions](./integration/github.md)
-- [Using with commercial package indexes](./integration/commercial-indexes.md)
+- [Using with alternative package indexes](./integration/alternative-indexes.md)
 
-Or, explore the concept documentation for comprehensive breakdown of each feature:
-
-- [Projects](../projects.md)
-- [Dependencies](../dependencies.md)
-- [Workspaces](../workspaces.md)
-- [Tools](../tools.md)
-- [Python versions](../python-versions.md)
-- [Resolution](../resolution.md)
-- [Caching](../cache.md)
-- [Authentication](../configuration/authentication.md)
+Or, explore the [concept documentation](../concepts/index.md) for comprehensive breakdown of each feature.

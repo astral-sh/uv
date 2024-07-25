@@ -51,7 +51,7 @@ Running and installing tools published to Python package indexes, e.g., `ruff` o
 
 See the [guide on tools](./guides/tools.md) to get started.
 
-## Low-level
+## The pip interface
 
 Manually managing environments and packages — intended to be used in legacy workflows or cases where the high-level commands do not provide enough control.
 

@@ -141,5 +141,5 @@ $ uv remove requests
 
 ## Next steps
 
-See the [projects concept](../projects.md) documentation for more details about
+See the [projects concept](../concepts/projects.md) documentation for more details about
 projects.

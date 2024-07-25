@@ -25,12 +25,12 @@ An extremely fast Python package and project manager, written in Rust.
 - 🐍 [Installs and manages](./guides/install-python.md) Python versions.
 - 🛠️ [Runs and installs](./guides/tools.md) Python applications.
 - ❇️ [Runs scripts](./guides/scripts.md), with support for [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
-- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a [universal lockfile](./projects.md#lock-file).
-- 🏢 Supports Cargo-style [workspaces](./workspaces.md) for scalable projects.
+- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a [universal lockfile](./concepts/projects.md#lock-file).
+- 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
 - 🚀 A replacement for `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`
   and `pip-tools` (`pip-compile` and `pip-sync`).
-- 💾 Disk-space efficient, with a [global cache](./cache.md) for dependency deduplication.
+- 💾 Disk-space efficient, with a [global cache](./concepts/cache.md) for dependency deduplication.
 - ⏬ Installable without Rust or Python via `curl` or `pip`.
 - 🖥️ Supports macOS, Linux, and Windows.
 
@@ -157,7 +157,7 @@ Pinned `.python-version` to `pypy@3.11`
 
 See the [installing Python guide](./guides/install-python.md) to get started.
 
-## Package management
+## The pip interface
 
 uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands with support for
 a wide range of advanced `pip` features, including editable installs, Git dependencies, direct URL dependencies, local dependencies, constraints, source distributions, HTML and JSON indexes, and more.
@@ -192,8 +192,8 @@ Installed 43 packages in 208ms
  ...
 ```
 
-See the [uv pip documentation](./pip/environments.md) to get started.
+See the [uv pip documentation](./pip/index.md) to get started.
 
 ## Next steps
 
-See the [first steps](./first-steps.md) or jump straight into the [guides](./guides/overview.md) to start using uv.
+See the [first steps](./first-steps.md) or jump straight into the [guides](./guides/index.md) to start using uv.
