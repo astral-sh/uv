@@ -15,6 +15,7 @@ use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir, SymlinkToFile};
 use indoc::formatdoc;
 use predicates::prelude::predicate;
 use regex::Regex;
+
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
@@ -31,6 +32,10 @@ pub const PACKSE_VERSION: &str = "0.3.30";
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {
     format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html")
+}
+
+pub fn packse_index_url() -> String {
+    format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/")
 }
 
 #[doc(hidden)] // Macro and test context only, don't use directly.

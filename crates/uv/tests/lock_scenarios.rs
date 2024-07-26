@@ -10,7 +10,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use common::{uv_snapshot, TestContext};
+use common::{packse_index_url, uv_snapshot, TestContext};
 
 mod common;
 
@@ -62,8 +62,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -158,8 +157,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -243,8 +241,7 @@ fn fork_basic() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -353,8 +350,7 @@ fn conflict_in_fork() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -422,8 +418,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -504,8 +499,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -655,8 +649,7 @@ fn fork_incomplete_markers() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -782,8 +775,7 @@ fn fork_marker_accrue() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -899,8 +891,7 @@ fn fork_marker_disjoint() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -971,8 +962,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1115,8 +1105,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1248,8 +1237,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1375,8 +1363,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1497,8 +1484,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1626,8 +1612,7 @@ fn fork_marker_inherit() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1736,8 +1721,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1865,8 +1849,7 @@ fn fork_marker_selection() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1993,8 +1976,7 @@ fn fork_marker_track() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2119,8 +2101,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2239,8 +2220,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -2314,8 +2294,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -2375,8 +2354,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2447,8 +2425,7 @@ fn fork_requires_python_full() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2522,8 +2499,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2604,8 +2580,7 @@ fn fork_requires_python() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
