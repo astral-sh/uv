@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.31/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.32/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -15,12 +15,14 @@ use common::{packse_index_url, uv_snapshot, TestContext};
 
 mod common;
 
-/// This test ensures that multiple non-conflicting but also non-overlapping
-/// dependency specifications with the same package name are allowed and supported.
-/// At time of writing, this provokes a fork in the resolver, but it arguably
-/// shouldn't since the requirements themselves do not conflict with one another.
-/// However, this does impact resolution. Namely, it leaves the `a>=1` fork free to
-/// choose `a==2.0.0` since it behaves as if the `a<2` constraint doesn't exist.
+/// This test ensures that multiple non-conflicting but also
+/// non-overlapping dependency specifications with the same package name
+/// are allowed and supported.
+/// At time of writing, this provokes a fork in the resolver, but it
+/// arguably shouldn't since the requirements themselves do not conflict
+/// with one another. However, this does impact resolution. Namely, it
+/// leaves the `a>=1` fork free to choose `a==2.0.0` since it behaves as if
+/// the `a<2` constraint doesn't exist.
 ///
 /// ```text
 /// fork-allows-non-conflicting-non-overlapping-dependencies
@@ -123,15 +125,16 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     Ok(())
 }
 
-/// This test ensures that multiple non-conflicting dependency specifications with
-/// the same package name are allowed and supported.  This test exists because the
-/// universal resolver forks itself based on duplicate dependency specifications by
-/// looking at package name. So at first glance, a case like this could perhaps
-/// cause an errant fork. While it's difficult to test for "does not create a fork"
-/// (at time of writing, the implementation does not fork), we can at least check
-/// that this case is handled correctly without issue. Namely, forking should only
-/// occur when there are duplicate dependency specifications with disjoint marker
-/// expressions.
+/// This test ensures that multiple non-conflicting dependency
+/// specifications with the same package name are allowed and supported.
+/// This test exists because the universal resolver forks itself based on
+/// duplicate dependency specifications by looking at package name. So at
+/// first glance, a case like this could perhaps cause an errant fork.
+/// While it's difficult to test for "does not create a fork" (at time of
+/// writing, the implementation does not fork), we can at least check that
+/// this case is handled correctly without issue. Namely, forking should
+/// only occur when there are duplicate dependency specifications with
+/// disjoint marker expressions.
 ///
 /// ```text
 /// fork-allows-non-conflicting-repeated-dependencies
@@ -345,8 +348,7 @@ fn fork_basic() -> Result<()> {
     Ok(())
 }
 
-/// We have a conflict after forking. This scenario exists to test the error
-/// message.
+/// We have a conflict after forking. This scenario exists to test the error message.
 ///
 /// ```text
 /// conflict-in-fork
@@ -424,10 +426,11 @@ fn conflict_in_fork() -> Result<()> {
 }
 
 /// This test ensures that conflicting dependency specifications lead to an
-/// unsatisfiable result.  In particular, this is a case that should not fork even
-/// though there are conflicting requirements because their marker expressions are
-/// overlapping. (Well, there aren't any marker expressions here, which means they
-/// are both unconditional.)
+/// unsatisfiable result.
+/// In particular, this is a case that should not fork even though there
+/// are conflicting requirements because their marker expressions are
+/// overlapping. (Well, there aren't any marker expressions here, which
+/// means they are both unconditional.)
 ///
 /// ```text
 /// fork-conflict-unsatisfiable
@@ -485,15 +488,17 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     Ok(())
 }
 
-/// This tests that sibling dependencies of a package that provokes a fork are
-/// correctly filtered out of forks where they are otherwise impossible.  In this
-/// case, a previous version of the universal resolver would include both `b` and
-/// `c` in *both* of the forks produced by the conflicting dependency specifications
-/// on `a`. This in turn led to transitive dependency specifications on both
-/// `d==1.0.0` and `d==2.0.0`. Since the universal resolver only forks based on
-/// local conditions, this led to a failed resolution.  The correct thing to do here
-/// is to ensure that `b` is only part of the `a==4.4.0` fork and `c` is only par of
-/// the `a==4.3.0` fork.
+/// This tests that sibling dependencies of a package that provokes a
+/// fork are correctly filtered out of forks where they are otherwise
+/// impossible.
+/// In this case, a previous version of the universal resolver would
+/// include both `b` and `c` in *both* of the forks produced by the
+/// conflicting dependency specifications on `a`. This in turn led to
+/// transitive dependency specifications on both `d==1.0.0` and `d==2.0.0`.
+/// Since the universal resolver only forks based on local conditions, this
+/// led to a failed resolution.
+/// The correct thing to do here is to ensure that `b` is only part of the
+/// `a==4.4.0` fork and `c` is only par of the `a==4.3.0` fork.
 ///
 /// ```text
 /// fork-filter-sibling-dependencies
@@ -675,11 +680,11 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     Ok(())
 }
 
-/// The root cause the resolver to fork over `a`, but the markers on the variant of
-/// `a` don't cover the entire marker space, they are missing Python 3.10. Later, we
-/// have a dependency this very hole, which we still need to select, instead of
-/// having two forks around but without Python 3.10 and omitting `c` from the
-/// solution.
+/// The root cause the resolver to fork over `a`, but the markers on the variant
+/// of `a` don't cover the entire marker space, they are missing Python 3.10.
+/// Later, we have a dependency this very hole, which we still need to select,
+/// instead of having two forks around but without Python 3.10 and omitting
+/// `c` from the solution.
 ///
 /// ```text
 /// fork-incomplete-markers
@@ -827,9 +832,9 @@ fn fork_incomplete_markers() -> Result<()> {
 
 /// This is actually a non-forking test case that tests the tracking of marker
 /// expressions in general. In this case, the dependency on `c` should have its
-/// marker expressions automatically combined. In this case, it's `linux OR darwin`,
-/// even though `linux OR darwin` doesn't actually appear verbatim as a marker
-/// expression for any dependency on `c`.
+/// marker expressions automatically combined. In this case, it's `linux OR
+/// darwin`, even though `linux OR darwin` doesn't actually appear verbatim as a
+/// marker expression for any dependency on `c`.
 ///
 /// ```text
 /// fork-marker-accrue
@@ -959,11 +964,12 @@ fn fork_marker_accrue() -> Result<()> {
 /// universal resolution happens only when the corresponding marker expressions are
 /// completely disjoint. Here, we provide two completely incompatible dependency
 /// specifications with equivalent markers. Thus, they are trivially not disjoint,
-/// and resolution should fail.  NOTE: This acts a regression test for the initial
-/// version of universal resolution that would fork whenever a package was repeated
-/// in the list of dependency specifications. So previously, this would produce a
-/// resolution with both `1.0.0` and `2.0.0` of `a`. But of course, the correct
-/// behavior is to fail resolving.
+/// and resolution should fail.
+/// NOTE: This acts a regression test for the initial version of universal
+/// resolution that would fork whenever a package was repeated in the list of
+/// dependency specifications. So previously, this would produce a resolution with
+/// both `1.0.0` and `2.0.0` of `a`. But of course, the correct behavior is to fail
+/// resolving.
 ///
 /// ```text
 /// fork-marker-disjoint
@@ -1019,11 +1025,12 @@ fn fork_marker_disjoint() -> Result<()> {
     Ok(())
 }
 
-/// This test builds on `fork-marker-inherit-combined`. Namely, we add `or
-/// implementation_name == 'pypy'` to the dependency on `c`. While `sys_platform ==
-/// 'linux'` cannot be true because of the first fork, the second fork which
-/// includes `b==1.0.0` happens precisely when `implementation_name == 'pypy'`. So
-/// in this case, `c` should be included.
+/// This test builds on `fork-marker-inherit-combined`. Namely, we add
+/// `or implementation_name == 'pypy'` to the dependency on `c`. While
+/// `sys_platform == 'linux'` cannot be true because of the first fork,
+/// the second fork which includes `b==1.0.0` happens precisely when
+/// `implementation_name == 'pypy'`. So in this case, `c` should be
+/// included.
 ///
 /// ```text
 /// fork-marker-inherit-combined-allowed
@@ -1193,12 +1200,13 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     Ok(())
 }
 
-/// This test builds on `fork-marker-inherit-combined`. Namely, we add `or
-/// implementation_name == 'cpython'` to the dependency on `c`. While `sys_platform
-/// == 'linux'` cannot be true because of the first fork, the second fork which
-/// includes `b==1.0.0` happens precisely when `implementation_name == 'pypy'`,
-/// which is *also* disjoint with `implementation_name == 'cpython'`. Therefore, `c`
-/// should not be included here.
+/// This test builds on `fork-marker-inherit-combined`. Namely, we add
+/// `or implementation_name == 'cpython'` to the dependency on `c`.
+/// While `sys_platform == 'linux'` cannot be true because of the first
+/// fork, the second fork which includes `b==1.0.0` happens precisely
+/// when `implementation_name == 'pypy'`, which is *also* disjoint with
+/// `implementation_name == 'cpython'`. Therefore, `c` should not be
+/// included here.
 ///
 /// ```text
 /// fork-marker-inherit-combined-disallowed
@@ -1356,13 +1364,14 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     Ok(())
 }
 
-/// In this test, we check that marker expressions which provoke a fork are carried
-/// through to subsequent forks. Here, the `a>=2` and `a<2` dependency
-/// specifications create a fork, and then the `a<2` fork leads to `a==1.0.0` with
-/// dependency specifications on `b>=2` and `b<2` that provoke yet another fork.
-/// Finally, in the `b<2` fork, a dependency on `c` is introduced whose marker
-/// expression is disjoint with the marker expression that provoked the *first*
-/// fork. Therefore, `c` should be entirely excluded from the resolution.
+/// In this test, we check that marker expressions which provoke a fork
+/// are carried through to subsequent forks. Here, the `a>=2` and `a<2`
+/// dependency specifications create a fork, and then the `a<2` fork leads
+/// to `a==1.0.0` with dependency specifications on `b>=2` and `b<2` that
+/// provoke yet another fork. Finally, in the `b<2` fork, a dependency on
+/// `c` is introduced whose marker expression is disjoint with the marker
+/// expression that provoked the *first* fork. Therefore, `c` should be
+/// entirely excluded from the resolution.
 ///
 /// ```text
 /// fork-marker-inherit-combined
@@ -1520,12 +1529,12 @@ fn fork_marker_inherit_combined() -> Result<()> {
     Ok(())
 }
 
-/// This is like `fork-marker-inherit`, but where both `a>=2` and `a<2` have a
-/// conditional dependency on `b`. For `a>=2`, the conditional dependency on `b` has
-/// overlap with the `a>=2` marker expression, and thus, `b` should be included
-/// *only* in the dependencies for `a==2.0.0`. As with `fork-marker-inherit`, the
-/// `a<2` path should exclude `b==1.0.0` since their marker expressions are
-/// disjoint.
+/// This is like `fork-marker-inherit`, but where both `a>=2` and `a<2`
+/// have a conditional dependency on `b`. For `a>=2`, the conditional
+/// dependency on `b` has overlap with the `a>=2` marker expression, and
+/// thus, `b` should be included *only* in the dependencies for `a==2.0.0`.
+/// As with `fork-marker-inherit`, the `a<2` path should exclude `b==1.0.0`
+/// since their marker expressions are disjoint.
 ///
 /// ```text
 /// fork-marker-inherit-isolated
@@ -1658,11 +1667,12 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     Ok(())
 }
 
-/// This is like `fork-marker-inherit`, but tests that the marker expressions that
-/// provoke a fork are carried transitively through the dependency graph. In this
-/// case, `a<2 -> b -> c -> d`, but where the last dependency on `d` requires a
-/// marker expression that is disjoint with the initial `a<2` dependency. Therefore,
-/// it ought to be completely excluded from the resolution.
+/// This is like `fork-marker-inherit`, but tests that the marker
+/// expressions that provoke a fork are carried transitively through the
+/// dependency graph. In this case, `a<2 -> b -> c -> d`, but where the
+/// last dependency on `d` requires a marker expression that is disjoint
+/// with the initial `a<2` dependency. Therefore, it ought to be completely
+/// excluded from the resolution.
 ///
 /// ```text
 /// fork-marker-inherit-transitive
@@ -1813,14 +1823,15 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     Ok(())
 }
 
-/// This tests that markers which provoked a fork in the universal resolver are used
-/// to ignore dependencies which cannot possibly be installed by a resolution
-/// produced by that fork.  In this example, the `a<2` dependency is only active on
-/// Darwin platforms. But the `a==1.0.0` distribution has a dependency on `b` that
-/// is only active on Linux, where as `a==2.0.0` does not. Therefore, when the fork
-/// provoked by the `a<2` dependency considers `b`, it should ignore it because it
-/// isn't possible for `sys_platform == 'linux'` and `sys_platform == 'darwin'` to
-/// be simultaneously true.
+/// This tests that markers which provoked a fork in the universal resolver
+/// are used to ignore dependencies which cannot possibly be installed by a
+/// resolution produced by that fork.
+/// In this example, the `a<2` dependency is only active on Darwin
+/// platforms. But the `a==1.0.0` distribution has a dependency on `b`
+/// that is only active on Linux, where as `a==2.0.0` does not. Therefore,
+/// when the fork provoked by the `a<2` dependency considers `b`, it should
+/// ignore it because it isn't possible for `sys_platform == 'linux'` and
+/// `sys_platform == 'darwin'` to be simultaneously true.
 ///
 /// ```text
 /// fork-marker-inherit
@@ -1939,12 +1950,14 @@ fn fork_marker_inherit() -> Result<()> {
     Ok(())
 }
 
-/// This is like `fork-marker-inherit`, but it tests that dependency filtering only
-/// occurs in the context of a fork.  For example, as in `fork-marker-inherit`, the
-/// `c` dependency of `a<2` should be entirely excluded here since it is possible
-/// for `sys_platform` to be simultaneously equivalent to Darwin and Linux. However,
-/// the unconditional dependency on `b`, which in turn depends on `c` for Linux
-/// only, should still incorporate `c` as the dependency is not part of any fork.
+/// This is like `fork-marker-inherit`, but it tests that dependency
+/// filtering only occurs in the context of a fork.
+/// For example, as in `fork-marker-inherit`, the `c` dependency of
+/// `a<2` should be entirely excluded here since it is possible for
+/// `sys_platform` to be simultaneously equivalent to Darwin and Linux.
+/// However, the unconditional dependency on `b`, which in turn depends on
+/// `c` for Linux only, should still incorporate `c` as the dependency is
+/// not part of any fork.
 ///
 /// ```text
 /// fork-marker-limited-inherit
@@ -2392,8 +2405,8 @@ fn fork_marker_track() -> Result<()> {
 }
 
 /// This is the same setup as `non-local-fork-marker-transitive`, but the disjoint
-/// dependency specifications on `c` use the same constraints and thus depend on the
-/// same version of `c`. In this case, there is no conflict.
+/// dependency specifications on `c` use the same constraints and thus depend on
+/// the same version of `c`. In this case, there is no conflict.
 ///
 /// ```text
 /// fork-non-fork-marker-transitive
@@ -2588,16 +2601,16 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     Ok(())
 }
 
-/// This setup introduces dependencies on two distinct versions of `c`, where each
-/// such dependency has a marker expression attached that would normally make them
-/// disjoint. In a non-universal resolver, this is no problem. But in a forking
-/// resolver that tries to create one universal resolution, this can lead to two
-/// distinct versions of `c` in the resolution. This is in and of itself not a
-/// problem, since that is an expected scenario for universal resolution. The
-/// problem in this case is that because the dependency specifications for `c` occur
-/// in two different points (i.e., they are not sibling dependency specifications)
-/// in the dependency graph, the forking resolver does not "detect" it, and thus
-/// never forks and thus this results in "no resolution."
+/// This setup introduces dependencies on two distinct versions of `c`, where
+/// each such dependency has a marker expression attached that would normally
+/// make them disjoint. In a non-universal resolver, this is no problem. But in a
+/// forking resolver that tries to create one universal resolution, this can lead
+/// to two distinct versions of `c` in the resolution. This is in and of itself
+/// not a problem, since that is an expected scenario for universal resolution.
+/// The problem in this case is that because the dependency specifications for
+/// `c` occur in two different points (i.e., they are not sibling dependency
+/// specifications) in the dependency graph, the forking resolver does not "detect"
+/// it, and thus never forks and thus this results in "no resolution."
 ///
 /// ```text
 /// fork-non-local-fork-marker-transitive
@@ -2666,20 +2679,394 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     Ok(())
 }
 
-/// Like `preferences-dependent-forking`, but when we don't fork the resolution
-/// fails.  Consider a fresh run without preferences: * We start with cleaver 2 * We
-/// fork * We reject cleaver 2 * We find cleaver solution in fork 1 with foo 2 with
-/// bar 1 * We find cleaver solution in fork 2 with foo 1 with bar 2 * We write
-/// cleaver 1, foo 1, foo 2, bar 1 and bar 2 to the lockfile  In a subsequent run,
-/// we read the preference cleaver 1 from the lockfile (the preferences for foo and
-/// bar don't matter): * We start with cleaver 1 * We're in universal mode, cleaver
-/// requires foo 1, bar 1 * foo 1 requires bar 2, conflict  Design sketch: ```text
-/// root -> clear, foo, bar # Cause a fork, then forget that version. cleaver 2 ->
-/// unrelated-dep==1; fork==1 cleaver 2 -> unrelated-dep==2; fork==2 cleaver 2 ->
-/// reject-cleaver-2 # Allow different versions when forking, but force foo 1, bar 1
-/// in universal mode without forking. cleaver 1 -> foo==1; fork==1 cleaver 1 ->
-/// bar==1; fork==2 # When we selected foo 1, bar 1 in universal mode for cleaver,
-/// this causes a conflict, otherwise we select bar 2. foo 1 -> bar==2 ```
+/// This scenario tests a very basic case of overlapping markers. Namely,
+/// it emulates a common pattern in the ecosystem where marker expressions
+/// are used to progressively increase the version constraints of a package
+/// as the Python version increases.
+/// In this case, there is actually a split occurring between
+/// `python_version < '3.10'` and the other marker expressions, so this
+/// isn't just a scenario with overlapping but non-disjoint markers.
+/// In particular, this serves as a regression test. uv used to create a
+/// lock file with a dependency on `a` with the following markers:
+///     python_version < '3.10' or python_version >= '3.11'
+/// But this implies that `a` won't be installed for Python 3.10, which is
+/// clearly wrong.
+/// The issue was that uv was intersecting *all* marker expressions. So
+/// that `a>=1.1.0` and `a>=1.2.0` fork was getting `python_version >=
+/// '3.10' and python_version >= '3.11'`, which, of course, simplifies
+/// to `python_version >= '3.11'`. But this is wrong! It should be
+/// `python_version >= '3.10' or python_version >= '3.11'`, which of course
+/// simplifies to `python_version >= '3.10'`. And thus, the resulting forks
+/// are not just disjoint but complete in this case.
+/// Since there are no other constraints on `a`, this causes uv to select
+/// `1.2.0` unconditionally. (The marker expressions get normalized out
+/// entirely.)
+///
+/// ```text
+/// fork-overlapping-markers-basic
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a>=1.0.0; python_version < "3.10"
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   ├── satisfied by a-1.1.0
+/// │   │   └── satisfied by a-1.2.0
+/// │   ├── requires a>=1.1.0; python_version >= "3.10"
+/// │   │   ├── satisfied by a-1.1.0
+/// │   │   └── satisfied by a-1.2.0
+/// │   └── requires a>=1.2.0; python_version >= "3.11"
+/// │       └── satisfied by a-1.2.0
+/// └── a
+///     ├── a-1.0.0
+///     ├── a-1.1.0
+///     └── a-1.2.0
+/// ```
+#[test]
+fn fork_overlapping_markers_basic() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"fork-overlapping-markers-basic-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''fork-overlapping-markers-basic-a>=1.0.0; python_version < "3.10"''',
+          '''fork-overlapping-markers-basic-a>=1.1.0; python_version >= "3.10"''',
+          '''fork-overlapping-markers-basic-a>=1.2.0; python_version >= "3.11"''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+        environment-markers = [
+            "python_version < '3.10'",
+            "python_version >= '3.10'",
+        ]
+
+        [[distribution]]
+        name = "package-a"
+        version = "1.2.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_overlapping_markers_basic_a-1.2.0.tar.gz#sha256=f8c2058d80430d62b15c87fd66040a6c0dd23d32e7f144a932899c0c74bdff2a", hash = "sha256:f8c2058d80430d62b15c87fd66040a6c0dd23d32e7f144a932899c0c74bdff2a" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_overlapping_markers_basic_a-1.2.0-py3-none-any.whl#sha256=04293ed42eb3620c9ddf56e380a8408a30733d5d38f321a35c024d03e7116083", hash = "sha256:04293ed42eb3620c9ddf56e380a8408a30733d5d38f321a35c024d03e7116083" },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "package-a" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock`
+    context
+        .lock()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .assert()
+        .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
+
+    Ok(())
+}
+
+/// This test contains a bistable resolution scenario when not using ahead-of-time
+/// splitting of resolution forks: We meet one of two fork points depending on the
+/// preferences, creating a resolution whose preferences lead us the other fork
+/// point.
+/// In the first case, we are in cleaver 2 and fork on `sys_platform`, in the
+/// second case, we are in foo 1 or bar 1 amd fork over `os_name`.
+/// First case: We select cleaver 2, fork on `sys_platform`, we reject cleaver 2
+/// (missing fork `os_name`), we select cleaver 1 and don't fork on `os_name` in
+/// `fork-if-not-forked`, done.
+/// Second case: We have preference cleaver 1, fork on `os_name` in
+/// `fork-if-not-forked`, we reject cleaver 1, we select cleaver 2, we fork on
+/// `sys_platform`, we accept cleaver 2 since we forked on `os_name`, done.
+///
+/// ```text
+/// preferences-dependent-forking-bistable
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires cleaver
+/// │       ├── satisfied by cleaver-2.0.0
+/// │       └── satisfied by cleaver-1.0.0
+/// ├── cleaver
+/// │   ├── cleaver-2.0.0
+/// │   │   ├── requires fork-sys-platform==1; sys_platform == "linux"
+/// │   │   │   └── satisfied by fork-sys-platform-1.0.0
+/// │   │   ├── requires fork-sys-platform==2; sys_platform != "linux"
+/// │   │   │   └── satisfied by fork-sys-platform-2.0.0
+/// │   │   ├── requires reject-cleaver2==1; os_name == "posix"
+/// │   │   │   └── satisfied by reject-cleaver2-1.0.0
+/// │   │   └── requires reject-cleaver2-proxy
+/// │   │       └── satisfied by reject-cleaver2-proxy-1.0.0
+/// │   └── cleaver-1.0.0
+/// │       ├── requires fork-if-not-forked!=2; sys_platform == "linux"
+/// │       │   ├── satisfied by fork-if-not-forked-1.0.0
+/// │       │   └── satisfied by fork-if-not-forked-3.0.0
+/// │       ├── requires fork-if-not-forked-proxy; sys_platform != "linux"
+/// │       │   └── satisfied by fork-if-not-forked-proxy-1.0.0
+/// │       ├── requires reject-cleaver1==1; sys_platform == "linux"
+/// │       │   └── satisfied by reject-cleaver1-1.0.0
+/// │       └── requires reject-cleaver1-proxy
+/// │           └── satisfied by reject-cleaver1-proxy-1.0.0
+/// ├── fork-if-not-forked
+/// │   ├── fork-if-not-forked-1.0.0
+/// │   │   ├── requires fork-os-name==1; os_name == "posix"
+/// │   │   │   └── satisfied by fork-os-name-1.0.0
+/// │   │   ├── requires fork-os-name==2; os_name != "posix"
+/// │   │   │   └── satisfied by fork-os-name-2.0.0
+/// │   │   └── requires reject-cleaver1-proxy
+/// │   │       └── satisfied by reject-cleaver1-proxy-1.0.0
+/// │   ├── fork-if-not-forked-2.0.0
+/// │   └── fork-if-not-forked-3.0.0
+/// ├── fork-if-not-forked-proxy
+/// │   └── fork-if-not-forked-proxy-1.0.0
+/// │       └── requires fork-if-not-forked!=3
+/// │           ├── satisfied by fork-if-not-forked-1.0.0
+/// │           └── satisfied by fork-if-not-forked-2.0.0
+/// ├── fork-os-name
+/// │   ├── fork-os-name-1.0.0
+/// │   └── fork-os-name-2.0.0
+/// ├── fork-sys-platform
+/// │   ├── fork-sys-platform-1.0.0
+/// │   └── fork-sys-platform-2.0.0
+/// ├── reject-cleaver1
+/// │   ├── reject-cleaver1-1.0.0
+/// │   └── reject-cleaver1-2.0.0
+/// ├── reject-cleaver1-proxy
+/// │   └── reject-cleaver1-proxy-1.0.0
+/// │       └── requires reject-cleaver1==2; sys_platform != "linux"
+/// │           └── satisfied by reject-cleaver1-2.0.0
+/// ├── reject-cleaver2
+/// │   ├── reject-cleaver2-1.0.0
+/// │   └── reject-cleaver2-2.0.0
+/// └── reject-cleaver2-proxy
+///     └── reject-cleaver2-proxy-1.0.0
+///         └── requires reject-cleaver2==2; os_name != "posix"
+///             └── satisfied by reject-cleaver2-2.0.0
+/// ```
+#[test]
+fn preferences_dependent_forking_bistable() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"preferences-dependent-forking-bistable-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''preferences-dependent-forking-bistable-cleaver''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [[distribution]]
+        name = "package-cleaver"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-fork-if-not-forked", version = "3.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-fork-if-not-forked-proxy", marker = "sys_platform != 'linux'" },
+            { name = "package-reject-cleaver1", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-reject-cleaver1-proxy" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_cleaver-1.0.0.tar.gz#sha256=64e5ee0c81d6a51fb71ed517fd04cc26c656908ad05073270e67c2f9b92194c5", hash = "sha256:64e5ee0c81d6a51fb71ed517fd04cc26c656908ad05073270e67c2f9b92194c5" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_cleaver-1.0.0-py3-none-any.whl#sha256=552a061bf303fc4103ff91adb03864391a041f9bdcb9b2f8a552b232efce633b", hash = "sha256:552a061bf303fc4103ff91adb03864391a041f9bdcb9b2f8a552b232efce633b" },
+        ]
+
+        [[distribution]]
+        name = "package-fork-if-not-forked"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_fork_if_not_forked-2.0.0.tar.gz#sha256=1f130c437449e7f0752938bff562addd287b6df96784122885e83563f7624798", hash = "sha256:1f130c437449e7f0752938bff562addd287b6df96784122885e83563f7624798" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_fork_if_not_forked-2.0.0-py3-none-any.whl#sha256=a3e0a53d855ef38b9bbe2c6de67a1dd5eefc65c40e02b5282319cabf59bac740", hash = "sha256:a3e0a53d855ef38b9bbe2c6de67a1dd5eefc65c40e02b5282319cabf59bac740" },
+        ]
+
+        [[distribution]]
+        name = "package-fork-if-not-forked"
+        version = "3.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_fork_if_not_forked-3.0.0.tar.gz#sha256=72aee18148130c3287f2e07f31cd8883f1b35d91d6ef5230961e5fcc57667943", hash = "sha256:72aee18148130c3287f2e07f31cd8883f1b35d91d6ef5230961e5fcc57667943" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_fork_if_not_forked-3.0.0-py3-none-any.whl#sha256=45343fd8a37969d5ace1fe0d235341573b1dc84eea099d92f479d41a21e206fa", hash = "sha256:45343fd8a37969d5ace1fe0d235341573b1dc84eea099d92f479d41a21e206fa" },
+        ]
+
+        [[distribution]]
+        name = "package-fork-if-not-forked-proxy"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-fork-if-not-forked", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_fork_if_not_forked_proxy-1.0.0.tar.gz#sha256=0ed00a7c8280348225835fadc76db8ecc6b4a9ee11351a6c432c475f8d1579de", hash = "sha256:0ed00a7c8280348225835fadc76db8ecc6b4a9ee11351a6c432c475f8d1579de" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_fork_if_not_forked_proxy-1.0.0-py3-none-any.whl#sha256=0f6bd3726cd7aa245751f08e176caa797a5de986f020b7d0b8767756eea77d26", hash = "sha256:0f6bd3726cd7aa245751f08e176caa797a5de986f020b7d0b8767756eea77d26" },
+        ]
+
+        [[distribution]]
+        name = "package-reject-cleaver1"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_reject_cleaver1-1.0.0.tar.gz#sha256=bf19f244de469bb73c7fb9dc438bca2fac829d865e546327694b2f292192c042", hash = "sha256:bf19f244de469bb73c7fb9dc438bca2fac829d865e546327694b2f292192c042" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_reject_cleaver1-1.0.0-py3-none-any.whl#sha256=bda045df120e617d369b8be48e7a489c57968ee2b75e181969593fbc2a789519", hash = "sha256:bda045df120e617d369b8be48e7a489c57968ee2b75e181969593fbc2a789519" },
+        ]
+
+        [[distribution]]
+        name = "package-reject-cleaver1"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_reject_cleaver1-2.0.0.tar.gz#sha256=b671f6112e6829557bec5c1aa86e55e79a9883a28117025523a132ff24cd9be3", hash = "sha256:b671f6112e6829557bec5c1aa86e55e79a9883a28117025523a132ff24cd9be3" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_reject_cleaver1-2.0.0-py3-none-any.whl#sha256=104923522767e447fb2ff3e2cfc730f5d2d4b2040f89a33d1abeb9863ed169ac", hash = "sha256:104923522767e447fb2ff3e2cfc730f5d2d4b2040f89a33d1abeb9863ed169ac" },
+        ]
+
+        [[distribution]]
+        name = "package-reject-cleaver1-proxy"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-reject-cleaver1", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_reject_cleaver1_proxy-1.0.0.tar.gz#sha256=6b6eaa229d55de992e36084521d2f62dce35120a866e20354d0e5617e16e00ce", hash = "sha256:6b6eaa229d55de992e36084521d2f62dce35120a866e20354d0e5617e16e00ce" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bistable_reject_cleaver1_proxy-1.0.0-py3-none-any.whl#sha256=08ace26d0f4a74275dd38803fd67101eaf2cb400441fc8d479461ced31a947c1", hash = "sha256:08ace26d0f4a74275dd38803fd67101eaf2cb400441fc8d479461ced31a947c1" },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "package-cleaver" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock`
+    context
+        .lock()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .assert()
+        .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
+
+    Ok(())
+}
+
+/// Like `preferences-dependent-forking`, but when we don't fork the resolution fails.
+/// Consider a fresh run without preferences:
+/// * We start with cleaver 2
+/// * We fork
+/// * We reject cleaver 2
+/// * We find cleaver solution in fork 1 with foo 2 with bar 1
+/// * We find cleaver solution in fork 2 with foo 1 with bar 2
+/// * We write cleaver 1, foo 1, foo 2, bar 1 and bar 2 to the lockfile
+/// In a subsequent run, we read the preference cleaver 1 from the lockfile (the preferences for foo and bar don't matter):
+/// * We start with cleaver 1
+/// * We're in universal mode, cleaver requires foo 1, bar 1
+/// * foo 1 requires bar 2, conflict
+/// Design sketch:
+/// ```text
+/// root -> clear, foo, bar
+/// # Cause a fork, then forget that version.
+/// cleaver 2 -> unrelated-dep==1; fork==1
+/// cleaver 2 -> unrelated-dep==2; fork==2
+/// cleaver 2 -> reject-cleaver-2
+/// # Allow different versions when forking, but force foo 1, bar 1 in universal mode without forking.
+/// cleaver 1 -> foo==1; fork==1
+/// cleaver 1 -> bar==1; fork==2
+/// # When we selected foo 1, bar 1 in universal mode for cleaver, this causes a conflict, otherwise we select bar 2.
+/// foo 1 -> bar==2
+/// ```
 ///
 /// ```text
 /// preferences-dependent-forking-conflicting
@@ -2765,20 +3152,339 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
     Ok(())
 }
 
-/// This test contains a scenario where the solution depends on whether we fork, and
-/// whether we fork depends on the preferences.  Consider a fresh run without
-/// preferences: * We start with cleaver 2 * We fork * We reject cleaver 2 * We find
-/// cleaver solution in fork 1 with foo 2 with bar 1 * We find cleaver solution in
-/// fork 2 with foo 1 with bar 2 * We write cleaver 1, foo 1, foo 2, bar 1 and bar 2
-/// to the lockfile  In a subsequent run, we read the preference cleaver 1 from the
-/// lockfile (the preferences for foo and bar don't matter): * We start with cleaver
-/// 1 * We're in universal mode, we resolve foo 1 and bar 1 * We write cleaver 1 and
-/// bar 1 to the lockfile  We call a resolution that's different on the second run
-/// to the first unstable.  Design sketch: ```text root -> clear, foo, bar # Cause a
-/// fork, then forget that version. cleaver 2 -> unrelated-dep==1; fork==1 cleaver 2
-/// -> unrelated-dep==2; fork==2 cleaver 2 -> reject-cleaver-2 # Allow different
-/// versions when forking, but force foo 1, bar 1 in universal mode without forking.
-/// cleaver 1 -> foo==1; fork==1 cleaver 1 -> bar==1; fork==2 ```
+/// This test case is like "preferences-dependent-forking-bistable", but with three
+/// states instead of two. The first two locks are in a different state, then we
+/// enter the tristable state.
+/// It's not polished, but it's useful to have something with a higher period
+/// than 2 in our test suite.
+///
+/// ```text
+/// preferences-dependent-forking-tristable
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires bar
+/// │   │   ├── satisfied by bar-1.0.0
+/// │   │   └── satisfied by bar-2.0.0
+/// │   ├── requires cleaver
+/// │   │   ├── satisfied by cleaver-2.0.0
+/// │   │   └── satisfied by cleaver-1.0.0
+/// │   └── requires foo
+/// │       ├── satisfied by foo-1.0.0
+/// │       └── satisfied by foo-2.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires unrelated-dep3==1; os_name == "posix"
+/// │           └── satisfied by unrelated-dep3-1.0.0
+/// ├── b
+/// │   └── b-1.0.0
+/// │       └── requires unrelated-dep3==2; os_name != "posix"
+/// │           └── satisfied by unrelated-dep3-2.0.0
+/// ├── bar
+/// │   ├── bar-1.0.0
+/// │   │   ├── requires c!=3; sys_platform == "linux"
+/// │   │   │   ├── satisfied by c-1.0.0
+/// │   │   │   └── satisfied by c-2.0.0
+/// │   │   ├── requires d; sys_platform != "linux"
+/// │   │   │   └── satisfied by d-1.0.0
+/// │   │   └── requires reject-cleaver-1
+/// │   │       └── satisfied by reject-cleaver-1-1.0.0
+/// │   └── bar-2.0.0
+/// ├── c
+/// │   ├── c-1.0.0
+/// │   │   ├── requires reject-cleaver-1
+/// │   │   │   └── satisfied by reject-cleaver-1-1.0.0
+/// │   │   ├── requires unrelated-dep2==1; os_name == "posix"
+/// │   │   │   └── satisfied by unrelated-dep2-1.0.0
+/// │   │   └── requires unrelated-dep2==2; os_name != "posix"
+/// │   │       └── satisfied by unrelated-dep2-2.0.0
+/// │   ├── c-2.0.0
+/// │   └── c-3.0.0
+/// ├── cleaver
+/// │   ├── cleaver-2.0.0
+/// │   │   ├── requires a
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   ├── requires b
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
+/// │   │   │   └── satisfied by unrelated-dep-1.0.0
+/// │   │   └── requires unrelated-dep==2; sys_platform != "linux"
+/// │   │       └── satisfied by unrelated-dep-2.0.0
+/// │   └── cleaver-1.0.0
+/// │       ├── requires bar==1; sys_platform != "linux"
+/// │       │   └── satisfied by bar-1.0.0
+/// │       └── requires foo==1; sys_platform == "linux"
+/// │           └── satisfied by foo-1.0.0
+/// ├── d
+/// │   └── d-1.0.0
+/// │       └── requires c!=2
+/// │           ├── satisfied by c-1.0.0
+/// │           └── satisfied by c-3.0.0
+/// ├── foo
+/// │   ├── foo-1.0.0
+/// │   │   ├── requires c!=3; sys_platform == "linux"
+/// │   │   │   ├── satisfied by c-1.0.0
+/// │   │   │   └── satisfied by c-2.0.0
+/// │   │   ├── requires c!=2; sys_platform != "linux"
+/// │   │   │   ├── satisfied by c-1.0.0
+/// │   │   │   └── satisfied by c-3.0.0
+/// │   │   └── requires reject-cleaver-1
+/// │   │       └── satisfied by reject-cleaver-1-1.0.0
+/// │   └── foo-2.0.0
+/// ├── reject-cleaver-1
+/// │   └── reject-cleaver-1-1.0.0
+/// │       ├── requires unrelated-dep2==1; sys_platform == "linux"
+/// │       │   └── satisfied by unrelated-dep2-1.0.0
+/// │       └── requires unrelated-dep2==2; sys_platform != "linux"
+/// │           └── satisfied by unrelated-dep2-2.0.0
+/// ├── reject-cleaver-2
+/// │   └── reject-cleaver-2-1.0.0
+/// │       └── requires unrelated-dep3==3
+/// │           └── satisfied by unrelated-dep3-3.0.0
+/// ├── unrelated-dep
+/// │   ├── unrelated-dep-1.0.0
+/// │   ├── unrelated-dep-2.0.0
+/// │   └── unrelated-dep-3.0.0
+/// ├── unrelated-dep2
+/// │   ├── unrelated-dep2-1.0.0
+/// │   ├── unrelated-dep2-2.0.0
+/// │   └── unrelated-dep2-3.0.0
+/// └── unrelated-dep3
+///     ├── unrelated-dep3-1.0.0
+///     ├── unrelated-dep3-2.0.0
+///     └── unrelated-dep3-3.0.0
+/// ```
+#[test]
+fn preferences_dependent_forking_tristable() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"preferences-dependent-forking-tristable-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''preferences-dependent-forking-tristable-cleaver''',
+          '''preferences-dependent-forking-tristable-foo''',
+          '''preferences-dependent-forking-tristable-bar''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 11 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [[distribution]]
+        name = "package-bar"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-c", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-d", marker = "sys_platform != 'linux'" },
+            { name = "package-reject-cleaver-1" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-1.0.0.tar.gz#sha256=5d7142b60729bd25206dde836b8f629c72a29593156dee4c4551ad23b7096e8c", hash = "sha256:5d7142b60729bd25206dde836b8f629c72a29593156dee4c4551ad23b7096e8c" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-1.0.0-py3-none-any.whl#sha256=a590cb59852676a12e3537efe2c812c0640a32408a2ea7f6e5611c7190683865", hash = "sha256:a590cb59852676a12e3537efe2c812c0640a32408a2ea7f6e5611c7190683865" },
+        ]
+
+        [[distribution]]
+        name = "package-c"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_c-2.0.0.tar.gz#sha256=f0d941b83146d72e05fde266be4a500400683e6c62ae86dab11af78c2d26587b", hash = "sha256:f0d941b83146d72e05fde266be4a500400683e6c62ae86dab11af78c2d26587b" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_c-2.0.0-py3-none-any.whl#sha256=aaaddb9a24c0827169bd66d4b1b1965ceb375bebdb60047e2d66a05d363df2e3", hash = "sha256:aaaddb9a24c0827169bd66d4b1b1965ceb375bebdb60047e2d66a05d363df2e3" },
+        ]
+
+        [[distribution]]
+        name = "package-c"
+        version = "3.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_c-3.0.0.tar.gz#sha256=3531c0ec88cc79cde8106e949c7062854bbd48e3bc60803246372cdc4f4c4864", hash = "sha256:3531c0ec88cc79cde8106e949c7062854bbd48e3bc60803246372cdc4f4c4864" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_c-3.0.0-py3-none-any.whl#sha256=c048df9ab2c29bf914684add607dccca9ed7d035608cb92ef789216a15544e8b", hash = "sha256:c048df9ab2c29bf914684add607dccca9ed7d035608cb92ef789216a15544e8b" },
+        ]
+
+        [[distribution]]
+        name = "package-cleaver"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-bar", marker = "sys_platform != 'linux'" },
+            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_cleaver-1.0.0.tar.gz#sha256=49ec5779d0722586652e3ceb4ca2bf053a79dc3fa2d7ccd428a359bcc885a248", hash = "sha256:49ec5779d0722586652e3ceb4ca2bf053a79dc3fa2d7ccd428a359bcc885a248" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_cleaver-1.0.0-py3-none-any.whl#sha256=fb33bd10e4c6a237e7d0488e7ba1c5ee794eb01a1813ff80695bbfc4036f01b7", hash = "sha256:fb33bd10e4c6a237e7d0488e7ba1c5ee794eb01a1813ff80695bbfc4036f01b7" },
+        ]
+
+        [[distribution]]
+        name = "package-d"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-c", version = "3.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_d-1.0.0.tar.gz#sha256=690b69acb46d0ebfb11a81f401d2ea2e2e6a8ae97f199d345715e9bd40a7ceba", hash = "sha256:690b69acb46d0ebfb11a81f401d2ea2e2e6a8ae97f199d345715e9bd40a7ceba" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_d-1.0.0-py3-none-any.whl#sha256=f34e37e7164316c9b9ed3022d1ff378b3dcd895db6e339894f53d2b27a5d6ba0", hash = "sha256:f34e37e7164316c9b9ed3022d1ff378b3dcd895db6e339894f53d2b27a5d6ba0" },
+        ]
+
+        [[distribution]]
+        name = "package-foo"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        dependencies = [
+            { name = "package-c", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-reject-cleaver-1", marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-1.0.0.tar.gz#sha256=7c1a2ca51dd2156cf36c3400e38595e11b09442052f4bd1d6b3d53eb5b2acf32", hash = "sha256:7c1a2ca51dd2156cf36c3400e38595e11b09442052f4bd1d6b3d53eb5b2acf32" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-1.0.0-py3-none-any.whl#sha256=524dfd846c31a55bb6d6a0d0cec80d42c0a87c78aabbe0f1d5426c60493bd41b", hash = "sha256:524dfd846c31a55bb6d6a0d0cec80d42c0a87c78aabbe0f1d5426c60493bd41b" },
+        ]
+
+        [[distribution]]
+        name = "package-foo"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-2.0.0.tar.gz#sha256=1607aa970fac2e237de28636bf53b022b0c391ecc9039e34438638c8743cc83b", hash = "sha256:1607aa970fac2e237de28636bf53b022b0c391ecc9039e34438638c8743cc83b" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-2.0.0-py3-none-any.whl#sha256=8a757092c63519d20d312dacf83ed3c9cc8156495279305a2249175e0407e4df", hash = "sha256:8a757092c63519d20d312dacf83ed3c9cc8156495279305a2249175e0407e4df" },
+        ]
+
+        [[distribution]]
+        name = "package-reject-cleaver-1"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-unrelated-dep2", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-unrelated-dep2", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_reject_cleaver_1-1.0.0.tar.gz#sha256=6ef93ca22db3a054559cb34f574ffa3789951f2f82b213c5502d0e9ff746f15e", hash = "sha256:6ef93ca22db3a054559cb34f574ffa3789951f2f82b213c5502d0e9ff746f15e" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_reject_cleaver_1-1.0.0-py3-none-any.whl#sha256=b5e5203994245c2b983dd94595281a03ac38c05e14f0a8792d13763f69aa43a8", hash = "sha256:b5e5203994245c2b983dd94595281a03ac38c05e14f0a8792d13763f69aa43a8" },
+        ]
+
+        [[distribution]]
+        name = "package-unrelated-dep2"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_unrelated_dep2-1.0.0.tar.gz#sha256=bbeb0f558aff8c48bac6fdab42ed52f49d68d2b51a7de82ff9357925a6e5023a", hash = "sha256:bbeb0f558aff8c48bac6fdab42ed52f49d68d2b51a7de82ff9357925a6e5023a" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_unrelated_dep2-1.0.0-py3-none-any.whl#sha256=b36bc1e6f0140fdbf03575eb6bb0873c298b1d44dd7955412909ba9c2650a250", hash = "sha256:b36bc1e6f0140fdbf03575eb6bb0873c298b1d44dd7955412909ba9c2650a250" },
+        ]
+
+        [[distribution]]
+        name = "package-unrelated-dep2"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_unrelated_dep2-2.0.0.tar.gz#sha256=ac23c6208b6340b2542e730e1df770ed4ca65f234de86d2216add6c2b975f95c", hash = "sha256:ac23c6208b6340b2542e730e1df770ed4ca65f234de86d2216add6c2b975f95c" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_unrelated_dep2-2.0.0-py3-none-any.whl#sha256=5fc6d9c0fee066b33df862f31057c8cc2c0c5662ef9949337407e0131aa46e7f", hash = "sha256:5fc6d9c0fee066b33df862f31057c8cc2c0c5662ef9949337407e0131aa46e7f" },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "package-bar" },
+            { name = "package-cleaver" },
+            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-foo", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock`
+    context
+        .lock()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .assert()
+        .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
+
+    Ok(())
+}
+
+/// This test contains a scenario where the solution depends on whether we fork, and whether we fork depends on the
+/// preferences.
+/// Consider a fresh run without preferences:
+/// * We start with cleaver 2
+/// * We fork
+/// * We reject cleaver 2
+/// * We find cleaver solution in fork 1 with foo 2 with bar 1
+/// * We find cleaver solution in fork 2 with foo 1 with bar 2
+/// * We write cleaver 1, foo 1, foo 2, bar 1 and bar 2 to the lockfile
+/// In a subsequent run, we read the preference cleaver 1 from the lockfile (the preferences for foo and bar don't matter):
+/// * We start with cleaver 1
+/// * We're in universal mode, we resolve foo 1 and bar 1
+/// * We write cleaver 1 and bar 1 to the lockfile
+/// We call a resolution that's different on the second run to the first unstable.
+/// Design sketch:
+/// ```text
+/// root -> clear, foo, bar
+/// # Cause a fork, then forget that version.
+/// cleaver 2 -> unrelated-dep==1; fork==1
+/// cleaver 2 -> unrelated-dep==2; fork==2
+/// cleaver 2 -> reject-cleaver-2
+/// # Allow different versions when forking, but force foo 1, bar 1 in universal mode without forking.
+/// cleaver 1 -> foo==1; fork==1
+/// cleaver 1 -> bar==1; fork==2
+/// ```
 ///
 /// ```text
 /// preferences-dependent-forking
@@ -2946,9 +3652,186 @@ fn preferences_dependent_forking() -> Result<()> {
     Ok(())
 }
 
-/// This tests that a `Requires-Python` specifier will result in the exclusion of
-/// dependency specifications that cannot possibly satisfy it.  In particular, this
-/// is tested via the `python_full_version` marker with a pre-release version.
+/// This scenario tries to check that the "remaining universe" handling in
+/// the universal resolver is correct. Namely, whenever we create forks
+/// from disjoint markers that don't union to the universe, we need to
+/// create *another* fork corresponding to the difference between the
+/// universe and the union of the forks.
+/// But when we do this, that remaining universe fork needs to be created
+/// like any other fork: it should start copying whatever set of forks
+/// existed by the time we got to this point, intersecting the markers with
+/// the markers describing the remaining universe and then filtering out
+/// any dependencies that are disjoint with the resulting markers.
+/// This test exercises that logic by ensuring that a package `z` in the
+/// remaining universe is excluded based on the combination of markers
+/// from a parent fork. That is, if the remaining universe fork does not
+/// pick up the markers from the parent forks, then `z` would be included
+/// because the remaining universe for _just_ the `b` dependencies of `a`
+/// is `os_name != 'linux' and os_name != 'darwin'`, which is satisfied by
+/// `z`'s marker of `sys_platform == 'windows'`. However, `a 1.0.0` is only
+/// selected in the context of `a < 2 ; sys_platform == 'illumos'`, so `z`
+/// should never appear in the resolution.
+///
+/// ```text
+/// fork-remaining-universe-partitioning
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a>=2; sys_platform == "windows"
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires a<2; sys_platform == "illumos"
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   ├── requires b>=2; os_name == "linux"
+/// │   │   │   └── satisfied by b-2.0.0
+/// │   │   ├── requires b<2; os_name == "darwin"
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   └── requires z; sys_platform == "windows"
+/// │   │       └── satisfied by z-1.0.0
+/// │   └── a-2.0.0
+/// ├── b
+/// │   ├── b-1.0.0
+/// │   └── b-2.0.0
+/// └── z
+///     └── z-1.0.0
+/// ```
+#[test]
+fn fork_remaining_universe_partitioning() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"fork-remaining-universe-partitioning-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''fork-remaining-universe-partitioning-a>=2; sys_platform == "windows"''',
+          '''fork-remaining-universe-partitioning-a<2; sys_platform == "illumos"''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'windows'",
+            "os_name == 'darwin' and sys_platform == 'illumos'",
+            "os_name == 'linux' and sys_platform == 'illumos'",
+            "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
+            "sys_platform != 'illumos' and sys_platform != 'windows'",
+        ]
+
+        [[distribution]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "os_name == 'darwin' and sys_platform == 'illumos'",
+            "os_name == 'linux' and sys_platform == 'illumos'",
+            "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
+        ]
+        dependencies = [
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "os_name == 'darwin'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "os_name == 'linux'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_a-1.0.0.tar.gz#sha256=d5be0af9a1958ec08ca2827b47bfd507efc26cab03ecf7ddf204e18e8a3a18ae", hash = "sha256:d5be0af9a1958ec08ca2827b47bfd507efc26cab03ecf7ddf204e18e8a3a18ae" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_a-1.0.0-py3-none-any.whl#sha256=d72d45c02de21048507987503d67ff7b579cd58b8f58003fdf7800bc450b2b1d", hash = "sha256:d72d45c02de21048507987503d67ff7b579cd58b8f58003fdf7800bc450b2b1d" },
+        ]
+
+        [[distribution]]
+        name = "package-a"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'windows'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_a-2.0.0.tar.gz#sha256=c6166efba9da6cbe32221dd425873c9de605343db1cd8d732c4c1624635944b0", hash = "sha256:c6166efba9da6cbe32221dd425873c9de605343db1cd8d732c4c1624635944b0" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_a-2.0.0-py3-none-any.whl#sha256=db8e9cdacc9d755db5ce38bb1fd884c5cb047c3f3e1753e7a9cd46aed13757ae", hash = "sha256:db8e9cdacc9d755db5ce38bb1fd884c5cb047c3f3e1753e7a9cd46aed13757ae" },
+        ]
+
+        [[distribution]]
+        name = "package-b"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "os_name == 'darwin' and sys_platform == 'illumos'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_b-1.0.0.tar.gz#sha256=83755cf4f9d97909bc295a3fbb10006747c02b2344f3f017cff276fa7922b756", hash = "sha256:83755cf4f9d97909bc295a3fbb10006747c02b2344f3f017cff276fa7922b756" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_b-1.0.0-py3-none-any.whl#sha256=24ecd35e335149ed5de3ed495aa3715c31385d34cde7f9e0db5d168099e74f51", hash = "sha256:24ecd35e335149ed5de3ed495aa3715c31385d34cde7f9e0db5d168099e74f51" },
+        ]
+
+        [[distribution]]
+        name = "package-b"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "os_name == 'linux' and sys_platform == 'illumos'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_b-2.0.0.tar.gz#sha256=32cf6efcab24453f11a3bf2c230536b99a41e9611f5e96b2eee589c0d81f2348", hash = "sha256:32cf6efcab24453f11a3bf2c230536b99a41e9611f5e96b2eee589c0d81f2348" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_b-2.0.0-py3-none-any.whl#sha256=4c90283190759f076d67f0b4683efd061af5ab2ce5007b35c7dd42836ceaebdf", hash = "sha256:4c90283190759f076d67f0b4683efd061af5ab2ce5007b35c7dd42836ceaebdf" },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'illumos'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'windows'" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock`
+    context
+        .lock()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .assert()
+        .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
+
+    Ok(())
+}
+
+/// This tests that a `Requires-Python` specifier will result in the
+/// exclusion of dependency specifications that cannot possibly satisfy it.
+/// In particular, this is tested via the `python_full_version` marker with
+/// a pre-release version.
 ///
 /// ```text
 /// fork-requires-python-full-prerelease
@@ -3027,10 +3910,10 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     Ok(())
 }
 
-/// This tests that a `Requires-Python` specifier will result in the exclusion of
-/// dependency specifications that cannot possibly satisfy it.  In particular, this
-/// is tested via the `python_full_version` marker instead of the more common
-/// `python_version` marker.
+/// This tests that a `Requires-Python` specifier will result in the
+/// exclusion of dependency specifications that cannot possibly satisfy it.
+/// In particular, this is tested via the `python_full_version` marker
+/// instead of the more common `python_version` marker.
 ///
 /// ```text
 /// fork-requires-python-full
@@ -3109,12 +3992,13 @@ fn fork_requires_python_full() -> Result<()> {
     Ok(())
 }
 
-/// This tests that a `Requires-Python` specifier that includes a Python patch
-/// version will not result in excluded a dependency specification with a
-/// `python_version == '3.10'` marker.  This is a regression test for the universal
-/// resolver where it would convert a `Requires-Python: >=3.10.1` specifier into a
-/// `python_version >= '3.10.1'` marker expression, which would be considered
-/// disjoint with `python_version == '3.10'`. Thus, the dependency `a` below was
+/// This tests that a `Requires-Python` specifier that includes a Python
+/// patch version will not result in excluded a dependency specification
+/// with a `python_version == '3.10'` marker.
+/// This is a regression test for the universal resolver where it would
+/// convert a `Requires-Python: >=3.10.1` specifier into a `python_version
+/// >= '3.10.1'` marker expression, which would be considered disjoint
+/// with `python_version == '3.10'`. Thus, the dependency `a` below was
 /// erroneously excluded. It should be included.
 ///
 /// ```text
@@ -3206,8 +4090,8 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     Ok(())
 }
 
-/// This tests that a `Requires-Python` specifier will result in the exclusion of
-/// dependency specifications that cannot possibly satisfy it.
+/// This tests that a `Requires-Python` specifier will result in the
+/// exclusion of dependency specifications that cannot possibly satisfy it.
 ///
 /// ```text
 /// fork-requires-python
