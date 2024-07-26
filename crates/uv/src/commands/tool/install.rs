@@ -95,9 +95,18 @@ pub(crate) async fn install(
             bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)", from = from.cyan(), package = package.cyan())
         };
 
+        let source = if editable {
+            RequirementsSource::Editable(from)
+        } else {
+            RequirementsSource::Package(from)
+        };
+        let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+            .await?
+            .requirements;
+
         let from_requirement = {
             resolve_names(
-                vec![RequirementsSpecification::parse_package(&from)?],
+                requirements,
                 &interpreter,
                 &settings,
                 &state,
@@ -125,16 +134,14 @@ pub(crate) async fn install(
 
         from_requirement
     } else {
-        let requirements = if editable {
-            RequirementsSpecification::from_source(
-                &RequirementsSource::Editable(package),
-                &client_builder,
-            )
-            .await?
-            .requirements
+        let source = if editable {
+            RequirementsSource::Editable(package.clone())
         } else {
-            vec![RequirementsSpecification::parse_package(&package)?]
+            RequirementsSource::Package(package.clone())
         };
+        let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+            .await?
+            .requirements;
 
         resolve_names(
             requirements,
