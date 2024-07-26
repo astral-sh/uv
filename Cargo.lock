@@ -2719,7 +2719,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.12.3",
+ "parking_lot 0.11.2",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -4426,7 +4426,7 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 
 [[package]]
 name = "uv"
-version = "0.2.29"
+version = "0.2.30"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5156,7 +5156,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.29"
+version = "0.2.30"
 
 [[package]]
 name = "uv-virtualenv"
