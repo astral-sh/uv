@@ -71,7 +71,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //    search for `pyproject.toml` files, since we're not in a workspace.
     let filesystem = if let Some(config_file) = cli.config_file.as_ref() {
         Some(FilesystemOptions::from_file(config_file)?)
-    } else if cli.global_args.isolated {
+    } else if cli.global_args.isolated || cli.no_config {
         None
     } else if let Ok(project) =
         Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await
@@ -179,6 +179,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
+
             let cache = cache.init()?.with_refresh(args.refresh);
 
             let requirements = args
@@ -262,7 +263,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             let requirements = args
                 .src_file
@@ -324,7 +327,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+
             let requirements = args
                 .package
                 .into_iter()
@@ -538,8 +544,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::cache_clean(&args.package, &cache, printer)
         }
         Commands::Cache(CacheNamespace {
-            command: CacheCommand::Prune,
-        }) => commands::cache_prune(&cache, printer),
+            command: CacheCommand::Prune(args),
+        }) => {
+            show_settings!(args);
+            commands::cache_prune(args.ci, &cache, printer)
+        }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
         }) => {
@@ -858,6 +867,7 @@ async fn run_project(
             commands::init(
                 args.path,
                 args.name,
+                args.r#virtual,
                 args.no_readme,
                 args.python,
                 globals.isolated,
@@ -877,7 +887,9 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             let requirements = args
                 .with
@@ -918,7 +930,9 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             commands::sync(
                 args.locked,
@@ -945,7 +959,7 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache.init()?;
 
             commands::lock(
                 args.locked,
@@ -969,7 +983,9 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             commands::add(
                 args.locked,
@@ -1002,7 +1018,9 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache
+                .init()?
+                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
 
             commands::remove(
                 args.locked,

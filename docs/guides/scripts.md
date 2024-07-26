@@ -20,7 +20,7 @@ Hello world
 
 Similarly, if your script depends on a module in the standard library, there's nothing more to do:
 
-```python
+```python title="example.py"
 import os
 
 print(os.path.expanduser("~"))
@@ -90,7 +90,7 @@ For example: ━━━━━━━━━━━━━━━━━━━━━━�
 
 Constraints can be added to the requested dependency if specific versions are needed:
 
-```consoleq
+```console
 $ uv run --with 'rich>12,<13' example.py
 ```
 
@@ -102,7 +102,7 @@ Note that if `uv run` is used in a _project_, these dependencies will be include
 
 Python recently added a standard format for [inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata). This allows the dependencies for a script to be declared in the script itself.
 
-To use inline script metadata, include a `script` section at the top of the script:
+To use inline script metadata, include a `script` section at the top of the script and declare the dependencies using TOML:
 
 ```python title="example.py"
 # /// script
@@ -151,7 +151,7 @@ type Point = tuple[float, float]
 print(Point)
 ```
 
-uv will fetch the required Python version if it is not installed — see the documentation on [Python versions](../python-versions.md) for more details. Note that the `dependencies` field must be provided even if empty.
+uv will fetch the required Python version if it is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for more details. Note that the `dependencies` field must be provided even if empty.
 
 Note that when using inline script metadata, even if `uv run` is used in a _project_, the project's dependencies will be ignored. The `--isolated` flag is not required.
 
@@ -177,4 +177,4 @@ $ uv run --python 3.10 example.py
 3.10.13
 ```
 
-See the [Python version request](../python-versions.md#requesting-a-version) documentation for more details on requesting Python versions.
+See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation for more details on requesting Python versions.

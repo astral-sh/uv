@@ -2,9 +2,9 @@
 
 Python projects are help manage Python applications spanning multiple files.
 
-!!! note
+!!! tip
 
-    Looking for an introduction to creating a project with uv? See the [projects guide](./guides/projects.md) first.
+    Looking for an introduction to creating a project with uv? See the [projects guide](../guides/projects.md) first.
 
 ## Project metadata
 
@@ -32,7 +32,9 @@ This Python version requirement determines what syntax is valid in the project a
 
 The `pyproject.toml` also lists dependencies of the project. uv supports modifying the standard dependency list from the command line with `uv add` and `uv remove`. uv also supports [extended package sources](./dependencies.md) for advanced users.
 
-See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with a `pyproject.toml`.
+!!! tip
+
+    See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with a `pyproject.toml`.
 
 ## Project environments
 
@@ -42,7 +44,7 @@ To run a command in the project environment, use `uv run`. Alternatively the pro
 
 When `uv run` is invoked, it will create the project environment if it does not exist yet or ensure it is up to date if it exists. The project environment can also be explicitly created with `uv sync`.
 
-It is _not_ recommended to modify the project environment manually, e.g., with `uv pip install`. For project dependencies, use `uv add` to add a package to the environment. For one-off requirements, use [`uvx`](./guides/tools.md) or [`uv run --with`](#running-commands-with-additional-dependencies).
+It is _not_ recommended to modify the project environment manually, e.g., with `uv pip install`. For project dependencies, use `uv add` to add a package to the environment. For one-off requirements, use [`uvx`](../guides/tools.md) or [`uv run --with`](#running-commands-with-additional-dependencies).
 
 ## Lock file
 
@@ -148,11 +150,11 @@ The requested version will be respected regardless of the project's requirements
 
 ### Running scripts
 
-Scripts that declare inline metadata are automatically executed in environments isolated from the project. See the [scripts guide](./guides/scripts.md#declaring-script-dependencies) for more details.
+Scripts that declare inline metadata are automatically executed in environments isolated from the project. See the [scripts guide](../guides/scripts.md#declaring-script-dependencies) for more details.
 
 For example, given a script:
 
-```python  title="example.py"
+```python title="example.py"
 # /// script
 # dependencies = [
 #   "httpx",

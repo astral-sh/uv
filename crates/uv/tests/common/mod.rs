@@ -29,7 +29,7 @@ static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub const BUILD_VENDOR_LINKS_URL: &str =
-    "https://raw.githubusercontent.com/astral-sh/packse/0.3.30/vendor/links.html";
+    "https://raw.githubusercontent.com/astral-sh/packse/0.3.31/vendor/links.html";
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
@@ -877,7 +877,7 @@ pub fn run_and_format<T: AsRef<str>>(
     // cause the set of dependencies to be the same across platforms.
     if cfg!(windows) {
         if let Some(windows_filters) = windows_filters {
-            // The optional leading +/- is for install logs, the optional next line is for lock files
+            // The optional leading +/- is for install logs, the optional next line is for lockfiles
             let windows_only_deps = [
                 ("( [+-] )?colorama==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
                 ("( [+-] )?colorama==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),

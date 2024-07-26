@@ -5,6 +5,7 @@ use pubgrub::range::Range;
 use tracing::warn;
 
 use pep440_rs::{Version, VersionSpecifiers};
+use pep508_rs::MarkerTree;
 use pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
     RequirementSource, VerbatimParsedUrl,
@@ -29,6 +30,10 @@ pub(crate) struct PubGrubDependency {
 }
 
 impl PubGrubDependency {
+    pub(crate) fn and_markers(&mut self, marker: &MarkerTree) {
+        self.package.and_markers(marker);
+    }
+
     pub(crate) fn from_requirement<'a>(
         requirement: &'a Requirement,
         source_name: Option<&'a PackageName>,

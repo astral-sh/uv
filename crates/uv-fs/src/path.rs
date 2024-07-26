@@ -1,7 +1,6 @@
 use either::Either;
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
-use std::{io, iter};
 
 use once_cell::sync::Lazy;
 use path_slash::PathExt;
@@ -251,123 +250,19 @@ pub fn absolutize_path(path: &Path) -> Result<Cow<Path>, std::io::Error> {
     path.absolutize_from(CWD.simplified())
 }
 
-/// Like `fs_err::canonicalize`, but with permissive failures on Windows.
-///
-/// On Windows, we can't canonicalize the resolved path to Pythons that are installed via the
-/// Windows Store. For example, if you install Python via the Windows Store, then run `python`
-/// and print the `sys.executable` path, you'll get a path like:
-///
-/// ```text
-/// C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe
-/// ```
-///
-/// Attempting to canonicalize this path will fail with `ErrorKind::Uncategorized`.
+/// Like `fs_err::canonicalize`, but avoids attempting to resolve symlinks on Windows.
 pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let path = path.as_ref();
-    if is_windows_store_python(path) {
+    debug_assert!(
+        path.is_absolute(),
+        "path must be absolute: {}",
+        path.display()
+    );
+    if cfg!(windows) {
         Ok(path.to_path_buf())
     } else {
         fs_err::canonicalize(path)
     }
-}
-
-/// Returns `true` if this is a Python executable or shim installed via the Windows Store, based on
-/// the path.
-///
-/// This method does _not_ introspect the filesystem to determine if the shim is a redirect to the
-/// Windows Store installer. In other words, it assumes that the path represents a Python
-/// executable, not a redirect.
-fn is_windows_store_python(path: &Path) -> bool {
-    /// Returns `true` if this is a Python executable shim installed via the Windows Store, like:
-    ///
-    /// ```text
-    /// C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe
-    /// ```
-    fn is_windows_store_python_shim(path: &Path) -> bool {
-        let mut components = path.components().rev();
-
-        // Ex) `python.exe`, or `python3.exe`, or `python3.12.exe`
-        if !components
-            .next()
-            .and_then(|component| component.as_os_str().to_str())
-            .is_some_and(|component| component.starts_with("python"))
-        {
-            return false;
-        }
-
-        // Ex) `WindowsApps`
-        if !components
-            .next()
-            .is_some_and(|component| component.as_os_str() == "WindowsApps")
-        {
-            return false;
-        }
-
-        // Ex) `Microsoft`
-        if !components
-            .next()
-            .is_some_and(|component| component.as_os_str() == "Microsoft")
-        {
-            return false;
-        }
-
-        true
-    }
-
-    /// Returns `true` if this is a Python executable installed via the Windows Store, like:
-    ///
-    /// ```text
-    /// C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe
-    /// ```
-    fn is_windows_store_python_executable(path: &Path) -> bool {
-        let mut components = path.components().rev();
-
-        // Ex) `python.exe`
-        if !components
-            .next()
-            .and_then(|component| component.as_os_str().to_str())
-            .is_some_and(|component| component.starts_with("python"))
-        {
-            return false;
-        }
-
-        // Ex) `PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0`
-        if !components
-            .next()
-            .and_then(|component| component.as_os_str().to_str())
-            .is_some_and(|component| component.starts_with("PythonSoftwareFoundation.Python.3."))
-        {
-            return false;
-        }
-
-        // Ex) `WindowsApps`
-        if !components
-            .next()
-            .is_some_and(|component| component.as_os_str() == "WindowsApps")
-        {
-            return false;
-        }
-
-        // Ex) `Microsoft`
-        if !components
-            .next()
-            .is_some_and(|component| component.as_os_str() == "Microsoft")
-        {
-            return false;
-        }
-
-        true
-    }
-
-    if !cfg!(windows) {
-        return false;
-    }
-
-    if !path.is_absolute() {
-        return false;
-    }
-
-    is_windows_store_python_shim(path) || is_windows_store_python_executable(path)
 }
 
 /// Compute a path describing `path` relative to `base`.
@@ -375,7 +270,10 @@ fn is_windows_store_python(path: &Path) -> bool {
 /// `lib/python/site-packages/foo/__init__.py` and `lib/python/site-packages` -> `foo/__init__.py`
 /// `lib/marker.txt` and `lib/python/site-packages` -> `../../marker.txt`
 /// `bin/foo_launcher` and `lib/python/site-packages` -> `../../../bin/foo_launcher`
-pub fn relative_to(path: impl AsRef<Path>, base: impl AsRef<Path>) -> Result<PathBuf, io::Error> {
+pub fn relative_to(
+    path: impl AsRef<Path>,
+    base: impl AsRef<Path>,
+) -> Result<PathBuf, std::io::Error> {
     // Find the longest common prefix, and also return the path stripped from that prefix
     let (stripped, common_prefix) = base
         .as_ref()
@@ -388,8 +286,8 @@ pub fn relative_to(path: impl AsRef<Path>, base: impl AsRef<Path>) -> Result<Pat
                 .map(|stripped| (stripped, ancestor))
         })
         .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
                 format!(
                     "Trivial strip failed: {} vs. {}",
                     path.as_ref().simplified_display(),
@@ -400,7 +298,7 @@ pub fn relative_to(path: impl AsRef<Path>, base: impl AsRef<Path>) -> Result<Pat
 
     // go as many levels up as required
     let levels_up = base.as_ref().components().count() - common_prefix.components().count();
-    let up = iter::repeat("..").take(levels_up).collect::<PathBuf>();
+    let up = std::iter::repeat("..").take(levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))
 }

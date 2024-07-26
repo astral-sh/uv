@@ -39,9 +39,6 @@ fn init() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -100,9 +97,6 @@ fn init_no_readme() -> Result<()> {
         description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -143,9 +137,6 @@ fn init_current_dir() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -209,9 +200,6 @@ fn init_dot_args() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -288,9 +276,6 @@ fn init_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -383,9 +368,6 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -479,9 +461,6 @@ fn init_workspace_outside() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -560,9 +539,6 @@ fn init_invalid_names() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -627,7 +603,7 @@ fn init_workspace_isolated() -> Result<()> {
 }
 
 #[test]
-fn init_nested_workspace() -> Result<()> {
+fn init_project_inside_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -695,9 +671,6 @@ fn init_nested_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -760,6 +733,64 @@ fn init_explicit_workspace() -> Result<()> {
 fn init_virtual_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--virtual"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized workspace `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [tool.uv.workspace]
+        members = []
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Adding `bar` as member of workspace `[TEMP_DIR]/foo`
+    Initialized project `bar` at `[TEMP_DIR]/foo/bar`
+    "###);
+
+    let pyproject = fs_err::read_to_string(pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [tool.uv.workspace]
+        members = ["bar"]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init --virtual` from within a workspace.
+#[test]
+fn init_nested_virtual_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
         r"
@@ -768,17 +799,28 @@ fn init_virtual_workspace() -> Result<()> {
         ",
     })?;
 
-    let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--virtual").arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv init` is experimental and may change without warning
-    Adding `foo` as member of workspace `[TEMP_DIR]/`
-    Initialized project `foo` at `[TEMP_DIR]/foo`
+    warning: Nested workspaces are not supported, but outer workspace (`[TEMP_DIR]/`) includes `[TEMP_DIR]/foo`
+    Initialized workspace `foo` at `[TEMP_DIR]/foo`
     "###);
+
+    let pyproject = fs_err::read_to_string(context.temp_dir.join("foo").join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [tool.uv.workspace]
+        members = []
+        "###
+        );
+    });
 
     let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
     insta::with_settings!({
@@ -787,7 +829,7 @@ fn init_virtual_workspace() -> Result<()> {
         assert_snapshot!(
             workspace, @r###"
         [tool.uv.workspace]
-        members = ["foo"]
+        members = []
         "###
         );
     });
@@ -927,9 +969,6 @@ fn init_requires_python_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.10"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -980,9 +1019,6 @@ fn init_requires_python_version() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.8"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -1034,9 +1070,6 @@ fn init_requires_python_specifiers() -> Result<()> {
         readme = "README.md"
         requires-python = "==3.8.*"
         dependencies = []
-
-        [tool.uv]
-        dev-dependencies = []
         "###
         );
     });
@@ -1080,4 +1113,19 @@ fn init_unmanaged() -> Result<()> {
     });
 
     Ok(())
+}
+
+#[test]
+fn init_hidden() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg(".foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    error: Not a valid package or extra name: ".foo". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    "###);
 }

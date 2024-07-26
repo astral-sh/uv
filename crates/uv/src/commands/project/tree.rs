@@ -64,7 +64,7 @@ pub(crate) async fn tree(
     .await?
     .into_interpreter();
 
-    // Update the lock file, if necessary.
+    // Update the lockfile, if necessary.
     let lock = project::lock::do_safe_lock(
         locked,
         frozen,
@@ -83,7 +83,7 @@ pub(crate) async fn tree(
 
     // Read packages from the lockfile.
     let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();
-    for dist in lock.into_distributions() {
+    for dist in lock.lock.into_distributions() {
         let name = dist.name().clone();
         let metadata = dist.to_metadata(workspace.install_path())?;
         packages.entry(name).or_default().push(metadata);

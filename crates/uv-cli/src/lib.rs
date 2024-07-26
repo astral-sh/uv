@@ -75,6 +75,11 @@ pub struct Cli {
     #[arg(global = true, long, env = "UV_CONFIG_FILE")]
     pub config_file: Option<PathBuf>,
 
+    /// Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current directory,
+    /// parent directories, or user configuration directories.
+    #[arg(global = true, long, env = "UV_NO_CONFIG", value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_config: bool,
+
     /// Print help.
     #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]
     help: Option<bool>,
@@ -279,7 +284,7 @@ pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
     Clean(CleanArgs),
     /// Prune all unreachable objects from the cache.
-    Prune,
+    Prune(PruneArgs),
     /// Show the cache directory.
     Dir,
 }
@@ -289,6 +294,26 @@ pub enum CacheCommand {
 pub struct CleanArgs {
     /// The packages to remove from the cache.
     pub package: Vec<PackageName>,
+}
+
+#[derive(Args, Debug)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PruneArgs {
+    /// Optimize the cache for persistence in a continuous integration environment, like GitHub
+    /// Actions.
+    ///
+    /// By default, uv caches both the wheels that it builds from source and the pre-built wheels
+    /// that it downloads directly, to enable high-performance package installation. In some
+    /// scenarios, though, persisting pre-built wheels may be undesirable. For example, in GitHub
+    /// Actions, it's faster to omit pre-built wheels from the cache and instead have re-download
+    /// them on each run. However, it typically _is_ faster to cache wheels that are built from
+    /// source, since the wheel building process can be expensive, especially for extension
+    /// modules.
+    ///
+    /// In `--ci` mode, uv will prune any pre-built wheels from the cache, but retain any wheels
+    /// that were built from source.
+    #[arg(long)]
+    pub ci: bool,
 }
 
 #[derive(Args)]
@@ -1794,7 +1819,11 @@ pub struct InitArgs {
     #[arg(long)]
     pub name: Option<PackageName>,
 
-    /// Do not create a readme file.
+    /// Create a virtual workspace instead of a project.
+    #[arg(long)]
+    pub r#virtual: bool,
+
+    /// Do not create a `README.md` file.
     #[arg(long)]
     pub no_readme: bool,
 
@@ -2527,14 +2556,16 @@ pub struct InstallerArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Reinstall all packages, regardless of whether they're already installed.
+    /// Reinstall all packages, regardless of whether they're already installed. Implies
+    /// `--refresh`.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub reinstall: bool,
 
     #[arg(long, overrides_with("reinstall"), hide = true)]
     pub no_reinstall: bool,
 
-    /// Reinstall a specific package, regardless of whether it's already installed.
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `--refresh-package`.
     #[arg(long)]
     pub reinstall_package: Vec<PackageName>,
 
@@ -2691,14 +2722,16 @@ pub struct ResolverInstallerArgs {
     #[arg(long, short = 'P')]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
-    /// Reinstall all packages, regardless of whether they're already installed.
+    /// Reinstall all packages, regardless of whether they're already installed. Implies
+    /// `--refresh`.
     #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
     pub reinstall: bool,
 
     #[arg(long, overrides_with("reinstall"), hide = true)]
     pub no_reinstall: bool,
 
-    /// Reinstall a specific package, regardless of whether it's already installed.
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `--refresh-package`.
     #[arg(long)]
     pub reinstall_package: Vec<PackageName>,
 

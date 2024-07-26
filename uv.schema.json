@@ -253,14 +253,14 @@
       ]
     },
     "reinstall": {
-      "description": "Reinstall all packages, regardless of whether they're already installed.",
+      "description": "Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.",
       "type": [
         "boolean",
         "null"
       ]
     },
     "reinstall-package": {
-      "description": "Reinstall a specific package, regardless of whether it's already installed.",
+      "description": "Reinstall a specific package, regardless of whether it's already installed. Implies `refresh-package`.",
       "type": [
         "array",
         "null"
@@ -845,14 +845,14 @@
           ]
         },
         "reinstall": {
-          "description": "Reinstall all packages, regardless of whether they're already installed.",
+          "description": "Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "reinstall-package": {
-          "description": "Reinstall a specific package, regardless of whether it's already installed.",
+          "description": "Reinstall a specific package, regardless of whether it's already installed. Implies `refresh-package`.",
           "type": [
             "array",
             "null"

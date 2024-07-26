@@ -585,6 +585,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - flask==3.0.2
@@ -1816,6 +1817,7 @@ fn reinstall_no_binary() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - anyio==4.3.0
@@ -4673,6 +4675,7 @@ fn already_installed_local_version_of_remote_package() {
     );
 
     // Request install with a different version
+    //
     // We should attempt to pull from the index since the installed version does not match
     // but we disable it here to preserve this dependency for future tests
     uv_snapshot!(context.filters(), context.pip_install()
@@ -4705,8 +4708,8 @@ fn already_installed_local_version_of_remote_package() {
     "###
     );
 
-    // Request reinstall with the full path, this should reinstall from the path
-    // and not pull from the index
+    // Request reinstall with the full path, this should reinstall from the path and not pull from
+    // the index (or rebuild).
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("anyio_local"))
         .arg("--reinstall")
@@ -4755,7 +4758,6 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
@@ -4975,6 +4977,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
@@ -6100,6 +6103,49 @@ fn local_index_fallback() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn accept_existing_prerelease() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask==2.0.0rc1")?;
+
+    // Install a pre-release version of `flask`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("Flask==2.0.0rc1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + click==8.1.7
+     + flask==2.0.0rc1
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    // Install `flask-login`, without enabling pre-releases. The existing version of `flask` should
+    // still be accepted.
+    uv_snapshot!(context.filters(), context.pip_install().arg("flask-login==0.6.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + flask-login==0.6.0
     "###
     );
 

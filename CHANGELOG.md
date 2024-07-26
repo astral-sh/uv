@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.2.30
+
+### Enhancements
+
+- Infer missing `.exe` in Windows Python discovery ([#5456](https://github.com/astral-sh/uv/pull/5456))
+- Make `--reinstall` imply `--refresh` ([#5425](https://github.com/astral-sh/uv/pull/5425))
+
+### CLI
+
+- Add `--no-config` to replace `--isolated` ([#5463](https://github.com/astral-sh/uv/pull/5463))
+- Cache metadata for source tree dependencies ([#5423](https://github.com/astral-sh/uv/pull/5423))
+
+### Bug fixes
+
+- Avoid canonicalizing executables on Windows ([#5446](https://github.com/astral-sh/uv/pull/5446))
+- Set standard permissions for temporary files ([#5457](https://github.com/astral-sh/uv/pull/5457))
+
+## 0.2.29
+
+### Enhancements
+
+- Add `--ci` mode to `uv cache prune` ([#5391](https://github.com/astral-sh/uv/pull/5391))
+- Display Python installation key for discovered interpreters ([#5365](https://github.com/astral-sh/uv/pull/5365))
+
+### Bug fixes
+
+- Allow symlinks to files in scripts directory ([#5380](https://github.com/astral-sh/uv/pull/5380))
+- Always accept already-installed pre-releases ([#5419](https://github.com/astral-sh/uv/pull/5419))
+- Validate successful metadata fetch for direct dependencies ([#5392](https://github.com/astral-sh/uv/pull/5392))
+
+### Documentation
+
+- Add warning to `--link-mode=symlink` documentation ([#5387](https://github.com/astral-sh/uv/pull/5387))
+
 ## 0.2.28
 
 ### Enhancements
@@ -1360,7 +1394,7 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Always remove color codes from output file ([#2018](https://github.com/astral-sh/uv/pull/2018))
 - Support recursive extras in direct `pyproject.toml` files ([#1990](https://github.com/astral-sh/uv/pull/1990))
 - Un-cache editable requirements with dynamic metadata ([#2029](https://github.com/astral-sh/uv/pull/2029))
-- Use a non-local lock file for locking system interpreters ([#2045](https://github.com/astral-sh/uv/pull/2045))
+- Use a non-local lockfile for locking system interpreters ([#2045](https://github.com/astral-sh/uv/pull/2045))
 - Surface the `EXTERNALLY-MANAGED` message to users ([#2032](https://github.com/astral-sh/uv/pull/2032))
 
 ## 0.1.11

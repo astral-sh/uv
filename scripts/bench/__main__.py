@@ -181,7 +181,7 @@ class Suite(abc.ABC):
     def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         """Resolve a set of dependencies using pip-tools, from a cold cache.
 
-        The resolution is performed from scratch, i.e., without an existing lock file,
+        The resolution is performed from scratch, i.e., without an existing lockfile,
         and the cache directory is cleared between runs.
         """
 
@@ -189,7 +189,7 @@ class Suite(abc.ABC):
     def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
         """Resolve a set of dependencies using pip-tools, from a warm cache.
 
-        The resolution is performed from scratch, i.e., without an existing lock file;
+        The resolution is performed from scratch, i.e., without an existing lockfile;
         however, the cache directory is _not_ cleared between runs.
         """
 
@@ -199,9 +199,9 @@ class Suite(abc.ABC):
     ) -> Command | None:
         """Resolve a modified lockfile using pip-tools, from a warm cache.
 
-        The resolution is performed with an existing lock file, and the cache directory
+        The resolution is performed with an existing lockfile, and the cache directory
         is _not_ cleared between runs. However, a new dependency is added to the set
-        of input requirements, which does not appear in the lock file.
+        of input requirements, which does not appear in the lockfile.
         """
 
     @abc.abstractmethod
@@ -267,7 +267,7 @@ class PipCompile(Suite):
         cache_dir = os.path.join(cwd, ".cache")
         baseline = os.path.join(cwd, "baseline.txt")
 
-        # First, perform a cold resolution, to ensure that the lock file exists.
+        # First, perform a cold resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
         subprocess.check_call(
             [
@@ -473,7 +473,7 @@ class Poetry(Suite):
             poetry_lock
         ), f"Lock file already exists at: {poetry_lock}"
 
-        # Run a resolution, to ensure that the lock file exists.
+        # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
         subprocess.check_call(
             [self.path, "lock"],
@@ -497,7 +497,7 @@ class Poetry(Suite):
         with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
             tomli_w.dump(pyproject, fp)
 
-        # Store the baseline lock file.
+        # Store the baseline lockfile.
         baseline = os.path.join(cwd, "baseline.lock")
         shutil.copyfile(poetry_lock, baseline)
 
@@ -529,7 +529,7 @@ class Poetry(Suite):
             poetry_lock
         ), f"Lock file already exists at: {poetry_lock}"
 
-        # Run a resolution, to ensure that the lock file exists.
+        # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
         subprocess.check_call(
             [self.path, "lock"],
@@ -574,7 +574,7 @@ class Poetry(Suite):
             poetry_lock
         ), f"Lock file already exists at: {poetry_lock}"
 
-        # Run a resolution, to ensure that the lock file exists.
+        # Run a resolution, to ensure that the lockfile exists.
         subprocess.check_call(
             [self.path, "lock"],
             cwd=cwd,
@@ -690,7 +690,7 @@ class Pdm(Suite):
         pdm_lock = os.path.join(cwd, "pdm.lock")
         assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
 
-        # Run a resolution, to ensure that the lock file exists.
+        # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
         subprocess.check_call(
             [self.path, "lock"],
@@ -710,7 +710,7 @@ class Pdm(Suite):
         with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
             tomli_w.dump(pyproject, fp)
 
-        # Store the baseline lock file.
+        # Store the baseline lockfile.
         baseline = os.path.join(cwd, "baseline.lock")
         shutil.copyfile(pdm_lock, baseline)
 
@@ -735,7 +735,7 @@ class Pdm(Suite):
         pdm_lock = os.path.join(cwd, "pdm.lock")
         assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
 
-        # Run a resolution, to ensure that the lock file exists.
+        # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
         subprocess.check_call(
             [self.path, "lock"],
@@ -770,7 +770,7 @@ class Pdm(Suite):
         pdm_lock = os.path.join(cwd, "pdm.lock")
         assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
 
-        # Run a resolution, to ensure that the lock file exists.
+        # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
         subprocess.check_call(
             [self.path, "lock"],
@@ -856,7 +856,7 @@ class uv(Suite):
         cache_dir = os.path.join(cwd, ".cache")
         baseline = os.path.join(cwd, "baseline.txt")
 
-        # First, perform a cold resolution, to ensure that the lock file exists.
+        # First, perform a cold resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
         subprocess.check_call(
             [

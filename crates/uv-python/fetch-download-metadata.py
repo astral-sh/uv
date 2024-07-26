@@ -104,6 +104,7 @@ class CPythonFinder(Finder):
     )
 
     FLAVOR_PREFERENCES = [
+        "install_only_stripped",
         "install_only",
         "shared-pgo",
         "shared-noopt",

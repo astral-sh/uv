@@ -1319,7 +1319,7 @@ fn lock_upgrade_log() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask<3"]
+        dependencies = ["markupsafe<2", "iniconfig"]
         "#,
     )?;
 
@@ -1331,7 +1331,7 @@ fn lock_upgrade_log() -> Result<()> {
 
         ----- stderr -----
         warning: `uv lock` is experimental and may change without warning
-        Resolved 9 packages in [TIME]
+        Resolved 3 packages in [TIME]
         "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1346,108 +1346,27 @@ fn lock_upgrade_log() -> Result<()> {
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
-            name = "blinker"
-            version = "1.7.0"
+            name = "iniconfig"
+            version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
+            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
             wheels = [
-                { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
-            ]
-
-            [[distribution]]
-            name = "click"
-            version = "8.1.7"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "colorama", marker = "platform_system == 'Windows'" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
-            ]
-
-            [[distribution]]
-            name = "colorama"
-            version = "0.4.6"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
-            ]
-
-            [[distribution]]
-            name = "flask"
-            version = "2.3.3"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "blinker" },
-                { name = "click" },
-                { name = "itsdangerous" },
-                { name = "jinja2" },
-                { name = "werkzeug" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/46/b7/4ace17e37abd9c21715dea5ee11774a25e404c486a7893fa18e764326ead/flask-2.3.3.tar.gz", hash = "sha256:09c347a92aa7ff4a8e7f3206795f30d826654baf38b873d0744cd571ca609efc", size = 672756 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/fd/56/26f0be8adc2b4257df20c1c4260ddd0aa396cf8e75d90ab2f7ff99bc34f9/flask-2.3.3-py3-none-any.whl", hash = "sha256:f69fcd559dc907ed196ab9df0e48471709175e696d6e698dd4dbe940f96ce66b", size = 96112 },
-            ]
-
-            [[distribution]]
-            name = "itsdangerous"
-            version = "2.1.2"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
-            ]
-
-            [[distribution]]
-            name = "jinja2"
-            version = "3.1.3"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "markupsafe" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
+                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
             ]
 
             [[distribution]]
             name = "markupsafe"
-            version = "2.1.5"
+            version = "1.1.1"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/53/bd/583bf3e4c8d6a321938c13f49d44024dbe5ed63e0a7ba127e454a66da974/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1", size = 18215 },
-                { url = "https://files.pythonhosted.org/packages/48/d6/e7cd795fc710292c3af3a06d80868ce4b02bfbbf370b7cee11d282815a2a/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4", size = 14069 },
-                { url = "https://files.pythonhosted.org/packages/51/b5/5d8ec796e2a08fc814a2c7d2584b55f889a55cf17dd1a90f2beb70744e5c/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee", size = 29452 },
-                { url = "https://files.pythonhosted.org/packages/0a/0d/2454f072fae3b5a137c119abf15465d1771319dfe9e4acbb31722a0fff91/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5", size = 28462 },
-                { url = "https://files.pythonhosted.org/packages/2d/75/fd6cb2e68780f72d47e6671840ca517bda5ef663d30ada7616b0462ad1e3/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b", size = 27869 },
-                { url = "https://files.pythonhosted.org/packages/b0/81/147c477391c2750e8fc7705829f7351cf1cd3be64406edcf900dc633feb2/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:d050b3361367a06d752db6ead6e7edeb0009be66bc3bae0ee9d97fb326badc2a", size = 33906 },
-                { url = "https://files.pythonhosted.org/packages/8b/ff/9a52b71839d7a256b563e85d11050e307121000dcebc97df120176b3ad93/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:bec0a414d016ac1a18862a519e54b2fd0fc8bbfd6890376898a6c0891dd82e9f", size = 32296 },
-                { url = "https://files.pythonhosted.org/packages/88/07/2dc76aa51b481eb96a4c3198894f38b480490e834479611a4053fbf08623/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:58c98fee265677f63a4385256a6d7683ab1832f3ddd1e66fe948d5880c21a169", size = 33038 },
-                { url = "https://files.pythonhosted.org/packages/96/0c/620c1fb3661858c0e37eb3cbffd8c6f732a67cd97296f725789679801b31/MarkupSafe-2.1.5-cp312-cp312-win32.whl", hash = "sha256:8590b4ae07a35970728874632fed7bd57b26b0102df2d2b233b6d9d82f6c62ad", size = 16572 },
-                { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
-            ]
+            sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
 
             [[distribution]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "flask" },
-            ]
-
-            [[distribution]]
-            name = "werkzeug"
-            version = "3.0.1"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
+                { name = "iniconfig" },
                 { name = "markupsafe" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
             ]
             "###
             );
@@ -1462,21 +1381,22 @@ fn lock_upgrade_log() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Resolved 9 packages in [TIME]
+    Resolved 3 packages in [TIME]
     "###);
 
-    // Modify the `pyproject.toml` to loosen the requirement.
+    // Modify the `pyproject.toml` to loosen a requirement, drop a requirement, and add a
+    // requirement.
     pyproject_toml.write_str(
         r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask"]
+        dependencies = ["markupsafe", "typing-extensions"]
         "#,
     )?;
 
-    // Run with `--upgrade`; ensure that `flask` is upgraded.
+    // Run with `--upgrade`; ensure that the updates are reported.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
     success: true
     exit_code: 0
@@ -1484,8 +1404,10 @@ fn lock_upgrade_log() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Resolved 9 packages in [TIME]
-    Updating flask v2.3.3 -> v3.0.2
+    Resolved 3 packages in [TIME]
+    Removed iniconfig v2.0.0
+    Updated markupsafe v1.1.1 -> v2.1.5
+    Added typing-extensions v4.10.0
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1498,73 +1420,6 @@ fn lock_upgrade_log() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         exclude-newer = "2024-03-25 00:00:00 UTC"
-
-        [[distribution]]
-        name = "blinker"
-        version = "1.7.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
-        ]
-
-        [[distribution]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
-        ]
-
-        [[distribution]]
-        name = "colorama"
-        version = "0.4.6"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
-        ]
-
-        [[distribution]]
-        name = "flask"
-        version = "3.0.2"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "blinker" },
-            { name = "click" },
-            { name = "itsdangerous" },
-            { name = "jinja2" },
-            { name = "werkzeug" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/3f/e0/a89e8120faea1edbfca1a9b171cff7f2bf62ec860bbafcb2c2387c0317be/flask-3.0.2.tar.gz", hash = "sha256:822c03f4b799204250a7ee84b1eddc40665395333973dfb9deebfe425fefcb7d", size = 675248 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/93/a6/aa98bfe0eb9b8b15d36cdfd03c8ca86a03968a87f27ce224fb4f766acb23/flask-3.0.2-py3-none-any.whl", hash = "sha256:3232e0e9c850d781933cf0207523d1ece087eb8d87b23777ae38456e2fbe7c6e", size = 101300 },
-        ]
-
-        [[distribution]]
-        name = "itsdangerous"
-        version = "2.1.2"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
-        ]
-
-        [[distribution]]
-        name = "jinja2"
-        version = "3.1.3"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "markupsafe" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
-        ]
 
         [[distribution]]
         name = "markupsafe"
@@ -1589,19 +1444,17 @@ fn lock_upgrade_log() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "flask" },
+            { name = "markupsafe" },
+            { name = "typing-extensions" },
         ]
 
         [[distribution]]
-        name = "werkzeug"
-        version = "3.0.1"
+        name = "typing-extensions"
+        version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "markupsafe" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
         "###
         );
@@ -1623,7 +1476,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask<3 ; sys_platform != 'win32'", "flask==3.0.0 ; sys_platform == 'win32'"]
+        dependencies = ["markupsafe<2 ; sys_platform != 'win32'", "markupsafe==2.0.0 ; sys_platform == 'win32'"]
         "#,
     )?;
 
@@ -1635,7 +1488,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
 
         ----- stderr -----
         warning: `uv lock` is experimental and may change without warning
-        Resolved 10 packages in [TIME]
+        Resolved 3 packages in [TIME]
         "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1650,125 +1503,24 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
-            name = "blinker"
-            version = "1.7.0"
+            name = "markupsafe"
+            version = "1.1.1"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
-            ]
-
-            [[distribution]]
-            name = "click"
-            version = "8.1.7"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "colorama", marker = "platform_system == 'Windows'" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
-            ]
-
-            [[distribution]]
-            name = "colorama"
-            version = "0.4.6"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
-            ]
-
-            [[distribution]]
-            name = "flask"
-            version = "2.3.3"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "blinker" },
-                { name = "click" },
-                { name = "itsdangerous" },
-                { name = "jinja2" },
-                { name = "werkzeug" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/46/b7/4ace17e37abd9c21715dea5ee11774a25e404c486a7893fa18e764326ead/flask-2.3.3.tar.gz", hash = "sha256:09c347a92aa7ff4a8e7f3206795f30d826654baf38b873d0744cd571ca609efc", size = 672756 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/fd/56/26f0be8adc2b4257df20c1c4260ddd0aa396cf8e75d90ab2f7ff99bc34f9/flask-2.3.3-py3-none-any.whl", hash = "sha256:f69fcd559dc907ed196ab9df0e48471709175e696d6e698dd4dbe940f96ce66b", size = 96112 },
-            ]
-
-            [[distribution]]
-            name = "flask"
-            version = "3.0.0"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "blinker" },
-                { name = "click" },
-                { name = "itsdangerous" },
-                { name = "jinja2" },
-                { name = "werkzeug" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz", hash = "sha256:cfadcdb638b609361d29ec22360d6070a77d7463dcb3ab08d2c2f2f168845f58", size = 674171 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl", hash = "sha256:21128f47e4e3b9d597a3e8521a329bf56909b690fcc3fa3e477725aa81367638", size = 99724 },
-            ]
-
-            [[distribution]]
-            name = "itsdangerous"
-            version = "2.1.2"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
-            ]
-
-            [[distribution]]
-            name = "jinja2"
-            version = "3.1.3"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "markupsafe" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
-            ]
+            sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
 
             [[distribution]]
             name = "markupsafe"
-            version = "2.1.5"
+            version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/53/bd/583bf3e4c8d6a321938c13f49d44024dbe5ed63e0a7ba127e454a66da974/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1", size = 18215 },
-                { url = "https://files.pythonhosted.org/packages/48/d6/e7cd795fc710292c3af3a06d80868ce4b02bfbbf370b7cee11d282815a2a/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4", size = 14069 },
-                { url = "https://files.pythonhosted.org/packages/51/b5/5d8ec796e2a08fc814a2c7d2584b55f889a55cf17dd1a90f2beb70744e5c/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee", size = 29452 },
-                { url = "https://files.pythonhosted.org/packages/0a/0d/2454f072fae3b5a137c119abf15465d1771319dfe9e4acbb31722a0fff91/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5", size = 28462 },
-                { url = "https://files.pythonhosted.org/packages/2d/75/fd6cb2e68780f72d47e6671840ca517bda5ef663d30ada7616b0462ad1e3/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b", size = 27869 },
-                { url = "https://files.pythonhosted.org/packages/b0/81/147c477391c2750e8fc7705829f7351cf1cd3be64406edcf900dc633feb2/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:d050b3361367a06d752db6ead6e7edeb0009be66bc3bae0ee9d97fb326badc2a", size = 33906 },
-                { url = "https://files.pythonhosted.org/packages/8b/ff/9a52b71839d7a256b563e85d11050e307121000dcebc97df120176b3ad93/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:bec0a414d016ac1a18862a519e54b2fd0fc8bbfd6890376898a6c0891dd82e9f", size = 32296 },
-                { url = "https://files.pythonhosted.org/packages/88/07/2dc76aa51b481eb96a4c3198894f38b480490e834479611a4053fbf08623/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:58c98fee265677f63a4385256a6d7683ab1832f3ddd1e66fe948d5880c21a169", size = 33038 },
-                { url = "https://files.pythonhosted.org/packages/96/0c/620c1fb3661858c0e37eb3cbffd8c6f732a67cd97296f725789679801b31/MarkupSafe-2.1.5-cp312-cp312-win32.whl", hash = "sha256:8590b4ae07a35970728874632fed7bd57b26b0102df2d2b233b6d9d82f6c62ad", size = 16572 },
-                { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
-            ]
+            sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466 }
 
             [[distribution]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "flask", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
-                { name = "flask", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
-            ]
-
-            [[distribution]]
-            name = "werkzeug"
-            version = "3.0.1"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "markupsafe" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
+                { name = "markupsafe", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+                { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
             ]
             "###
             );
@@ -1783,7 +1535,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Resolved 10 packages in [TIME]
+    Resolved 3 packages in [TIME]
     "###);
 
     // Modify the `pyproject.toml` to loosen the requirement.
@@ -1793,11 +1545,11 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask"]
+        dependencies = ["markupsafe"]
         "#,
     )?;
 
-    // Run with `--upgrade`; ensure that `flask` is upgraded.
+    // Run with `--upgrade`; ensure that `markupsafe` is upgraded.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
     success: true
     exit_code: 0
@@ -1805,8 +1557,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Resolved 9 packages in [TIME]
-    Updating flask v2.3.3, 3.0.0 -> v3.0.2
+    Resolved 2 packages in [TIME]
+    Updated markupsafe v1.1.1, v2.0.0 -> v2.1.5
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1819,73 +1571,6 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         exclude-newer = "2024-03-25 00:00:00 UTC"
-
-        [[distribution]]
-        name = "blinker"
-        version = "1.7.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
-        ]
-
-        [[distribution]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
-        ]
-
-        [[distribution]]
-        name = "colorama"
-        version = "0.4.6"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
-        ]
-
-        [[distribution]]
-        name = "flask"
-        version = "3.0.2"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "blinker" },
-            { name = "click" },
-            { name = "itsdangerous" },
-            { name = "jinja2" },
-            { name = "werkzeug" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/3f/e0/a89e8120faea1edbfca1a9b171cff7f2bf62ec860bbafcb2c2387c0317be/flask-3.0.2.tar.gz", hash = "sha256:822c03f4b799204250a7ee84b1eddc40665395333973dfb9deebfe425fefcb7d", size = 675248 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/93/a6/aa98bfe0eb9b8b15d36cdfd03c8ca86a03968a87f27ce224fb4f766acb23/flask-3.0.2-py3-none-any.whl", hash = "sha256:3232e0e9c850d781933cf0207523d1ece087eb8d87b23777ae38456e2fbe7c6e", size = 101300 },
-        ]
-
-        [[distribution]]
-        name = "itsdangerous"
-        version = "2.1.2"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
-        ]
-
-        [[distribution]]
-        name = "jinja2"
-        version = "3.1.3"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "markupsafe" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
-        ]
 
         [[distribution]]
         name = "markupsafe"
@@ -1910,19 +1595,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "flask" },
-        ]
-
-        [[distribution]]
-        name = "werkzeug"
-        version = "3.0.1"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
             { name = "markupsafe" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
         ]
         "###
         );
@@ -2045,53 +1718,47 @@ fn lock_preference() -> Result<()> {
         );
     });
 
-    deterministic! { context =>
-        // Run with `--upgrade`; ensure that `iniconfig` is upgraded.
-        let mut filters = context.filters();
-        // Running `lock` multiple times causes the update log to change between alternate runs
-        filters.push(("Updating iniconfig v1.1.1 -> v2.0.0", ""));
-        filters.push(("note: pass `--verbose` to see 1 unchanged dependencies", ""));
-        uv_snapshot!(filters, context.lock().arg("--upgrade"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    Updated iniconfig v1.1.1 -> v2.0.0
+    "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "iniconfig"
-            version = "2.0.0"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
-            ]
+        [[distribution]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "iniconfig" },
-            ]
-            "###
-            );
-        });
-    }
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -3234,9 +2901,9 @@ fn lock_python_version_marker_complement() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "attrs" },
-                { name = "iniconfig" },
-                { name = "typing-extensions", marker = "python_full_version <= '3.10' or python_full_version > '3.10'" },
+                { name = "attrs", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
+                { name = "iniconfig", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
+                { name = "typing-extensions", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
             ]
 
             [[distribution]]
@@ -3902,23 +3569,23 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    deterministic! { context =>
-        uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
+        Added pysocks v1.7.1
         "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
             version = 1
             requires-python = ">=3.12"
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -4011,9 +3678,8 @@ fn lock_new_extras() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
             ]
             "###
-            );
-        });
-    }
+        );
+    });
 
     Ok(())
 }
@@ -4196,14 +3862,15 @@ fn lock_resolution_mode() -> Result<()> {
 
     // Locking with `lowest-direct` should ignore the existing lockfile.
     uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
-        Resolved 4 packages in [TIME]
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
+    Resolved 4 packages in [TIME]
+    Updated anyio v4.3.0 -> v3.0.0
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();

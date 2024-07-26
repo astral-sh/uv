@@ -6,7 +6,7 @@ use std::ops::RangeBounds;
 use pubgrub::range::{Range as PubGrubRange, Range};
 use rustc_hash::FxHashMap;
 
-use pep440_rs::{Operator, Version, VersionSpecifier};
+use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{
     ExtraName, ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
     MarkerValueVersion,
@@ -74,12 +74,8 @@ pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
     match (expr1, expr2) {
         // `Arbitrary` expressions always evaluate to `false`, and are thus always disjoint.
         (MarkerExpression::Arbitrary { .. }, _) | (_, MarkerExpression::Arbitrary { .. }) => true,
-        (MarkerExpression::Version { .. } | MarkerExpression::VersionInverted { .. }, expr2) => {
-            version_is_disjoint(expr1, expr2)
-        }
-        (MarkerExpression::String { .. } | MarkerExpression::StringInverted { .. }, expr2) => {
-            string_is_disjoint(expr1, expr2)
-        }
+        (MarkerExpression::Version { .. }, expr2) => version_is_disjoint(expr1, expr2),
+        (MarkerExpression::String { .. }, expr2) => string_is_disjoint(expr1, expr2),
         (MarkerExpression::Extra { operator, name }, expr2) => {
             extra_is_disjoint(operator, name, expr2)
         }
@@ -89,43 +85,6 @@ pub(crate) fn is_disjoint(first: &MarkerTree, second: &MarkerTree) -> bool {
 /// Returns `true` if this string expression does not intersect with the given expression.
 fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool {
     use MarkerOperator::*;
-
-    // The `in` and `not in` operators are not reversible, so we have to ensure the expressions
-    // match exactly. Notably, `'a' in env` and `env not in 'a'` are not disjoint given `env == 'ab'`.
-    match (this, other) {
-        (
-            MarkerExpression::String {
-                key,
-                operator,
-                value,
-            },
-            MarkerExpression::String {
-                key: key2,
-                operator: operator2,
-                value: value2,
-            },
-        )
-        | (
-            MarkerExpression::StringInverted {
-                key,
-                operator,
-                value,
-            },
-            MarkerExpression::StringInverted {
-                key: key2,
-                operator: operator2,
-                value: value2,
-            },
-        ) if key == key2 => match (operator, operator2) {
-            // The only disjoint expressions involving these operators are `key in value`
-            // and `key not in value`, or reversed.
-            (In, NotIn) | (NotIn, In) => return value == value2,
-            // Anything else cannot be disjoint.
-            (In | NotIn, _) | (_, In | NotIn) => return false,
-            _ => {}
-        },
-        _ => {}
-    }
 
     // Extract the normalized string expressions.
     let Some((key, operator, value)) = extract_string_expression(this) else {
@@ -144,6 +103,12 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
         // The only disjoint expressions involving strict inequality are `key != value` and `key == value`.
         (NotEqual, Equal) | (Equal, NotEqual) => return value == value2,
         (NotEqual, _) | (_, NotEqual) => return false,
+        // Similarly for `in` and `not in`.
+        (In, NotIn) | (NotIn, In) => return value == value2,
+        (In | NotIn, _) | (_, In | NotIn) => return false,
+        // As well as the inverse.
+        (Contains, NotContains) | (NotContains, Contains) => return value == value2,
+        (Contains | NotContains, _) | (_, Contains | NotContains) => return false,
         _ => {}
     }
 
@@ -639,14 +604,6 @@ fn extract_string_expression(
             operator,
             value,
         } => Some((key, *operator, value)),
-        MarkerExpression::StringInverted {
-            value,
-            operator,
-            key,
-        } => {
-            // If the expression was inverted, we have to reverse the marker operator.
-            reverse_marker_operator(*operator).map(|operator| (key, operator, value.as_str()))
-        }
         _ => None,
     }
 }
@@ -675,7 +632,7 @@ fn string_bounds(value: &str, operator: MarkerOperator) -> (Bound<&str>, Bound<&
         GreaterEqual => (Included(value), Unbounded),
         LessThan => (Unbounded, Excluded(value)),
         LessEqual => (Unbounded, Included(value)),
-        NotEqual | In | NotIn => unreachable!(),
+        NotEqual | In | NotIn | Contains | NotContains => unreachable!(),
     }
 }
 
@@ -717,21 +674,15 @@ fn version_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> boo
 fn contains_complements(trees: &[MarkerTree]) -> bool {
     let mut terms = FxHashMap::default();
     for tree in trees {
-        let MarkerTree::Expression(
-            MarkerExpression::String {
-                key,
-                operator,
-                value,
-            }
-            | MarkerExpression::StringInverted {
-                value,
-                operator,
-                key,
-            },
-        ) = tree
+        let MarkerTree::Expression(MarkerExpression::String {
+            key,
+            operator,
+            value,
+        }) = tree
         else {
             continue;
         };
+
         match operator {
             MarkerOperator::Equal => {
                 if let Some(MarkerOperator::NotEqual) = terms.insert((key, value), operator) {
@@ -753,18 +704,6 @@ fn contains_complements(trees: &[MarkerTree]) -> bool {
 fn keyed_range(expr: &MarkerExpression) -> Option<(&MarkerValueVersion, PubGrubRange<Version>)> {
     let (key, specifier) = match expr {
         MarkerExpression::Version { key, specifier } => (key, specifier.clone()),
-        MarkerExpression::VersionInverted {
-            version,
-            operator,
-            key,
-        } => {
-            // if the expression was inverted, we have to reverse the operator before constructing
-            // a version specifier
-            let operator = reverse_operator(*operator);
-            let specifier = VersionSpecifier::from_version(operator, version.clone()).ok()?;
-
-            (key, specifier)
-        }
         _ => return None,
     };
 
@@ -778,48 +717,10 @@ fn keyed_range(expr: &MarkerExpression) -> Option<(&MarkerValueVersion, PubGrubR
             key: MarkerValueVersion::PythonFullVersion,
             ..
         } => PubGrubSpecifier::from_pep440_specifier(&specifier).ok()?,
-        MarkerExpression::VersionInverted {
-            key: MarkerValueVersion::PythonVersion,
-            ..
-        } => PubGrubSpecifier::from_release_specifier(&specifier).ok()?,
-        MarkerExpression::VersionInverted {
-            key: MarkerValueVersion::PythonFullVersion,
-            ..
-        } => PubGrubSpecifier::from_pep440_specifier(&specifier).ok()?,
         _ => return None,
     };
 
     Some((key, pubgrub_specifier.into()))
-}
-
-/// Reverses a binary operator.
-fn reverse_operator(operator: Operator) -> Operator {
-    use Operator::*;
-
-    match operator {
-        LessThan => GreaterThan,
-        LessThanEqual => GreaterThanEqual,
-        GreaterThan => LessThan,
-        GreaterThanEqual => LessThanEqual,
-        _ => operator,
-    }
-}
-
-/// Reverses a marker operator, if possible.
-fn reverse_marker_operator(operator: MarkerOperator) -> Option<MarkerOperator> {
-    use MarkerOperator::*;
-
-    Some(match operator {
-        LessThan => GreaterThan,
-        LessEqual => GreaterEqual,
-        GreaterThan => LessThan,
-        GreaterEqual => LessEqual,
-        Equal => Equal,
-        NotEqual => NotEqual,
-        TildeEqual => TildeEqual,
-        // The `in` and `not in` operators are not reversible.
-        In | NotIn => return None,
-    })
 }
 
 #[cfg(test)]

@@ -76,7 +76,7 @@ pub(crate) fn create(
                 interpreter.sys_base_prefix().join("python.exe")
             }
         } else {
-            uv_fs::canonicalize_executable(interpreter.sys_executable())?
+            interpreter.sys_executable().to_path_buf()
         }
     } else {
         unimplemented!("Only Windows and Unix are supported")

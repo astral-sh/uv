@@ -16,7 +16,7 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 uv is installed to `~/.cargo/bin`.
 
-!!! note
+!!! tip
 
     The installation script may be inspected with:
 
@@ -40,13 +40,13 @@ curl -LsSf https://astral.sh/uv/0.2.11/install.sh | sh
 powershell -c "irm https://astral.sh/uv/0.2.11/install.ps1 | iex"
 ```
 
-When the standalone installer is used, uv can upgrade itself.
+When the standalone installer is used, uv can upgrade itself:
 
 ```bash
 uv self update
 ```
 
-When all other installers are used, self updates are disabled. Use the package manager's upgrade method instead.
+When another installation method is used, self updates are disabled. Use the package manager's upgrade method instead.
 
 ## PyPI
 

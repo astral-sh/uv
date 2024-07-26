@@ -1,6 +1,6 @@
 # Working on projects
 
-uv is capable of managing Python projects following the `pyproject.toml` standard.
+uv is capable of managing Python projects using a `pyproject.toml` with a `[project]` metadata table.
 
 ## Creating a new project
 
@@ -69,6 +69,10 @@ such as it's description or license. You can edit this file manually, or use
 commands like `uv add` and `uv remove` to manage your project through the
 CLI.
 
+!!! tip
+
+    See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with the `pyproject.toml` format.
+
 ### `.venv`
 
 The `.venv` folder contains your project's virtual environment, a Python
@@ -102,8 +106,13 @@ virtual environment before executing a command:
 
 ```console
 $ uv sync
+$ source .venv/bin/active
 $ python my_script.py
 ```
+
+!!! note
+
+    The virtual environment must be active to run scripts and commands in the project without `uv run`. Virtual environment activation differs per shell and platform.
 
 ## Managing dependencies
 
@@ -132,5 +141,5 @@ $ uv remove requests
 
 ## Next steps
 
-See the [projects concept](../projects.md) documentation for more details about
+See the [projects concept](../concepts/projects.md) documentation for more details about
 projects.

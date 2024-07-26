@@ -1,12 +1,14 @@
 site_name: uv
 theme:
   name: material
+  logo: assets/logo-letter.svg
   favicon: assets/favicon.svg
   features:
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.instant.progress
     - navigation.expand
+    - navigation.indexes
     - navigation.tracking
     - content.code.annotate
     - toc.follow
@@ -73,31 +75,35 @@ nav:
       - Installation: installation.md
       - First steps: first-steps.md
       - Features: features.md
-      - Overview: overview.md
   - Guides:
+      - guides/index.md
       - Installing Python: guides/install-python.md
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
       - Working on projects: guides/projects.md
   - Concepts:
-      - Projects: projects.md
-      - Dependencies: dependencies.md
-      - Workspaces: workspaces.md
-      - Tools: tools.md
-      - Python versions: python-versions.md
-      - Resolution: resolution.md
-      - Caching: cache.md
-      - Authentication: configuration/authentication.md
+      - concepts/index.md
+      - Projects: concepts/projects.md
+      - Dependencies: concepts/dependencies.md
+      - Workspaces: concepts/workspaces.md
+      - Tools: concepts/tools.md
+      - Python versions: concepts/python-versions.md
+      - Resolution: concepts/resolution.md
+      - Caching: concepts/cache.md
   - Configuration:
+      - configuration/index.md
       - Configuration files: configuration/files.md
       - Environment variables: configuration/environment.md
       - Settings: settings.md
+      - Authentication: configuration/authentication.md
   - Integration guides:
+      - guides/integration/index.md
       - Docker: guides/integration/docker.md
       - GitHub Actions: guides/integration/github.md
       - Pre-commit: guides/integration/pre-commit.md
-      - Commercial indexes: guides/integration/commercial-indexes.md
-  - Low-level operations:
+      - Alternative indexes: guides/integration/alternative-indexes.md
+  - The pip interface:
+      - pip/index.md
       - Using environments: pip/environments.md
       - Managing packages: pip/packages.md
       - Inspecting packages: pip/inspection.md
