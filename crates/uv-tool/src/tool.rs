@@ -6,7 +6,7 @@ use toml_edit::Array;
 use toml_edit::Table;
 use toml_edit::Value;
 
-use pypi_types::VerbatimParsedUrl;
+use pypi_types::Requirement;
 use uv_fs::PortablePath;
 
 /// A tool entry.
@@ -15,7 +15,7 @@ use uv_fs::PortablePath;
 #[serde(rename_all = "kebab-case")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
-    requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+    requirements: Vec<Requirement>,
     /// The Python requested by the user during installation.
     python: Option<String>,
     /// A mapping of entry point names to their metadata.
@@ -59,7 +59,7 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 impl Tool {
     /// Create a new `Tool`.
     pub fn new(
-        requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+        requirements: Vec<Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
     ) -> Self {
@@ -79,12 +79,20 @@ impl Tool {
         table.insert("requirements", {
             let requirements = match self.requirements.as_slice() {
                 [] => Array::new(),
-                [requirement] => Array::from_iter([Value::from(requirement.to_string())]),
-                requirements => each_element_on_its_line_array(
-                    requirements
-                        .iter()
-                        .map(|requirement| Value::from(requirement.to_string())),
-                ),
+                [requirement] => Array::from_iter([serde::Serialize::serialize(
+                    &requirement,
+                    toml_edit::ser::ValueSerializer::new(),
+                )
+                .unwrap()]),
+                requirements => {
+                    each_element_on_its_line_array(requirements.iter().map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                        .unwrap()
+                    }))
+                }
             };
             value(requirements)
         });
@@ -98,7 +106,7 @@ impl Tool {
                 self.entrypoints
                     .iter()
                     .map(ToolEntrypoint::to_toml)
-                    .map(toml_edit::Table::into_inline_table),
+                    .map(Table::into_inline_table),
             );
             value(entrypoints)
         });
@@ -110,7 +118,7 @@ impl Tool {
         &self.entrypoints
     }
 
-    pub fn requirements(&self) -> &[pep508_rs::Requirement<VerbatimParsedUrl>] {
+    pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
     }
 }

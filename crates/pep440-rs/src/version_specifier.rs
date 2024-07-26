@@ -61,6 +61,11 @@ impl VersionSpecifiers {
     pub fn contains(&self, version: &Version) -> bool {
         self.iter().all(|specifier| specifier.contains(version))
     }
+
+    /// Returns `true` if the specifiers are empty is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl FromIterator<VersionSpecifier> for VersionSpecifiers {
@@ -95,6 +100,12 @@ impl std::fmt::Display for VersionSpecifiers {
             }
         }
         Ok(())
+    }
+}
+
+impl Default for VersionSpecifiers {
+    fn default() -> Self {
+        Self::empty()
     }
 }
 

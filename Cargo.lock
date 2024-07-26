@@ -2807,6 +2807,7 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+ "uv-fs",
  "uv-git",
  "uv-normalize",
 ]
@@ -4844,6 +4845,7 @@ dependencies = [
  "fs-err",
  "reqwest",
  "reqwest-middleware",
+ "serde",
  "thiserror",
  "tokio",
  "tracing",
