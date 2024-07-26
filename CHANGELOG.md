@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.30
+
+### Enhancements
+
+- Infer missing `.exe` in Windows Python discovery ([#5456](https://github.com/astral-sh/uv/pull/5456))
+- Make `--reinstall` imply `--refresh` ([#5425](https://github.com/astral-sh/uv/pull/5425))
+
+### CLI
+
+- Add `--no-config` to replace `--isolated` ([#5463](https://github.com/astral-sh/uv/pull/5463))
+- Cache metadata for source tree dependencies ([#5423](https://github.com/astral-sh/uv/pull/5423))
+
+### Bug fixes
+
+- Avoid canonicalizing executables on Windows ([#5446](https://github.com/astral-sh/uv/pull/5446))
+- Set standard permissions for temporary files ([#5457](https://github.com/astral-sh/uv/pull/5457))
+
 ## 0.2.29
 
 ### Enhancements

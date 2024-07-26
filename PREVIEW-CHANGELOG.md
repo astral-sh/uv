@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.30
+
+### Preview features
+
+- Allow distributions to be absent in deserialization ([#5453](https://github.com/astral-sh/uv/pull/5453))
+- Merge identical forks ([#5405](https://github.com/astral-sh/uv/pull/5405))
+- Minor consistency fixes for code blocks ([#5437](https://github.com/astral-sh/uv/pull/5437))
+- Prefer "lockfile" to "lock file" ([#5427](https://github.com/astral-sh/uv/pull/5427))
+- Update documentation sections ([#5452](https://github.com/astral-sh/uv/pull/5452))
+- Use `sitecustomize.py` to implement environment layering ([#5462](https://github.com/astral-sh/uv/pull/5462))
+- Use stripped variants by default in Python install ([#5451](https://github.com/astral-sh/uv/pull/5451))
+
 ## 0.2.29
 
 ### Preview features
