@@ -43,9 +43,6 @@ fn help() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
           --no-progress
               Hides all progress outputs when set
       -n, --no-cache
@@ -109,9 +106,6 @@ fn help_flag() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
           --no-progress
               Hides all progress outputs when set
       -n, --no-cache
@@ -174,9 +168,6 @@ fn help_short_flag() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
           --no-progress
               Hides all progress outputs when set
       -n, --no-cache
@@ -279,10 +270,6 @@ fn help_subcommand() {
               - automatic: Automatically fetch managed Python installations when needed
               - manual:    Do not automatically fetch managed Python installations; require explicit
                 installation
-
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
 
           --no-progress
               Hides all progress outputs when set
@@ -408,10 +395,6 @@ fn help_subsubcommand() {
               - manual:    Do not automatically fetch managed Python installations; require explicit
                 installation
 
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
-
           --no-progress
               Hides all progress outputs when set
 
@@ -490,9 +473,6 @@ fn help_flag_subcommand() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
           --no-progress
               Hides all progress outputs when set
       -n, --no-cache
@@ -552,9 +532,6 @@ fn help_flag_subsubcommand() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
           --no-progress
               Hides all progress outputs when set
       -n, --no-cache
@@ -671,9 +648,6 @@ fn help_with_global_option() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
           --no-progress
               Hides all progress outputs when set
       -n, --no-cache
@@ -770,9 +744,6 @@ fn test_with_no_pager() {
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
-          --isolated
-              Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-              parent directories
           --no-progress
               Hides all progress outputs when set
       -n, --no-cache

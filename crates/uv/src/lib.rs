@@ -24,6 +24,7 @@ use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::{ExitStatus, ToolRunCommand};
@@ -67,6 +68,39 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         std::env::set_current_dir(directory)?;
     }
 
+    // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
+    let deprecated_isolated = if cli.global_args.isolated {
+        match &*cli.command {
+            // Supports `--isolated` as its own argument, so we can't warn either way.
+            Commands::Tool(ToolNamespace {
+                command: ToolCommand::Run(_),
+            }) => false,
+
+            // Supports `--isolated` as its own argument, so we can't warn either way.
+            Commands::Project(command) if matches!(**command, ProjectCommand::Run(_)) => false,
+
+            // `--isolated` moved to `--no-workspace`.
+            Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
+                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.");
+                false
+            }
+
+            // Preview APIs. Ignore `--isolated` and warn.
+            Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
+                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                false
+            }
+
+            // Non-preview APIs. Continue to support `--isolated`, but warn.
+            _ => {
+                warn_user!("The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                true
+            }
+        }
+    } else {
+        false
+    };
+
     // Load configuration from the filesystem, prioritizing (in order):
     // 1. The configuration file specified on the command-line.
     // 2. The configuration file in the current workspace (i.e., the `pyproject.toml` or `uv.toml`
@@ -77,7 +111,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //    search for `pyproject.toml` files, since we're not in a workspace.
     let filesystem = if let Some(config_file) = cli.config_file.as_ref() {
         Some(FilesystemOptions::from_file(config_file)?)
-    } else if cli.global_args.isolated || cli.no_config {
+    } else if deprecated_isolated || cli.no_config {
         None
     } else if let Ok(project) = Workspace::discover(&CWD, &DiscoveryOptions::default()).await {
         let project = FilesystemOptions::from_directory(project.install_path())?;
@@ -654,7 +688,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.python,
                 args.settings,
                 invocation_source,
-                args.isolated || globals.isolated,
+                args.isolated,
                 globals.preview,
                 globals.python_preference,
                 globals.python_fetch,
@@ -780,7 +814,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 globals.connectivity,
                 globals.preview,
-                cli.no_config || globals.isolated,
+                cli.no_config,
                 printer,
             )
             .await
@@ -826,7 +860,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.resolved,
                 globals.python_preference,
                 globals.preview,
-                args.no_workspace || globals.isolated,
+                args.no_workspace,
                 &cache,
                 printer,
             )
@@ -876,7 +910,7 @@ async fn run_project(
                 args.r#virtual,
                 args.no_readme,
                 args.python,
-                args.no_workspace || globals.isolated,
+                args.no_workspace,
                 globals.preview,
                 globals.python_preference,
                 globals.python_fetch,
@@ -916,7 +950,7 @@ async fn run_project(
                 args.frozen,
                 args.isolated,
                 args.package,
-                args.no_project || globals.isolated,
+                args.no_project,
                 args.extras,
                 args.dev,
                 args.python,

@@ -612,7 +612,9 @@ fn init_isolated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.
     warning: `uv init` is experimental and may change without warning
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
     Initialized project `foo`
     "###);
 
@@ -627,6 +629,9 @@ fn init_isolated() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["foo"]
         "###
         );
     });

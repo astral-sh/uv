@@ -50,11 +50,11 @@ hello world!
 
 Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will
 install the current project before running the script. If your script does not depend on the
-project, use the `--isolated` flag to skip this:
+project, use the `--no-project` flag to skip this:
 
 ```console
 # Note, it is important that the flag comes _before_ the script
-$ uv run --isolated example.py
+$ uv run --no-project example.py
 ```
 
 See the [projects guide](./projects.md) for more details on working in projects.
@@ -81,7 +81,7 @@ for i in track(range(20), description="For example:"):
 If executed without specifying a dependency, this script will fail:
 
 ```console
-$ uv run --isolated example.py
+$ uv run --no-project example.py
 Traceback (most recent call last):
   File "/Users/astral/example.py", line 2, in <module>
     from rich.progress import track
@@ -104,7 +104,7 @@ $ uv run --with 'rich>12,<13' example.py
 Multiple dependencies can be requested by repeating with `--with` option.
 
 Note that if `uv run` is used in a _project_, these dependencies will be included _in addition_ to
-the project's dependencies. To opt-out of this behavior, use the `--isolated` flag.
+the project's dependencies. To opt-out of this behavior, use the `--no-project` flag.
 
 ## Declaring script dependencies
 
@@ -167,7 +167,7 @@ versions](../concepts/python-versions.md) for more details. Note that the `depen
 be provided even if empty.
 
 Note that when using inline script metadata, even if `uv run` is used in a _project_, the project's
-dependencies will be ignored. The `--isolated` flag is not required.
+dependencies will be ignored. The `--no-project` flag is not required.
 
 ## Using different Python versions
 
