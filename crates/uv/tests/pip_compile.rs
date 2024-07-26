@@ -7766,7 +7766,7 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -p 3.8 --universal
     alabaster==0.7.13
         # via sphinx
-    astroid==3.1.0 ; python_version < '3.11' or python_version >= '3.12'
+    astroid==3.1.0
         # via pylint
     babel==2.14.0
         # via sphinx
@@ -7778,7 +7778,7 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via
         #   pylint
         #   sphinx
-    dill==0.3.8 ; python_version < '3.11' or python_version >= '3.12'
+    dill==0.3.8
         # via pylint
     docutils==0.20.1
         # via sphinx
@@ -7788,17 +7788,17 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via sphinx
     importlib-metadata==7.1.0 ; python_version < '3.10'
         # via sphinx
-    isort==5.13.2 ; python_version < '3.11' or python_version >= '3.12'
+    isort==5.13.2
         # via pylint
     jinja2==3.1.3
         # via sphinx
     markupsafe==2.1.5
         # via jinja2
-    mccabe==0.7.0 ; python_version < '3.11' or python_version >= '3.12'
+    mccabe==0.7.0
         # via pylint
     packaging==24.0
         # via sphinx
-    platformdirs==4.2.0 ; python_version < '3.11' or python_version >= '3.12'
+    platformdirs==4.2.0
         # via pylint
     pygments==2.17.2
         # via sphinx
@@ -7826,7 +7826,7 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via sphinx
     tomli==2.0.1 ; python_version < '3.11'
         # via pylint
-    tomlkit==0.12.4 ; python_version < '3.11' or python_version >= '3.12'
+    tomlkit==0.12.4
         # via pylint
     typing-extensions==4.10.0 ; python_version < '3.11'
         # via
