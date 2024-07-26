@@ -103,13 +103,13 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 
 /// Return a [`NamedTempFile`] in the specified directory.
 ///
-/// Sets the permissions of the temporary file to `0o644`, to match the non-temporary file default.
+/// Sets the permissions of the temporary file to `0o666`, to match the non-temporary file default.
 /// ([`NamedTempfile`] defaults to `0o600`.)
 #[cfg(unix)]
 pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
     use std::os::unix::fs::PermissionsExt;
     tempfile::Builder::new()
-        .permissions(std::fs::Permissions::from_mode(0o644))
+        .permissions(std::fs::Permissions::from_mode(0o666))
         .tempfile_in(path)
 }
 
