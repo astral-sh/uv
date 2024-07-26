@@ -2283,6 +2283,9 @@ pub struct ToolInstallArgs {
     /// The package to install commands from.
     pub package: String,
 
+    #[arg(short, long)]
+    pub editable: bool,
+
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.

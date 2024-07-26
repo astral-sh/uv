@@ -40,6 +40,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Install a tool.
 pub(crate) async fn install(
     package: String,
+    editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
     python: Option<String>,
@@ -82,6 +83,9 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
 
     // Resolve the `from` requirement.
     let from = if let Some(from) = from {
@@ -91,9 +95,18 @@ pub(crate) async fn install(
             bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)", from = from.cyan(), package = package.cyan())
         };
 
+        let source = if editable {
+            RequirementsSource::Editable(from)
+        } else {
+            RequirementsSource::Package(from)
+        };
+        let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+            .await?
+            .requirements;
+
         let from_requirement = {
             resolve_names(
-                vec![RequirementsSpecification::parse_package(&from)?],
+                requirements,
                 &interpreter,
                 &settings,
                 &state,
@@ -121,8 +134,17 @@ pub(crate) async fn install(
 
         from_requirement
     } else {
+        let source = if editable {
+            RequirementsSource::Editable(package.clone())
+        } else {
+            RequirementsSource::Package(package.clone())
+        };
+        let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+            .await?
+            .requirements;
+
         resolve_names(
-            vec![RequirementsSpecification::parse_package(&package)?],
+            requirements,
             &interpreter,
             &settings,
             &state,
@@ -139,12 +161,7 @@ pub(crate) async fn install(
     };
 
     // Read the `--with` requirements.
-    let spec = {
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
-        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
-    };
+    let spec = RequirementsSpecification::from_simple_sources(with, &client_builder).await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
