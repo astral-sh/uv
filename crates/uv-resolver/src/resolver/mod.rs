@@ -2217,7 +2217,7 @@ impl ForkState {
     fn with_markers(mut self, markers: MarkerTree) -> Self {
         let combined_markers = self.markers.and(markers);
         let combined_markers =
-            normalize(combined_markers, None).expect("Fork markers are universal");
+            normalize(combined_markers, None).unwrap_or_else(|| MarkerTree::And(vec![]));
 
         // If the fork contains a narrowed Python requirement, apply it.
         let python_requirement = requires_python_marker(&combined_markers)
@@ -2709,25 +2709,20 @@ impl Dependencies {
                 let mut new_forks_for_remaining_universe = forks.clone();
                 for fork in &mut new_forks_for_remaining_universe {
                     fork.markers.and(markers.clone());
-                    fork.dependencies.retain(|dep| {
-                        let Some(dep_marker) = dep.package.marker() else {
-                            return true;
-                        };
-                        // After we constrain the markers on an existing
-                        // fork, we should ensure that any existing
-                        // dependencies that are no longer possible in this
-                        // fork are removed. This mirrors the check we do in
-                        // `add_nonfork_package`.
-                        !crate::marker::is_disjoint(&fork.markers, dep_marker)
-                    });
+                    fork.remove_disjoint_packages();
                 }
                 new_forks.extend(new_forks_for_remaining_universe);
             }
+            // Each group has a list of packages whose marker expressions are
+            // guaranteed to be overlapping. So we must union those marker
+            // expressions and then intersect them with each existing fork.
             for group in fork_groups.forks {
                 let mut new_forks_for_group = forks.clone();
-                for (index, _) in group.packages {
-                    for fork in &mut new_forks_for_group {
-                        fork.add_forked_package(deps[index].clone());
+                for fork in &mut new_forks_for_group {
+                    fork.markers.and(group.union());
+                    fork.remove_disjoint_packages();
+                    for &(index, _) in &group.packages {
+                        fork.dependencies.push(deps[index].clone());
                     }
                 }
                 new_forks.extend(new_forks_for_group);
@@ -2802,39 +2797,6 @@ struct Fork {
 }
 
 impl Fork {
-    /// Add the given dependency to this fork with the assumption that it
-    /// provoked this fork into existence.
-    ///
-    /// In particular, the markers given should correspond to the markers
-    /// associated with that dependency, and they are combined (via
-    /// conjunction) with the markers on this fork.
-    ///
-    /// Finally, and critically, any dependencies that are already in this
-    /// fork that are disjoint with the markers given are removed. This is
-    /// because a fork provoked by the given marker should not have packages
-    /// whose markers are disjoint with it. While it might seem harmless, this
-    /// can cause the resolver to explore otherwise impossible resolutions,
-    /// and also run into conflicts (and thus a failed resolution) that don't
-    /// actually exist.
-    fn add_forked_package(&mut self, dependency: PubGrubDependency) {
-        // OK because a package without a marker is unconditional and
-        // thus can never provoke a fork.
-        let marker = dependency
-            .package
-            .marker()
-            .cloned()
-            .expect("forked package always has a marker");
-        self.remove_disjoint_packages(&marker);
-        self.dependencies.push(dependency);
-        // Each marker expression in a single fork is,
-        // by construction, overlapping with at least
-        // one other marker expression in this fork.
-        // However, the symmetric differences may be
-        // non-empty. Therefore, the markers need to be
-        // combined on the corresponding fork.
-        self.markers.and(marker);
-    }
-
     /// Add the given dependency to this fork.
     ///
     /// This works by assuming the given package did *not* provoke a fork.
@@ -2854,15 +2816,15 @@ impl Fork {
     }
 
     /// Removes any dependencies in this fork whose markers are disjoint with
-    /// the given markers.
-    fn remove_disjoint_packages(&mut self, fork_marker: &MarkerTree) {
+    /// its own markers.
+    fn remove_disjoint_packages(&mut self) {
         use crate::marker::is_disjoint;
 
         self.dependencies.retain(|dependency| {
             dependency
                 .package
                 .marker()
-                .map_or(true, |pkg_marker| !is_disjoint(pkg_marker, fork_marker))
+                .map_or(true, |pkg_marker| !is_disjoint(pkg_marker, &self.markers))
         });
     }
 
@@ -3052,12 +3014,16 @@ impl<'a> PossibleFork<'a> {
     /// Each marker expression in the union returned is guaranteed to be overlapping
     /// with at least one other expression in the same union.
     fn union(&self) -> MarkerTree {
-        MarkerTree::Or(
-            self.packages
-                .iter()
-                .map(|&(_, tree)| (*tree).clone())
-                .collect(),
-        )
+        let mut trees: Vec<MarkerTree> = self
+            .packages
+            .iter()
+            .map(|&(_, tree)| (*tree).clone())
+            .collect();
+        if trees.len() == 1 {
+            trees.pop().unwrap()
+        } else {
+            MarkerTree::Or(trees)
+        }
     }
 }
 

@@ -192,6 +192,11 @@ pub(crate) fn requires_python_marker(tree: &MarkerTree) -> Option<RequiresPython
 ///
 /// This is useful in cases where creating conjunctions or disjunctions might occur in a non-deterministic
 /// order. This routine will attempt to erase the distinction created by such a construction.
+///
+/// This returns `None` in the case of normalization turning a `MarkerTree`
+/// into an expression that is known to match all possible marker
+/// environments. Note though that this may return an empty disjunction, e.g.,
+/// `MarkerTree::Or(vec![])`, which matches precisely zero marker environments.
 pub(crate) fn normalize(
     mut tree: MarkerTree,
     bound: Option<&RequiresPythonBound>,
