@@ -19,7 +19,6 @@ crate-type = ["rlib", "cdylib"]
 workspace = true
 
 [dependencies]
-once_cell = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["extension-module", "abi3-py37"] }
 serde = { workspace = true, features = ["derive"] }
 rkyv = { workspace = true }

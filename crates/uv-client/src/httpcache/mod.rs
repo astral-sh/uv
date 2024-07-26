@@ -5,11 +5,11 @@ This implementation was guided by the following things:
 
 * RFCs 9110 and 9111.
 * The `http-cache-semantics` crate. (The implementation here is completely
-different, but the source of `http-cache-semantics` helped guide the
-implementation here and understanding of HTTP caching.)
+  different, but the source of `http-cache-semantics` helped guide the
+  implementation here and understanding of HTTP caching.)
 * A desire for our cache policy to support zero-copy deserialization. That
-is, we want the cached response fast path (where no revalidation request is
-necessary) to avoid any costly deserialization for the cache policy at all.
+  is, we want the cached response fast path (where no revalidation request is
+  necessary) to avoid any costly deserialization for the cache policy at all.
 
 # Flow
 
@@ -33,13 +33,13 @@ the server for a fresh response. In our case, the main utility of `max-age` is
 two fold:
 
 * PyPI sets a `max-age` of 600 seconds (10 minutes) on its responses. As long
-as our cached responses have an age less than this, we can completely avoid
-talking to PyPI at all when we need access to the full set of versions for a
-package.
+  as our cached responses have an age less than this, we can completely avoid
+  talking to PyPI at all when we need access to the full set of versions for a
+  package.
 * Most other assets, like wheels, are forever immutable. They will never
-change. So servers will typically set a very high `max-age`, which means we
-will almost never need to ask the server for permission to reuse our cached
-wheel.
+  change. So servers will typically set a very high `max-age`, which means we
+  will almost never need to ask the server for permission to reuse our cached
+  wheel.
 
 When a cached response exceeds the `max-age` configured on a response, then
 we call that response stale. Generally speaking, we won't return responses
@@ -295,14 +295,14 @@ impl ArchivedCachePolicy {
     /// This returns one of three possible behaviors:
     ///
     /// 1. The cached response is still fresh, and the caller may return
-    /// the cached response without issuing an HTTP requests.
+    ///    the cached response without issuing an HTTP requests.
     /// 2. The cached response is stale. The caller should send a re-validation
-    /// request and then call `CachePolicy::after_response` to determine whether
-    /// the cached response is actually fresh, or if it's stale and needs to
-    /// be updated.
+    ///    request and then call `CachePolicy::after_response` to determine whether
+    ///    the cached response is actually fresh, or if it's stale and needs to
+    ///    be updated.
     /// 3. The given request does not match the cache policy identification.
-    /// Generally speaking, this usually implies a bug with the cache in that
-    /// it loaded a cache policy that does not match the request.
+    ///    Generally speaking, this usually implies a bug with the cache in that
+    ///    it loaded a cache policy that does not match the request.
     ///
     /// In the case of (2), the given request is modified in place such that
     /// it is suitable as a revalidation request.

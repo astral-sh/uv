@@ -28,7 +28,6 @@ anyhow = { workspace = true }
 fs-err = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
-once_cell = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

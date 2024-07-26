@@ -1,16 +1,16 @@
-use either::Either;
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
+use std::sync::LazyLock;
 
-use once_cell::sync::Lazy;
+use either::Either;
 use path_slash::PathExt;
 
 /// The current working directory.
-pub static CWD: Lazy<PathBuf> =
-    Lazy::new(|| std::env::current_dir().expect("The current directory must exist"));
+pub static CWD: LazyLock<PathBuf> =
+    LazyLock::new(|| std::env::current_dir().expect("The current directory must exist"));
 
 /// The current working directory, canonicalized.
-pub static CANONICAL_CWD: Lazy<PathBuf> = Lazy::new(|| {
+pub static CANONICAL_CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::current_dir()
         .expect("The current directory must exist")
         .canonicalize()

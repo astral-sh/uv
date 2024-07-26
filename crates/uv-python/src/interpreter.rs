@@ -2,10 +2,10 @@ use std::borrow::Cow;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::sync::OnceLock;
 
 use configparser::ini::Ini;
 use fs_err as fs;
-use once_cell::sync::OnceCell;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -40,7 +40,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
-    tags: OnceCell<Tags>,
+    tags: OnceLock<Tags>,
     target: Option<Target>,
     prefix: Option<Prefix>,
     pointer_size: PointerSize,
@@ -72,7 +72,7 @@ impl Interpreter {
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
             stdlib: info.stdlib,
-            tags: OnceCell::new(),
+            tags: OnceLock::new(),
             target: None,
             prefix: None,
         })
@@ -104,7 +104,7 @@ impl Interpreter {
             sys_executable: PathBuf::from("/dev/null"),
             sys_path: vec![],
             stdlib: PathBuf::from("/dev/null"),
-            tags: OnceCell::new(),
+            tags: OnceLock::new(),
             target: None,
             prefix: None,
             pointer_size: PointerSize::_64,
@@ -204,15 +204,17 @@ impl Interpreter {
 
     /// Returns the [`Tags`] for this Python executable.
     pub fn tags(&self) -> Result<&Tags, TagsError> {
-        self.tags.get_or_try_init(|| {
-            Tags::from_env(
+        if self.tags.get().is_none() {
+            let tags = Tags::from_env(
                 self.platform(),
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),
                 self.gil_disabled,
-            )
-        })
+            )?;
+            self.tags.set(tags).expect("tags should not be set");
+        }
+        Ok(self.tags.get().expect("tags should be set"))
     }
 
     /// Returns `true` if the environment is a PEP 405-compliant virtual environment.

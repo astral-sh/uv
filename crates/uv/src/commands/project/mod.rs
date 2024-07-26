@@ -137,6 +137,7 @@ fn interpreter_meets_requirements(
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum FoundInterpreter {
     Interpreter(Interpreter),
     Environment(PythonEnvironment),
