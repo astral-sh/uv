@@ -74,8 +74,10 @@ impl CachedEnvironment {
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.
-        let distributions = resolution.distributions().collect::<Vec<_>>();
-        let resolution_hash = hash_digest(&distributions);
+        let resolution_hash = {
+            let distributions = resolution.distributions().collect::<Vec<_>>();
+            hash_digest(&distributions)
+        };
 
         // Hash the interpreter based on its path.
         // TODO(charlie): Come up with a robust hash for the interpreter.
@@ -84,24 +86,39 @@ impl CachedEnvironment {
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
-        // Lock the interpreter, to avoid concurrent modification across processes.
+        // Lock at the interpreter level, to avoid concurrent modification across processes.
         fs_err::tokio::create_dir_all(cache_entry.dir()).await?;
         let _lock = LockedFile::acquire(
             cache_entry.dir().join(".lock"),
             cache_entry.dir().user_display(),
         )?;
 
-        // If the receipt exists, return the environment.
         let ok = cache_entry.path().join(".ok");
-        if ok.is_file() {
-            debug!(
-                "Found existing cached environment at: `{}`",
-                cache_entry.path().display()
-            );
-            return Ok(Self(PythonEnvironment::from_root(
-                cache_entry.path(),
-                cache,
-            )?));
+
+        if settings.reinstall.is_none() {
+            // If the receipt exists, return the environment.
+            if ok.is_file() {
+                debug!(
+                    "Reusing cached environment at: `{}`",
+                    cache_entry.path().display()
+                );
+                return Ok(Self(PythonEnvironment::from_root(
+                    cache_entry.path(),
+                    cache,
+                )?));
+            }
+        } else {
+            // If the receipt exists, remove it.
+            match fs_err::tokio::remove_file(&ok).await {
+                Ok(()) => {
+                    debug!(
+                        "Removed receipt for environment at: `{}`",
+                        cache_entry.path().display()
+                    );
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
         }
 
         debug!(
@@ -117,8 +134,6 @@ impl CachedEnvironment {
             false,
         )?;
 
-        // TODO(charlie): Rather than passing all the arguments to `sync_environment`, return a
-        // struct that lets us "continue" from `resolve_environment`.
         let venv = sync_environment(
             venv,
             &resolution,
