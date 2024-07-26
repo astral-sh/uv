@@ -197,7 +197,7 @@ impl PythonEnvironment {
         } else {
             // Otherwise, use a global lockfile.
             LockedFile::acquire(
-                env::temp_dir().join(format!("uv-{}.lock", cache_key::digest(&self.0.root))),
+                env::temp_dir().join(format!("uv-{}.lock", cache_key::cache_digest(&self.0.root))),
                 self.0.root.user_display(),
             )
         }

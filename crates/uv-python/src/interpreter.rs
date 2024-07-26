@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{trace, warn};
 
-use cache_key::digest;
+use cache_key::cache_digest;
 use install_wheel_rs::Layout;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
@@ -716,7 +716,7 @@ impl InterpreterInfo {
             "",
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't to query the executable with symbolic links resolved.
-            format!("{}.msgpack", digest(&absolute)),
+            format!("{}.msgpack", cache_digest(&absolute)),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying

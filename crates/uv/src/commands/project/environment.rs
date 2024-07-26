@@ -1,7 +1,6 @@
-use itertools::Itertools;
 use tracing::debug;
 
-use cache_key::digest;
+use cache_key::{cache_digest, hash_digest};
 use distribution_types::Resolution;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::Connectivity;
@@ -75,18 +74,12 @@ impl CachedEnvironment {
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.
-        // TODO(charlie): Consider implementing `CacheKey` for `Resolution`.
-        let resolution_hash = digest(
-            &resolution
-                .distributions()
-                .map(std::string::ToString::to_string)
-                .join("\n")
-                .as_bytes(),
-        );
+        let distributions = resolution.distributions().collect::<Vec<_>>();
+        let resolution_hash = hash_digest(&distributions);
 
         // Hash the interpreter based on its path.
         // TODO(charlie): Come up with a robust hash for the interpreter.
-        let interpreter_hash = digest(&interpreter.sys_executable());
+        let interpreter_hash = cache_digest(&interpreter.sys_executable());
 
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
