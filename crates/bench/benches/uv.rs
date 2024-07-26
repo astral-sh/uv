@@ -73,7 +73,7 @@ criterion_main!(uv);
 mod resolver {
     use anyhow::Result;
     use chrono::NaiveDate;
-    use once_cell::sync::Lazy;
+    use std::sync::LazyLock;
 
     use distribution_types::IndexLocations;
     use install_wheel_rs::linker::LinkMode;
@@ -94,7 +94,7 @@ mod resolver {
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
-    static MARKERS: Lazy<MarkerEnvironment> = Lazy::new(|| {
+    static MARKERS: LazyLock<MarkerEnvironment> = LazyLock::new(|| {
         MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
             implementation_name: "cpython",
             implementation_version: "3.11.5",
@@ -118,8 +118,8 @@ mod resolver {
         Arch::Aarch64,
     );
 
-    static TAGS: Lazy<Tags> =
-        Lazy::new(|| Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false).unwrap());
+    static TAGS: LazyLock<Tags> =
+        LazyLock::new(|| Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false).unwrap());
 
     pub(crate) async fn resolve(
         manifest: Manifest,

@@ -3,7 +3,7 @@ use std::{
     cmp::Ordering,
     hash::{Hash, Hasher},
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 
 #[cfg(feature = "pyo3")]
@@ -821,8 +821,8 @@ impl FromStr for Version {
 /// * The epoch must be `0`.
 /// * The release portion must have 4 or fewer segments.
 /// * All release segments, except for the first, must be representable in a
-/// `u8`. The first segment must be representable in a `u16`. (This permits
-/// calendar versions, like `2023.03`, to be represented.)
+///   `u8`. The first segment must be representable in a `u16`. (This permits
+///   calendar versions, like `2023.03`, to be represented.)
 /// * There is *at most* one of the following components: pre, dev or post.
 /// * If there is a pre segment, then its numeric value is less than 64.
 /// * If there is a dev or post segment, then its value is less than `u8::MAX`.
@@ -843,20 +843,20 @@ impl FromStr for Version {
 ///
 /// * Bytes 6 and 7 correspond to the first release segment as a `u16`.
 /// * Bytes 5, 4 and 3 correspond to the second, third and fourth release
-/// segments, respectively.
+///   segments, respectively.
 /// * Bytes 2, 1 and 0 represent *one* of the following:
 ///   `min, .devN, aN, bN, rcN, <no suffix>, .postN, max`.
 ///   Its representation is thus:
 ///   * The most significant 3 bits of Byte 2 corresponds to a value in
-///   the range 0-6 inclusive, corresponding to min, dev, pre-a, pre-b, pre-rc,
-///   no-suffix or post releases, respectively. `min` is a special version that
-///   does not exist in PEP 440, but is used here to represent the smallest
-///   possible version, preceding any `dev`, `pre`, `post` or releases. `max` is
-///   an analogous concept for the largest possible version, following any `post`
-///   or local releases.
+///     the range 0-6 inclusive, corresponding to min, dev, pre-a, pre-b, pre-rc,
+///     no-suffix or post releases, respectively. `min` is a special version that
+///     does not exist in PEP 440, but is used here to represent the smallest
+///     possible version, preceding any `dev`, `pre`, `post` or releases. `max` is
+///     an analogous concept for the largest possible version, following any `post`
+///     or local releases.
 ///   * The low 5 bits combined with the bits in bytes 1 and 0 correspond
-///   to the release number of the suffix, if one exists. If there is no
-///   suffix, then this bits are always 0.
+///     to the release number of the suffix, if one exists. If there is no
+///     suffix, then these bits are always 0.
 ///
 /// The order of the encoding above is significant. For example, suffixes are
 /// encoded at a less significant location than the release numbers, so that
@@ -2532,8 +2532,8 @@ fn parse_u64(bytes: &[u8]) -> Result<u64, VersionParseError> {
 }
 
 /// The minimum version that can be represented by a [`Version`]: `0a0.dev0`.
-pub static MIN_VERSION: once_cell::sync::Lazy<Version> =
-    once_cell::sync::Lazy::new(|| Version::from_str("0a0.dev0").unwrap());
+pub static MIN_VERSION: LazyLock<Version> =
+    LazyLock::new(|| Version::from_str("0a0.dev0").unwrap());
 
 #[cfg(test)]
 mod tests {

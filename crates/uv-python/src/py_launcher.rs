@@ -2,8 +2,8 @@ use std::io;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 use thiserror::Error;
 use tracing::info_span;
 
@@ -34,7 +34,7 @@ pub enum Error {
 /// -V:3.12          C:\Users\Ferris\AppData\Local\Programs\Python\Python312\python.exe
 /// -V:3.8           C:\Users\Ferris\AppData\Local\Programs\Python\Python38\python.exe
 /// ```
-static PY_LIST_PATHS: Lazy<Regex> = Lazy::new(|| {
+static PY_LIST_PATHS: LazyLock<Regex> = LazyLock::new(|| {
     // Without the `R` flag, paths have trailing \r
     Regex::new(r"(?mR)^ -(?:V:)?(\d).(\d+)-?(?:arm)?\d*\s*\*?\s*(.*)$").unwrap()
 });

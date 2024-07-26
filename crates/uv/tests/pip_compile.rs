@@ -3117,7 +3117,7 @@ fn override_dependency_from_specific_uv_toml() -> Result<()> {
         .arg("pyproject.toml")
         .arg("--config-file")
         .arg("../uv/uv.toml")
-        .current_dir(&context.temp_dir.child("project"))
+        .current_dir(context.temp_dir.child("project"))
             , @r###"
     success: true
     exit_code: 0

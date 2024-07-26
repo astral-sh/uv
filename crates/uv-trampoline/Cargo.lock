@@ -750,7 +750,6 @@ dependencies = [
  "fs-err",
  "fs2",
  "junction",
- "once_cell",
  "path-absolutize",
  "path-slash",
  "tempfile",
@@ -782,7 +781,6 @@ name = "uv-warnings"
 version = "0.0.1"
 dependencies = [
  "anstream",
- "once_cell",
  "owo-colors",
  "rustc-hash",
 ]

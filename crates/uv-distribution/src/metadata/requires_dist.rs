@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use uv_configuration::PreviewMode;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -15,8 +15,8 @@ use crate::Metadata;
 ///
 /// Internally, we model dependency groups as a generic concept; but externally, we only expose the
 /// `dev-dependencies` group.
-pub static DEV_DEPENDENCIES: Lazy<GroupName> =
-    Lazy::new(|| GroupName::new("dev".to_string()).unwrap());
+pub static DEV_DEPENDENCIES: LazyLock<GroupName> =
+    LazyLock::new(|| GroupName::new("dev".to_string()).unwrap());
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {

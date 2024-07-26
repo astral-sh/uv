@@ -9,7 +9,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.80"
 homepage = "https://pypi.org/project/uv/"
 documentation = "https://pypi.org/project/uv/"
 repository = "https://github.com/astral-sh/uv"
@@ -172,8 +172,7 @@ reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", 
 [workspace.lints.rust]
 unsafe_code = "warn"
 unreachable_pub = "warn"
-# TODO(konsti): Reactivate when check-cfg hits stable rust
-# unexpected_cfgs = { level = "warn", check-cfg = ['cfg(codspeed)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(codspeed)'] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -2 }

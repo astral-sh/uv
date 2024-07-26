@@ -1,8 +1,8 @@
 use configparser::ini::Ini;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
+use std::sync::LazyLock;
 
 use crate::{wheel, Error};
 
@@ -30,7 +30,7 @@ impl Script {
         //  between the object reference and the left square bracket, between the extra names and the square brackets and colons delimiting them,
         //  and after the right square bracket."
         // – https://packaging.python.org/en/latest/specifications/entry-points/#file-format
-        static SCRIPT_REGEX: Lazy<Regex> = Lazy::new(|| {
+        static SCRIPT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r"^(?P<module>[\w\d_\-.]+)\s*:\s*(?P<function>[\w\d_\-.]+)(?:\s*\[\s*(?P<extras>(?:[^,]+,?\s*)+)\])?\s*$").unwrap()
         });
 
