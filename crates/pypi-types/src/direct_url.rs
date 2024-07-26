@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use url::Url;
 /// Metadata for a distribution that was installed via a direct URL.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/direct-url-data-structure/>
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", untagged)]
 pub enum DirectUrl {
     /// The direct URL is a local directory. For example:
@@ -41,23 +41,23 @@ pub enum DirectUrl {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DirInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub editable: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ArchiveInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hashes: Option<HashMap<String, String>>,
+    pub hashes: Option<BTreeMap<String, String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct VcsInfo {
     pub vcs: VcsKind,
@@ -67,7 +67,7 @@ pub struct VcsInfo {
     pub requested_revision: Option<String>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VcsKind {
     Git,

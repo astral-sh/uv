@@ -6,6 +6,7 @@ use crate::{InstalledMetadata, InstalledVersion, Name};
 
 /// A distribution which is either installable, is a wheel in our cache or is already installed.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum LocalDist {
     Cached(CachedDist),
     Installed(InstalledDist),

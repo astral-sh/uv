@@ -19,7 +19,7 @@ pub enum FileConversionError {
 
 /// Internal analog to [`pypi_types::File`].
 #[derive(
-    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+    Debug, Clone, Hash, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
@@ -67,7 +67,7 @@ impl File {
 
 /// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
 #[derive(
-    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+    Debug, Clone, Hash, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
@@ -147,13 +147,14 @@ impl Display for FileLocation {
 #[derive(
     Debug,
     Clone,
+    PartialEq,
+    Eq,
+    Hash,
     Serialize,
     Deserialize,
     rkyv::Archive,
     rkyv::Deserialize,
     rkyv::Serialize,
-    PartialEq,
-    Eq,
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
@@ -185,7 +186,7 @@ impl From<UrlString> for String {
     }
 }
 
-impl fmt::Display for UrlString {
+impl Display for UrlString {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
     }

@@ -63,7 +63,7 @@ impl GitResolver {
         fs::create_dir_all(&lock_dir).await?;
         let repository_url = RepositoryUrl::new(url.repository());
         let _lock = LockedFile::acquire(
-            lock_dir.join(cache_key::digest(&repository_url)),
+            lock_dir.join(cache_key::cache_digest(&repository_url)),
             &repository_url,
         )?;
 
