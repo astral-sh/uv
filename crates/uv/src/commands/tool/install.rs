@@ -30,7 +30,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use crate::commands::reporters::PythonDownloadReporter;
 
 use crate::commands::{
-    project::{resolve_environment, resolve_names, sync_environment, update_environment},
+    project::{resolve_environment, resolve_names, sync_environment},
     tool::common::matching_packages,
 };
 use crate::commands::{ExitStatus, SharedState};
@@ -275,21 +275,7 @@ pub(crate) async fn install(
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
-    let environment = if let Some(environment) = existing_environment {
-        update_environment(
-            environment,
-            spec,
-            &settings,
-            &state,
-            preview,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?
-    } else {
+    let environment = {
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
         let resolution = resolve_environment(
