@@ -498,10 +498,10 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), universal_windows_filters=true, context
         .run()
         .arg("--preview")
-            .arg("--package")
-            .arg("albatross")
-            .arg("check_installed_albatross.py")
-            .current_dir(&work_dir), @r###"
+        .arg("--package")
+        .arg("albatross")
+        .arg("check_installed_albatross.py")
+        .current_dir(&work_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -513,6 +513,97 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
      + tqdm==4.66.2
+    "###
+    );
+
+    Ok(())
+}
+
+/// Check that `uv run --isolated` creates isolated virtual environments.
+#[test]
+fn test_uv_run_isolate() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let work_dir = context.temp_dir.join("albatross-root-workspace");
+
+    copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
+
+    let mut filters = context.filters();
+    filters.push((
+        r"Using Python 3.12.\[X\] interpreter at: .*",
+        "Using Python 3.12.[X] interpreter at: [PYTHON]",
+    ));
+
+    // Install the root package.
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context
+        .run()
+        .arg("--preview")
+        .arg("--package")
+        .arg("albatross")
+        .arg("check_installed_albatross.py")
+        .current_dir(&work_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Success
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Resolved 8 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
+     + anyio==4.3.0
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
+     + idna==3.6
+     + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
+     + sniffio==1.3.1
+     + tqdm==4.66.2
+    "###
+    );
+
+    // Run in `bird-feeder`. We shouldn't be able to import `albatross`, but we _can_ due to our
+    // virtual environment semantics. Specifically, we only make the changes necessary to run a
+    // given command, so we don't remove `albatross` from the environment.
+    uv_snapshot!(filters, context
+        .run()
+        .arg("--preview")
+        .arg("--package")
+        .arg("bird-feeder")
+        .arg("check_installed_albatross.py")
+        .current_dir(&work_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Success
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "###
+    );
+
+    // If we `--isolated`, though, we use an isolated virtual environment, so `albatross` is not
+    // available.
+    // TODO(charlie): This should show the resolution output, but `--isolated` is coupled to
+    // `--no-project` right now.
+    uv_snapshot!(filters, context
+        .run()
+        .arg("--preview")
+        .arg("--isolated")
+        .arg("--package")
+        .arg("bird-feeder")
+        .arg("check_installed_albatross.py")
+        .current_dir(&work_dir), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/albatross-root-workspace/check_installed_albatross.py", line 1, in <module>
+        from albatross import fly
+    ModuleNotFoundError: No module named 'albatross'
     "###
     );
 

@@ -41,12 +41,13 @@ pub(crate) async fn run(
     show_resolution: bool,
     locked: bool,
     frozen: bool,
+    isolated: bool,
     package: Option<PackageName>,
+    no_project: bool,
     extras: ExtrasSpecification,
     dev: bool,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-    no_project: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
@@ -157,6 +158,8 @@ pub(crate) async fn run(
         None
     };
 
+    let temp_dir;
+
     // Discover and sync the base environment.
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         Some(script_interpreter)
@@ -195,17 +198,53 @@ pub(crate) async fn run(
                 );
             }
 
-            let venv = project::get_or_init_environment(
-                project.workspace(),
-                python.as_deref().map(PythonRequest::parse),
-                python_preference,
-                python_fetch,
-                connectivity,
-                native_tls,
-                cache,
-                printer.filter(show_resolution),
-            )
-            .await?;
+            let venv = if isolated {
+                // If we're isolating the environment, use an ephemeral virtual environment as the
+                // base environment for the project.
+                let interpreter = {
+                    let client_builder = BaseClientBuilder::new()
+                        .connectivity(connectivity)
+                        .native_tls(native_tls);
+
+                    // Note we force preview on during `uv run` for now since the entire interface is in preview
+                    PythonInstallation::find_or_fetch(
+                        python.as_deref().map(PythonRequest::parse),
+                        EnvironmentPreference::Any,
+                        python_preference,
+                        python_fetch,
+                        &client_builder,
+                        cache,
+                        Some(&reporter),
+                    )
+                    .await?
+                    .into_interpreter()
+                };
+
+                // Create a virtual environment
+                temp_dir = cache.environment()?;
+                uv_virtualenv::create_venv(
+                    temp_dir.path(),
+                    interpreter,
+                    uv_virtualenv::Prompt::None,
+                    false,
+                    false,
+                    false,
+                )?
+            } else {
+                // If we're not isolating the environment, reuse the base environment for the
+                // project.
+                project::get_or_init_environment(
+                    project.workspace(),
+                    python.as_deref().map(PythonRequest::parse),
+                    python_preference,
+                    python_fetch,
+                    connectivity,
+                    native_tls,
+                    cache,
+                    printer.filter(show_resolution),
+                )
+                .await?
+            };
 
             let lock = match project::lock::do_safe_lock(
                 locked,
