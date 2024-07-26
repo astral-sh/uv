@@ -773,17 +773,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonInstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            // Initialize the cache.
-            let cache = cache.init()?;
-
             commands::python_install(
                 args.targets,
                 args.reinstall,
                 globals.native_tls,
                 globals.connectivity,
                 globals.preview,
-                globals.isolated,
-                &cache,
+                cli.no_config || globals.isolated,
                 printer,
             )
             .await
@@ -829,7 +825,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.resolved,
                 globals.python_preference,
                 globals.preview,
-                globals.isolated,
+                args.no_workspace || globals.isolated,
                 &cache,
                 printer,
             )

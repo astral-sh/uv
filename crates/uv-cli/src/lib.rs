@@ -2485,6 +2485,11 @@ pub struct PythonPinArgs {
 
     #[arg(long, overrides_with("no_resolved"), hide = true)]
     pub no_resolved: bool,
+
+    /// Avoid validating the Python pin against the workspace in the current directory or any parent
+    /// directory.
+    #[arg(long)]
+    pub no_workspace: bool,
 }
 
 #[derive(Args)]
