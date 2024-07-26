@@ -155,6 +155,7 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) r#virtual: bool,
     pub(crate) no_readme: bool,
+    pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
 }
 
@@ -167,6 +168,7 @@ impl InitSettings {
             name,
             r#virtual,
             no_readme,
+            no_workspace,
             python,
         } = args;
 
@@ -175,6 +177,7 @@ impl InitSettings {
             name,
             r#virtual,
             no_readme,
+            no_workspace,
             python,
         }
     }
@@ -192,6 +195,7 @@ pub(crate) struct RunSettings {
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) package: Option<PackageName>,
+    pub(crate) no_project: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -216,6 +220,7 @@ impl RunSettings {
             build,
             refresh,
             package,
+            no_project,
             python,
         } = args;
 
@@ -234,6 +239,7 @@ impl RunSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             package,
+            no_project,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(

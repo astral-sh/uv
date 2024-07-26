@@ -31,7 +31,7 @@ pub(crate) async fn init(
     r#virtual: bool,
     no_readme: bool,
     python: Option<String>,
-    isolated: bool,
+    no_workspace: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
@@ -76,14 +76,14 @@ pub(crate) async fn init(
     };
 
     if r#virtual {
-        init_virtual_workspace(&path, isolated)?;
+        init_virtual_workspace(&path, no_workspace)?;
     } else {
         init_project(
             &path,
             &name,
             no_readme,
             python,
-            isolated,
+            no_workspace,
             python_preference,
             python_fetch,
             connectivity,
@@ -133,9 +133,9 @@ pub(crate) async fn init(
 }
 
 /// Initialize a virtual workspace at the given path.
-fn init_virtual_workspace(path: &Path, isolated: bool) -> Result<()> {
+fn init_virtual_workspace(path: &Path, no_workspace: bool) -> Result<()> {
     // Ensure that we aren't creating a nested workspace.
-    if !isolated {
+    if !no_workspace {
         check_nested_workspaces(path, &DiscoveryOptions::default());
     }
 
@@ -157,7 +157,7 @@ async fn init_project(
     name: &PackageName,
     no_readme: bool,
     python: Option<String>,
-    isolated: bool,
+    no_workspace: bool,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
     connectivity: Connectivity,
@@ -166,7 +166,7 @@ async fn init_project(
     printer: Printer,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
-    let workspace = if isolated {
+    let workspace = if no_workspace {
         None
     } else {
         // Attempt to find a workspace root.
