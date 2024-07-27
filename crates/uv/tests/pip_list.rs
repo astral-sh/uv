@@ -213,11 +213,16 @@ fn list_editable_only() {
     uv_snapshot!(filters, list_command(&context)
         .arg("--editable")
         .arg("--exclude-editable"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    error: the argument '--editable' cannot be used with '--exclude-editable'
+
+    Usage: uv pip list --cache-dir [CACHE_DIR] --editable
+
+    For more information, try '--help'.
     "###
     );
 }
@@ -367,19 +372,6 @@ fn list_format_json() {
     ----- stderr -----
     "###
     );
-
-    uv_snapshot!(filters, list_command(&context)
-    .arg("--format=json")
-    .arg("--editable")
-    .arg("--exclude-editable"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    []
-
-    ----- stderr -----
-    "###
-    );
 }
 
 #[test]
@@ -447,18 +439,6 @@ fn list_format_freeze() {
     anyio==4.3.0
     idna==3.6
     sniffio==1.3.1
-
-    ----- stderr -----
-    "###
-    );
-
-    uv_snapshot!(filters, list_command(&context)
-    .arg("--format=freeze")
-    .arg("--editable")
-    .arg("--exclude-editable"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
 
     ----- stderr -----
     "###
