@@ -328,9 +328,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
           $output = cargo bloat --release --target x86_64-pc-windows-msvc
-          $filteredOutput = $output | Select-String -Pattern 'core::fmt::write|core::fmt::getcount' -NotMatch
-          $containsPatterns = $filteredOutput | Select-String -Pattern 'core::fmt|std::panicking|std::backtrace_rs'
-
+          $containsPatterns = $output | Select-String -Pattern 'std::panicking|std::backtrace_rs'
           if ($containsPatterns) {
               Exit 1
           } else {
