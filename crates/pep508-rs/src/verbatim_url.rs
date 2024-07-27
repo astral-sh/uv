@@ -13,14 +13,10 @@ use uv_fs::{normalize_absolute_path, normalize_url_path};
 use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
-#[derive(Debug, Clone, Eq, derivative::Derivative, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Eq, derivative::Derivative)]
 #[derivative(PartialEq, Hash, Ord)]
 pub struct VerbatimUrl {
     /// The parsed URL.
-    #[serde(
-        serialize_with = "Url::serialize_internal",
-        deserialize_with = "Url::deserialize_internal"
-    )]
     url: Url,
     /// The URL as it was provided by the user.
     #[derivative(PartialEq = "ignore")]
