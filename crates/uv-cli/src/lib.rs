@@ -2054,15 +2054,15 @@ pub struct AddArgs {
     pub raw_sources: bool,
 
     /// Specific commit to use when adding from Git.
-    #[arg(long)]
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub rev: Option<String>,
 
     /// Tag to use when adding from git.
-    #[arg(long)]
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub tag: Option<String>,
 
     /// Branch to use when adding from git.
-    #[arg(long)]
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub branch: Option<String>,
 
     /// Extras to activate for the dependency; may be provided more than once.
