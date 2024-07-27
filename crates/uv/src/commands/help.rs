@@ -79,7 +79,6 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
                         let prompt = format!("help: uv {}", query.join(" "));
                         spawn_pager(&pager, &["-R", "-P", &prompt], &help_ansi)?
                     }
-                    Some("more") => spawn_pager(&pager, &[], &help)?,
                     Some(x) if !x.is_empty() => spawn_pager(&pager, &[], &help)?,
                     _ => {
                         writeln!(printer.stdout(), "{help_ansi}")?;
