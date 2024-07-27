@@ -1240,8 +1240,7 @@ impl PipFreezeSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipListSettings {
-    pub(crate) editable: bool,
-    pub(crate) exclude_editable: bool,
+    pub(crate) editable: Option<bool>,
     pub(crate) exclude: Vec<PackageName>,
     pub(crate) format: ListFormat,
     pub(crate) settings: PipSettings,
@@ -1264,8 +1263,7 @@ impl PipListSettings {
         } = args;
 
         Self {
-            editable,
-            exclude_editable,
+            editable: flag(editable, exclude_editable),
             exclude,
             format,
             settings: PipSettings::combine(

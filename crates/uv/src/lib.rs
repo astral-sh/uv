@@ -465,7 +465,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             commands::pip_list(
                 args.editable,
-                args.exclude_editable,
                 &args.exclude,
                 &args.format,
                 args.settings.strict,
