@@ -24,8 +24,7 @@ use crate::printer::Printer;
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_list(
-    editable: bool,
-    exclude_editable: bool,
+    editable: Option<bool>,
     exclude: &[PackageName],
     format: &ListFormat,
     strict: bool,
@@ -54,9 +53,7 @@ pub(crate) fn pip_list(
     // Filter if `--editable` is specified; always sort by name.
     let results = site_packages
         .iter()
-        .filter(|dist| {
-            (!dist.is_editable() && !editable) || (dist.is_editable() && !exclude_editable)
-        })
+        .filter(|dist| editable.is_none() || editable == Some(dist.is_editable()))
         .filter(|dist| !exclude.contains(dist.name()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .collect_vec();
