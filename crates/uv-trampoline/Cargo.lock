@@ -765,6 +765,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_fs",
+ "dunce",
  "embed-manifest",
  "fs-err",
  "thiserror",

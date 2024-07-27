@@ -85,6 +85,8 @@ import sys
 def main_console() -> None:
     print("Hello from uv-trampoline-console.exe", file=sys.stdout)
     print("Hello from uv-trampoline-console.exe", file=sys.stderr)
+    for arg in sys.argv[1:]:
+        print(arg, file=sys.stderr)
 
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
@@ -212,13 +214,28 @@ fn generate_console_launcher() -> Result<()> {
         console_bin_path.path().simplified_display()
     );
 
+    let stdout_predicate = "Hello from uv-trampoline-console.exe\r\n";
+    let stderr_predicate = "Hello from uv-trampoline-console.exe\r\n";
+
     // Test Console Launcher
     #[cfg(windows)]
     Command::new(console_bin_path.path())
         .assert()
         .success()
-        .stdout("Hello from uv-trampoline-console.exe\r\n")
-        .stderr("Hello from uv-trampoline-console.exe\r\n");
+        .stdout(stdout_predicate)
+        .stderr(stderr_predicate);
+
+    let args_to_test = vec!["foo", "bar", "foo bar", "foo \"bar\"", "foo 'bar'"];
+    let stderr_predicate = format!("{}{}\r\n", stderr_predicate, args_to_test.join("\r\n"));
+
+    // Test Console Launcher (with args)
+    #[cfg(windows)]
+    Command::new(console_bin_path.path())
+        .args(args_to_test)
+        .assert()
+        .success()
+        .stdout(stdout_predicate)
+        .stderr(stderr_predicate);
 
     Ok(())
 }

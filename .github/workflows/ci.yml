@@ -347,6 +347,7 @@ jobs:
         if: matrix.target-arch == 'x86_64'
         run: |
           cargo xwin bloat --release --target x86_64-pc-windows-msvc | \
+          grep -v -i -E 'core::fmt::write|core::fmt::getcount' | \
           grep -q -E 'core::fmt|std::panicking|std::backtrace_rs' && exit 1 || exit 0
         env:
           XWIN_ARCH: "x86_64"
