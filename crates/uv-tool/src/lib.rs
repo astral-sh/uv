@@ -258,6 +258,7 @@ impl InstalledTools {
             uv_virtualenv::Prompt::None,
             false,
             false,
+            false,
         )?;
 
         Ok(venv)

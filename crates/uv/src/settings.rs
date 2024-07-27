@@ -1403,6 +1403,7 @@ pub(crate) struct VenvSettings {
     pub(crate) name: PathBuf,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
+    pub(crate) relocatable: bool,
     pub(crate) settings: PipSettings,
 }
 
@@ -1418,6 +1419,7 @@ impl VenvSettings {
             name,
             prompt,
             system_site_packages,
+            relocatable,
             index_args,
             index_strategy,
             keyring_provider,
@@ -1432,6 +1434,7 @@ impl VenvSettings {
             name,
             prompt,
             system_site_packages,
+            relocatable,
             settings: PipSettings::combine(
                 PipOptions {
                     python,

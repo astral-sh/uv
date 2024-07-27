@@ -1743,6 +1743,17 @@ pub struct VenvArgs {
     #[arg(long)]
     pub system_site_packages: bool,
 
+    /// Make the virtual environment relocatable.
+    ///
+    /// A relocatable virtual environment can be moved around and redistributed with its
+    /// associated entrypoint and activation scripts functioning as usual.
+    ///
+    /// Note that this can only be guaranteed for standard `console_scripts` and `gui_scripts`.
+    /// Other scripts may be adjusted if they ship with a generic `#!python[w]` shebang,
+    /// and binaries are left as-is.
+    #[arg(long)]
+    pub relocatable: bool,
+
     #[command(flatten)]
     pub index_args: IndexArgs,
 

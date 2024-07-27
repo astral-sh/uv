@@ -313,6 +313,7 @@ pub(crate) async fn get_or_init_environment(
                 uv_virtualenv::Prompt::None,
                 false,
                 false,
+                false,
             )?)
         }
     }

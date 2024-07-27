@@ -63,9 +63,17 @@ impl<'a> Installer<'a> {
             installer_name,
         } = self;
         let layout = venv.interpreter().layout();
+        let is_relocatable = venv.cfg().is_ok_and(|cfg| cfg.is_relocatable());
 
         rayon::spawn(move || {
-            let result = install(wheels, layout, installer_name, link_mode, reporter);
+            let result = install(
+                wheels,
+                layout,
+                installer_name,
+                link_mode,
+                reporter,
+                is_relocatable,
+            );
             tx.send(result).unwrap();
         });
 
@@ -83,6 +91,7 @@ impl<'a> Installer<'a> {
             self.installer_name,
             self.link_mode,
             self.reporter,
+            self.venv.cfg().is_ok_and(|cfg| cfg.is_relocatable()),
         )
     }
 }
@@ -95,6 +104,7 @@ fn install(
     installer_name: Option<String>,
     link_mode: LinkMode,
     reporter: Option<Box<dyn Reporter>>,
+    is_relocatable: bool,
 ) -> Result<Vec<CachedDist>> {
     let locks = install_wheel_rs::linker::Locks::default();
     wheels.par_iter().try_for_each(|wheel| {
@@ -111,6 +121,7 @@ fn install(
             installer_name.as_deref(),
             link_mode,
             &locks,
+            is_relocatable,
         )
         .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
 

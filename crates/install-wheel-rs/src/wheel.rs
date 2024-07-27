@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::io::{BufRead, BufReader, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, io};
 
@@ -128,7 +128,7 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
 /// executable.
 ///
 /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
-fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
+fn format_shebang(executable: impl AsRef<Path>, os_name: &str, is_relocatable: bool) -> String {
     // Convert the executable to a simplified path.
     let executable = executable.as_ref().simplified_display().to_string();
 
@@ -139,11 +139,18 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
         let shebang_length = 2 + executable.len() + 1;
 
         // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
-        if shebang_length > 127 || executable.contains(' ') {
+        // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
+        // (note: the Windows trampoline binaries natively support relative paths to executable)
+        if shebang_length > 127 || executable.contains(' ') || is_relocatable {
+            let prefix = if is_relocatable {
+                r#""$(CDPATH= cd -- "$(dirname -- "$0")" && echo "$PWD")""#
+            } else {
+                ""
+            };
             // Like Python's `shlex.quote`:
             // > Use single quotes, and put single quotes into double quotes
             // > The string $'b is then quoted as '$'"'"'b'
-            let executable = format!("'{}'", executable.replace('\'', r#"'"'"'"#));
+            let executable = format!("{}'{}'", prefix, executable.replace('\'', r#"'"'"'"#));
             return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
         }
     }
@@ -235,9 +242,9 @@ pub(crate) fn windows_script_launcher(
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.
 ///
 /// <https://github.com/pypa/pip/blob/76e82a43f8fb04695e834810df64f2d9a2ff6020/src/pip/_vendor/distlib/scripts.py#L121-L126>
-fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
+fn get_script_executable(python_executable: &Path, is_gui: bool, is_relocatable: bool) -> PathBuf {
     // Only check for pythonw.exe on Windows
-    if cfg!(windows) && is_gui {
+    let script_executable = if cfg!(windows) && is_gui {
         python_executable
             .file_name()
             .map(|name| {
@@ -248,6 +255,14 @@ fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
             .unwrap_or_else(|| python_executable.to_path_buf())
     } else {
         python_executable.to_path_buf()
+    };
+    if is_relocatable {
+        script_executable
+            .file_name()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| script_executable)
+    } else {
+        script_executable
     }
 }
 
@@ -276,6 +291,7 @@ pub(crate) fn write_script_entrypoints(
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
     is_gui: bool,
+    is_relocatable: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
         let entrypoint_absolute = entrypoint_path(entrypoint, layout);
@@ -292,10 +308,11 @@ pub(crate) fn write_script_entrypoints(
             })?;
 
         // Generate the launcher script.
-        let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
+        let launcher_executable =
+            get_script_executable(&layout.sys_executable, is_gui, is_relocatable);
         let launcher_python_script = get_script_launcher(
             entrypoint,
-            &format_shebang(&launcher_executable, &layout.os_name),
+            &format_shebang(&launcher_executable, &layout.os_name, is_relocatable),
         );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
@@ -440,6 +457,7 @@ fn install_script(
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
+    is_relocatable: bool,
 ) -> Result<(), Error> {
     let file_type = file.file_type()?;
 
@@ -494,7 +512,18 @@ fn install_script(
     let mut start = vec![0; placeholder_python.len()];
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
-        let start = format_shebang(&layout.sys_executable, &layout.os_name)
+        let is_gui = {
+            let mut buf = vec![0];
+            script.read_exact(&mut buf)?;
+            if buf == b"w" {
+                true
+            } else {
+                script.seek_relative(-1)?;
+                false
+            }
+        };
+        let executable = get_script_executable(&layout.sys_executable, is_gui, is_relocatable);
+        let start = format_shebang(&executable, &layout.os_name, is_relocatable)
             .as_bytes()
             .to_vec();
 
@@ -561,6 +590,7 @@ pub(crate) fn install_data(
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
+    is_relocatable: bool,
 ) -> Result<(), Error> {
     for entry in fs::read_dir(data_dir)? {
         let entry = entry?;
@@ -598,7 +628,7 @@ pub(crate) fn install_data(
                         initialized = true;
                     }
 
-                    install_script(layout, site_packages, record, &file)?;
+                    install_script(layout, site_packages, record, &file, is_relocatable)?;
                 }
             }
             Some("headers") => {
@@ -888,33 +918,47 @@ mod test {
         // By default, use a simple shebang.
         let executable = Path::new("/usr/bin/python3");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/python3");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/usr/bin/python3"
+        );
 
         // If the path contains spaces, we should use the `exec` trick.
         let executable = Path::new("/usr/bin/path to python3");
         let os_name = "posix";
         assert_eq!(
-            format_shebang(executable, os_name),
+            format_shebang(executable, os_name, false),
             "#!/bin/sh\n'''exec' '/usr/bin/path to python3' \"$0\" \"$@\"\n' '''"
+        );
+
+        // And if we want a relocatable script, we should use the `exec` trick with `dirname`.
+        let executable = Path::new("python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name, true),
+            "#!/bin/sh\n'''exec' \"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && echo \"$PWD\")\"'python3' \"$0\" \"$@\"\n' '''"
         );
 
         // Except on Windows...
         let executable = Path::new("/usr/bin/path to python3");
         let os_name = "nt";
         assert_eq!(
-            format_shebang(executable, os_name),
+            format_shebang(executable, os_name, false),
             "#!/usr/bin/path to python3"
         );
 
         // Quotes, however, are ok.
         let executable = Path::new("/usr/bin/'python3'");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/'python3'");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/usr/bin/'python3'"
+        );
 
         // If the path is too long, we should not use the `exec` trick.
         let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+        assert_eq!(format_shebang(executable, os_name, false), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
     }
 
     #[test]
@@ -1005,13 +1049,13 @@ mod test {
         python_exe.write_str("")?;
         pythonw_exe.write_str("")?;
 
-        let script_path = get_script_executable(&python_exe, true);
+        let script_path = get_script_executable(&python_exe, true, false);
         #[cfg(windows)]
         assert_eq!(script_path, pythonw_exe.to_path_buf());
         #[cfg(not(windows))]
         assert_eq!(script_path, python_exe.to_path_buf());
 
-        let script_path = get_script_executable(&python_exe, false);
+        let script_path = get_script_executable(&python_exe, false, false);
         assert_eq!(script_path, python_exe.to_path_buf());
 
         // Test without adjacent pythonw.exe
@@ -1019,10 +1063,10 @@ mod test {
         let python_exe = temp_dir.child("python.exe");
         python_exe.write_str("")?;
 
-        let script_path = get_script_executable(&python_exe, true);
+        let script_path = get_script_executable(&python_exe, true, false);
         assert_eq!(script_path, python_exe.to_path_buf());
 
-        let script_path = get_script_executable(&python_exe, false);
+        let script_path = get_script_executable(&python_exe, false, false);
         assert_eq!(script_path, python_exe.to_path_buf());
 
         // Test with overridden python.exe and pythonw.exe
@@ -1036,14 +1080,30 @@ mod test {
         dot_python_exe.write_str("")?;
         dot_pythonw_exe.write_str("")?;
 
-        let script_path = get_script_executable(&dot_python_exe, true);
+        let script_path = get_script_executable(&dot_python_exe, true, false);
         #[cfg(windows)]
         assert_eq!(script_path, dot_pythonw_exe.to_path_buf());
         #[cfg(not(windows))]
         assert_eq!(script_path, dot_python_exe.to_path_buf());
 
-        let script_path = get_script_executable(&dot_python_exe, false);
+        let script_path = get_script_executable(&dot_python_exe, false, false);
         assert_eq!(script_path, dot_python_exe.to_path_buf());
+
+        // Test with relocatable executable.
+        let temp_dir = assert_fs::TempDir::new()?;
+        let python_exe = temp_dir.child("python.exe");
+        let pythonw_exe = temp_dir.child("pythonw.exe");
+        python_exe.write_str("")?;
+        pythonw_exe.write_str("")?;
+
+        let script_path = get_script_executable(&python_exe, true, true);
+        #[cfg(windows)]
+        assert_eq!(script_path, Path::new("pythonw.exe").to_path_buf());
+        #[cfg(not(windows))]
+        assert_eq!(script_path, Path::new("python.exe").to_path_buf());
+
+        let script_path = get_script_executable(&python_exe, false, true);
+        assert_eq!(script_path, Path::new("python.exe").to_path_buf());
 
         Ok(())
     }

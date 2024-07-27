@@ -46,6 +46,7 @@ pub fn install_wheel(
     installer: Option<&str>,
     link_mode: LinkMode,
     locks: &Locks,
+    is_relocatable: bool,
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
@@ -101,8 +102,22 @@ pub fn install_wheel(
         debug!(name, "Writing entrypoints");
 
         fs_err::create_dir_all(&layout.scheme.scripts)?;
-        write_script_entrypoints(layout, site_packages, &console_scripts, &mut record, false)?;
-        write_script_entrypoints(layout, site_packages, &gui_scripts, &mut record, true)?;
+        write_script_entrypoints(
+            layout,
+            site_packages,
+            &console_scripts,
+            &mut record,
+            false,
+            is_relocatable,
+        )?;
+        write_script_entrypoints(
+            layout,
+            site_packages,
+            &gui_scripts,
+            &mut record,
+            true,
+            is_relocatable,
+        )?;
     }
 
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
@@ -118,6 +133,7 @@ pub fn install_wheel(
             &console_scripts,
             &gui_scripts,
             &mut record,
+            is_relocatable,
         )?;
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data
