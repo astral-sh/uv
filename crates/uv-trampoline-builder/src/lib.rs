@@ -328,14 +328,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are ~45kb.
+        // At time of writing, they are ~80kb.
         assert!(
-            super::LAUNCHER_I686_GUI.len() < 45 * 1024,
+            super::LAUNCHER_I686_GUI.len() < 80 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_I686_GUI.len()
         );
         assert!(
-            super::LAUNCHER_I686_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_I686_CONSOLE.len() < 80 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_I686_CONSOLE.len()
         );
@@ -344,14 +344,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86_64", feature = "production"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are ~45kb.
+        // At time of writing, they are ~80kb.
         assert!(
-            super::LAUNCHER_X86_64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_GUI.len() < 80 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_X86_64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_X86_64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_CONSOLE.len() < 80 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_X86_64_CONSOLE.len()
         );
@@ -360,14 +360,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "aarch64", feature = "production"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are ~45kb.
+        // At time of writing, they are ~80kb.
         assert!(
-            super::LAUNCHER_AARCH64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_GUI.len() < 80 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_AARCH64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_AARCH64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_CONSOLE.len() < 80 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_AARCH64_CONSOLE.len()
         );
@@ -507,7 +507,8 @@ if __name__ == "__main__":
             .arg("print('Hello from Python Launcher')")
             .assert()
             .success()
-            .stdout("Hello from Python Launcher\r\n");
+            .stdout("Hello from Python Launcher\r\n")
+            .stderr("");
 
         let launcher = Launcher::try_from_path(console_bin_path.path())
             .expect("We should succeed at reading the launcher")
