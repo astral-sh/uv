@@ -5,7 +5,6 @@ use distribution_types::Resolution;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
-use uv_fs::{LockedFile, Simplified};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::RequirementsSpecification;
 
@@ -86,57 +85,26 @@ impl CachedEnvironment {
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
-        // Lock at the interpreter level, to avoid concurrent modification across processes.
-        fs_err::tokio::create_dir_all(cache_entry.dir()).await?;
-        let _lock = LockedFile::acquire(
-            cache_entry.dir().join(".lock"),
-            cache_entry.dir().user_display(),
-        )?;
-
-        let ok = cache_entry.path().join(".ok");
-
         if settings.reinstall.is_none() {
-            // If the receipt exists, return the environment.
-            if ok.is_file() {
-                debug!(
-                    "Reusing cached environment at: `{}`",
-                    cache_entry.path().display()
-                );
-                return Ok(Self(PythonEnvironment::from_root(
-                    cache_entry.path(),
-                    cache,
-                )?));
-            }
-        } else {
-            // If the receipt exists, remove it.
-            match fs_err::tokio::remove_file(&ok).await {
-                Ok(()) => {
-                    debug!(
-                        "Removed receipt for environment at: `{}`",
-                        cache_entry.path().display()
-                    );
+            if let Ok(root) = fs_err::read_link(cache_entry.path()) {
+                if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
+                    return Ok(Self(environment));
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) => return Err(err.into()),
             }
         }
 
-        debug!(
-            "Creating cached environment at: `{}`",
-            cache_entry.path().display()
-        );
-
+        // Create the environment in the cache, then relocate it to its content-addressed location.
+        let temp_dir = cache.environment()?;
         let venv = uv_virtualenv::create_venv(
-            cache_entry.path(),
+            temp_dir.path(),
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
             false,
             false,
         )?;
-
-        let venv = sync_environment(
-            venv,
+        sync_environment(
+            venv.with_relocatable(),
             &resolution,
             settings.as_ref().into(),
             state,
@@ -149,10 +117,13 @@ impl CachedEnvironment {
         )
         .await?;
 
-        // Create the receipt, to indicate to future readers that the environment is complete.
-        fs_err::tokio::File::create(ok).await?;
+        // Now that the environment is complete, sync it to its content-addressed location.
+        let id = cache
+            .persist(temp_dir.into_path(), cache_entry.path())
+            .await?;
+        let root = cache.archive(&id);
 
-        Ok(Self(venv))
+        Ok(Self(PythonEnvironment::from_root(root, cache)?))
     }
 
     /// Convert the [`CachedEnvironment`] into an [`Interpreter`].

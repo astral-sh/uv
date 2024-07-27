@@ -45,6 +45,7 @@ pub struct Interpreter {
     prefix: Option<Prefix>,
     pointer_size: PointerSize,
     gil_disabled: bool,
+    relocatable: bool,
 }
 
 impl Interpreter {
@@ -75,6 +76,7 @@ impl Interpreter {
             tags: OnceLock::new(),
             target: None,
             prefix: None,
+            relocatable: false,
         })
     }
 
@@ -107,6 +109,15 @@ impl Interpreter {
             prefix: Some(prefix),
             ..self
         })
+    }
+
+    /// Return a new [`Interpreter`] that should be treated as relocatable.
+    #[must_use]
+    pub fn with_relocatable(self) -> Self {
+        Self {
+            relocatable: true,
+            ..self
+        }
     }
 
     /// Return the [`Interpreter`] for the base executable, if it's available.
@@ -426,6 +437,7 @@ impl Interpreter {
                     },
                 }
             },
+            relocatable: self.relocatable,
         }
     }
 

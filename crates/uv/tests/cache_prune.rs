@@ -122,6 +122,7 @@ fn prune_cached_env() {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache entry: [CACHE_DIR]/environments-v1/[ENTRY]
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     "###);
 }

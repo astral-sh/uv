@@ -144,6 +144,16 @@ impl PythonEnvironment {
         })))
     }
 
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] with relocatable paths.
+    #[must_use]
+    pub fn with_relocatable(self) -> Self {
+        let inner = Arc::unwrap_or_clone(self.0);
+        Self(Arc::new(PythonEnvironmentShared {
+            interpreter: inner.interpreter.with_relocatable(),
+            ..inner
+        }))
+    }
+
     /// Returns the root (i.e., `prefix`) of the Python interpreter.
     pub fn root(&self) -> &Path {
         &self.0.root
