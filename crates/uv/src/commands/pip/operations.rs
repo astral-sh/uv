@@ -2,7 +2,6 @@
 
 use std::fmt::{self, Write};
 use std::path::PathBuf;
-use std::time::Instant;
 
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
@@ -99,7 +98,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     preview: PreviewMode,
     quiet: bool,
 ) -> Result<ResolutionGraph, Error> {
-    let start = Instant::now();
+    let start = std::time::Instant::now();
 
     // Resolve the requirements from the provided sources.
     let requirements = {
@@ -261,7 +260,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 // Prints a success message after completing resolution.
 pub(crate) fn resolution_success(
     resolution: &ResolutionGraph,
-    start: Instant,
+    start: std::time::Instant,
     printer: Printer,
 ) -> fmt::Result {
     let s = if resolution.len() == 1 { "" } else { "s" };
