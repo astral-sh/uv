@@ -197,7 +197,7 @@ impl<T: Pep508Url + Display> Display for Requirement<T> {
 }
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
-impl<'de, T: Pep508Url + Deserialize<'de>> Deserialize<'de> for Requirement<T> {
+impl<'de, T: Pep508Url> Deserialize<'de> for Requirement<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,

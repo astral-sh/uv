@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
-
 use thiserror::Error;
 use url::{ParseError, Url};
 
@@ -135,37 +134,6 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
 impl Display for VerbatimParsedUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.verbatim, f)
-    }
-}
-
-impl TryFrom<VerbatimUrl> for VerbatimParsedUrl {
-    type Error = ParsedUrlError;
-
-    fn try_from(verbatim_url: VerbatimUrl) -> Result<Self, Self::Error> {
-        let parsed_url = ParsedUrl::try_from(verbatim_url.to_url())?;
-        Ok(Self {
-            parsed_url,
-            verbatim: verbatim_url,
-        })
-    }
-}
-
-impl serde::ser::Serialize for VerbatimParsedUrl {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        self.verbatim.serialize(serializer)
-    }
-}
-
-impl<'de> serde::de::Deserialize<'de> for VerbatimParsedUrl {
-    fn deserialize<D>(deserializer: D) -> Result<VerbatimParsedUrl, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        let verbatim_url = VerbatimUrl::deserialize(deserializer)?;
-        Self::try_from(verbatim_url).map_err(serde::de::Error::custom)
     }
 }
 
