@@ -71,15 +71,31 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
     let should_page = !no_pager && !is_root && is_terminal;
 
     if should_page {
-        if let Ok(less) = which("less") {
-            // When using less, we use the command name as the file name and can support colors
-            let prompt = format!("help: uv {}", query.join(" "));
-            spawn_pager(less, &["-R", "-P", &prompt], &help_ansi)?;
-        } else if let Ok(more) = which("more") {
-            // When using more, we skip the ANSI color codes
-            spawn_pager(more, &[], &help)?;
-        } else {
-            writeln!(printer.stdout(), "{help_ansi}")?;
+        match std::env::var_os("PAGER") {
+            Some(pager) if !pager.is_empty() => {
+                // When using a pager, we use the command name as the file name and can support colors
+                let prompt = format!("help: uv {}", query.join(" "));
+                match pager.to_str() {
+                    Some("less") => spawn_pager(&pager, &["-R", "-P", &prompt], &help_ansi)?,
+                    Some("more") => spawn_pager(&pager, &[], &help)?,
+                    Some(_) => spawn_pager(&pager, &[], &help)?,
+                    None => {
+                        writeln!(printer.stdout(), "{help_ansi}")?;
+                    }
+                }
+            }
+            _ => {
+                if let Ok(less) = which("less") {
+                    // When using less, we use the command name as the file name and can support colors
+                    let prompt = format!("help: uv {}", query.join(" "));
+                    spawn_pager(less, &["-R", "-P", &prompt], &help_ansi)?;
+                } else if let Ok(more) = which("more") {
+                    // When using more, we skip the ANSI color codes
+                    spawn_pager(more, &[], &help)?;
+                } else {
+                    writeln!(printer.stdout(), "{help_ansi}")?;
+                }
+            }
         }
     } else {
         writeln!(printer.stdout(), "{help_ansi}")?;
