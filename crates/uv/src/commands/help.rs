@@ -72,14 +72,14 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
 
     if should_page {
         match std::env::var_os("PAGER") {
-            Some(pager) if !pager.is_empty() => {
+            Some(pager) => {
                 // When using a pager, we use the command name as the file name and can support colors
                 let prompt = format!("help: uv {}", query.join(" "));
                 match pager.to_str() {
                     Some("less") => spawn_pager(&pager, &["-R", "-P", &prompt], &help_ansi)?,
                     Some("more") => spawn_pager(&pager, &[], &help)?,
-                    Some(_) => spawn_pager(&pager, &[], &help)?,
-                    None => {
+                    Some(x) if !x.is_empty() => spawn_pager(&pager, &[], &help)?,
+                    _ => {
                         writeln!(printer.stdout(), "{help_ansi}")?;
                     }
                 }
