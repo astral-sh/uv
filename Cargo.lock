@@ -1821,7 +1821,6 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "indoc",
- "mailparse",
  "pathdiff",
  "pep440_rs",
  "platform-info",
