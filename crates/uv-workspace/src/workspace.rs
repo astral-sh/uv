@@ -736,9 +736,12 @@ impl ProjectWorkspace {
             return Ok(None);
         };
 
-        Ok(Some(
-            Self::from_project(install_path, lock_path, &project, &pyproject_toml, options).await?,
-        ))
+        match Self::from_project(install_path, lock_path, &project, &pyproject_toml, options).await
+        {
+            Ok(workspace) => Ok(Some(workspace)),
+            Err(WorkspaceError::NonWorkspace(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 
     /// Returns the directory containing the closest `pyproject.toml` that defines the current
