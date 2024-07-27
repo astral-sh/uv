@@ -26,7 +26,6 @@ uv-normalize = { workspace = true }
 anyhow = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
-once_cell = { workspace = true }
 rkyv = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }

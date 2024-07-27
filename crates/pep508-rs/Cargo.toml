@@ -21,7 +21,6 @@ workspace = true
 
 [dependencies]
 derivative = { workspace = true }
-once_cell = { workspace = true }
 pep440_rs = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }

@@ -2,6 +2,13 @@
 //!
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
+use fs_err as fs;
+use indoc::formatdoc;
+use itertools::Itertools;
+use regex::Regex;
+use rustc_hash::FxHashMap;
+use serde::de::{value, SeqAccess, Visitor};
+use serde::{de, Deserialize, Deserializer};
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -9,16 +16,8 @@ use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Output};
 use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use std::{env, iter};
-
-use fs_err as fs;
-use indoc::formatdoc;
-use itertools::Itertools;
-use once_cell::sync::Lazy;
-use regex::Regex;
-use rustc_hash::FxHashMap;
-use serde::de::{value, SeqAccess, Visitor};
-use serde::{de, Deserialize, Deserializer};
 use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
@@ -35,7 +34,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
-static MISSING_HEADER_RE_GCC: Lazy<Regex> = Lazy::new(|| {
+static MISSING_HEADER_RE_GCC: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: (.*\.(?:h|h..)): No such file or directory",
     )
@@ -43,32 +42,32 @@ static MISSING_HEADER_RE_GCC: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3023:10: fatal error: 'graphviz/cgraph.h' file not found`
-static MISSING_HEADER_RE_CLANG: Lazy<Regex> = Lazy::new(|| {
+static MISSING_HEADER_RE_CLANG: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: '(.*\.(?:h|h..))' file not found")
         .unwrap()
 });
 
 /// e.g. `pygraphviz/graphviz_wrap.c(3023): fatal error C1083: Cannot open include file: 'graphviz/cgraph.h': No such file or directory`
-static MISSING_HEADER_RE_MSVC: Lazy<Regex> = Lazy::new(|| {
+static MISSING_HEADER_RE_MSVC: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r".*\.(?:c|c..|h|h..)\(\d+\): fatal error C1083: Cannot open include file: '(.*\.(?:h|h..))': No such file or directory")
         .unwrap()
 });
 
 /// e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
-static LD_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
+static LD_NOT_FOUND_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
 });
 
 /// e.g. `error: invalid command 'bdist_wheel'`
-static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
+static WHEEL_NOT_FOUND_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
 
 /// e.g. `ModuleNotFoundError: No module named 'torch'`
-static TORCH_NOT_FOUND_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"ModuleNotFoundError: No module named 'torch'").unwrap());
+static TORCH_NOT_FOUND_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'torch'").unwrap());
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
-static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
+static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
     requirements: vec![Requirement::from(
@@ -77,7 +76,7 @@ static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
 });
 
 /// The requirements for `--legacy-setup-py` builds.
-static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
+static SETUP_PY_REQUIREMENTS: LazyLock<[Requirement; 2]> = LazyLock::new(|| {
     [
         Requirement::from(pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap()),
         Requirement::from(pep508_rs::Requirement::from_str("wheel").unwrap()),

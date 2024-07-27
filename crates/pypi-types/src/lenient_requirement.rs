@@ -1,9 +1,8 @@
-use std::borrow::Cow;
-use std::str::FromStr;
-
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize};
+use std::borrow::Cow;
+use std::str::FromStr;
+use std::sync::LazyLock;
 use tracing::warn;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
@@ -12,21 +11,22 @@ use pep508_rs::{Pep508Error, Pep508Url, Requirement};
 use crate::VerbatimParsedUrl;
 
 /// Ex) `>=7.2.0<8.0.0`
-static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
+static MISSING_COMMA: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
 /// Ex) `!=~5.0`
-static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
+static NOT_EQUAL_TILDE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
 /// Ex) `>=1.9.*`, `<3.4.*`
-static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(<=|>=|<|>)(\d+(\.\d+)*)\.\*").unwrap());
+static INVALID_TRAILING_DOT_STAR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(<=|>=|<|>)(\d+(\.\d+)*)\.\*").unwrap());
 /// Ex) `!=3.0*`
-static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
+static MISSING_DOT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
-static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*$").unwrap());
+static TRAILING_COMMA: LazyLock<Regex> = LazyLock::new(|| Regex::new(r",\s*$").unwrap());
 /// Ex) `>dev`
-static GREATER_THAN_DEV: Lazy<Regex> = Lazy::new(|| Regex::new(r">dev").unwrap());
+static GREATER_THAN_DEV: LazyLock<Regex> = LazyLock::new(|| Regex::new(r">dev").unwrap());
 /// Ex) `>=9.0.0a1.0`
-static TRAILING_ZERO: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d+(\.\d)*(a|b|rc|post|dev)\d+)\.0").unwrap());
+static TRAILING_ZERO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\d+(\.\d)*(a|b|rc|post|dev)\d+)\.0").unwrap());
 
 // Search and replace functions that fix invalid specifiers.
 type FixUp = for<'a> fn(&'a str) -> Cow<'a, str>;
@@ -74,7 +74,7 @@ static FIXUPS: &[(FixUp, &str)] = &[
 // Given `>= 2.7'`, rewrite to `>= 2.7`
 fn remove_stray_quotes(input: &str) -> Cow<'_, str> {
     /// Ex) `'>= 2.7'`, `>=3.6'`
-    static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]"#).unwrap());
+    static STRAY_QUOTES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"['"]"#).unwrap());
 
     // make sure not to touch markers, which can have quotes (e.g. `python_version >= '3.7'`)
     match input.find(';') {

@@ -232,7 +232,7 @@ impl TestContext {
 
             // And for the symlink we created in the test the Python path
             filters.extend(
-                Self::path_patterns(&python_dir.join(version.to_string()))
+                Self::path_patterns(python_dir.join(version.to_string()))
                     .into_iter()
                     .map(|pattern| {
                         (
@@ -338,7 +338,7 @@ impl TestContext {
             .env("UV_NO_WRAP", "1")
             .env("HOME", self.home_dir.as_os_str())
             .env("UV_PYTHON_INSTALL_DIR", "")
-            .env("UV_TEST_PYTHON_PATH", &self.python_path())
+            .env("UV_TEST_PYTHON_PATH", self.python_path())
             .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
             .current_dir(self.temp_dir.path());
 

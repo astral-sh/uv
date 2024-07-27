@@ -530,7 +530,7 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
         context
             .lock()
             .arg("--preview")
-            .current_dir(&work_dir.join(dir))
+            .current_dir(work_dir.join(dir))
             .assert()
             .success();
 
