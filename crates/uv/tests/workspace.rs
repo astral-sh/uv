@@ -178,13 +178,15 @@ fn test_albatross_project_in_excluded() {
         .join("packages")
         .join("seeds");
     uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `seeds @ file://[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/packages/seeds`
-      Caused by: The project is marked as unmanaged: `[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/packages/seeds`
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/packages/seeds)
     "###
     );
 }
