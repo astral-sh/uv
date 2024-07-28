@@ -1,7 +1,6 @@
 //! Takes a wheel and installs it into a venv.
 
 use std::io;
-
 use std::path::PathBuf;
 
 use platform_info::PlatformInfoError;
@@ -11,10 +10,10 @@ use zip::result::ZipError;
 use pep440_rs::Version;
 use platform_tags::{Arch, Os};
 use pypi_types::Scheme;
-pub use uninstall::{uninstall_egg, uninstall_legacy_editable, uninstall_wheel, Uninstall};
+pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-pub use wheel::{parse_wheel_file, read_record_file, LibKind};
+pub use wheel::{LibKind, parse_wheel_file, read_record_file};
 
 pub mod linker;
 pub mod metadata;

@@ -37,13 +37,13 @@ pub struct Locks(Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>);
 #[instrument(skip_all, fields(wheel = %filename))]
 pub fn install_wheel(
     layout: &Layout,
+    relocatable: bool,
     wheel: impl AsRef<Path>,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
     installer: Option<&str>,
     link_mode: LinkMode,
     locks: &Locks,
-    is_relocatable: bool,
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
@@ -100,19 +100,19 @@ pub fn install_wheel(
         fs_err::create_dir_all(&layout.scheme.scripts)?;
         write_script_entrypoints(
             layout,
+            relocatable,
             site_packages,
             &console_scripts,
             &mut record,
             false,
-            is_relocatable,
         )?;
         write_script_entrypoints(
             layout,
+            relocatable,
             site_packages,
             &gui_scripts,
             &mut record,
             true,
-            is_relocatable,
         )?;
     }
 
@@ -123,13 +123,13 @@ pub fn install_wheel(
         debug!(?name, "Installing data");
         install_data(
             layout,
+            relocatable,
             site_packages,
             &data_dir,
             &name,
             &console_scripts,
             &gui_scripts,
             &mut record,
-            is_relocatable,
         )?;
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data

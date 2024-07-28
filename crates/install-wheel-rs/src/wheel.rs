@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, io};
-
+use std::borrow::Cow;
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
@@ -128,7 +128,7 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
 /// executable.
 ///
 /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
-fn format_shebang(executable: impl AsRef<Path>, os_name: &str, is_relocatable: bool) -> String {
+fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool) -> String {
     // Convert the executable to a simplified path.
     let executable = executable.as_ref().simplified_display().to_string();
 
@@ -141,8 +141,8 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, is_relocatable: b
         // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
         // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
         // (note: the Windows trampoline binaries natively support relative paths to executable)
-        if shebang_length > 127 || executable.contains(' ') || is_relocatable {
-            let prefix = if is_relocatable {
+        if shebang_length > 127 || executable.contains(' ') || relocatable {
+            let prefix = if relocatable {
                 r#""$(CDPATH= cd -- "$(dirname -- "$0")" && echo "$PWD")"/"#
             } else {
                 ""
@@ -242,9 +242,9 @@ pub(crate) fn windows_script_launcher(
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.
 ///
 /// <https://github.com/pypa/pip/blob/76e82a43f8fb04695e834810df64f2d9a2ff6020/src/pip/_vendor/distlib/scripts.py#L121-L126>
-fn get_script_executable(python_executable: &Path, is_gui: bool, is_relocatable: bool) -> PathBuf {
+fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
     // Only check for pythonw.exe on Windows
-    let script_executable = if cfg!(windows) && is_gui {
+    if cfg!(windows) && is_gui {
         python_executable
             .file_name()
             .map(|name| {
@@ -255,14 +255,6 @@ fn get_script_executable(python_executable: &Path, is_gui: bool, is_relocatable:
             .unwrap_or_else(|| python_executable.to_path_buf())
     } else {
         python_executable.to_path_buf()
-    };
-    if is_relocatable {
-        script_executable
-            .file_name()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| script_executable)
-    } else {
-        script_executable
     }
 }
 
@@ -287,11 +279,11 @@ fn entrypoint_path(entrypoint: &Script, layout: &Layout) -> PathBuf {
 /// Create the wrapper scripts in the bin folder of the venv for launching console scripts.
 pub(crate) fn write_script_entrypoints(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
     is_gui: bool,
-    is_relocatable: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
         let entrypoint_absolute = entrypoint_path(entrypoint, layout);
@@ -307,12 +299,14 @@ pub(crate) fn write_script_entrypoints(
                 ))
             })?;
 
+
         // Generate the launcher script.
+        let python_executable = get_python_executable(layout, relocatable)?;
         let launcher_executable =
-            get_script_executable(&layout.sys_executable, is_gui, is_relocatable);
+            get_script_executable(&python_executable, is_gui);
         let launcher_python_script = get_script_launcher(
             entrypoint,
-            &format_shebang(&launcher_executable, &layout.os_name, is_relocatable),
+            &format_shebang(&launcher_executable, &layout.os_name, relocatable),
         );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
@@ -449,15 +443,15 @@ pub(crate) fn move_folder_recorded(
     Ok(())
 }
 
-/// Installs a single script (not an entrypoint)
+/// Installs a single script (not an entrypoint).
 ///
-/// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable)
+/// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable).
 fn install_script(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
-    is_relocatable: bool,
 ) -> Result<(), Error> {
     let file_type = file.file_type()?;
 
@@ -513,7 +507,7 @@ fn install_script(
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
         let is_gui = {
-            let mut buf = vec![0];
+            let mut buf = vec![0; 1];
             script.read_exact(&mut buf)?;
             if buf == b"w" {
                 true
@@ -522,8 +516,9 @@ fn install_script(
                 false
             }
         };
-        let executable = get_script_executable(&layout.sys_executable, is_gui, is_relocatable);
-        let start = format_shebang(&executable, &layout.os_name, is_relocatable)
+        let python_executable = get_python_executable(layout, relocatable)?;
+        let executable = get_script_executable(&python_executable, is_gui);
+        let start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
 
@@ -584,13 +579,13 @@ fn install_script(
 #[instrument(skip_all)]
 pub(crate) fn install_data(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     data_dir: &Path,
     dist_name: &PackageName,
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
-    is_relocatable: bool,
 ) -> Result<(), Error> {
     for entry in fs::read_dir(data_dir)? {
         let entry = entry?;
@@ -628,7 +623,7 @@ pub(crate) fn install_data(
                         initialized = true;
                     }
 
-                    install_script(layout, site_packages, record, &file, is_relocatable)?;
+                    install_script(layout, relocatable, site_packages, record, &file)?;
                 }
             }
             Some("headers") => {
@@ -710,6 +705,26 @@ pub(crate) fn extra_dist_info(
         )?;
     }
     Ok(())
+}
+
+pub(crate) fn get_python_executable(layout: &Layout, relocatable: bool) -> Result<Cow<'_, Path>, Error> {
+    Ok(if relocatable {
+        Cow::Owned(
+            pathdiff::diff_paths(&layout.sys_executable, &layout.scheme.scripts).ok_or_else(
+                || {
+                    Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "Could not find relative path for: {}",
+                            layout.sys_executable.simplified_display()
+                        ),
+                    ))
+                },
+            )?,
+        )
+    } else {
+        Cow::Borrowed(&layout.sys_executable)
+    })
 }
 
 /// Reads the record file
@@ -1006,13 +1021,13 @@ mod test {
         python_exe.write_str("")?;
         pythonw_exe.write_str("")?;
 
-        let script_path = get_script_executable(&python_exe, true, false);
+        let script_path = get_script_executable(&python_exe, true);
         #[cfg(windows)]
         assert_eq!(script_path, pythonw_exe.to_path_buf());
         #[cfg(not(windows))]
         assert_eq!(script_path, python_exe.to_path_buf());
 
-        let script_path = get_script_executable(&python_exe, false, false);
+        let script_path = get_script_executable(&python_exe, false);
         assert_eq!(script_path, python_exe.to_path_buf());
 
         // Test without adjacent pythonw.exe
@@ -1020,10 +1035,10 @@ mod test {
         let python_exe = temp_dir.child("python.exe");
         python_exe.write_str("")?;
 
-        let script_path = get_script_executable(&python_exe, true, false);
+        let script_path = get_script_executable(&python_exe, true);
         assert_eq!(script_path, python_exe.to_path_buf());
 
-        let script_path = get_script_executable(&python_exe, false, false);
+        let script_path = get_script_executable(&python_exe, false);
         assert_eq!(script_path, python_exe.to_path_buf());
 
         // Test with overridden python.exe and pythonw.exe
@@ -1037,13 +1052,13 @@ mod test {
         dot_python_exe.write_str("")?;
         dot_pythonw_exe.write_str("")?;
 
-        let script_path = get_script_executable(&dot_python_exe, true, false);
+        let script_path = get_script_executable(&dot_python_exe, true);
         #[cfg(windows)]
         assert_eq!(script_path, dot_pythonw_exe.to_path_buf());
         #[cfg(not(windows))]
         assert_eq!(script_path, dot_python_exe.to_path_buf());
 
-        let script_path = get_script_executable(&dot_python_exe, false, false);
+        let script_path = get_script_executable(&dot_python_exe, false);
         assert_eq!(script_path, dot_python_exe.to_path_buf());
 
         // Test with relocatable executable.
@@ -1053,13 +1068,16 @@ mod test {
         python_exe.write_str("")?;
         pythonw_exe.write_str("")?;
 
-        let script_path = get_script_executable(&python_exe, true, true);
+        // Truncate to a relative path.
+        let python_exe = python_exe.path().strip_prefix(temp_dir.path()).unwrap();
+
+        let script_path = get_script_executable(&python_exe ,true);
         #[cfg(windows)]
         assert_eq!(script_path, Path::new("pythonw.exe").to_path_buf());
         #[cfg(not(windows))]
         assert_eq!(script_path, Path::new("python.exe").to_path_buf());
 
-        let script_path = get_script_executable(&python_exe, false, true);
+        let script_path = get_script_executable(&python_exe, false);
         assert_eq!(script_path, Path::new("python.exe").to_path_buf());
 
         Ok(())
