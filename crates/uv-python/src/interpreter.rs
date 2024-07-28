@@ -78,40 +78,6 @@ impl Interpreter {
         })
     }
 
-    // TODO(konstin): Find a better way mocking the fields
-    pub fn artificial(platform: Platform, markers: MarkerEnvironment) -> Self {
-        Self {
-            platform,
-            markers: Box::new(markers),
-            scheme: Scheme {
-                purelib: PathBuf::from("/dev/null"),
-                platlib: PathBuf::from("/dev/null"),
-                include: PathBuf::from("/dev/null"),
-                scripts: PathBuf::from("/dev/null"),
-                data: PathBuf::from("/dev/null"),
-            },
-            virtualenv: Scheme {
-                purelib: PathBuf::from("/dev/null"),
-                platlib: PathBuf::from("/dev/null"),
-                include: PathBuf::from("/dev/null"),
-                scripts: PathBuf::from("/dev/null"),
-                data: PathBuf::from("/dev/null"),
-            },
-            sys_prefix: PathBuf::from("/dev/null"),
-            sys_base_exec_prefix: PathBuf::from("/dev/null"),
-            sys_base_prefix: PathBuf::from("/dev/null"),
-            sys_base_executable: None,
-            sys_executable: PathBuf::from("/dev/null"),
-            sys_path: vec![],
-            stdlib: PathBuf::from("/dev/null"),
-            tags: OnceLock::new(),
-            target: None,
-            prefix: None,
-            pointer_size: PointerSize::_64,
-            gil_disabled: false,
-        }
-    }
-
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
