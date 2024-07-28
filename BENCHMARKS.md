@@ -54,40 +54,43 @@ manager cache is not shared across runs).
 
 ## Reproduction
 
-All benchmarks were generated using the `scripts/bench/__main__.py` script, which wraps
+All benchmarks were generated using the `scripts/benchmark` package, which wraps
 [`hyperfine`](https://github.com/sharkdp/hyperfine) to facilitate benchmarking uv
 against a variety of other tools.
 
 The benchmark script itself has a several requirements:
 
 - A local uv release build (`cargo build --release`).
-- A virtual environment with the script's own dependencies installed (`uv venv && uv pip sync scripts/bench/requirements.txt`).
+- An installation of the production `uv` binary in your path.
 - The [`hyperfine`](https://github.com/sharkdp/hyperfine) command-line tool installed on your system.
 
 To benchmark resolution against pip-compile, Poetry, and PDM:
 
 ```shell
-python -m scripts.bench \
-    --uv \
+uv run benchmark \
+    --uv-pip \
     --poetry \
     --pdm \
     --pip-compile \
     --benchmark resolve-warm --benchmark resolve-cold \
-    scripts/requirements/trio.in \
-    --json
+    --json \
+    ../requirements/trio.in
 ```
 
 To benchmark installation against pip-sync, Poetry, and PDM:
 
 ```shell
-python -m scripts.bench \
-    --uv \
+uv run benchmark \
+    --uv-pip \
     --poetry \
     --pdm \
     --pip-sync \
     --benchmark install-warm --benchmark install-cold \
-    --json
+    --json \
+    ../requirements/compiled/trio.txt
 ```
+
+Both commands should be run from the `scripts/benchmark` directory.
 
 After running the benchmark script, you can generate the corresponding graph via:
 

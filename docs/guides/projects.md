@@ -106,7 +106,7 @@ virtual environment before executing a command:
 
 ```console
 $ uv sync
-$ source .venv/bin/active
+$ source .venv/bin/activate
 $ python my_script.py
 ```
 

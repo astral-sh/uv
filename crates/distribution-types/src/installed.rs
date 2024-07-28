@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
-use distribution_filename::EggInfoFilename;
 use fs_err as fs;
 use tracing::warn;
 use url::Url;
 
+use distribution_filename::EggInfoFilename;
 use pep440_rs::Version;
 use pypi_types::DirectUrl;
 use uv_fs::Simplified;

@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anstream::eprint;
 use owo_colors::OwoColorize;
@@ -47,6 +48,7 @@ pub(crate) async fn lock(
     frozen: bool,
     python: Option<String>,
     settings: ResolverSettings,
+    directory: Option<PathBuf>,
     preview: PreviewMode,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
@@ -60,9 +62,14 @@ pub(crate) async fn lock(
         warn_user_once!("`uv lock` is experimental and may change without warning");
     }
 
+    let directory = if let Some(directory) = directory {
+        directory
+    } else {
+        std::env::current_dir()?
+    };
+
     // Find the project requirements.
-    let workspace =
-        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?;
+    let workspace = Workspace::discover(&directory, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(

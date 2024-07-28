@@ -707,6 +707,11 @@ pub(crate) fn extra_dist_info(
     Ok(())
 }
 
+/// Get the path to the Python executable for the [`Layout`], based on whether the wheel should
+/// be relocatable.
+///
+/// Returns `sys.executable` if the wheel is not relocatable; otherwise, returns a path relative
+/// to the scripts directory.
 pub(crate) fn get_python_executable(layout: &Layout, relocatable: bool) -> Result<Cow<'_, Path>, Error> {
     Ok(if relocatable {
         Cow::Owned(
