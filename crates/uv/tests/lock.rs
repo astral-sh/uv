@@ -4105,3 +4105,37 @@ fn lock_same_version_multiple_urls() -> Result<()> {
 
     Ok(())
 }
+
+/// When locking with `--resolution-mode=lowest`, we shouldn't warn on unbounded direct
+/// dependencies.
+#[test]
+fn lock_unsafe_lowest() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        all = ["project[dev]"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
