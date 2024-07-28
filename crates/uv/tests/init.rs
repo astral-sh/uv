@@ -39,6 +39,10 @@ fn init() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -97,6 +101,10 @@ fn init_no_readme() -> Result<()> {
         description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -137,6 +145,10 @@ fn init_current_dir() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -200,6 +212,10 @@ fn init_dot_args() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -276,6 +292,10 @@ fn init_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -368,6 +388,10 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -461,6 +485,10 @@ fn init_workspace_outside() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -539,6 +567,10 @@ fn init_invalid_names() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -671,6 +703,10 @@ fn init_project_inside_project() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -969,6 +1005,10 @@ fn init_requires_python_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.10"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -1019,6 +1059,10 @@ fn init_requires_python_version() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.8"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -1070,6 +1114,10 @@ fn init_requires_python_specifiers() -> Result<()> {
         readme = "README.md"
         requires-python = "==3.8.*"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });

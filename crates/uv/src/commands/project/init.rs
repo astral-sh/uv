@@ -261,6 +261,10 @@ async fn init_project(
         description = "Add your description here"{readme}
         requires-python = "{requires_python}"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         requires_python = requires_python.specifiers(),
@@ -269,7 +273,7 @@ async fn init_project(
     fs_err::create_dir_all(path)?;
     fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-    // Create `src/{name}/__init__.py` if it does not already exist.
+    // Create `src/{name}/__init__.py`, if it doesn't exist already.
     let src_dir = path.join("src").join(&*name.as_dist_info_name());
     let init_py = src_dir.join("__init__.py");
     if !init_py.try_exists()? {
