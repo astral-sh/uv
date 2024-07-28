@@ -7,7 +7,7 @@ Benchmarking scripts for uv and other package management tools.
 From the `scripts/benchmark` directory:
 
 ```shell
-uv run benchmark \
+uv run resolver \
     --uv-pip \
     --poetry \
     --benchmark \

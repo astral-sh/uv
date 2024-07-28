@@ -10,10 +10,12 @@ dependencies = [
   "tomli",
   "tomli_w",
   "virtualenv",
+  "pipx",
 ]
 
 [project.scripts]
-benchmark = "benchmark:main"
+resolver = "benchmark.resolver:main"
+tools = "benchmark.tools:main"
 
 [build-system]
 requires = ["hatchling"]

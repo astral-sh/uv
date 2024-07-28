@@ -67,7 +67,7 @@ The benchmark script itself has a several requirements:
 To benchmark resolution against pip-compile, Poetry, and PDM:
 
 ```shell
-uv run benchmark \
+uv run resolver \
     --uv-pip \
     --poetry \
     --pdm \
@@ -80,7 +80,7 @@ uv run benchmark \
 To benchmark installation against pip-sync, Poetry, and PDM:
 
 ```shell
-uv run benchmark \
+uv run resolver \
     --uv-pip \
     --poetry \
     --pdm \
