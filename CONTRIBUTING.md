@@ -86,7 +86,7 @@ We provide diverse sets of requirements for testing and benchmarking the resolve
 You can use `scripts/benchmark` to benchmark predefined workloads between uv versions and with other tools, e.g., from the `scripts/benchmark` directory:
 
 ```shell
-uv run benchmark \
+uv run resolver \
     --uv-pip \
     --poetry \
     --benchmark \
