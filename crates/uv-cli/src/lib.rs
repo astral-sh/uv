@@ -1980,6 +1980,10 @@ pub struct SyncArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
+
+    /// The path to the project. Defaults to the current working directory.
+    #[arg(long, hide = true)]
+    pub directory: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -2015,6 +2019,10 @@ pub struct LockArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
+
+    /// The path to the project. Defaults to the current working directory.
+    #[arg(long, hide = true)]
+    pub directory: Option<PathBuf>,
 }
 
 #[derive(Args)]
