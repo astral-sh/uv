@@ -226,7 +226,7 @@ ci = ["github"]
 installers = ["shell", "powershell"]
 # The archive format to use for windows builds (defaults .zip)
 windows-archive = ".zip"
-# The archive format to use for non-windows builds (defaults .tar.gz)
+# The archive format to use for non-windows builds (defaults .tar.xz)
 unix-archive = ".tar.gz"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
