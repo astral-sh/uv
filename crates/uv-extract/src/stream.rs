@@ -198,6 +198,23 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     Ok(untar_in(&mut archive, target.as_ref()).await?)
 }
 
+/// Unzip a `.tar.xz` archive into the target directory, without requiring `Seek`.
+///
+/// This is useful for unpacking files as they're being downloaded.
+pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: impl AsRef<Path>,
+) -> Result<(), Error> {
+    let reader = tokio::io::BufReader::new(reader);
+    let decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
+
+    let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
+        .set_preserve_mtime(false)
+        .build();
+    untar_in(&mut archive, target.as_ref()).await?;
+    Ok(())
+}
+
 /// Unzip a `.zip`, `.tar.gz`, or `.tar.bz2` archive into the target directory, without requiring `Seek`.
 pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
@@ -255,6 +272,21 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
         })
     {
         untar_zst(reader, target).await?;
+        return Ok(());
+    }
+
+    // `.tar.xz`
+    if source
+        .as_ref()
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("xz"))
+        && source.as_ref().file_stem().is_some_and(|stem| {
+            Path::new(stem)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+        })
+    {
+        untar_xz(reader, target).await?;
         return Ok(());
     }
 

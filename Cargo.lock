@@ -212,6 +212,7 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "tokio",
+ "xz2",
  "zstd",
  "zstd-safe",
 ]
@@ -4806,7 +4807,6 @@ dependencies = [
  "tokio-tar",
  "tokio-util",
  "tracing",
- "xz2",
  "zip",
 ]
 
