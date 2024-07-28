@@ -387,7 +387,7 @@ class Poetry(Suite):
                 "bench",
                 "--no-interaction",
                 "--python",
-                "3.12.1",
+                "3.12.3",
             ],
             cwd=cwd,
             stdout=subprocess.DEVNULL,
@@ -508,7 +508,7 @@ class Poetry(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
-            prepare=f"rm -f {poetry_lock} && cp {baseline} {poetry_lock}",
+            prepare=f"rm {poetry_lock} && cp {baseline} {poetry_lock}",
             command=[
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
@@ -799,7 +799,7 @@ class Pdm(Suite):
         )
 
 
-class uv(Suite):
+class UvPip(Suite):
     def __init__(self, *, path: str | None = None) -> Command | None:
         """Initialize a uv benchmark."""
         self.name = path or "uv"
@@ -818,7 +818,7 @@ class uv(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
-            prepare=f"rm -rf {cwd} && rm -f {output_file}",
+            prepare=f"rm -rf {cache_dir} && rm -f {output_file}",
             command=[
                 self.path,
                 "pip",
@@ -936,6 +936,229 @@ class uv(Suite):
         )
 
 
+class UvProject(Suite):
+    def __init__(self, *, path: str | None = None) -> Command | None:
+        """Initialize a uv benchmark."""
+        self.name = path or "uv"
+        self.path = path or os.path.join(
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ),
+            "target",
+            "release",
+            "uv",
+        )
+
+    def setup(self, requirements_file: str, *, cwd: str) -> None:
+        """Initialize a uv project from a requirements file."""
+        import tomli
+        import tomli_w
+        from packaging.requirements import Requirement
+
+        # Parse all dependencies from the requirements file.
+        with open(requirements_file) as fp:
+            requirements = [
+                Requirement(line)
+                for line in fp
+                if not line.lstrip().startswith("#") and len(line.strip()) > 0
+            ]
+
+        # Create a Poetry project.
+        subprocess.check_call(
+            [
+                self.path,
+                "init",
+                "--name",
+                "bench",
+                "--python",
+                "3.12.3",
+            ],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        # Parse the pyproject.toml.
+        with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
+            pyproject = tomli.load(fp)
+
+        # Add the dependencies to the pyproject.toml.
+        pyproject["project"]["dependencies"] += [
+            str(requirement) for requirement in requirements
+        ]
+
+        with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
+            tomli_w.dump(pyproject, fp)
+
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        cache_dir = os.path.join(cwd, ".cache")
+        output_file = os.path.join(cwd, "uv.lock")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
+            prepare=f"rm -rf {cache_dir} && rm -f {output_file}",
+            command=[
+                self.path,
+                "lock",
+                "--cache-dir",
+                cache_dir,
+                "--directory",
+                cwd,
+                "--python",
+                "3.12.3",
+            ],
+        )
+
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        cache_dir = os.path.join(cwd, ".cache")
+        output_file = os.path.join(cwd, "uv.lock")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
+            prepare=f"rm -f {output_file}",
+            command=[
+                self.path,
+                "lock",
+                "--cache-dir",
+                cache_dir,
+                "--directory",
+                cwd,
+                "--python",
+                "3.12.3",
+            ],
+        )
+
+    def resolve_incremental(
+        self, requirements_file: str, *, cwd: str
+    ) -> Command | None:
+        import tomli
+        import tomli_w
+
+        self.setup(requirements_file, cwd=cwd)
+
+        uv_lock = os.path.join(cwd, "uv.lock")
+        assert not os.path.exists(uv_lock), f"Lock file already exists at: {uv_lock}"
+
+        # Run a resolution, to ensure that the lockfile exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(uv_lock), f"Lock file doesn't exist at: {uv_lock}"
+
+        # Add a dependency to the requirements file.
+        with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
+            pyproject = tomli.load(fp)
+
+        # Add the dependencies to the pyproject.toml.
+        pyproject["project"]["dependencies"] += [INCREMENTAL_REQUIREMENT]
+
+        with open(os.path.join(cwd, "pyproject.toml"), "wb") as fp:
+            tomli_w.dump(pyproject, fp)
+
+        # Store the baseline lockfile.
+        baseline = os.path.join(cwd, "baseline.lock")
+        shutil.copyfile(uv_lock, baseline)
+
+        uv_lock = os.path.join(cwd, "uv.lock")
+        cache_dir = os.path.join(cwd, ".cache")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
+            prepare=f"rm -f {uv_lock} && cp {baseline} {uv_lock}",
+            command=[
+                self.path,
+                "lock",
+                "--cache-dir",
+                cache_dir,
+                "--directory",
+                cwd,
+                "--python",
+                "3.12.3",
+            ],
+        )
+
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        uv_lock = os.path.join(cwd, "uv.lock")
+        assert not os.path.exists(uv_lock), f"Lock file already exists at: {uv_lock}"
+
+        # Run a resolution, to ensure that the lockfile exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(uv_lock), f"Lock file doesn't exist at: {uv_lock}"
+
+        cache_dir = os.path.join(cwd, ".cache")
+        venv_dir = os.path.join(cwd, ".venv")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            prepare=(
+                f"rm -rf {cache_dir} && "
+                f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"
+            ),
+            command=[
+                f"VIRTUAL_ENV={venv_dir}",
+                self.path,
+                "sync",
+                "--cache-dir",
+                cache_dir,
+                "--directory",
+                cwd,
+                "--python",
+                "3.12.3",
+            ],
+        )
+
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        uv_lock = os.path.join(cwd, "uv.lock")
+        assert not os.path.exists(uv_lock), f"Lock file already exists at: {uv_lock}"
+
+        # Run a resolution, to ensure that the lockfile exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(uv_lock), f"Lock file doesn't exist at: {uv_lock}"
+
+        cache_dir = os.path.join(cwd, ".cache")
+        venv_dir = os.path.join(cwd, ".venv")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            prepare=(f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"),
+            command=[
+                f"VIRTUAL_ENV={venv_dir}",
+                self.path,
+                "sync",
+                "--cache-dir",
+                cache_dir,
+                "--directory",
+                cwd,
+                "--python",
+                "3.12.3",
+            ],
+        )
+
+
 def main():
     """Run the benchmark."""
     parser = argparse.ArgumentParser(
@@ -994,8 +1217,13 @@ def main():
         action="store_true",
     )
     parser.add_argument(
-        "--uv",
-        help="Whether to benchmark uv (assumes a uv binary exists at `./target/release/uv`).",
+        "--uv-pip",
+        help="Whether to benchmark uv's pip interface (assumes a uv binary exists at `./target/release/uv`).",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--uv-project",
+        help="Whether to benchmark uv's project interface (assumes a uv binary exists at `./target/release/uv`).",
         action="store_true",
     )
     parser.add_argument(
@@ -1023,7 +1251,13 @@ def main():
         action="append",
     )
     parser.add_argument(
-        "--uv-path",
+        "--uv-pip-path",
+        type=str,
+        help="Path(s) to the uv binary to benchmark.",
+        action="append",
+    )
+    parser.add_argument(
+        "--uv-project-path",
         type=str,
         help="Path(s) to the uv binary to benchmark.",
         action="append",
@@ -1055,8 +1289,10 @@ def main():
         suites.append(Poetry())
     if args.pdm:
         suites.append(Pdm())
-    if args.uv:
-        suites.append(uv())
+    if args.uv_pip:
+        suites.append(UvPip())
+    if args.uv_project:
+        suites.append(UvProject())
     for path in args.pip_sync_path or []:
         suites.append(PipSync(path=path))
     for path in args.pip_compile_path or []:
@@ -1065,8 +1301,10 @@ def main():
         suites.append(Poetry(path=path))
     for path in args.pdm_path or []:
         suites.append(Pdm(path=path))
-    for path in args.uv_path or []:
-        suites.append(uv(path=path))
+    for path in args.uv_pip_path or []:
+        suites.append(UvPip(path=path))
+    for path in args.uv_project_path or []:
+        suites.append(UvProject(path=path))
 
     # If no tools were specified, benchmark all tools.
     if not suites:
@@ -1074,7 +1312,8 @@ def main():
             PipSync(),
             PipCompile(),
             Poetry(),
-            uv(),
+            UvPip(),
+            UvProject(),
         ]
 
     # Determine the benchmarks to run, based on user input. If no benchmarks were

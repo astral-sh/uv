@@ -527,6 +527,7 @@ pub(crate) struct SyncSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) directory: Option<PathBuf>,
 }
 
 impl SyncSettings {
@@ -546,6 +547,7 @@ impl SyncSettings {
             build,
             refresh,
             python,
+            directory,
         } = args;
 
         let modifications = if no_clean {
@@ -569,6 +571,7 @@ impl SyncSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            directory,
         }
     }
 }
@@ -582,6 +585,7 @@ pub(crate) struct LockSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
+    pub(crate) directory: Option<PathBuf>,
 }
 
 impl LockSettings {
@@ -595,6 +599,7 @@ impl LockSettings {
             build,
             refresh,
             python,
+            directory,
         } = args;
 
         Self {
@@ -603,6 +608,7 @@ impl LockSettings {
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            directory,
         }
     }
 }
