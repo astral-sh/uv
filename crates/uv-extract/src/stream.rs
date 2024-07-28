@@ -215,7 +215,8 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     Ok(())
 }
 
-/// Unzip a `.zip`, `.tar.gz`, or `.tar.bz2` archive into the target directory, without requiring `Seek`.
+/// Unzip a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
+/// without requiring `Seek`.
 pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     source: impl AsRef<Path>,
