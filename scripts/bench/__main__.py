@@ -799,7 +799,7 @@ class Pdm(Suite):
         )
 
 
-class uv(Suite):
+class UvPip(Suite):
     def __init__(self, *, path: str | None = None) -> Command | None:
         """Initialize a uv benchmark."""
         self.name = path or "uv"
@@ -994,7 +994,7 @@ def main():
         action="store_true",
     )
     parser.add_argument(
-        "--uv",
+        "--uv-pip",
         help="Whether to benchmark uv (assumes a uv binary exists at `./target/release/uv`).",
         action="store_true",
     )
@@ -1023,7 +1023,7 @@ def main():
         action="append",
     )
     parser.add_argument(
-        "--uv-path",
+        "--uv-pip-path",
         type=str,
         help="Path(s) to the uv binary to benchmark.",
         action="append",
@@ -1055,8 +1055,8 @@ def main():
         suites.append(Poetry())
     if args.pdm:
         suites.append(Pdm())
-    if args.uv:
-        suites.append(uv())
+    if args.uv_pip:
+        suites.append(UvPip())
     for path in args.pip_sync_path or []:
         suites.append(PipSync(path=path))
     for path in args.pip_compile_path or []:
@@ -1066,7 +1066,7 @@ def main():
     for path in args.pdm_path or []:
         suites.append(Pdm(path=path))
     for path in args.uv_path or []:
-        suites.append(uv(path=path))
+        suites.append(UvPip(path=path))
 
     # If no tools were specified, benchmark all tools.
     if not suites:
@@ -1074,7 +1074,7 @@ def main():
             PipSync(),
             PipCompile(),
             Poetry(),
-            uv(),
+            UvPip(),
         ]
 
     # Determine the benchmarks to run, based on user input. If no benchmarks were
