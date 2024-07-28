@@ -4139,3 +4139,82 @@ fn lock_unsafe_lowest() -> Result<()> {
 
     Ok(())
 }
+
+/// Lock a package that's excluded from the parent workspace, but depends on that parent.
+#[test]
+fn lock_exclusion() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = []
+        exclude = ["child"]
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["project"]
+
+        [tool.uv.sources]
+        project = { path = ".." }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(child.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[distribution]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "project" },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { directory = "../" }
+        "###
+        );
+    });
+
+    Ok(())
+}
