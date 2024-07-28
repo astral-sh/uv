@@ -83,13 +83,15 @@ Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/
 
 We provide diverse sets of requirements for testing and benchmarking the resolver in `scripts/requirements` and for the installer in `scripts/requirements/compiled`.
 
-You can use `scripts/bench` to benchmark predefined workloads between uv versions and with other tools, e.g.
+You can use `scripts/bench` to benchmark predefined workloads between uv versions and with other tools, e.g., from the `scripts/bench` directory:
 
-```
-python -m scripts.bench \
+```shell
+uv run bench \
     --uv-path ./target/release/before \
     --uv-path ./target/release/after \
-    ./scripts/requirements/jupyter.in --benchmark resolve-cold --min-runs 20
+    ../scripts/requirements/jupyter.in \
+    --benchmark resolve-cold \
+    --min-runs 20
 ```
 
 ### Analyzing concurrency
