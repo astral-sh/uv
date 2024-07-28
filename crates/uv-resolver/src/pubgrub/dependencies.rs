@@ -79,7 +79,7 @@ impl PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
                             specifier,
-                            url: None,
+                            url,
                         })
                     }
                     _ => None,

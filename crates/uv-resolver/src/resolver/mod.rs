@@ -2135,7 +2135,7 @@ impl ForkState {
                 // A dependency from the root package or requirements.txt.
                 debug!("Adding direct dependency: {package}{version}");
 
-                // Warn the user if the direct dependency lacks a lower bound in lowest resolution.
+                // Warn the user if a direct dependency lacks a lower bound in `--lowest` resolution.
                 let missing_lower_bound = version
                     .bounding_range()
                     .map(|(lowest, _highest)| lowest == Bound::Unbounded)
