@@ -130,13 +130,6 @@ impl SitePackages {
             .collect()
     }
 
-    /// Returns `true` if there are any installed distributions with the given package name.
-    pub fn contains_package(&self, name: &PackageName) -> bool {
-        self.by_name
-            .get(name)
-            .is_some_and(|packages| !packages.is_empty())
-    }
-
     /// Remove the given packages from the index, returning all installed versions, if any.
     pub fn remove_packages(&mut self, name: &PackageName) -> Vec<InstalledDist> {
         let Some(indexes) = self.by_name.get(name) else {
