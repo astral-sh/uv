@@ -258,6 +258,11 @@ impl LinkMode {
             Self::Symlink => symlink_wheel_files(site_packages, wheel, locks),
         }
     }
+
+    /// Returns `true` if the link mode is [`LinkMode::Symlink`].
+    pub fn is_symlink(&self) -> bool {
+        matches!(self, Self::Symlink)
+    }
 }
 
 /// Extract a wheel by cloning all of its files into site packages. The files will be cloned

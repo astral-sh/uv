@@ -463,6 +463,7 @@ pub(crate) async fn install(
         let start = std::time::Instant::now();
         wheels = uv_installer::Installer::new(venv)
             .with_link_mode(link_mode)
+            .with_cache(cache)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking

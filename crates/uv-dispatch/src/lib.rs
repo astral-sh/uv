@@ -288,6 +288,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             );
             wheels = Installer::new(venv)
                 .with_link_mode(self.link_mode)
+                .with_cache(self.cache)
                 .install(wheels)
                 .await
                 .context("Failed to install build dependencies")?;
