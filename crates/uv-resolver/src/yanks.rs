@@ -57,10 +57,4 @@ impl AllowedYanks {
             .get(package_name)
             .map_or(false, |versions| versions.contains(version))
     }
-
-    /// Returns versions for the given package which are allowed even if marked as yanked by the
-    /// relevant index.
-    pub fn allowed_versions(&self, package_name: &PackageName) -> Option<&FxHashSet<Version>> {
-        self.0.get(package_name)
-    }
 }

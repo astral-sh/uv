@@ -33,7 +33,6 @@ configparser = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
-mailparse = { workspace = true }
 pathdiff = { workspace = true }
 platform-info = { workspace = true }
 reflink-copy = { workspace = true }

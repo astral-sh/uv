@@ -236,6 +236,34 @@ fn install_symlink() -> Result<()> {
     Ok(())
 }
 
+/// Reject attempts to use symlink semantics with `--no-cache`.
+#[test]
+fn install_symlink_no_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("symlink")
+        .arg("--no-cache")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install multiple packages into a virtual environment.
 #[test]
 fn install_many() -> Result<()> {

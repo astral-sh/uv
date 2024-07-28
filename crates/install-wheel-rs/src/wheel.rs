@@ -6,7 +6,6 @@ use std::{env, io};
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
-use mailparse::MailHeaderMap;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{instrument, warn};
@@ -16,6 +15,7 @@ use zip::ZipWriter;
 
 use pypi_types::DirectUrl;
 use uv_fs::{relative_to, Simplified};
+use uv_normalize::PackageName;
 
 use crate::record::RecordEntry;
 use crate::script::Script;
@@ -143,7 +143,7 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, is_relocatable: b
         // (note: the Windows trampoline binaries natively support relative paths to executable)
         if shebang_length > 127 || executable.contains(' ') || is_relocatable {
             let prefix = if is_relocatable {
-                r#""$(CDPATH= cd -- "$(dirname -- "$0")" && echo "$PWD")""#
+                r#""$(CDPATH= cd -- "$(dirname -- "$0")" && echo "$PWD")"/"#
             } else {
                 ""
             };
@@ -586,7 +586,7 @@ pub(crate) fn install_data(
     layout: &Layout,
     site_packages: &Path,
     data_dir: &Path,
-    dist_name: &str,
+    dist_name: &PackageName,
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
@@ -632,7 +632,7 @@ pub(crate) fn install_data(
                 }
             }
             Some("headers") => {
-                let target_path = layout.scheme.include.join(dist_name);
+                let target_path = layout.scheme.include.join(dist_name.as_str());
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
@@ -755,49 +755,6 @@ fn parse_key_value_file(
             .push(value.trim().to_string());
     }
     Ok(data)
-}
-
-/// Parse the distribution name and version from a wheel's `dist-info` metadata.
-///
-/// See: <https://github.com/PyO3/python-pkginfo-rs>
-pub(crate) fn parse_metadata(
-    dist_info_prefix: &str,
-    content: &[u8],
-) -> Result<(String, String), Error> {
-    // HACK: trick mailparse to parse as UTF-8 instead of ASCII
-    let mut mail = b"Content-Type: text/plain; charset=utf-8\n".to_vec();
-    mail.extend_from_slice(content);
-    let msg = mailparse::parse_mail(&mail).map_err(|err| {
-        Error::InvalidWheel(format!(
-            "Invalid metadata in {dist_info_prefix}.dist-info/METADATA: {err}"
-        ))
-    })?;
-    let headers = msg.get_headers();
-    let metadata_version =
-        headers
-            .get_first_value("Metadata-Version")
-            .ok_or(Error::InvalidWheel(format!(
-                "No `Metadata-Version` field in: {dist_info_prefix}.dist-info/METADATA"
-            )))?;
-    // Crude but it should do https://packaging.python.org/en/latest/specifications/core-metadata/#metadata-version
-    // At time of writing:
-    // > Version of the file format; legal values are “1.0”, “1.1”, “1.2”, “2.1”, “2.2”, and “2.3”.
-    if !(metadata_version.starts_with("1.") || metadata_version.starts_with("2.")) {
-        return Err(Error::InvalidWheel(format!(
-            "`Metadata-Version` field has unsupported value {metadata_version} in: {dist_info_prefix}.dist-info/METADATA"
-        )));
-    }
-    let name = headers
-        .get_first_value("Name")
-        .ok_or(Error::InvalidWheel(format!(
-            "No `Name` field in: {dist_info_prefix}.dist-info/METADATA"
-        )))?;
-    let version = headers
-        .get_first_value("Version")
-        .ok_or(Error::InvalidWheel(format!(
-            "No `Version` field in: {dist_info_prefix}.dist-info/METADATA"
-        )))?;
-    Ok((name, version))
 }
 
 #[cfg(test)]
@@ -936,7 +893,7 @@ mod test {
         let os_name = "posix";
         assert_eq!(
             format_shebang(executable, os_name, true),
-            "#!/bin/sh\n'''exec' \"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && echo \"$PWD\")\"'python3' \"$0\" \"$@\"\n' '''"
+            "#!/bin/sh\n'''exec' \"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && echo \"$PWD\")\"/'python3' \"$0\" \"$@\"\n' '''"
         );
 
         // Except on Windows...

@@ -120,7 +120,7 @@ pub struct Cache {
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
     /// is dropped at the end as appropriate.
-    _temp_dir_drop: Option<Arc<tempfile::TempDir>>,
+    temp_dir: Option<Arc<tempfile::TempDir>>,
 }
 
 impl Cache {
@@ -129,7 +129,7 @@ impl Cache {
         Self {
             root: root.into(),
             refresh: Refresh::None(Timestamp::now()),
-            _temp_dir_drop: None,
+            temp_dir: None,
         }
     }
 
@@ -139,7 +139,7 @@ impl Cache {
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
-            _temp_dir_drop: Some(Arc::new(temp_dir)),
+            temp_dir: Some(Arc::new(temp_dir)),
         })
     }
 
@@ -271,7 +271,12 @@ impl Cache {
         Ok(id)
     }
 
-    /// Initialize the cache.
+    /// Returns `true` if the [`Cache`] is temporary.
+    pub fn is_temporary(&self) -> bool {
+        self.temp_dir.is_some()
+    }
+
+    /// Initialize the [`Cache`].
     pub fn init(self) -> Result<Self, io::Error> {
         let root = &self.root;
 

@@ -1465,7 +1465,7 @@ pub struct PipListArgs {
     pub editable: bool,
 
     /// Exclude any editable packages from output.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "editable")]
     pub exclude_editable: bool,
 
     /// Exclude the specified package(s) from the output.
