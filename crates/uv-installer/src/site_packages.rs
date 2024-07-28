@@ -12,9 +12,11 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::InstalledPackagesProvider;
+use uv_warnings::warn_user;
 
 use crate::satisfies::RequirementSatisfaction;
 
@@ -82,10 +84,26 @@ impl SitePackages {
 
             // Index all installed packages by name.
             for path in site_packages {
-                let Some(dist_info) = InstalledDist::try_from_path(&path)
-                    .with_context(|| format!("Failed to read metadata: from {}", path.display()))?
-                else {
-                    continue;
+                let dist_info = match InstalledDist::try_from_path(&path) {
+                    Ok(Some(dist_info)) => dist_info,
+                    Ok(None) => continue,
+                    Err(_)
+                        if path.file_name().is_some_and(|name| {
+                            name.to_str().is_some_and(|name| name.starts_with('~'))
+                        }) =>
+                    {
+                        warn_user!(
+                            "Ignoring dangling temporary directory: `{}`",
+                            path.simplified_display().cyan()
+                        );
+                        continue;
+                    }
+                    Err(err) => {
+                        return Err(err).context(format!(
+                            "Failed to read metadata from: `{}`",
+                            path.simplified_display()
+                        ));
+                    }
                 };
 
                 let idx = distributions.len();

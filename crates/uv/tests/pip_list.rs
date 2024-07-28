@@ -531,7 +531,7 @@ Version: 0.1-bulbasaur
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read metadata: from [SITE_PACKAGES]/paramiko.egg-link
+    error: Failed to read metadata from: `[SITE_PACKAGES]/paramiko.egg-link`
      Caused by: after parsing '0.1-b', found 'ulbasaur', which is not part of a valid version
     "###
     );
