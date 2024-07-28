@@ -551,11 +551,6 @@ impl Extras {
     pub fn parse<T: Pep508Url>(input: &str) -> Result<Self, Pep508Error<T>> {
         Ok(Self(parse_extras_cursor(&mut Cursor::new(input))?))
     }
-
-    /// Convert the [`Extras`] into a [`Vec`] of [`ExtraName`].
-    pub fn into_vec(self) -> Vec<ExtraName> {
-        self.0
-    }
 }
 
 /// The actual version specifier or URL to install.
