@@ -1287,7 +1287,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Install Python"
-        run: choco install python3 --verbose --version=3.9.13
+        run: choco install python3 --verbose --version=3.11.0
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -1298,7 +1298,7 @@ jobs:
         run: echo $(which python3)
 
       - name: "Validate global Python install"
-        run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
+        run: py -3.11 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-pyenv:
     needs: build-binary-linux
