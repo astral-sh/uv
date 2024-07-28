@@ -10,10 +10,10 @@ use zip::result::ZipError;
 use pep440_rs::Version;
 use platform_tags::{Arch, Os};
 use pypi_types::Scheme;
-pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
+pub use uninstall::{uninstall_egg, uninstall_legacy_editable, uninstall_wheel, Uninstall};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-pub use wheel::{LibKind, parse_wheel_file, read_record_file};
+pub use wheel::{parse_wheel_file, read_record_file, LibKind};
 
 pub mod linker;
 pub mod metadata;
