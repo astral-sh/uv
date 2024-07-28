@@ -1058,7 +1058,7 @@ fn is_excluded_from_workspace(
         {
             let excluded_root = excluded_root
                 .map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
-            if excluded_root == project_path {
+            if excluded_root == project_path.simplified() {
                 return Ok(true);
             }
         }
