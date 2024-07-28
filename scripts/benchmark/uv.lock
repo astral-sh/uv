@@ -15,7 +15,7 @@ wheels = [
 ]
 
 [[distribution]]
-name = "bench"
+name = "benchmark"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [

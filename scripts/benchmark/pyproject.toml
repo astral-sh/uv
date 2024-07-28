@@ -1,5 +1,5 @@
 [project]
-name = "bench"
+name = "benchmark"
 version = "0.0.1"
 description = "Benchmark package resolution tools"
 requires-python = ">=3.12"
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-bench = "bench:main"
+benchmark = "benchmark:main"
 
 [build-system]
 requires = ["hatchling"]
