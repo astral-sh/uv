@@ -17,6 +17,7 @@ use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DEV_DEPENDENCIES;
+use uv_fs::{Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
@@ -63,9 +64,9 @@ pub(crate) async fn lock(
     }
 
     let directory = if let Some(directory) = directory {
-        directory
+        directory.simple_canonicalize()?
     } else {
-        std::env::current_dir()?
+        CWD.to_path_buf()
     };
 
     // Find the project requirements.

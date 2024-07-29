@@ -1,7 +1,6 @@
+use fs2::FileExt;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-
-use fs2::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, trace, warn};
 

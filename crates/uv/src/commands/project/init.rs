@@ -3,12 +3,13 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+
 use pep440_rs::Version;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::PreviewMode;
-use uv_fs::{absolutize_path, Simplified};
+use uv_fs::{absolutize_path, Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
     VersionRequest,
@@ -46,7 +47,7 @@ pub(crate) async fn init(
 
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
-        None => std::env::current_dir()?.canonicalize()?,
+        None => CWD.to_path_buf(),
         Some(ref path) => absolutize_path(Path::new(path))?.to_path_buf(),
     };
 

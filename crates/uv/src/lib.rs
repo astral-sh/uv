@@ -21,6 +21,7 @@ use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace};
 use uv_configuration::Concurrency;
+use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -73,14 +74,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Some(FilesystemOptions::from_file(config_file)?)
     } else if cli.global_args.isolated || cli.no_config {
         None
-    } else if let Ok(project) =
-        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await
-    {
+    } else if let Ok(project) = Workspace::discover(&CWD, &DiscoveryOptions::default()).await {
         let project = FilesystemOptions::from_directory(project.install_path())?;
         let user = FilesystemOptions::user()?;
         project.combine(user)
     } else {
-        let project = FilesystemOptions::find(std::env::current_dir()?)?;
+        let project = FilesystemOptions::find(&*CWD)?;
         let user = FilesystemOptions::user()?;
         project.combine(user)
     };

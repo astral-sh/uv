@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_fs::{PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
@@ -93,7 +93,7 @@ pub(crate) async fn run(
     let directory = if let Some(directory) = directory {
         directory.simple_canonicalize()?
     } else {
-        std::env::current_dir()?
+        CWD.to_path_buf()
     };
 
     // Determine whether the command to execute is a PEP 723 script.

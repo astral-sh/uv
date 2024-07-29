@@ -11,6 +11,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
+use uv_fs::CWD;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{
@@ -55,7 +56,7 @@ pub(crate) async fn install(
             }
             None
         } else {
-            requests_from_version_file(&std::env::current_dir()?).await?
+            requests_from_version_file(&CWD).await?
         };
         version_file_requests.unwrap_or_else(|| vec![PythonRequest::Any])
     } else {

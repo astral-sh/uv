@@ -1,5 +1,7 @@
-use anyhow::Result;
 use std::path::PathBuf;
+
+use anyhow::Result;
+
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -8,6 +10,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DEV_DEPENDENCIES;
+use uv_fs::{Simplified, CWD};
 use uv_installer::SitePackages;
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
@@ -47,9 +50,9 @@ pub(crate) async fn sync(
     }
 
     let directory = if let Some(directory) = directory {
-        directory
+        directory.simple_canonicalize()?
     } else {
-        std::env::current_dir()?
+        CWD.to_path_buf()
     };
 
     // Identify the project
