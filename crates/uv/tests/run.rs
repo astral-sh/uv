@@ -858,8 +858,6 @@ fn run_from_directory() -> Result<()> {
        "
     })?;
 
-    // Our tests change files in <1s, so we must disable CPython bytecode caching with `-B` or we'll
-    // get stale files, see https://github.com/python/cpython/issues/75953.
     let mut command = context.run();
     let command_with_args = command
         .arg("--preview")
