@@ -101,10 +101,10 @@ impl CachedEnvironment {
             uv_virtualenv::Prompt::None,
             false,
             false,
-            false,
+            true,
         )?;
         sync_environment(
-            venv.with_relocatable(),
+            venv,
             &resolution,
             settings.as_ref().into(),
             state,
