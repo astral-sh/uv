@@ -4808,6 +4808,7 @@ dependencies = [
  "tokio-tar",
  "tokio-util",
  "tracing",
+ "xz2",
  "zip",
 ]
 

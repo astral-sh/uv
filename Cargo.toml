@@ -157,10 +157,11 @@ winapi = { version = "0.3.9", features = ["fileapi", "handleapi", "ioapiset", "w
 winreg = { version = "0.52.0" }
 winsafe = { version = "0.0.19", features = ["kernel"] }
 wiremock = { version = "0.6.0" }
+xz2 = { version = "0.1.7" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
-ignored = ["flate2"]
+ignored = ["flate2", "xz2"]
 
 [patch.crates-io]
 # For pyproject-toml
