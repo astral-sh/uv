@@ -109,7 +109,7 @@ pub(crate) async fn run(
             let python_request = if let Some(request) = python.as_deref() {
                 Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
-            } else if let Some(request) = request_from_version_file(Some(&directory)).await? {
+            } else if let Some(request) = request_from_version_file(&directory).await? {
                 Some(request)
                 // (3) `Requires-Python` in `pyproject.toml`
             } else {

@@ -16,7 +16,7 @@ pub static PYTHON_VERSIONS_FILENAME: &str = ".python-versions";
 /// Prefers `.python-versions` then `.python-version`.
 /// If only one Python version is desired, use [`request_from_version_files`] which prefers the `.python-version` file.
 pub async fn requests_from_version_file(
-    directory: Option<&Path>,
+    directory: &Path,
 ) -> Result<Option<Vec<PythonRequest>>, std::io::Error> {
     if let Some(versions) = read_versions_file(directory).await? {
         Ok(Some(
@@ -40,7 +40,7 @@ pub async fn requests_from_version_file(
 /// Prefers `.python-version` then the first entry of `.python-versions`.
 /// If multiple Python versions are desired, use [`requests_from_version_files`] instead.
 pub async fn request_from_version_file(
-    directory: Option<&Path>,
+    directory: &Path,
 ) -> Result<Option<PythonRequest>, std::io::Error> {
     if let Some(version) = read_version_file(directory).await? {
         Ok(Some(PythonRequest::parse(&version)))
@@ -61,15 +61,9 @@ pub async fn write_version_file(version: &str) -> Result<(), std::io::Error> {
     fs::tokio::write(PYTHON_VERSION_FILENAME, format!("{version}\n")).await
 }
 
-async fn read_versions_file(
-    directory: Option<&Path>,
-) -> Result<Option<Vec<String>>, std::io::Error> {
-    let file_path = directory.map(|pth| pth.join(PYTHON_VERSIONS_FILENAME));
-    let path = file_path
-        .as_deref()
-        .unwrap_or(Path::new(PYTHON_VERSIONS_FILENAME));
-
-    match fs::tokio::read_to_string(path).await {
+async fn read_versions_file(directory: &Path) -> Result<Option<Vec<String>>, std::io::Error> {
+    let path = directory.join(PYTHON_VERSIONS_FILENAME);
+    match fs::tokio::read_to_string(&path).await {
         Ok(content) => {
             debug!("Reading requests from `{}`", path.display());
             Ok(Some(
@@ -89,13 +83,9 @@ async fn read_versions_file(
     }
 }
 
-async fn read_version_file(directory: Option<&Path>) -> Result<Option<String>, std::io::Error> {
-    let file_path = directory.map(|pth| pth.join(PYTHON_VERSION_FILENAME));
-    let path = file_path
-        .as_deref()
-        .unwrap_or(Path::new(PYTHON_VERSION_FILENAME));
-
-    match fs::tokio::read_to_string(path).await {
+async fn read_version_file(directory: &Path) -> Result<Option<String>, std::io::Error> {
+    let path = directory.join(PYTHON_VERSION_FILENAME);
+    match fs::tokio::read_to_string(&path).await {
         Ok(content) => {
             debug!("Reading requests from `{}`", path.display());
             Ok(content
