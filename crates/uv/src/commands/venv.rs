@@ -140,7 +140,7 @@ async fn venv_impl(
 
     let mut interpreter_request = python_request.map(PythonRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {
-        interpreter_request = request_from_version_file().await.into_diagnostic()?;
+        interpreter_request = request_from_version_file(None).await.into_diagnostic()?;
     }
     if preview.is_disabled() && relocatable {
         warn_user_once!("`--relocatable` is experimental and may change without warning");

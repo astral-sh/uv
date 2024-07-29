@@ -49,7 +49,7 @@ pub(crate) async fn pin(
 
     let Some(request) = request else {
         // Display the current pinned Python version
-        if let Some(pins) = requests_from_version_file().await? {
+        if let Some(pins) = requests_from_version_file(None).await? {
             for pin in pins {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
@@ -126,7 +126,7 @@ pub(crate) async fn pin(
         request.to_canonical_string()
     };
 
-    let existing = request_from_version_file().await.ok().flatten();
+    let existing = request_from_version_file(None).await.ok().flatten();
     write_version_file(&output).await?;
 
     if let Some(existing) = existing
