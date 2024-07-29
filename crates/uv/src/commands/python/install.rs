@@ -55,7 +55,7 @@ pub(crate) async fn install(
             }
             None
         } else {
-            requests_from_version_file(None).await?
+            requests_from_version_file(&std::env::current_dir()?).await?
         };
         version_file_requests.unwrap_or_else(|| vec![PythonRequest::Any])
     } else {
