@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.30/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.31/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -2312,6 +2312,265 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
           And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
     "###
     );
+
+    Ok(())
+}
+
+/// Like `preferences-dependent-forking`, but when we don't fork the resolution
+/// fails.  Consider a fresh run without preferences: * We start with cleaver 2 * We
+/// fork * We reject cleaver 2 * We find cleaver solution in fork 1 with foo 2 with
+/// bar 1 * We find cleaver solution in fork 2 with foo 1 with bar 2 * We write
+/// cleaver 1, foo 1, foo 2, bar 1 and bar 2 to the lockfile  In a subsequent run,
+/// we read the preference cleaver 1 from the lockfile (the preferences for foo and
+/// bar don't matter): * We start with cleaver 1 * We're in universal mode, cleaver
+/// requires foo 1, bar 1 * foo 1 requires bar 2, conflict  Design sketch: ```text
+/// root -> clear, foo, bar # Cause a fork, then forget that version. cleaver 2 ->
+/// unrelated-dep==1; fork==1 cleaver 2 -> unrelated-dep==2; fork==2 cleaver 2 ->
+/// reject-cleaver-2 # Allow different versions when forking, but force foo 1, bar 1
+/// in universal mode without forking. cleaver 1 -> foo==1; fork==1 cleaver 1 ->
+/// bar==1; fork==2 # When we selected foo 1, bar 1 in universal mode for cleaver,
+/// this causes a conflict, otherwise we select bar 2. foo 1 -> bar==2 ```
+///
+/// ```text
+/// preferences-dependent-forking-conflicting
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires bar
+/// │   │   ├── satisfied by bar-1.0.0
+/// │   │   └── satisfied by bar-2.0.0
+/// │   ├── requires cleaver
+/// │   │   ├── satisfied by cleaver-2.0.0
+/// │   │   └── satisfied by cleaver-1.0.0
+/// │   └── requires foo
+/// │       ├── satisfied by foo-1.0.0
+/// │       └── satisfied by foo-2.0.0
+/// ├── bar
+/// │   ├── bar-1.0.0
+/// │   └── bar-2.0.0
+/// ├── cleaver
+/// │   ├── cleaver-2.0.0
+/// │   │   ├── requires reject-cleaver-2
+/// │   │   │   └── satisfied by reject-cleaver-2-1.0.0
+/// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
+/// │   │   │   └── satisfied by unrelated-dep-1.0.0
+/// │   │   └── requires unrelated-dep==2; sys_platform != "linux"
+/// │   │       └── satisfied by unrelated-dep-2.0.0
+/// │   └── cleaver-1.0.0
+/// │       ├── requires bar==1; sys_platform != "linux"
+/// │       │   └── satisfied by bar-1.0.0
+/// │       └── requires foo==1; sys_platform == "linux"
+/// │           └── satisfied by foo-1.0.0
+/// ├── foo
+/// │   ├── foo-1.0.0
+/// │   │   └── requires bar==2
+/// │   │       └── satisfied by bar-2.0.0
+/// │   └── foo-2.0.0
+/// ├── reject-cleaver-2
+/// │   └── reject-cleaver-2-1.0.0
+/// │       └── requires unrelated-dep==3
+/// │           └── satisfied by unrelated-dep-3.0.0
+/// └── unrelated-dep
+///     ├── unrelated-dep-1.0.0
+///     ├── unrelated-dep-2.0.0
+///     └── unrelated-dep-3.0.0
+/// ```
+#[test]
+fn preferences_dependent_forking_conflicting() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"preferences-dependent-forking-conflicting-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''preferences-dependent-forking-conflicting-cleaver''',
+          '''preferences-dependent-forking-conflicting-foo''',
+          '''preferences-dependent-forking-conflicting-bar''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// This test contains a scenario where the solution depends on whether we fork, and
+/// whether we fork depends on the preferences.  Consider a fresh run without
+/// preferences: * We start with cleaver 2 * We fork * We reject cleaver 2 * We find
+/// cleaver solution in fork 1 with foo 2 with bar 1 * We find cleaver solution in
+/// fork 2 with foo 1 with bar 2 * We write cleaver 1, foo 1, foo 2, bar 1 and bar 2
+/// to the lockfile  In a subsequent run, we read the preference cleaver 1 from the
+/// lockfile (the preferences for foo and bar don't matter): * We start with cleaver
+/// 1 * We're in universal mode, we resolve foo 1 and bar 1 * We write cleaver 1 and
+/// bar 1 to the lockfile  We call a resolution that's different on the second run
+/// to the first unstable.  Design sketch: ```text root -> clear, foo, bar # Cause a
+/// fork, then forget that version. cleaver 2 -> unrelated-dep==1; fork==1 cleaver 2
+/// -> unrelated-dep==2; fork==2 cleaver 2 -> reject-cleaver-2 # Allow different
+/// versions when forking, but force foo 1, bar 1 in universal mode without forking.
+/// cleaver 1 -> foo==1; fork==1 cleaver 1 -> bar==1; fork==2 ```
+///
+/// ```text
+/// preferences-dependent-forking
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires bar
+/// │   │   ├── satisfied by bar-1.0.0
+/// │   │   └── satisfied by bar-2.0.0
+/// │   ├── requires cleaver
+/// │   │   ├── satisfied by cleaver-2.0.0
+/// │   │   └── satisfied by cleaver-1.0.0
+/// │   └── requires foo
+/// │       ├── satisfied by foo-1.0.0
+/// │       └── satisfied by foo-2.0.0
+/// ├── bar
+/// │   ├── bar-1.0.0
+/// │   └── bar-2.0.0
+/// ├── cleaver
+/// │   ├── cleaver-2.0.0
+/// │   │   ├── requires reject-cleaver-2
+/// │   │   │   └── satisfied by reject-cleaver-2-1.0.0
+/// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
+/// │   │   │   └── satisfied by unrelated-dep-1.0.0
+/// │   │   └── requires unrelated-dep==2; sys_platform != "linux"
+/// │   │       └── satisfied by unrelated-dep-2.0.0
+/// │   └── cleaver-1.0.0
+/// │       ├── requires bar==1; sys_platform != "linux"
+/// │       │   └── satisfied by bar-1.0.0
+/// │       └── requires foo==1; sys_platform == "linux"
+/// │           └── satisfied by foo-1.0.0
+/// ├── foo
+/// │   ├── foo-1.0.0
+/// │   └── foo-2.0.0
+/// ├── reject-cleaver-2
+/// │   └── reject-cleaver-2-1.0.0
+/// │       └── requires unrelated-dep==3
+/// │           └── satisfied by unrelated-dep-3.0.0
+/// └── unrelated-dep
+///     ├── unrelated-dep-1.0.0
+///     ├── unrelated-dep-2.0.0
+///     └── unrelated-dep-3.0.0
+/// ```
+#[test]
+fn preferences_dependent_forking() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"preferences-dependent-forking-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''preferences-dependent-forking-cleaver''',
+          '''preferences-dependent-forking-foo''',
+          '''preferences-dependent-forking-bar''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+
+        [[distribution]]
+        name = "package-bar"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0.tar.gz#sha256=7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e", hash = "sha256:7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0-py3-none-any.whl#sha256=3cdaac4b0ba330f902d0628c0b1d6e62692f52255d02718d04f46ade7c8ad6a6", hash = "sha256:3cdaac4b0ba330f902d0628c0b1d6e62692f52255d02718d04f46ade7c8ad6a6" },
+        ]
+
+        [[distribution]]
+        name = "package-cleaver"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-bar", marker = "sys_platform != 'linux'" },
+            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_cleaver-1.0.0.tar.gz#sha256=0347b927fdf7731758ea53e1594309fc6311ca6983f36553bc11654a264062b2", hash = "sha256:0347b927fdf7731758ea53e1594309fc6311ca6983f36553bc11654a264062b2" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_cleaver-1.0.0-py3-none-any.whl#sha256=855467570c9da8e92ce37d0ebd0653cfa50d5d88b9540beca94feaa37a539dc3", hash = "sha256:855467570c9da8e92ce37d0ebd0653cfa50d5d88b9540beca94feaa37a539dc3" },
+        ]
+
+        [[distribution]]
+        name = "package-foo"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-1.0.0.tar.gz#sha256=abf1c0ac825ee5961e683067634916f98c6651a6d4473ff87d8b57c17af8fed2", hash = "sha256:abf1c0ac825ee5961e683067634916f98c6651a6d4473ff87d8b57c17af8fed2" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-1.0.0-py3-none-any.whl#sha256=85348e8df4892b9f297560c16abcf231828f538dc07339ed121197a00a0626a5", hash = "sha256:85348e8df4892b9f297560c16abcf231828f538dc07339ed121197a00a0626a5" },
+        ]
+
+        [[distribution]]
+        name = "package-foo"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-2.0.0.tar.gz#sha256=ad54d14a4fd931b8ccb6412edef71fe223c36362d0ccfe3fa251c17d4f07e4a9", hash = "sha256:ad54d14a4fd931b8ccb6412edef71fe223c36362d0ccfe3fa251c17d4f07e4a9" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-2.0.0-py3-none-any.whl#sha256=bae278cf259c0e031e52b6cbb537d945e0e606d045e980b90d406d0f1e06aae9", hash = "sha256:bae278cf259c0e031e52b6cbb537d945e0e606d045e980b90d406d0f1e06aae9" },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "package-bar" },
+            { name = "package-cleaver" },
+            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" } },
+            { name = "package-foo", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" } },
+        ]
+        "###
+        );
+    });
 
     Ok(())
 }
