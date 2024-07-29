@@ -2264,8 +2264,9 @@ pub struct ToolRunArgs {
     ///
     /// If more complex version specification is desired or if the command is provided by a different
     /// package, use `--from`.
+    /// If no command is given, should list installed tools and treat it as `uv tool list`
     #[command(subcommand)]
-    pub command: ExternalCommand,
+    pub command: Option<ExternalCommand>,
 
     /// Use the given package to provide the command.
     ///
