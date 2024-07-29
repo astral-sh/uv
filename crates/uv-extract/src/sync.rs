@@ -48,12 +48,14 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             // Copy the file contents.
             let outfile = fs_err::File::create(&path)?;
             let size = file.size();
-            let mut writer = if let Ok(size) = usize::try_from(size) {
-                std::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), outfile)
-            } else {
-                std::io::BufWriter::new(outfile)
-            };
-            std::io::copy(&mut file, &mut writer)?;
+            if size > 0 {
+                let mut writer = if let Ok(size) = usize::try_from(size) {
+                    std::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), outfile)
+                } else {
+                    std::io::BufWriter::new(outfile)
+                };
+                std::io::copy(&mut file, &mut writer)?;
+            }
 
             // See `uv_extract::stream::unzip`. For simplicity, this is identical with the code there except for being
             // sync.
