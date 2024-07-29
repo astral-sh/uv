@@ -442,6 +442,7 @@ impl SourceBuild {
                 uv_virtualenv::Prompt::None,
                 false,
                 false,
+                false,
             )?,
             BuildIsolation::Shared(venv) => venv.clone(),
         };

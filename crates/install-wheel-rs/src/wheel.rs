@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::io::{BufRead, BufReader, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, io};
 
@@ -128,7 +128,7 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
 /// executable.
 ///
 /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
-fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
+fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool) -> String {
     // Convert the executable to a simplified path.
     let executable = executable.as_ref().simplified_display().to_string();
 
@@ -139,11 +139,18 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
         let shebang_length = 2 + executable.len() + 1;
 
         // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
-        if shebang_length > 127 || executable.contains(' ') {
+        // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
+        // (note: the Windows trampoline binaries natively support relative paths to executable)
+        if shebang_length > 127 || executable.contains(' ') || relocatable {
+            let prefix = if relocatable {
+                r#""$(CDPATH= cd -- "$(dirname -- "$0")" && echo "$PWD")"/"#
+            } else {
+                ""
+            };
             // Like Python's `shlex.quote`:
             // > Use single quotes, and put single quotes into double quotes
             // > The string $'b is then quoted as '$'"'"'b'
-            let executable = format!("'{}'", executable.replace('\'', r#"'"'"'"#));
+            let executable = format!("{}'{}'", prefix, executable.replace('\'', r#"'"'"'"#));
             return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
         }
     }
@@ -272,6 +279,7 @@ fn entrypoint_path(entrypoint: &Script, layout: &Layout) -> PathBuf {
 /// Create the wrapper scripts in the bin folder of the venv for launching console scripts.
 pub(crate) fn write_script_entrypoints(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
@@ -293,9 +301,11 @@ pub(crate) fn write_script_entrypoints(
 
         // Generate the launcher script.
         let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
+        let launcher_executable =
+            get_relocatable_executable(launcher_executable, layout, relocatable)?;
         let launcher_python_script = get_script_launcher(
             entrypoint,
-            &format_shebang(&launcher_executable, &layout.os_name),
+            &format_shebang(&launcher_executable, &layout.os_name, relocatable),
         );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
@@ -432,11 +442,12 @@ pub(crate) fn move_folder_recorded(
     Ok(())
 }
 
-/// Installs a single script (not an entrypoint)
+/// Installs a single script (not an entrypoint).
 ///
-/// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable)
+/// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable).
 fn install_script(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
@@ -494,7 +505,19 @@ fn install_script(
     let mut start = vec![0; placeholder_python.len()];
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
-        let start = format_shebang(&layout.sys_executable, &layout.os_name)
+        let is_gui = {
+            let mut buf = vec![0; 1];
+            script.read_exact(&mut buf)?;
+            if buf == b"w" {
+                true
+            } else {
+                script.seek_relative(-1)?;
+                false
+            }
+        };
+        let executable = get_script_executable(&layout.sys_executable, is_gui);
+        let executable = get_relocatable_executable(executable, layout, relocatable)?;
+        let start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
 
@@ -555,6 +578,7 @@ fn install_script(
 #[instrument(skip_all)]
 pub(crate) fn install_data(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     data_dir: &Path,
     dist_name: &PackageName,
@@ -598,7 +622,7 @@ pub(crate) fn install_data(
                         initialized = true;
                     }
 
-                    install_script(layout, site_packages, record, &file)?;
+                    install_script(layout, relocatable, site_packages, record, &file)?;
                 }
             }
             Some("headers") => {
@@ -680,6 +704,31 @@ pub(crate) fn extra_dist_info(
         )?;
     }
     Ok(())
+}
+
+/// Get the path to the Python executable for the [`Layout`], based on whether the wheel should
+/// be relocatable.
+///
+/// Returns `sys.executable` if the wheel is not relocatable; otherwise, returns a path relative
+/// to the scripts directory.
+pub(crate) fn get_relocatable_executable(
+    executable: PathBuf,
+    layout: &Layout,
+    relocatable: bool,
+) -> Result<PathBuf, Error> {
+    Ok(if relocatable {
+        pathdiff::diff_paths(&executable, &layout.scheme.scripts).ok_or_else(|| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Could not find relative path for: {}",
+                    executable.simplified_display()
+                ),
+            ))
+        })?
+    } else {
+        executable
+    })
 }
 
 /// Reads the record file
@@ -845,33 +894,47 @@ mod test {
         // By default, use a simple shebang.
         let executable = Path::new("/usr/bin/python3");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/python3");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/usr/bin/python3"
+        );
 
         // If the path contains spaces, we should use the `exec` trick.
         let executable = Path::new("/usr/bin/path to python3");
         let os_name = "posix";
         assert_eq!(
-            format_shebang(executable, os_name),
+            format_shebang(executable, os_name, false),
             "#!/bin/sh\n'''exec' '/usr/bin/path to python3' \"$0\" \"$@\"\n' '''"
+        );
+
+        // And if we want a relocatable script, we should use the `exec` trick with `dirname`.
+        let executable = Path::new("python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name, true),
+            "#!/bin/sh\n'''exec' \"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && echo \"$PWD\")\"/'python3' \"$0\" \"$@\"\n' '''"
         );
 
         // Except on Windows...
         let executable = Path::new("/usr/bin/path to python3");
         let os_name = "nt";
         assert_eq!(
-            format_shebang(executable, os_name),
+            format_shebang(executable, os_name, false),
             "#!/usr/bin/path to python3"
         );
 
         // Quotes, however, are ok.
         let executable = Path::new("/usr/bin/'python3'");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/'python3'");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/usr/bin/'python3'"
+        );
 
         // If the path is too long, we should not use the `exec` trick.
         let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+        assert_eq!(format_shebang(executable, os_name, false), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
     }
 
     #[test]

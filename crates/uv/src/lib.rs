@@ -593,6 +593,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.preview,
                 &cache,
                 printer,
+                args.relocatable,
             )
             .await
         }

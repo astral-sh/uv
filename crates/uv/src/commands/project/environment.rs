@@ -132,6 +132,7 @@ impl CachedEnvironment {
             uv_virtualenv::Prompt::None,
             false,
             false,
+            false,
         )?;
 
         let venv = sync_environment(

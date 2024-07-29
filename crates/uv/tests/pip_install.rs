@@ -6,8 +6,10 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
+use fs_err as fs;
 use indoc::indoc;
 use itertools::Itertools;
+use predicates::prelude::predicate;
 use url::Url;
 
 use common::{uv_snapshot, TestContext};
@@ -6185,6 +6187,60 @@ fn unmanaged() -> Result<()> {
      + sniffio==1.3.1
     "###
     );
+
+    Ok(())
+}
+
+#[test]
+fn install_relocatable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Remake the venv as relocatable
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    // Install a package with a hello-world console script entrypoint.
+    // (we use black_editable because it's convenient, but we don't actually install it as editable)
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts/packages/black_editable"),
+        )
+        .assert()
+        .success();
+
+    // Script should run correctly in-situ.
+    let script_path = if cfg!(windows) {
+        context.venv.child(r"Scripts\black.exe")
+    } else {
+        context.venv.child("bin/black")
+    };
+    Command::new(script_path.as_os_str())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello world!"));
+
+    // Relocate the venv, and see if it still works.
+    let new_venv_path = context.venv.with_file_name("relocated");
+    fs::rename(context.venv, new_venv_path.clone())?;
+
+    let script_path = if cfg!(windows) {
+        new_venv_path.join(r"Scripts\black.exe")
+    } else {
+        new_venv_path.join("bin/black")
+    };
+    Command::new(script_path.as_os_str())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello world!"));
 
     Ok(())
 }

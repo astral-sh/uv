@@ -1,7 +1,6 @@
 //! Takes a wheel and installs it into a venv.
 
 use std::io;
-
 use std::path::PathBuf;
 
 use platform_info::PlatformInfoError;

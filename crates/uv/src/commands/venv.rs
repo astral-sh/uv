@@ -28,6 +28,7 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
+use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{pip, ExitStatus, SharedState};
@@ -54,6 +55,7 @@ pub(crate) async fn venv(
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
+    relocatable: bool,
 ) -> Result<ExitStatus> {
     match venv_impl(
         path,
@@ -74,6 +76,7 @@ pub(crate) async fn venv(
         native_tls,
         cache,
         printer,
+        relocatable,
     )
     .await
     {
@@ -125,6 +128,7 @@ async fn venv_impl(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
+    relocatable: bool,
 ) -> miette::Result<ExitStatus> {
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
@@ -137,6 +141,9 @@ async fn venv_impl(
     let mut interpreter_request = python_request.map(PythonRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {
         interpreter_request = request_from_version_file().await.into_diagnostic()?;
+    }
+    if preview.is_disabled() && relocatable {
+        warn_user_once!("`--relocatable` is experimental and may change without warning");
     }
 
     // Locate the Python interpreter to use in the environment
@@ -192,6 +199,7 @@ async fn venv_impl(
         prompt,
         system_site_packages,
         allow_existing,
+        relocatable,
     )
     .map_err(VenvError::Creation)?;
 

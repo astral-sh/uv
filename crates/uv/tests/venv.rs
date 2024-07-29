@@ -577,6 +577,55 @@ fn verify_pyvenv_cfg() {
     let version = env!("CARGO_PKG_VERSION").to_string();
     let search_string = format!("uv = {version}");
     pyvenv_cfg.assert(predicates::str::contains(search_string));
+
+    // Not relocatable by default.
+    pyvenv_cfg.assert(predicates::str::contains("relocatable = false"));
+}
+
+#[test]
+fn verify_pyvenv_cfg_relocatable() {
+    let context = TestContext::new("3.12");
+
+    // Create a virtual environment at `.venv`.
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+
+    context.venv.assert(predicates::path::is_dir());
+
+    // Check pyvenv.cfg exists
+    pyvenv_cfg.assert(predicates::path::is_file());
+
+    // Relocatable flag is set.
+    pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+
+    // Activate scripts contain the relocatable boilerplate
+    let scripts = if cfg!(windows) {
+        context.venv.child("Scripts")
+    } else {
+        context.venv.child("bin")
+    };
+
+    let activate_sh = scripts.child("activate");
+    activate_sh.assert(predicates::path::is_file());
+    activate_sh.assert(predicates::str::contains(r#"VIRTUAL_ENV=''"$(dirname -- "$(CDPATH= cd -- "$(dirname -- ${BASH_SOURCE[0]:-${(%):-%x}})" && echo "$PWD")")"''"#));
+
+    let activate_bat = scripts.child("activate.bat");
+    activate_bat.assert(predicates::path::is_file());
+    activate_bat.assert(predicates::str::contains(
+        r#"@for %%i in ("%~dp0..") do @set "VIRTUAL_ENV=%%~fi""#,
+    ));
+
+    let activate_fish = scripts.child("activate.fish");
+    activate_fish.assert(predicates::path::is_file());
+    activate_fish.assert(predicates::str::contains(r#"set -gx VIRTUAL_ENV ''"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"''"#));
 }
 
 /// Ensure that a nested virtual environment uses the same `home` directory as the parent.

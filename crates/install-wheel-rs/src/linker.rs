@@ -37,6 +37,7 @@ pub struct Locks(Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>);
 #[instrument(skip_all, fields(wheel = %filename))]
 pub fn install_wheel(
     layout: &Layout,
+    relocatable: bool,
     wheel: impl AsRef<Path>,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
@@ -97,8 +98,22 @@ pub fn install_wheel(
         debug!(?name, "Writing entrypoints");
 
         fs_err::create_dir_all(&layout.scheme.scripts)?;
-        write_script_entrypoints(layout, site_packages, &console_scripts, &mut record, false)?;
-        write_script_entrypoints(layout, site_packages, &gui_scripts, &mut record, true)?;
+        write_script_entrypoints(
+            layout,
+            relocatable,
+            site_packages,
+            &console_scripts,
+            &mut record,
+            false,
+        )?;
+        write_script_entrypoints(
+            layout,
+            relocatable,
+            site_packages,
+            &gui_scripts,
+            &mut record,
+            true,
+        )?;
     }
 
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
@@ -108,6 +123,7 @@ pub fn install_wheel(
         debug!(?name, "Installing data");
         install_data(
             layout,
+            relocatable,
             site_packages,
             &data_dir,
             &name,

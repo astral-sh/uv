@@ -385,6 +385,7 @@ pub(crate) async fn run(
             uv_virtualenv::Prompt::None,
             false,
             false,
+            false,
         )?;
 
         match spec {
