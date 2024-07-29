@@ -44,6 +44,7 @@ pub(crate) async fn run(
     extras: ExtrasSpecification,
     dev: bool,
     python: Option<String>,
+    directory: Option<PathBuf>,
     settings: ResolverInstallerSettings,
     isolated: bool,
     preview: PreviewMode,
@@ -89,6 +90,12 @@ pub(crate) async fn run(
 
     let reporter = PythonDownloadReporter::single(printer);
 
+    let directory = if let Some(directory) = directory {
+        directory.simple_canonicalize()?
+    } else {
+        std::env::current_dir()?
+    };
+
     // Determine whether the command to execute is a PEP 723 script.
     let script_interpreter = if let RunCommand::Python(target, _) = &command {
         if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
@@ -102,7 +109,7 @@ pub(crate) async fn run(
             let python_request = if let Some(request) = python.as_deref() {
                 Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
-            } else if let Some(request) = request_from_version_file(None).await? {
+            } else if let Some(request) = request_from_version_file(Some(&directory)).await? {
                 Some(request)
                 // (3) `Requires-Python` in `pyproject.toml`
             } else {
@@ -167,15 +174,13 @@ pub(crate) async fn run(
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
+                Workspace::discover(&directory, &DiscoveryOptions::default())
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
-            match VirtualProject::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
-                .await
-            {
+            match VirtualProject::discover(&directory, &DiscoveryOptions::default()).await {
                 Ok(project) => Some(project),
                 Err(WorkspaceError::MissingPyprojectToml) => None,
                 Err(WorkspaceError::NonWorkspace(_)) => None,
