@@ -316,9 +316,9 @@ dependencies = [
 
 [[package]]
 name = "axoupdater"
-version = "0.6.9"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "720e671dc9dd9da3394476339a1f947d5af473fd106037e25218a59664c059be"
+checksum = "3adfac228780fcf162617739408bd8edeb1ae1d497c95082759c5e607cac1e71"
 dependencies = [
  "axoasset",
  "axoprocess",
@@ -2725,7 +2725,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.3",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
