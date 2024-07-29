@@ -344,7 +344,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target-arch: ["x86_64", "i686", "aarch64"]
+        target-arch: ["x86_64", "i686"]
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
