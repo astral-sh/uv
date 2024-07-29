@@ -21,7 +21,7 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
     IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
-    TargetTriple, Upgrade,
+    TargetTriple, Upgrade, VersionControl,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonFetch, PythonPreference, PythonVersion, Target};
@@ -154,6 +154,7 @@ pub(crate) struct InitSettings {
     pub(crate) path: Option<String>,
     pub(crate) name: Option<PackageName>,
     pub(crate) r#virtual: bool,
+    pub(crate) version_control: Option<VersionControl>,
     pub(crate) no_readme: bool,
     pub(crate) python: Option<String>,
 }
@@ -166,6 +167,7 @@ impl InitSettings {
             path,
             name,
             r#virtual,
+            vcs,
             no_readme,
             python,
         } = args;
@@ -174,6 +176,7 @@ impl InitSettings {
             path,
             name,
             r#virtual,
+            version_control: vcs,
             no_readme,
             python,
         }

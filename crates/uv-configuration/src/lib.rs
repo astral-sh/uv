@@ -10,6 +10,7 @@ pub use overrides::*;
 pub use package_options::*;
 pub use preview::*;
 pub use target_triple::*;
+pub use vcs_options::*;
 
 mod authentication;
 mod build_options;
@@ -23,3 +24,4 @@ mod overrides;
 mod package_options;
 mod preview;
 mod target_triple;
+mod vcs_options;

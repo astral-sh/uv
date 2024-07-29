@@ -875,6 +875,7 @@ async fn run_project(
                 args.r#virtual,
                 args.no_readme,
                 args.python,
+                args.version_control,
                 globals.isolated,
                 globals.preview,
                 globals.python_preference,
