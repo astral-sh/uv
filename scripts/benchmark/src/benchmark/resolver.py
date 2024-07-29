@@ -67,6 +67,7 @@ class Benchmark(enum.Enum):
     RESOLVE_COLD = "resolve-cold"
     RESOLVE_WARM = "resolve-warm"
     RESOLVE_INCREMENTAL = "resolve-incremental"
+    RESOLVE_NOOP = "resolve-noop"
     INSTALL_COLD = "install-cold"
     INSTALL_WARM = "install-warm"
 
@@ -95,6 +96,8 @@ class Suite(abc.ABC):
                 return self.resolve_warm(requirements_file, cwd=cwd)
             case Benchmark.RESOLVE_INCREMENTAL:
                 return self.resolve_incremental(requirements_file, cwd=cwd)
+            case Benchmark.RESOLVE_NOOP:
+                return self.resolve_noop(requirements_file, cwd=cwd)
             case Benchmark.INSTALL_COLD:
                 return self.install_cold(requirements_file, cwd=cwd)
             case Benchmark.INSTALL_WARM:
@@ -127,6 +130,14 @@ class Suite(abc.ABC):
         The resolution is performed with an existing lockfile, and the cache directory
         is _not_ cleared between runs. However, a new dependency is added to the set
         of input requirements, which does not appear in the lockfile.
+        """
+
+    @abc.abstractmethod
+    def resolve_noop(self, requirements_file: str, *, cwd: str) -> Command | None:
+        """Resolve a modified lockfile using pip-tools.
+
+        The resolution is performed with an existing lockfile, and the cache directory
+        is _not_ cleared between runs.
         """
 
     @abc.abstractmethod
@@ -231,6 +242,40 @@ class PipCompile(Suite):
             ],
         )
 
+    def resolve_noop(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        output_file = os.path.join(cwd, "requirements.txt")
+
+        # First, perform a cold resolution, to ensure that the lockfile exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [
+                self.path,
+                os.path.abspath(requirements_file),
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+            ],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(output_file), f"Lock file doesn't exist at: {output_file}"
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_NOOP.value})",
+            prepare=None,
+            command=[
+                self.path,
+                requirements_file,
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+            ],
+        )
+
     def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None: ...
 
     def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None: ...
@@ -248,6 +293,8 @@ class PipSync(Suite):
     def resolve_incremental(
         self, requirements_file: str, *, cwd: str
     ) -> Command | None: ...
+
+    def resolve_noop(self, requirements_file: str, *, cwd: str) -> Command | None: ...
 
     def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         cache_dir = os.path.join(cwd, ".cache")
@@ -434,6 +481,43 @@ class Poetry(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
             prepare=f"rm {poetry_lock} && cp {baseline} {poetry_lock}",
+            command=[
+                f"POETRY_CONFIG_DIR={config_dir}",
+                f"POETRY_CACHE_DIR={cache_dir}",
+                f"POETRY_DATA_DIR={data_dir}",
+                self.path,
+                "lock",
+                "--no-update",
+                "--directory",
+                cwd,
+            ],
+        )
+
+    def resolve_noop(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        poetry_lock = os.path.join(cwd, "poetry.lock")
+        assert not os.path.exists(
+            poetry_lock
+        ), f"Lock file already exists at: {poetry_lock}"
+
+        # Run a resolution, to ensure that the lockfile exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(poetry_lock), f"Lock file doesn't exist at: {poetry_lock}"
+
+        config_dir = os.path.join(cwd, "config", "pypoetry")
+        cache_dir = os.path.join(cwd, "cache", "pypoetry")
+        data_dir = os.path.join(cwd, "data", "pypoetry")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_NOOP.value})",
+            prepare=None,
             command=[
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
@@ -654,6 +738,36 @@ class Pdm(Suite):
             ],
         )
 
+    def resolve_noop(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        pdm_lock = os.path.join(cwd, "pdm.lock")
+        assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
+
+        # Run a resolution, to ensure that the lockfile exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(pdm_lock), f"Lock file doesn't exist at: {pdm_lock}"
+
+        cache_dir = os.path.join(cwd, "cache", "pdm")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_NOOP.value})",
+            prepare=f"{self.path} config cache_dir {cache_dir}",
+            command=[
+                self.path,
+                "lock",
+                "--update-reuse",
+                "--project",
+                cwd,
+            ],
+        )
+
     def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         self.setup(requirements_file, cwd=cwd)
 
@@ -730,7 +844,11 @@ class UvPip(Suite):
         self.name = path or "uv"
         self.path = path or os.path.join(
             os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                os.path.dirname(
+                    os.path.dirname(
+                        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    )
+                )
             ),
             "target",
             "release",
@@ -824,6 +942,25 @@ class UvPip(Suite):
             ],
         )
 
+    def resolve_noop(self, requirements_file: str, *, cwd: str) -> Command | None:
+        cache_dir = os.path.join(cwd, ".cache")
+        output_file = os.path.join(cwd, "requirements.txt")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_NOOP.value})",
+            prepare=None,
+            command=[
+                self.path,
+                "pip",
+                "compile",
+                requirements_file,
+                "--cache-dir",
+                cache_dir,
+                "--output-file",
+                output_file,
+            ],
+        )
+
     def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         cache_dir = os.path.join(cwd, ".cache")
         venv_dir = os.path.join(cwd, ".venv")
@@ -867,7 +1004,11 @@ class UvProject(Suite):
         self.name = path or "uv"
         self.path = path or os.path.join(
             os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                os.path.dirname(
+                    os.path.dirname(
+                        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    )
+                )
             ),
             "target",
             "release",
@@ -998,6 +1139,39 @@ class UvProject(Suite):
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
             prepare=f"rm -f {uv_lock} && cp {baseline} {uv_lock}",
+            command=[
+                self.path,
+                "lock",
+                "--cache-dir",
+                cache_dir,
+                "--directory",
+                cwd,
+                "--python",
+                "3.12.3",
+            ],
+        )
+
+    def resolve_noop(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+
+        uv_lock = os.path.join(cwd, "uv.lock")
+        assert not os.path.exists(uv_lock), f"Lock file already exists at: {uv_lock}"
+
+        # Run a resolution, to ensure that the lockfile exists.
+        # TODO(charlie): Make this a `setup`.
+        subprocess.check_call(
+            [self.path, "lock"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        assert os.path.exists(uv_lock), f"Lock file doesn't exist at: {uv_lock}"
+
+        cache_dir = os.path.join(cwd, ".cache")
+
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_NOOP.value})",
+            prepare=None,
             command=[
                 self.path,
                 "lock",
