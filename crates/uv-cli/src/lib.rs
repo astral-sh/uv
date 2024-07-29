@@ -1946,6 +1946,12 @@ pub struct RunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
+
+    /// Whether to show resolver and installer output from any environment modifications.
+    ///
+    /// By default, environment modifications are omitted, but enabled under `--verbose`.
+    #[arg(long, env = "UV_SHOW_RESOLUTION", value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
+    pub show_resolution: bool,
 }
 
 #[derive(Args)]
@@ -2307,6 +2313,12 @@ pub struct ToolRunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
+
+    /// Whether to show resolver and installer output from any environment modifications.
+    ///
+    /// By default, environment modifications are omitted, but enabled under `--verbose`.
+    #[arg(long, env = "UV_SHOW_RESOLUTION", value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
+    pub show_resolution: bool,
 }
 
 #[derive(Args)]

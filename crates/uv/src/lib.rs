@@ -650,6 +650,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.command,
                 args.from,
                 &requirements,
+                args.show_resolution || globals.verbose > 0,
                 args.python,
                 args.settings,
                 invocation_source,
@@ -910,6 +911,7 @@ async fn run_project(
             commands::run(
                 args.command,
                 requirements,
+                args.show_resolution || globals.verbose > 0,
                 args.locked,
                 args.frozen,
                 args.package,
