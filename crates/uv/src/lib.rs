@@ -62,6 +62,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         uv_warnings::enable();
     }
 
+    // Switch directories as early as possible.
+    if let Some(directory) = cli.global_args.directory.as_ref() {
+        std::env::set_current_dir(directory)?;
+    }
+
     // Load configuration from the filesystem, prioritizing (in order):
     // 1. The configuration file specified on the command-line.
     // 2. The configuration file in the current workspace (i.e., the `pyproject.toml` or `uv.toml`
@@ -915,7 +920,6 @@ async fn run_project(
                 args.extras,
                 args.dev,
                 args.python,
-                args.directory,
                 args.settings,
                 globals.isolated,
                 globals.preview,
@@ -949,7 +953,6 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_fetch,
                 args.settings,
-                args.directory,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -972,7 +975,6 @@ async fn run_project(
                 args.frozen,
                 args.python,
                 args.settings,
-                args.directory,
                 globals.preview,
                 globals.python_preference,
                 globals.python_fetch,

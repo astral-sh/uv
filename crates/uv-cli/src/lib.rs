@@ -164,6 +164,10 @@ pub struct GlobalArgs {
     /// Hides all progress outputs when set
     #[arg(global = true, long)]
     pub no_progress: bool,
+
+    /// Change to the given directory prior to running the command.
+    #[arg(global = true, long, hide = true)]
+    pub directory: Option<PathBuf>,
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
@@ -1932,10 +1936,6 @@ pub struct RunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
-
-    /// The path to the project. Defaults to the current working directory.
-    #[arg(long, hide = true)]
-    pub directory: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -2000,10 +2000,6 @@ pub struct SyncArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
-
-    /// The path to the project. Defaults to the current working directory.
-    #[arg(long, hide = true)]
-    pub directory: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -2039,10 +2035,6 @@ pub struct LockArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
-
-    /// The path to the project. Defaults to the current working directory.
-    #[arg(long, hide = true)]
-    pub directory: Option<PathBuf>,
 }
 
 #[derive(Args)]

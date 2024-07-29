@@ -865,9 +865,7 @@ fn run_from_directory() -> Result<()> {
         .arg("project")
         .arg("main");
 
-    let mut filters = context.filters();
-    filters.push((r"project(\\|/).venv", "[VENV]"));
-    uv_snapshot!(filters, command_with_args, @r###"
+    uv_snapshot!(context.filters(), command_with_args, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -875,7 +873,7 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtualenv at: [VENV]
+    Creating virtualenv at: .venv
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
