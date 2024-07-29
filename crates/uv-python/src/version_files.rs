@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use fs_err as fs;
 use tracing::debug;
 
@@ -13,15 +15,17 @@ pub static PYTHON_VERSIONS_FILENAME: &str = ".python-versions";
 ///
 /// Prefers `.python-versions` then `.python-version`.
 /// If only one Python version is desired, use [`request_from_version_files`] which prefers the `.python-version` file.
-pub async fn requests_from_version_file() -> Result<Option<Vec<PythonRequest>>, std::io::Error> {
-    if let Some(versions) = read_versions_file().await? {
+pub async fn requests_from_version_file(
+    directory: Option<&Path>,
+) -> Result<Option<Vec<PythonRequest>>, std::io::Error> {
+    if let Some(versions) = read_versions_file(directory).await? {
         Ok(Some(
             versions
                 .into_iter()
                 .map(|version| PythonRequest::parse(&version))
                 .collect(),
         ))
-    } else if let Some(version) = read_version_file().await? {
+    } else if let Some(version) = read_version_file(directory).await? {
         Ok(Some(vec![PythonRequest::parse(&version)]))
     } else {
         Ok(None)
@@ -30,12 +34,17 @@ pub async fn requests_from_version_file() -> Result<Option<Vec<PythonRequest>>, 
 
 /// Read a [`PythonRequest`] from a version file, if present.
 ///
+/// Find the version file inside directory, or the current directory
+/// if None.
+///
 /// Prefers `.python-version` then the first entry of `.python-versions`.
 /// If multiple Python versions are desired, use [`requests_from_version_files`] instead.
-pub async fn request_from_version_file() -> Result<Option<PythonRequest>, std::io::Error> {
-    if let Some(version) = read_version_file().await? {
+pub async fn request_from_version_file(
+    directory: Option<&Path>,
+) -> Result<Option<PythonRequest>, std::io::Error> {
+    if let Some(version) = read_version_file(directory).await? {
         Ok(Some(PythonRequest::parse(&version)))
-    } else if let Some(versions) = read_versions_file().await? {
+    } else if let Some(versions) = read_versions_file(directory).await? {
         Ok(versions
             .into_iter()
             .next()
@@ -52,10 +61,17 @@ pub async fn write_version_file(version: &str) -> Result<(), std::io::Error> {
     fs::tokio::write(PYTHON_VERSION_FILENAME, format!("{version}\n")).await
 }
 
-async fn read_versions_file() -> Result<Option<Vec<String>>, std::io::Error> {
-    match fs::tokio::read_to_string(PYTHON_VERSIONS_FILENAME).await {
+async fn read_versions_file(
+    directory: Option<&Path>,
+) -> Result<Option<Vec<String>>, std::io::Error> {
+    let file_path = directory.map(|pth| pth.join(PYTHON_VERSIONS_FILENAME));
+    let path = file_path
+        .as_deref()
+        .unwrap_or(Path::new(PYTHON_VERSIONS_FILENAME));
+
+    match fs::tokio::read_to_string(path).await {
         Ok(content) => {
-            debug!("Reading requests from `{PYTHON_VERSIONS_FILENAME}`");
+            debug!("Reading requests from `{}`", path.display());
             Ok(Some(
                 content
                     .lines()
@@ -73,10 +89,15 @@ async fn read_versions_file() -> Result<Option<Vec<String>>, std::io::Error> {
     }
 }
 
-async fn read_version_file() -> Result<Option<String>, std::io::Error> {
-    match fs::tokio::read_to_string(PYTHON_VERSION_FILENAME).await {
+async fn read_version_file(directory: Option<&Path>) -> Result<Option<String>, std::io::Error> {
+    let file_path = directory.map(|pth| pth.join(PYTHON_VERSION_FILENAME));
+    let path = file_path
+        .as_deref()
+        .unwrap_or(Path::new(PYTHON_VERSION_FILENAME));
+
+    match fs::tokio::read_to_string(path).await {
         Ok(content) => {
-            debug!("Reading requests from `{PYTHON_VERSION_FILENAME}`");
+            debug!("Reading requests from `{}`", path.display());
             Ok(content
                 .lines()
                 .find(|line| {

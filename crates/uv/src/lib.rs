@@ -916,6 +916,7 @@ async fn run_project(
                 args.extras,
                 args.dev,
                 args.python,
+                args.directory,
                 args.settings,
                 globals.isolated,
                 globals.preview,

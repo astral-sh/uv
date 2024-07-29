@@ -193,6 +193,7 @@ pub(crate) struct RunSettings {
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
+    pub(crate) directory: Option<PathBuf>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
@@ -217,6 +218,7 @@ impl RunSettings {
             refresh,
             package,
             python,
+            directory,
         } = args;
 
         Self {
@@ -235,6 +237,7 @@ impl RunSettings {
                 .collect(),
             package,
             python,
+            directory,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),

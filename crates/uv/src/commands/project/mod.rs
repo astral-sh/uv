@@ -161,7 +161,9 @@ impl FoundInterpreter {
         let python_request = if let Some(request) = python_request {
             Some(request)
             // (2) Request from `.python-version`
-        } else if let Some(request) = request_from_version_file().await? {
+        } else if let Some(request) =
+            request_from_version_file(Some(workspace.install_path())).await?
+        {
             Some(request)
             // (3) `Requires-Python` in `pyproject.toml`
         } else {
