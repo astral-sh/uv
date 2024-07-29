@@ -290,7 +290,9 @@ fn is_extended_transient_error(res: &Result<Response, reqwest_middleware::Error>
     // Check for connection reset errors, these are usually `Body` errors which are not retried by default.
     if let Err(reqwest_middleware::Error::Reqwest(err)) = res {
         if let Some(io) = find_source::<std::io::Error>(&err) {
-            if io.kind() == std::io::ErrorKind::ConnectionReset {
+            if io.kind() == std::io::ErrorKind::ConnectionReset
+                || io.kind() == std::io::ErrorKind::UnexpectedEof
+            {
                 return true;
             }
         }
