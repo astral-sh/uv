@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use anyhow::Result;
 
 use uv_auth::store_credentials_from_url;
@@ -10,7 +8,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DEV_DEPENDENCIES;
-use uv_fs::{Simplified, CWD};
+use uv_fs::CWD;
 use uv_installer::SitePackages;
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
@@ -37,7 +35,6 @@ pub(crate) async fn sync(
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
     settings: ResolverInstallerSettings,
-    directory: Option<PathBuf>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -49,14 +46,8 @@ pub(crate) async fn sync(
         warn_user_once!("`uv sync` is experimental and may change without warning");
     }
 
-    let directory = if let Some(directory) = directory {
-        directory.simple_canonicalize()?
-    } else {
-        CWD.to_path_buf()
-    };
-
     // Identify the project
-    let project = VirtualProject::discover(&directory, &DiscoveryOptions::default()).await?;
+    let project = VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?;
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
