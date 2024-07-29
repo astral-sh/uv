@@ -44,15 +44,13 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             // We don't know the file permissions here, because we haven't seen the central directory yet.
             let file = fs_err::tokio::File::create(&path).await?;
             let size = entry.reader().entry().uncompressed_size();
-            if size > 0 {
-                let mut writer = if let Ok(size) = usize::try_from(size) {
-                    tokio::io::BufWriter::with_capacity(std::cmp::min(size, 1 << 20), file)
-                } else {
-                    tokio::io::BufWriter::new(file)
-                };
-                let mut reader = entry.reader_mut().compat();
-                tokio::io::copy(&mut reader, &mut writer).await?;
-            }
+            let mut writer = if let Ok(size) = usize::try_from(size) {
+                tokio::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), file)
+            } else {
+                tokio::io::BufWriter::new(file)
+            };
+            let mut reader = entry.reader_mut().compat();
+            tokio::io::copy(&mut reader, &mut writer).await?;
         }
 
         // Close current file to get access to the next one. See docs:
