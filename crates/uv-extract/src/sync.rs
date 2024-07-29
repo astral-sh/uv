@@ -12,7 +12,6 @@ use crate::Error;
 pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
     reader: R,
     target: &Path,
-    buffer: bool,
 ) -> Result<(), Error> {
     // Unzip in parallel.
     let reader = std::io::BufReader::new(reader);
@@ -47,19 +46,15 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             }
 
             // Copy the file contents.
-            let mut outfile = fs_err::File::create(&path)?;
+            let outfile = fs_err::File::create(&path)?;
             let size = file.size();
             if size > 0 {
-                if buffer {
-                    let mut writer = if let Ok(size) = usize::try_from(size) {
-                        std::io::BufWriter::with_capacity(std::cmp::min(size, 1 << 20), outfile)
-                    } else {
-                        std::io::BufWriter::new(outfile)
-                    };
-                    std::io::copy(&mut file, &mut writer)?;
+                let mut writer = if let Ok(size) = usize::try_from(size) {
+                    std::io::BufWriter::with_capacity(std::cmp::min(size, 1 << 20), outfile)
                 } else {
-                    std::io::copy(&mut file, &mut outfile)?;
-                }
+                    std::io::BufWriter::new(outfile)
+                };
+                std::io::copy(&mut file, &mut writer)?;
             }
 
             // See `uv_extract::stream::unzip`. For simplicity, this is identical with the code there except for being
