@@ -1,8 +1,7 @@
-use std::convert;
-
 use anyhow::{Context, Error, Result};
 use install_wheel_rs::{linker::LinkMode, Layout};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use std::convert;
 use tokio::sync::oneshot;
 use tracing::instrument;
 
