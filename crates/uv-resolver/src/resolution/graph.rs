@@ -1,16 +1,17 @@
-use distribution_types::{
-    Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
-    VersionOrUrlRef,
-};
 use indexmap::IndexSet;
-use pep440_rs::{Version, VersionSpecifier};
-use pep508_rs::{MarkerEnvironment, MarkerTree};
 use petgraph::{
     graph::{Graph, NodeIndex},
     Directed,
 };
-use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+
+use distribution_types::{
+    Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
+    VersionOrUrlRef,
+};
+use pep440_rs::{Version, VersionSpecifier};
+use pep508_rs::{MarkerEnvironment, MarkerTree};
+use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_git::GitResolver;
@@ -18,7 +19,6 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
-use crate::pubgrub::PubGrubDistribution;
 use crate::python_requirement::PythonTarget;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
@@ -274,44 +274,19 @@ impl ResolutionGraph {
             // Create the distribution.
             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
 
-            // Extract the hashes, preserving those that were already present in the
-            // lockfile if necessary.
-            let hashes = if let Some(digests) = preferences
-                .match_hashes(name, version)
-                .filter(|digests| !digests.is_empty())
-            {
-                digests.to_vec()
-            } else if let Some(metadata_response) = index.distributions().get(&dist.version_id()) {
-                if let MetadataResponse::Found(ref archive) = *metadata_response {
-                    let mut digests = archive.hashes.clone();
-                    digests.sort_unstable();
-                    digests
-                } else {
-                    vec![]
-                }
-            } else {
-                vec![]
-            };
+            let version_id = VersionId::from_url(&url.verbatim);
+
+            // Extract the hashes.
+            let hashes = Self::get_hashes(&version_id, name, version, preferences, index);
 
             // Extract the metadata.
             let metadata = {
-                let dist = PubGrubDistribution::from_url(name, url);
-
-                let response = index
-                    .distributions()
-                    .get(&dist.version_id())
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Every package should have metadata: {:?}",
-                            dist.version_id()
-                        )
-                    });
+                let response = index.distributions().get(&version_id).unwrap_or_else(|| {
+                    panic!("Every package should have metadata: {version_id:?}")
+                });
 
                 let MetadataResponse::Found(archive) = &*response else {
-                    panic!(
-                        "Every package should have metadata: {:?}",
-                        dist.version_id()
-                    )
+                    panic!("Every package should have metadata: {version_id:?}")
                 };
 
                 archive.metadata.clone()
@@ -323,6 +298,8 @@ impl ResolutionGraph {
                 .get(name, version)
                 .expect("Every package should be pinned")
                 .clone();
+
+            let version_id = dist.version_id();
 
             // Track yanks for any registry distributions.
             match dist.yanked() {
@@ -341,49 +318,17 @@ impl ResolutionGraph {
                 }
             }
 
-            // Extract the hashes, preserving those that were already present in the
-            // lockfile if necessary.
-            let hashes = if let Some(digests) = preferences
-                .match_hashes(name, version)
-                .filter(|digests| !digests.is_empty())
-            {
-                digests.to_vec()
-            } else if let Some(versions_response) = index.packages().get(name) {
-                if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                    version_maps
-                        .iter()
-                        .find_map(|version_map| version_map.hashes(version))
-                        .map(|mut digests| {
-                            digests.sort_unstable();
-                            digests
-                        })
-                        .unwrap_or_default()
-                } else {
-                    vec![]
-                }
-            } else {
-                vec![]
-            };
+            // Extract the hashes.
+            let hashes = Self::get_hashes(&version_id, name, version, preferences, index);
 
             // Extract the metadata.
             let metadata = {
-                let dist = PubGrubDistribution::from_registry(name, version);
-
-                let response = index
-                    .distributions()
-                    .get(&dist.version_id())
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Every package should have metadata: {:?}",
-                            dist.version_id()
-                        )
-                    });
+                let response = index.distributions().get(&version_id).unwrap_or_else(|| {
+                    panic!("Every package should have metadata: {version_id:?}")
+                });
 
                 let MetadataResponse::Found(archive) = &*response else {
-                    panic!(
-                        "Every package should have metadata: {:?}",
-                        dist.version_id()
-                    )
+                    panic!("Every package should have metadata: {version_id:?}")
                 };
 
                 archive.metadata.clone()
@@ -391,6 +336,54 @@ impl ResolutionGraph {
 
             (dist, hashes, metadata)
         })
+    }
+
+    /// Identify the hashes for the [`VersionId`], preserving any hashes that were provided by the
+    /// lockfile.
+    fn get_hashes(
+        version_id: &VersionId,
+        name: &PackageName,
+        version: &Version,
+        preferences: &Preferences,
+        index: &InMemoryIndex,
+    ) -> Vec<HashDigest> {
+        // 1. Look for hashes from the lockfile.
+        if let Some(digests) = preferences.match_hashes(name, version) {
+            if !digests.is_empty() {
+                return digests.to_vec();
+            }
+        }
+
+        // 2. Look for hashes from the registry, which are served at the package level.
+        if let Some(versions_response) = index.packages().get(name) {
+            if let VersionsResponse::Found(ref version_maps) = *versions_response {
+                if let Some(digests) = version_maps
+                    .iter()
+                    .find_map(|version_map| version_map.hashes(version))
+                    .map(|mut digests| {
+                        digests.sort_unstable();
+                        digests
+                    })
+                {
+                    if !digests.is_empty() {
+                        return digests;
+                    }
+                }
+            }
+        }
+
+        // 3. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
+        if let Some(metadata_response) = index.distributions().get(version_id) {
+            if let MetadataResponse::Found(ref archive) = *metadata_response {
+                let mut digests = archive.hashes.clone();
+                digests.sort_unstable();
+                if !digests.is_empty() {
+                    return digests;
+                }
+            }
+        }
+
+        vec![]
     }
 
     /// Returns an iterator over the distinct packages in the graph.

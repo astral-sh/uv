@@ -879,9 +879,9 @@ pub fn run_and_format<T: AsRef<str>>(
         if let Some(windows_filters) = windows_filters {
             // The optional leading +/- is for install logs, the optional next line is for lockfiles
             let windows_only_deps = [
-                ("( [+-] )?colorama==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
+                ("( [+-] )?colorama==\\d+(\\.[\\d+])+( \\\\\n    --hash=.*)?\n(    # via .*\n)?"),
                 ("( [+-] )?colorama==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),
-                ("( [+-] )?tzdata==\\d+(\\.[\\d+])+\n(    # via .*\n)?"),
+                ("( [+-] )?tzdata==\\d+(\\.[\\d+])+( \\\\\n    --hash=.*)?\n(    # via .*\n)?"),
                 ("( [+-] )?tzdata==\\d+(\\.[\\d+])+(\\s+# via .*)?\n"),
             ];
             let mut removed_packages = 0;
