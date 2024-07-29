@@ -1,13 +1,13 @@
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Cursor, Read, Seek, Write};
+use std::path::{Path, PathBuf};
+use std::{env, io};
+
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Cursor, Read, Seek, Write};
-use std::path::{Path, PathBuf};
-use std::{env, io};
 use tracing::{instrument, warn};
 use walkdir::WalkDir;
 use zip::write::FileOptions;
@@ -300,8 +300,9 @@ pub(crate) fn write_script_entrypoints(
             })?;
 
         // Generate the launcher script.
-        let python_executable = get_python_executable(layout, relocatable)?;
-        let launcher_executable = get_script_executable(&python_executable, is_gui);
+        let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
+        let launcher_executable =
+            get_relocatable_executable(launcher_executable, layout, relocatable)?;
         let launcher_python_script = get_script_launcher(
             entrypoint,
             &format_shebang(&launcher_executable, &layout.os_name, relocatable),
@@ -514,8 +515,8 @@ fn install_script(
                 false
             }
         };
-        let python_executable = get_python_executable(layout, relocatable)?;
-        let executable = get_script_executable(&python_executable, is_gui);
+        let executable = get_script_executable(&layout.sys_executable, is_gui);
+        let executable = get_relocatable_executable(executable, layout, relocatable)?;
         let start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
@@ -710,26 +711,23 @@ pub(crate) fn extra_dist_info(
 ///
 /// Returns `sys.executable` if the wheel is not relocatable; otherwise, returns a path relative
 /// to the scripts directory.
-pub(crate) fn get_python_executable(
+pub(crate) fn get_relocatable_executable(
+    executable: PathBuf,
     layout: &Layout,
     relocatable: bool,
-) -> Result<Cow<'_, Path>, Error> {
+) -> Result<PathBuf, Error> {
     Ok(if relocatable {
-        Cow::Owned(
-            pathdiff::diff_paths(&layout.sys_executable, &layout.scheme.scripts).ok_or_else(
-                || {
-                    Error::Io(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!(
-                            "Could not find relative path for: {}",
-                            layout.sys_executable.simplified_display()
-                        ),
-                    ))
-                },
-            )?,
-        )
+        pathdiff::diff_paths(&executable, &layout.scheme.scripts).ok_or_else(|| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Could not find relative path for: {}",
+                    executable.simplified_display()
+                ),
+            ))
+        })?
     } else {
-        Cow::Borrowed(&layout.sys_executable)
+        executable
     })
 }
 
@@ -1066,25 +1064,6 @@ mod test {
 
         let script_path = get_script_executable(&dot_python_exe, false);
         assert_eq!(script_path, dot_python_exe.to_path_buf());
-
-        // Test with relocatable executable.
-        let temp_dir = assert_fs::TempDir::new()?;
-        let python_exe = temp_dir.child("python.exe");
-        let pythonw_exe = temp_dir.child("pythonw.exe");
-        python_exe.write_str("")?;
-        pythonw_exe.write_str("")?;
-
-        // Truncate to a relative path.
-        let python_exe = python_exe.path().strip_prefix(temp_dir.path()).unwrap();
-
-        let script_path = get_script_executable(python_exe, true);
-        #[cfg(windows)]
-        assert_eq!(script_path, Path::new("pythonw.exe").to_path_buf());
-        #[cfg(not(windows))]
-        assert_eq!(script_path, Path::new("python.exe").to_path_buf());
-
-        let script_path = get_script_executable(python_exe, false);
-        assert_eq!(script_path, Path::new("python.exe").to_path_buf());
 
         Ok(())
     }
