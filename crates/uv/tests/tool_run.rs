@@ -766,3 +766,48 @@ fn tool_run_requirements_txt_arguments() {
      + werkzeug==3.0.1
     "###);
 }
+
+/// List installed tools when no command arg is given (e.g. `uv tool run`).
+#[test]
+fn tool_run_list_installed() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // No tools installed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    No tools installed
+    "###);
+
+    // Install `black`.
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // List installed tools.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0
+    - black
+    - blackd
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    "###);
+}
