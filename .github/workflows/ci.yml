@@ -1487,7 +1487,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
           cargo run --bin uv -- venv --cache-dir .cache
-          cargo run --bin uv -- pip compile scripts/requirements/airflow.in --cache-dir .cache
+          cargo run --bin uv -- pip compile scripts/requirements/airflow.in --exclude-newer 2024-06-20 --cache-dir .cache
 
       - name: "Build benchmarks"
         run: cargo codspeed build --features codspeed -p bench
