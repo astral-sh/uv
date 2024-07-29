@@ -44,7 +44,6 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             // We don't know the file permissions here, because we haven't seen the central directory yet.
             let file = fs_err::tokio::File::create(&path).await?;
             let size = entry.reader().entry().uncompressed_size();
-            if size > 0 {
                 let mut writer = if let Ok(size) = usize::try_from(size) {
                     tokio::io::BufWriter::with_capacity(std::cmp::min(size, 1 << 20), file)
                 } else {

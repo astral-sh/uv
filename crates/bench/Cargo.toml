@@ -18,11 +18,6 @@ workspace = true
 bench = false
 
 [[bench]]
-name = "distribution-filename"
-path = "benches/distribution_filename.rs"
-harness = false
-
-[[bench]]
 name = "uv"
 path = "benches/uv.rs"
 harness = false
@@ -39,6 +34,7 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
+uv-extract = { workspace = true }
 uv-git = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }
@@ -48,6 +44,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 codspeed-criterion-compat = { version = "2.6.0", default-features = false, optional = true }
 criterion = { version = "0.5.1", default-features = false, features = ["async_tokio"] }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [features]

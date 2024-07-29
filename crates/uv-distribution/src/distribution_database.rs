@@ -687,7 +687,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let target = temp_dir.path().to_owned();
                         move || -> Result<(), uv_extract::Error> {
                             // Unzip the wheel into a temporary directory.
-                            uv_extract::unzip(file, &target)?;
+                            uv_extract::unzip(file, &target, false)?;
                             Ok(())
                         }
                     })
@@ -874,7 +874,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             move || -> Result<TempDir, uv_extract::Error> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(root)?;
-                uv_extract::unzip(fs_err::File::open(path)?, temp_dir.path())?;
+                uv_extract::unzip(fs_err::File::open(path)?, temp_dir.path(), false)?;
                 Ok(temp_dir)
             }
         })
