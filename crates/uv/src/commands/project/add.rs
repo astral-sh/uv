@@ -7,6 +7,7 @@ use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -55,12 +56,12 @@ pub(crate) async fn add(
 
     // Find the project in the workspace.
     let project = if let Some(package) = package {
-        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
+        Workspace::discover(&CWD, &DiscoveryOptions::default())
             .await?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?
     } else {
-        ProjectWorkspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?
+        ProjectWorkspace::discover(&CWD, &DiscoveryOptions::default()).await?
     };
 
     // Discover or create the virtual environment.

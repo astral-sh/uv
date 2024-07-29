@@ -8,6 +8,7 @@ use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
+use uv_fs::CWD;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -47,8 +48,7 @@ pub(crate) async fn tree(
     }
 
     // Find the project requirements.
-    let workspace =
-        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?;
+    let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(

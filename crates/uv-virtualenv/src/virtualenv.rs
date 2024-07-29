@@ -1,6 +1,5 @@
 //! Create a virtual environment.
 
-use std::env;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
@@ -12,7 +11,7 @@ use itertools::Itertools;
 use tracing::info;
 
 use pypi_types::Scheme;
-use uv_fs::{cachedir, Simplified};
+use uv_fs::{cachedir, Simplified, CWD};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_version::version;
 
@@ -131,7 +130,7 @@ pub(crate) fn create(
     };
     let scripts = location.join(&interpreter.virtualenv().scripts);
     let prompt = match prompt {
-        Prompt::CurrentDirectoryName => env::current_dir()?
+        Prompt::CurrentDirectoryName => CWD
             .file_name()
             .map(|name| name.to_string_lossy().to_string()),
         Prompt::Static(value) => Some(value),

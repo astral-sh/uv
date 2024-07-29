@@ -5,6 +5,7 @@ use anyhow::Result;
 use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
+use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_resolver::{Lock, Preference, PreferenceError};
 
@@ -34,7 +35,7 @@ pub async fn read_requirements_txt(
     // Parse the requirements from the lockfile.
     let requirements_txt = RequirementsTxt::parse(
         output_file,
-        std::env::current_dir()?,
+        &*CWD,
         &BaseClientBuilder::new().connectivity(Connectivity::Offline),
     )
     .await?;
