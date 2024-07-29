@@ -13,7 +13,10 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
-use common::{get_bin, python_path_with_versions, uv_snapshot, TestContext};
+use common::{
+    build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions, uv_snapshot,
+    TestContext,
+};
 
 mod common;
 
@@ -27,9 +30,9 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("compile")
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.31/vendor/links.html");
+        .arg(build_vendor_links_url());
     context.add_shared_args(&mut command);
     command.env_remove("UV_EXCLUDE_NEWER");
     command.env("UV_TEST_PYTHON_PATH", python_path);

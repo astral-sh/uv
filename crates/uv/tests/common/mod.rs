@@ -26,10 +26,17 @@ use uv_python::{
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
+pub const PACKSE_VERSION: &str = "0.3.30";
+
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
-pub const BUILD_VENDOR_LINKS_URL: &str =
-    "https://raw.githubusercontent.com/astral-sh/packse/0.3.31/vendor/links.html";
+pub fn build_vendor_links_url() -> String {
+    format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/vendor/links.html")
+}
+
+pub fn packse_index_url() -> String {
+    format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/simple-html/")
+}
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
@@ -299,6 +306,13 @@ impl TestContext {
 
         // Destroy any remaining UNC prefixes (Windows only)
         filters.push((r"\\\\\?\\".to_string(), String::new()));
+
+        // Remove the version from the packse url in lockfile snapshots. This avoid having a huge
+        // diff any time we upgrade packse
+        filters.push((
+            format!("https://astral-sh.github.io/packse/{PACKSE_VERSION}/"),
+            "https://astral-sh.github.io/packse/PACKSE_VERSION/".to_string(),
+        ));
 
         Self {
             temp_dir,

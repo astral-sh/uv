@@ -250,22 +250,28 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
 
 
 def update_common_mod_rs(packse_version: str):
-    """Update the value of `BUILD_VENDOR_LINKS_URL` used in non-scenario tests."""
+    """Update the value of `PACKSE_VERSION` used in non-scenario tests.
+
+    Example:
+    ```rust
+    pub const PACKSE_VERSION: &str = "0.3.30";
+    ```
+    """
     test_common = TESTS_COMMON_MOD_RS.read_text()
-    url_before_version = "https://raw.githubusercontent.com/astral-sh/packse/"
-    url_after_version = "/vendor/links.html"
-    build_vendor_links_url = f"{url_before_version}{packse_version}{url_after_version}"
+    before_version = 'pub const PACKSE_VERSION: &str = "'
+    after_version = '";'
+    build_vendor_links_url = f"{before_version}{packse_version}{after_version}"
     if build_vendor_links_url in test_common:
         logging.info(f"Up-to-date: {TESTS_COMMON_MOD_RS}")
     else:
         logging.info(f"Updating: {TESTS_COMMON_MOD_RS}")
         url_matcher = re.compile(
-            re.escape(url_before_version) + "[^/]+" + re.escape(url_after_version)
+            re.escape(before_version) + '[^"]+' + re.escape(after_version)
         )
         assert (
             len(url_matcher.findall(test_common)) == 1
-        ), f"BUILD_VENDOR_LINKS_URL not found in {TESTS_COMMON_MOD_RS}"
-        test_common = url_matcher.sub(build_vendor_links_url, test_common)
+        ), f"PACKSE_VERSION not found in {TESTS_COMMON_MOD_RS}"
+        test_common = url_matcher.sub(packse_version, test_common)
         TESTS_COMMON_MOD_RS.write_text(test_common)
 
 
