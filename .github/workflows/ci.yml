@@ -357,7 +357,7 @@ jobs:
           workspaces: ${{ github.workspace }}/crates/uv-trampoline
       - name: "Test"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc
+        run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc --test *
 
   typos:
     runs-on: ubuntu-latest
