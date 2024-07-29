@@ -59,6 +59,17 @@ impl CachedWheel {
         }
     }
 
+    /// Convert a [`CachedWheel`] into an editable [`CachedDirectUrlDist`].
+    pub fn into_editable(self, url: VerbatimUrl) -> CachedDirectUrlDist {
+        CachedDirectUrlDist {
+            filename: self.filename,
+            url,
+            path: self.entry.into_path_buf(),
+            editable: true,
+            hashes: self.hashes,
+        }
+    }
+
     /// Read a cached wheel from a `.http` pointer (e.g., `anyio-4.0.0-py3-none-any.http`).
     pub fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
