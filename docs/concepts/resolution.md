@@ -117,7 +117,7 @@ will be treated as a lower bound. For example, `--universal --python-version 3.7
 for Python 3.7 and later.
 
 If using uv's [project](../guides/projects.md) interface, the machine agnostic resolution will be used
-automatically and a `uv.lock` file will be created. The lock file can also be created with an explicit `uv lock`
+automatically and a `uv.lock` file will be created. The lockfile can also be created with an explicit `uv lock`
 invocation.
 
 uv also supports resolving for specific alternate platforms and Python versions via the
