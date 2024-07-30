@@ -443,6 +443,19 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv python list` command with options shared across scenarios.
+    pub fn python_list(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command
+            .arg("python")
+            .arg("list")
+            .env("UV_PREVIEW", "1")
+            .env("UV_PYTHON_INSTALL_DIR", "")
+            .current_dir(&self.temp_dir);
+        self.add_shared_args(&mut command);
+        command
+    }
+
     /// Create a `uv python pin` command with options shared across scenarios.
     pub fn python_pin(&self) -> Command {
         let mut command = Command::new(get_bin());

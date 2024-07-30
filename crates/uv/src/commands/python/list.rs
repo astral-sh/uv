@@ -142,7 +142,8 @@ pub(crate) async fn list(
     for (key, path) in include {
         let key = key.to_string();
         if let Some(path) = path {
-            let is_symlink = fs_err::symlink_metadata(path)?.is_symlink();
+            let is_symlink =
+                fs_err::symlink_metadata(path).map_or(false, |metadata| metadata.is_symlink());
             if is_symlink {
                 writeln!(
                     printer.stdout(),
