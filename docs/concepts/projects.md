@@ -1,6 +1,6 @@
 # Projects
 
-Python projects are help manage Python applications spanning multiple files.
+Python projects help manage Python applications spanning multiple files.
 
 !!! tip
 
@@ -38,7 +38,7 @@ The `pyproject.toml` also lists dependencies of the project. uv supports modifyi
 
 ## Project environments
 
-uv creates a virtual environment in a `.venv` directory next to the `pyproject.toml`. This virtual environment contains the project and its dependencies. It is stored inside the project to make it easy for editors to find — they need the environment to give code completions and type hints. It is not recommended to include the `.venv` directory in version control, it should be excluded via a `.gitignore` entry (or similar).
+uv creates a virtual environment in a `.venv` directory next to the `pyproject.toml`. This virtual environment contains the project and its dependencies. It is stored inside the project to make it easy for editors to find — they need the environment to give code completions and type hints. It is not recommended to include the `.venv` directory in version control; it is automatically excluded from `git` with an internal `.gitignore` file.
 
 To run a command in the project environment, use `uv run`. Alternatively the project environment can be activated as normal for a virtual environment.
 
@@ -50,15 +50,17 @@ It is _not_ recommended to modify the project environment manually, e.g., with `
 
 uv creates a `uv.lock` file next to the `pyproject.toml`.
 
-`uv.lock` is a "universal" lockfile that contains exact information about your
-project's dependencies. Unlike the `pyproject.toml` which is used to specify the
-broad requirements of your project, the lockfile contains the exact resolved versions
-that are installed in the project environment. This file should be checked into version
-control, allowing for consistent and reproducible installations across machines.
+`uv.lock` is a _universal_ lockfile that captures the packages that would be installed across all
+possible Python markers such as operating system, architecture, and Python version.
 
-A "universal" lockfile captures packages that would be installed across all possible Python markers such as operating system, architecture, and Python version.
+Unlike the `pyproject.toml`, which is used to specify the broad requirements of your project, the
+lockfile contains the exact resolved versions that are installed in the project environment. This
+file should be checked into version control, allowing for consistent and reproducible installations
+across machines.
 
-A lockfile ensures that developers working on the project are using a consistent set of package versions. Additionally, it ensures when deploying the project as an application that the exact set of used package versions is known. 
+A lockfile ensures that developers working on the project are using a consistent set of package
+versions. Additionally, it ensures when deploying the project as an application that the exact set
+of used package versions is known.
 
 The lockfile is created and updated during uv invocations that use the project environment, i.e., `uv sync` and `uv run`. The lockfile may also be explicitly updated using `uv lock`.
 

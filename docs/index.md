@@ -25,7 +25,7 @@ An extremely fast Python package and project manager, written in Rust.
 - 🐍 [Installs and manages](./guides/install-python.md) Python versions.
 - 🛠️ [Runs and installs](./guides/tools.md) Python applications.
 - ❇️ [Runs scripts](./guides/scripts.md), with support for [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
-- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a [universal lockfile](./concepts/projects.md#lock-file).
+- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a [universal lockfile](./concepts/projects.md#lockfile).
 - 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
 - 🚀 A replacement for `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`
