@@ -69,10 +69,12 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
                     let has_any_executable_bit = mode & 0o111;
                     if has_any_executable_bit != 0 {
                         let permissions = fs_err::metadata(&path)?.permissions();
-                        fs_err::set_permissions(
-                            &path,
-                            Permissions::from_mode(permissions.mode() | 0o111),
-                        )?;
+                        if permissions.mode() & 0o111 != 0o111 {
+                            fs_err::set_permissions(
+                                &path,
+                                Permissions::from_mode(permissions.mode() | 0o111),
+                            )?;
+                        }
                     }
                 }
             }

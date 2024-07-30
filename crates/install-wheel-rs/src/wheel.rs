@@ -327,11 +327,14 @@ pub(crate) fn write_script_entrypoints(
             // Make the launcher executable.
             #[cfg(unix)]
             {
+                use std::fs::Permissions;
                 use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(
-                    site_packages.join(entrypoint_relative),
-                    std::fs::Permissions::from_mode(0o755),
-                )?;
+
+                let path = site_packages.join(entrypoint_relative);
+                let permissions = fs::metadata(&path)?.permissions();
+                if permissions.mode() & 0o111 != 0o111 {
+                    fs::set_permissions(path, Permissions::from_mode(permissions.mode() | 0o111))?;
+                }
             }
         }
     }
@@ -534,20 +537,64 @@ fn install_script(
             )
         })?;
         fs::remove_file(&path)?;
+
+        // Make the script executable. We just created the file, so we can set permissions directly.
+        #[cfg(unix)]
+        {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+
+            let permissions = fs::metadata(&script_absolute)?.permissions();
+            if permissions.mode() & 0o111 != 0o111 {
+                fs::set_permissions(
+                    script_absolute,
+                    Permissions::from_mode(permissions.mode() | 0o111),
+                )?;
+            }
+        }
+
         Some(size_and_encoded_hash)
     } else {
-        // reading and writing is slow especially for large binaries, so we move them instead
+        // Reading and writing is slow (especially for large binaries), so we move them instead, if
+        // we can. This also retains the file permissions. We _can't_ move (and must copy) if the
+        // file permissions need to be changed, since we might not own the file.
         drop(script);
-        fs::rename(&path, &script_absolute)?;
+
+        #[cfg(unix)]
+        {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+
+            let permissions = fs::metadata(&path)?.permissions();
+
+            if permissions.mode() & 0o111 == 0o111 {
+                // If the permissions are already executable, we don't need to change them.
+                fs::rename(&path, &script_absolute)?;
+            } else {
+                // If we have to modify the permissions, copy the file, since we might not own it.
+                warn!(
+                    "Copying script from {} to {} (permissions: {:o})",
+                    path.simplified_display(),
+                    script_absolute.simplified_display(),
+                    permissions.mode()
+                );
+
+                uv_fs::copy_atomic_sync(&path, &script_absolute)?;
+
+                fs::set_permissions(
+                    script_absolute,
+                    Permissions::from_mode(permissions.mode() | 0o111),
+                )?;
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            fs::rename(&path, &script_absolute)?;
+        }
+
         None
     };
-    #[cfg(unix)]
-    {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-
-        fs::set_permissions(&script_absolute, Permissions::from_mode(0o755))?;
-    }
 
     // Find the existing entry in the `RECORD`.
     let relative_to_site_packages = path
