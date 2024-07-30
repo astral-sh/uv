@@ -1500,18 +1500,28 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "sys_platform == 'win32'",
+                "sys_platform != 'win32'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
             name = "markupsafe"
             version = "1.1.1"
             source = { registry = "https://pypi.org/simple" }
+            environment-markers = [
+                "sys_platform != 'win32'",
+            ]
             sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
 
             [[distribution]]
             name = "markupsafe"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
+            environment-markers = [
+                "sys_platform == 'win32'",
+            ]
             sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466 }
 
             [[distribution]]
@@ -2876,6 +2886,16 @@ fn lock_python_version_marker_complement() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.8"
+            environment-markers = [
+                "python_full_version <= '3.10' and python_version == '3.10'",
+                "python_full_version <= '3.10' and python_version < '3.10'",
+                "python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version > '3.10'",
+                "python_full_version > '3.10' and python_version == '3.10'",
+                "python_full_version > '3.10' and python_version < '3.10'",
+                "python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10'",
+                "python_full_version > '3.10' and python_version > '3.10'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2901,9 +2921,9 @@ fn lock_python_version_marker_complement() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "attrs", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
-                { name = "iniconfig", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
-                { name = "typing-extensions", marker = "(python_full_version <= '3.10' and python_version == '3.10') or (python_full_version <= '3.10' and python_version < '3.10') or (python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version <= '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version == '3.10') or (python_full_version > '3.10' and python_version < '3.10') or (python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10') or (python_full_version > '3.10' and python_version > '3.10')" },
+                { name = "attrs" },
+                { name = "iniconfig" },
+                { name = "typing-extensions", marker = "python_full_version <= '3.10' or python_full_version > '3.10'" },
             ]
 
             [[distribution]]
@@ -4029,15 +4049,22 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin'",
+        ]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
+        environment-markers = [
+            "sys_platform != 'darwin'",
+        ]
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            { name = "idna", marker = "sys_platform != 'darwin'" },
+            { name = "sniffio", marker = "sys_platform != 'darwin'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", hash = "sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9", size = 116952 }
         wheels = [
@@ -4048,9 +4075,12 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "anyio"
         version = "3.7.0"
         source = { registry = "https://pypi.org/simple" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            { name = "idna", marker = "sys_platform == 'darwin'" },
+            { name = "sniffio", marker = "sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
         wheels = [
@@ -4061,16 +4091,22 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v1" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
         dependencies = [
-            { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
         ]
 
         [[distribution]]
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v2" }
+        environment-markers = [
+            "sys_platform != 'darwin'",
+        ]
         dependencies = [
-            { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
         ]
 
         [[distribution]]

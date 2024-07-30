@@ -2,7 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anstream::eprint;
 use owo_colors::OwoColorize;
@@ -17,6 +16,7 @@ use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DEV_DEPENDENCIES;
+use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
@@ -48,7 +48,6 @@ pub(crate) async fn lock(
     frozen: bool,
     python: Option<String>,
     settings: ResolverSettings,
-    directory: Option<PathBuf>,
     preview: PreviewMode,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
@@ -62,14 +61,8 @@ pub(crate) async fn lock(
         warn_user_once!("`uv lock` is experimental and may change without warning");
     }
 
-    let directory = if let Some(directory) = directory {
-        directory
-    } else {
-        std::env::current_dir()?
-    };
-
     // Find the project requirements.
-    let workspace = Workspace::discover(&directory, &DiscoveryOptions::default()).await?;
+    let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(
@@ -386,6 +379,14 @@ async fn do_lock(
         }
     });
 
+    // When we run the same resolution from the lockfile again, we could get a different result the
+    // second time due to the preferences causing us to skip a fork point (see
+    // "preferences-dependent-forking" packse scenario). To avoid this, we store the forks in the
+    // lockfile. We read those after all the lockfile filters, to allow the forks to change when
+    // the environment changed, e.g. the python bound check above can lead to different forking.
+    let resolver_markers =
+        ResolverMarkers::universal(existing_lock.and_then(|lock| lock.fork_markers().clone()));
+
     let resolution = match existing_lock {
         None => None,
 
@@ -439,7 +440,7 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                ResolverMarkers::Universal,
+                resolver_markers,
                 python_requirement.clone(),
                 &client,
                 &flat_index,
@@ -515,7 +516,7 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                ResolverMarkers::Universal,
+                ResolverMarkers::universal(None),
                 python_requirement,
                 &client,
                 &flat_index,

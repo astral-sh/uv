@@ -8,6 +8,8 @@ use tracing::warn;
 
 use crate::Error;
 
+const DEFAULT_BUF_SIZE: usize = 128 * 1024;
+
 /// Unzip a `.zip` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unzipping files as they're being downloaded. If the archive
@@ -18,7 +20,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let target = target.as_ref();
-    let mut reader = futures::io::BufReader::with_capacity(128 * 1024, reader.compat());
+    let mut reader = futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader.compat());
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(&mut reader);
 
     let mut directories = FxHashSet::default();
@@ -43,12 +45,12 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 
             // We don't know the file permissions here, because we haven't seen the central directory yet.
             let file = fs_err::tokio::File::create(&path).await?;
-            let mut writer =
-                if let Ok(size) = usize::try_from(entry.reader().entry().uncompressed_size()) {
-                    tokio::io::BufWriter::with_capacity(size, file)
-                } else {
-                    tokio::io::BufWriter::new(file)
-                };
+            let size = entry.reader().entry().uncompressed_size();
+            let mut writer = if let Ok(size) = usize::try_from(size) {
+                tokio::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), file)
+            } else {
+                tokio::io::BufWriter::new(file)
+            };
             let mut reader = entry.reader_mut().compat();
             tokio::io::copy(&mut reader, &mut writer).await?;
         }
@@ -85,11 +87,13 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                 let path = target.join(path);
 
                 let permissions = fs_err::tokio::metadata(&path).await?.permissions();
-                fs_err::tokio::set_permissions(
-                    &path,
-                    Permissions::from_mode(permissions.mode() | 0o111),
-                )
-                .await?;
+                if permissions.mode() & 0o111 != 0o111 {
+                    fs_err::tokio::set_permissions(
+                        &path,
+                        Permissions::from_mode(permissions.mode() | 0o111),
+                    )
+                    .await?;
+                }
             }
         }
     }
@@ -135,11 +139,13 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
                 if has_any_executable_bit != 0 {
                     if let Some(path) = crate::tar::unpacked_at(dst.as_ref(), &file.path()?) {
                         let permissions = fs_err::tokio::metadata(&path).await?.permissions();
-                        fs_err::tokio::set_permissions(
-                            &path,
-                            Permissions::from_mode(permissions.mode() | 0o111),
-                        )
-                        .await?;
+                        if permissions.mode() & 0o111 != 0o111 {
+                            fs_err::tokio::set_permissions(
+                                &path,
+                                Permissions::from_mode(permissions.mode() | 0o111),
+                            )
+                            .await?;
+                        }
                     }
                 }
             }
@@ -155,7 +161,7 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let reader = tokio::io::BufReader::new(reader);
+    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
 
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
@@ -172,7 +178,7 @@ pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let reader = tokio::io::BufReader::new(reader);
+    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
 
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
@@ -189,7 +195,7 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let reader = tokio::io::BufReader::new(reader);
+    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
 
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
@@ -205,7 +211,7 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let reader = tokio::io::BufReader::new(reader);
+    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
 
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)

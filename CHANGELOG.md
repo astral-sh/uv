@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.31
+
+### Enhancements
+
+- Add `--relocatable` flag to `uv venv` ([#5515](https://github.com/astral-sh/uv/pull/5515))
+- Support `xz`-compressed packages ([#5513](https://github.com/astral-sh/uv/pull/5513))
+- Warn, but don't error, when encountering tilde `.dist-info` directories ([#5520](https://github.com/astral-sh/uv/pull/5520))
+
+### Bug fixes
+
+- Make `pip list --editable` conflict with `--exclude-editable` ([#5506](https://github.com/astral-sh/uv/pull/5506))
+- Add some missing reinstall-refresh calls ([#5497](https://github.com/astral-sh/uv/pull/5497))
+- Avoid warning users for missing self-extra lower bounds ([#5518](https://github.com/astral-sh/uv/pull/5518))
+- Generate hashes for `--find-links` entries ([#5544](https://github.com/astral-sh/uv/pull/5544))
+- Retain editable designation for cached wheel installs ([#5545](https://github.com/astral-sh/uv/pull/5545))
+- Use 666 rather than 644 for default permissions ([#5498](https://github.com/astral-sh/uv/pull/5498))
+- Retry on incomplete body ([#5555](https://github.com/astral-sh/uv/pull/5555))
+- Ban `--no-cache` with `--link-mode=symlink` ([#5519](https://github.com/astral-sh/uv/pull/5519))
+
 ## 0.2.30
 
 ### Enhancements

@@ -1,4 +1,3 @@
-use std::mem;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -118,77 +117,6 @@ impl PubGrubPackage {
                 dev: None,
                 marker,
             }))
-        }
-    }
-
-    /// Modifies this package in place such that it is associated with the
-    /// given markers by intersecting them any pre-existing markers.
-    ///
-    /// That is, this causes the package to only be applicable to marker
-    /// environments corresponding to the intersection of what it previously
-    /// matched and the given markers.
-    ///
-    /// This is useful when one needs to propagate markers from a fork to each
-    /// of its constituent dependencies. This is necessary because within a
-    /// fork, the resolver makes decisions based on the markers that created
-    /// that fork. While in many cases these decisions are universal, some may
-    /// not be! And so the markers from the fork must be propagated out to the
-    /// individual packages.
-    pub(crate) fn and_markers(&mut self, fork_marker: &MarkerTree) {
-        // We do a little dance here to pluck out as much existing
-        // information from this package as we can to avoid allocs.
-        // It is possible that the `Arc::make_mut` will do a deep
-        // clone here, thereby defeating our efforts, but I think it
-        // is likely that in most cases it will not. This is because
-        // this routine should be called almost immediately after a
-        // `PubGrubPackage` is created and _before_ it is passed to
-        // PubGrub itself.
-        match Arc::make_mut(&mut self.0) {
-            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => {}
-            // In this case, we may or may not already have a marker.
-            // If we don't, then this implies we will, and thus we may
-            // need to switch `Package` to some other representation.
-            PubGrubPackageInner::Package {
-                ref mut name,
-                ref mut extra,
-                ref dev,
-                ref mut marker,
-            } => {
-                // This case *should* never happen, I believe, because
-                // a `Package` with a non-None `dev` can only happen as
-                // a result of a `Dev` package, which we should have
-                // processed already by the time we get this package.
-                if dev.is_some() {
-                    return;
-                }
-
-                let mut and = fork_marker.clone();
-                if let Some(marker) = marker.take() {
-                    and.and(marker);
-                }
-                *self = PubGrubPackage::from_package(mem::take(name), extra.take(), Some(and));
-            }
-            // These cases are easy, because we can just modify the marker
-            // in place.
-            PubGrubPackageInner::Extra { ref mut marker, .. } => {
-                let mut and = fork_marker.clone();
-                if let Some(marker) = marker.take() {
-                    and.and(marker);
-                }
-                *marker = Some(and);
-            }
-            PubGrubPackageInner::Dev { ref mut marker, .. } => {
-                let mut and = fork_marker.clone();
-                if let Some(marker) = marker.take() {
-                    and.and(marker);
-                }
-                *marker = Some(and);
-            }
-            PubGrubPackageInner::Marker { ref mut marker, .. } => {
-                let mut and = fork_marker.clone();
-                and.and(mem::replace(marker, MarkerTree::And(vec![])));
-                *marker = and;
-            }
         }
     }
 

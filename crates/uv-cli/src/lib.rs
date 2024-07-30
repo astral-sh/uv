@@ -154,7 +154,7 @@ pub struct GlobalArgs {
 
     /// Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
     /// parent directories.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, hide = true)]
     pub isolated: bool,
 
     /// Show the resolved settings for the current command.
@@ -164,6 +164,10 @@ pub struct GlobalArgs {
     /// Hides all progress outputs when set
     #[arg(global = true, long)]
     pub no_progress: bool,
+
+    /// Change to the given directory prior to running the command.
+    #[arg(global = true, long, hide = true)]
+    pub directory: Option<PathBuf>,
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
@@ -1843,6 +1847,11 @@ pub struct InitArgs {
     #[arg(long)]
     pub no_readme: bool,
 
+    /// Avoid discovering the workspace in the current directory or any parent directory. Instead,
+    /// create a standalone project.
+    #[arg(long, alias = "no_project")]
+    pub no_workspace: bool,
+
     /// The Python interpreter to use to determine the minimum supported Python version.
     ///
     /// By default, uv uses the virtual environment in the current working directory or any parent
@@ -1898,6 +1907,11 @@ pub struct RunArgs {
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
+    /// Run the tool in an isolated virtual environment, rather than leveraging the base environment
+    /// for the current project, to enforce strict isolation between dependencies.
+    #[arg(long)]
+    pub isolated: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
@@ -1916,8 +1930,13 @@ pub struct RunArgs {
     pub refresh: RefreshArgs,
 
     /// Run the command in a specific package in the workspace.
-    #[arg(long, conflicts_with = "isolated")]
+    #[arg(long)]
     pub package: Option<PackageName>,
+
+    /// Avoid discovering the project or workspace in the current directory or any parent directory.
+    /// Instead, run in an isolated, ephemeral environment populated by the `--with` requirements.
+    #[arg(long, alias = "no_workspace", conflicts_with = "package")]
+    pub no_project: bool,
 
     /// The Python interpreter to use to build the run environment.
     ///
@@ -1932,6 +1951,12 @@ pub struct RunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
+
+    /// Whether to show resolver and installer output from any environment modifications.
+    ///
+    /// By default, environment modifications are omitted, but enabled under `--verbose`.
+    #[arg(long, env = "UV_SHOW_RESOLUTION", value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
+    pub show_resolution: bool,
 }
 
 #[derive(Args)]
@@ -1996,10 +2021,6 @@ pub struct SyncArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
-
-    /// The path to the project. Defaults to the current working directory.
-    #[arg(long, hide = true)]
-    pub directory: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -2035,10 +2056,6 @@ pub struct LockArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
-
-    /// The path to the project. Defaults to the current working directory.
-    #[arg(long, hide = true)]
-    pub directory: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -2078,15 +2095,15 @@ pub struct AddArgs {
     pub raw_sources: bool,
 
     /// Specific commit to use when adding from Git.
-    #[arg(long)]
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub rev: Option<String>,
 
     /// Tag to use when adding from git.
-    #[arg(long)]
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub tag: Option<String>,
 
     /// Branch to use when adding from git.
-    #[arg(long)]
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub branch: Option<String>,
 
     /// Extras to activate for the dependency; may be provided more than once.
@@ -2260,8 +2277,10 @@ pub struct ToolRunArgs {
     ///
     /// If more complex version specification is desired or if the command is provided by a different
     /// package, use `--from`.
+    ///
+    /// If omitted, lists the available tools.
     #[command(subcommand)]
-    pub command: ExternalCommand,
+    pub command: Option<ExternalCommand>,
 
     /// Use the given package to provide the command.
     ///
@@ -2276,6 +2295,10 @@ pub struct ToolRunArgs {
     /// Run with all packages listed in the given `requirements.txt` files.
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
+
+    /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
+    #[arg(long)]
+    pub isolated: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -2299,6 +2322,12 @@ pub struct ToolRunArgs {
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
     pub python: Option<String>,
+
+    /// Whether to show resolver and installer output from any environment modifications.
+    ///
+    /// By default, environment modifications are omitted, but enabled under `--verbose`.
+    #[arg(long, env = "UV_SHOW_RESOLUTION", value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
+    pub show_resolution: bool,
 }
 
 #[derive(Args)]
@@ -2477,6 +2506,11 @@ pub struct PythonPinArgs {
 
     #[arg(long, overrides_with("no_resolved"), hide = true)]
     pub no_resolved: bool,
+
+    /// Avoid validating the Python pin against the workspace in the current directory or any parent
+    /// directory.
+    #[arg(long)]
+    pub no_workspace: bool,
 }
 
 #[derive(Args)]

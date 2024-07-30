@@ -62,8 +62,8 @@ async-channel = { version = "2.2.0" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.78" }
 async_http_range_reader = { version = "0.8.0" }
-async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "1dcb40cfe1bf5325a6fd4bfcf9894db40241f585", features = ["deflate"] }
-axoupdater = { version = "0.6.0", default-features = false }
+async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b24604fa7bc223daaad7712c0694bac8f0a87", features = ["deflate"] }
+axoupdater = { version = "0.7.0", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.0" }
 cachedir = { version = "0.3.1" }
@@ -153,14 +153,15 @@ url = { version = "2.5.0" }
 urlencoding = { version = "2.1.3" }
 walkdir = { version = "2.5.0" }
 which = { version = "6.0.0", features = ["regex"] }
-winapi = { version = "0.3.9", features = ["fileapi", "handleapi", "ioapiset", "winbase", "winioctl", "winnt"] }
+windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
 winreg = { version = "0.52.0" }
 winsafe = { version = "0.0.19", features = ["kernel"] }
 wiremock = { version = "0.6.0" }
+xz2 = { version = "0.1.7" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
-ignored = ["flate2"]
+ignored = ["flate2", "xz2"]
 
 [patch.crates-io]
 # For pyproject-toml

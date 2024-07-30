@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_python::{
     request_from_version_file, requests_from_version_file, write_version_file,
     EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest,
@@ -25,7 +25,7 @@ pub(crate) async fn pin(
     resolved: bool,
     python_preference: PythonPreference,
     preview: PreviewMode,
-    isolated: bool,
+    no_workspace: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -33,12 +33,10 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning");
     }
 
-    let virtual_project = if isolated {
+    let virtual_project = if no_workspace {
         None
     } else {
-        match VirtualProject::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
-            .await
-        {
+        match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
             Ok(virtual_project) => Some(virtual_project),
             Err(err) => {
                 debug!("Failed to discover virtual project: {err}");
@@ -49,7 +47,7 @@ pub(crate) async fn pin(
 
     let Some(request) = request else {
         // Display the current pinned Python version
-        if let Some(pins) = requests_from_version_file().await? {
+        if let Some(pins) = requests_from_version_file(&CWD).await? {
             for pin in pins {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
@@ -126,7 +124,7 @@ pub(crate) async fn pin(
         request.to_canonical_string()
     };
 
-    let existing = request_from_version_file().await.ok().flatten();
+    let existing = request_from_version_file(&CWD).await.ok().flatten();
     write_version_file(&output).await?;
 
     if let Some(existing) = existing

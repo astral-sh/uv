@@ -10,7 +10,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use common::{uv_snapshot, TestContext};
+use common::{packse_index_url, uv_snapshot, TestContext};
 
 mod common;
 
@@ -62,8 +62,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -83,14 +82,19 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_allows_non_conflicting_non_overlapping_dependencies_a-1.0.0.tar.gz#sha256=dd40a6bd59fbeefbf9f4936aec3df6fb6017e57d334f85f482ae5dd03ae353b9", hash = "sha256:dd40a6bd59fbeefbf9f4936aec3df6fb6017e57d334f85f482ae5dd03ae353b9" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_allows_non_conflicting_non_overlapping_dependencies_a-1.0.0.tar.gz#sha256=dd40a6bd59fbeefbf9f4936aec3df6fb6017e57d334f85f482ae5dd03ae353b9", hash = "sha256:dd40a6bd59fbeefbf9f4936aec3df6fb6017e57d334f85f482ae5dd03ae353b9" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_allows_non_conflicting_non_overlapping_dependencies_a-1.0.0-py3-none-any.whl#sha256=8111e996c2a4e04c7a7cf91cf6f8338f5195c22ecf2303d899c4ef4e718a8175", hash = "sha256:8111e996c2a4e04c7a7cf91cf6f8338f5195c22ecf2303d899c4ef4e718a8175" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_allows_non_conflicting_non_overlapping_dependencies_a-1.0.0-py3-none-any.whl#sha256=8111e996c2a4e04c7a7cf91cf6f8338f5195c22ecf2303d899c4ef4e718a8175", hash = "sha256:8111e996c2a4e04c7a7cf91cf6f8338f5195c22ecf2303d899c4ef4e718a8175" },
         ]
 
         [[distribution]]
@@ -158,8 +162,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -183,10 +186,10 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_allows_non_conflicting_repeated_dependencies_a-1.0.0.tar.gz#sha256=45ca30f1f66eaf6790198fad279b6448719092f2128f23b99f2ede0d6dde613b", hash = "sha256:45ca30f1f66eaf6790198fad279b6448719092f2128f23b99f2ede0d6dde613b" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_allows_non_conflicting_repeated_dependencies_a-1.0.0.tar.gz#sha256=45ca30f1f66eaf6790198fad279b6448719092f2128f23b99f2ede0d6dde613b", hash = "sha256:45ca30f1f66eaf6790198fad279b6448719092f2128f23b99f2ede0d6dde613b" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_allows_non_conflicting_repeated_dependencies_a-1.0.0-py3-none-any.whl#sha256=fc3f6d2fab10d1bb4f52bd9a7de69dc97ed1792506706ca78bdc9e95d6641a6b", hash = "sha256:fc3f6d2fab10d1bb4f52bd9a7de69dc97ed1792506706ca78bdc9e95d6641a6b" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_allows_non_conflicting_repeated_dependencies_a-1.0.0-py3-none-any.whl#sha256=fc3f6d2fab10d1bb4f52bd9a7de69dc97ed1792506706ca78bdc9e95d6641a6b", hash = "sha256:fc3f6d2fab10d1bb4f52bd9a7de69dc97ed1792506706ca78bdc9e95d6641a6b" },
         ]
 
         [[distribution]]
@@ -243,8 +246,7 @@ fn fork_basic() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -264,23 +266,34 @@ fn fork_basic() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_basic_a-1.0.0.tar.gz#sha256=9bd6d9d74d8928854f79ea3ed4cd0d8a4906eeaa40f5f3d63460a1c2d5f6d773", hash = "sha256:9bd6d9d74d8928854f79ea3ed4cd0d8a4906eeaa40f5f3d63460a1c2d5f6d773" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_basic_a-1.0.0.tar.gz#sha256=9bd6d9d74d8928854f79ea3ed4cd0d8a4906eeaa40f5f3d63460a1c2d5f6d773", hash = "sha256:9bd6d9d74d8928854f79ea3ed4cd0d8a4906eeaa40f5f3d63460a1c2d5f6d773" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_basic_a-1.0.0-py3-none-any.whl#sha256=9d3af617bb44ae1c8daf19f6d4d118ee8aac7eaf0cc5368d0f405137411291a1", hash = "sha256:9d3af617bb44ae1c8daf19f6d4d118ee8aac7eaf0cc5368d0f405137411291a1" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_basic_a-1.0.0-py3-none-any.whl#sha256=9d3af617bb44ae1c8daf19f6d4d118ee8aac7eaf0cc5368d0f405137411291a1", hash = "sha256:9d3af617bb44ae1c8daf19f6d4d118ee8aac7eaf0cc5368d0f405137411291a1" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_basic_a-2.0.0.tar.gz#sha256=c0ce6dfb6d712eb42a4bbe9402a1f823627b9d3773f31d259c49478fc7d8d082", hash = "sha256:c0ce6dfb6d712eb42a4bbe9402a1f823627b9d3773f31d259c49478fc7d8d082" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_basic_a-2.0.0.tar.gz#sha256=c0ce6dfb6d712eb42a4bbe9402a1f823627b9d3773f31d259c49478fc7d8d082", hash = "sha256:c0ce6dfb6d712eb42a4bbe9402a1f823627b9d3773f31d259c49478fc7d8d082" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_basic_a-2.0.0-py3-none-any.whl#sha256=3876778dc6e5178b0e456b0d988cb8c2542cb943a45497aff3e198cbec3dfcc9", hash = "sha256:3876778dc6e5178b0e456b0d988cb8c2542cb943a45497aff3e198cbec3dfcc9" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_basic_a-2.0.0-py3-none-any.whl#sha256=3876778dc6e5178b0e456b0d988cb8c2542cb943a45497aff3e198cbec3dfcc9", hash = "sha256:3876778dc6e5178b0e456b0d988cb8c2542cb943a45497aff3e198cbec3dfcc9" },
         ]
 
         [[distribution]]
@@ -288,8 +301,8 @@ fn fork_basic() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -353,8 +366,7 @@ fn conflict_in_fork() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -422,8 +434,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -504,8 +515,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -525,65 +535,82 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "4.3.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_a-4.3.0.tar.gz#sha256=5389f0927f61393ba8bd940622329299d769e79b725233604a6bdac0fd088c49", hash = "sha256:5389f0927f61393ba8bd940622329299d769e79b725233604a6bdac0fd088c49" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_a-4.3.0.tar.gz#sha256=5389f0927f61393ba8bd940622329299d769e79b725233604a6bdac0fd088c49", hash = "sha256:5389f0927f61393ba8bd940622329299d769e79b725233604a6bdac0fd088c49" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_a-4.3.0-py3-none-any.whl#sha256=932c128393cd499617d1a5b457b11887d51039284b18e06add4c384ab661148c", hash = "sha256:932c128393cd499617d1a5b457b11887d51039284b18e06add4c384ab661148c" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_a-4.3.0-py3-none-any.whl#sha256=932c128393cd499617d1a5b457b11887d51039284b18e06add4c384ab661148c", hash = "sha256:932c128393cd499617d1a5b457b11887d51039284b18e06add4c384ab661148c" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "4.4.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_a-4.4.0.tar.gz#sha256=7dbb8575aec8f87063954917b6ee628191cd53ca233ec810f6d926b4954e578b", hash = "sha256:7dbb8575aec8f87063954917b6ee628191cd53ca233ec810f6d926b4954e578b" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_a-4.4.0.tar.gz#sha256=7dbb8575aec8f87063954917b6ee628191cd53ca233ec810f6d926b4954e578b", hash = "sha256:7dbb8575aec8f87063954917b6ee628191cd53ca233ec810f6d926b4954e578b" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_a-4.4.0-py3-none-any.whl#sha256=26989734e8fa720896dbbf900adc64551bf3f0026fb62c3c22b47dc23edd4a4c", hash = "sha256:26989734e8fa720896dbbf900adc64551bf3f0026fb62c3c22b47dc23edd4a4c" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_a-4.4.0-py3-none-any.whl#sha256=26989734e8fa720896dbbf900adc64551bf3f0026fb62c3c22b47dc23edd4a4c", hash = "sha256:26989734e8fa720896dbbf900adc64551bf3f0026fb62c3c22b47dc23edd4a4c" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-d", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" } },
+            { name = "package-d", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_b-1.0.0.tar.gz#sha256=af3f861d6df9a2bbad55bae02acf17384ea2efa1abbf19206ac56cb021814613", hash = "sha256:af3f861d6df9a2bbad55bae02acf17384ea2efa1abbf19206ac56cb021814613" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_b-1.0.0.tar.gz#sha256=af3f861d6df9a2bbad55bae02acf17384ea2efa1abbf19206ac56cb021814613", hash = "sha256:af3f861d6df9a2bbad55bae02acf17384ea2efa1abbf19206ac56cb021814613" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_b-1.0.0-py3-none-any.whl#sha256=bc72ef97f57a77fc7be9dc400be26ae5c344aabddbe39407c05a62e07554cdbf", hash = "sha256:bc72ef97f57a77fc7be9dc400be26ae5c344aabddbe39407c05a62e07554cdbf" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_b-1.0.0-py3-none-any.whl#sha256=bc72ef97f57a77fc7be9dc400be26ae5c344aabddbe39407c05a62e07554cdbf", hash = "sha256:bc72ef97f57a77fc7be9dc400be26ae5c344aabddbe39407c05a62e07554cdbf" },
         ]
 
         [[distribution]]
         name = "package-c"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-d", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" } },
+            { name = "package-d", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_c-1.0.0.tar.gz#sha256=c03742ca6e81c2a5d7d8cb72d1214bf03b2925e63858a19097f17d3e1a750192", hash = "sha256:c03742ca6e81c2a5d7d8cb72d1214bf03b2925e63858a19097f17d3e1a750192" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_c-1.0.0.tar.gz#sha256=c03742ca6e81c2a5d7d8cb72d1214bf03b2925e63858a19097f17d3e1a750192", hash = "sha256:c03742ca6e81c2a5d7d8cb72d1214bf03b2925e63858a19097f17d3e1a750192" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_c-1.0.0-py3-none-any.whl#sha256=71fc9aec5527839358209ccb927186dd0529e9814a725d86aa17e7a033c59cd4", hash = "sha256:71fc9aec5527839358209ccb927186dd0529e9814a725d86aa17e7a033c59cd4" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_c-1.0.0-py3-none-any.whl#sha256=71fc9aec5527839358209ccb927186dd0529e9814a725d86aa17e7a033c59cd4", hash = "sha256:71fc9aec5527839358209ccb927186dd0529e9814a725d86aa17e7a033c59cd4" },
         ]
 
         [[distribution]]
         name = "package-d"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_d-1.0.0.tar.gz#sha256=cc1af60e53faf957fd0542349441ea79a909cd5feb30fb8933c39dc33404e4b2", hash = "sha256:cc1af60e53faf957fd0542349441ea79a909cd5feb30fb8933c39dc33404e4b2" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_d-1.0.0.tar.gz#sha256=cc1af60e53faf957fd0542349441ea79a909cd5feb30fb8933c39dc33404e4b2", hash = "sha256:cc1af60e53faf957fd0542349441ea79a909cd5feb30fb8933c39dc33404e4b2" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_d-1.0.0-py3-none-any.whl#sha256=de669ada03e9f8625e3ac4af637c88de04066a72675c16c3d1757e0e9d5db7a8", hash = "sha256:de669ada03e9f8625e3ac4af637c88de04066a72675c16c3d1757e0e9d5db7a8" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_d-1.0.0-py3-none-any.whl#sha256=de669ada03e9f8625e3ac4af637c88de04066a72675c16c3d1757e0e9d5db7a8", hash = "sha256:de669ada03e9f8625e3ac4af637c88de04066a72675c16c3d1757e0e9d5db7a8" },
         ]
 
         [[distribution]]
         name = "package-d"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_d-2.0.0.tar.gz#sha256=68e380efdea5206363f5397e4cd560a64f5f4927396dc0b6f6f36dd3f026281f", hash = "sha256:68e380efdea5206363f5397e4cd560a64f5f4927396dc0b6f6f36dd3f026281f" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_d-2.0.0.tar.gz#sha256=68e380efdea5206363f5397e4cd560a64f5f4927396dc0b6f6f36dd3f026281f", hash = "sha256:68e380efdea5206363f5397e4cd560a64f5f4927396dc0b6f6f36dd3f026281f" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_filter_sibling_dependencies_d-2.0.0-py3-none-any.whl#sha256=87c133dcc987137d62c011a41af31e8372ca971393d93f808dffc32e136363c7", hash = "sha256:87c133dcc987137d62c011a41af31e8372ca971393d93f808dffc32e136363c7" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_filter_sibling_dependencies_d-2.0.0-py3-none-any.whl#sha256=87c133dcc987137d62c011a41af31e8372ca971393d93f808dffc32e136363c7", hash = "sha256:87c133dcc987137d62c011a41af31e8372ca971393d93f808dffc32e136363c7" },
         ]
 
         [[distribution]]
@@ -591,8 +618,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "4.3.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "4.4.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "4.3.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "4.4.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-b", marker = "sys_platform == 'linux'" },
             { name = "package-c", marker = "sys_platform == 'darwin'" },
         ]
@@ -655,8 +682,7 @@ fn fork_incomplete_markers() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -676,44 +702,55 @@ fn fork_incomplete_markers() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "python_version < '3.10'",
+            "python_version >= '3.11'",
+            "python_version < '3.11' and python_version >= '3.10'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_incomplete_markers_a-1.0.0.tar.gz#sha256=dd56de2e560b3f95c529c44cbdae55d9b1ada826ddd3e19d3ea45438224ad603", hash = "sha256:dd56de2e560b3f95c529c44cbdae55d9b1ada826ddd3e19d3ea45438224ad603" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "python_version < '3.10'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-1.0.0.tar.gz#sha256=dd56de2e560b3f95c529c44cbdae55d9b1ada826ddd3e19d3ea45438224ad603", hash = "sha256:dd56de2e560b3f95c529c44cbdae55d9b1ada826ddd3e19d3ea45438224ad603" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_incomplete_markers_a-1.0.0-py3-none-any.whl#sha256=779bb805058fc59858e8b9260cd1a40f13f1640631fdea89d9d243691a4f39ca", hash = "sha256:779bb805058fc59858e8b9260cd1a40f13f1640631fdea89d9d243691a4f39ca" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-1.0.0-py3-none-any.whl#sha256=779bb805058fc59858e8b9260cd1a40f13f1640631fdea89d9d243691a4f39ca", hash = "sha256:779bb805058fc59858e8b9260cd1a40f13f1640631fdea89d9d243691a4f39ca" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_incomplete_markers_a-2.0.0.tar.gz#sha256=580f1454a172036c89f5cfbefe52f175b011806a61f243eb476526bcc186e0be", hash = "sha256:580f1454a172036c89f5cfbefe52f175b011806a61f243eb476526bcc186e0be" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "python_version >= '3.11'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-2.0.0.tar.gz#sha256=580f1454a172036c89f5cfbefe52f175b011806a61f243eb476526bcc186e0be", hash = "sha256:580f1454a172036c89f5cfbefe52f175b011806a61f243eb476526bcc186e0be" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_incomplete_markers_a-2.0.0-py3-none-any.whl#sha256=58a4b7dcf929aabf1ed434d9ff8d715929dc3dec02b92cf2b364d5a2206f1f6a", hash = "sha256:58a4b7dcf929aabf1ed434d9ff8d715929dc3dec02b92cf2b364d5a2206f1f6a" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-2.0.0-py3-none-any.whl#sha256=58a4b7dcf929aabf1ed434d9ff8d715929dc3dec02b92cf2b364d5a2206f1f6a", hash = "sha256:58a4b7dcf929aabf1ed434d9ff8d715929dc3dec02b92cf2b364d5a2206f1f6a" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
             { name = "package-c", marker = "python_version == '3.10'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_incomplete_markers_b-1.0.0.tar.gz#sha256=c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1", hash = "sha256:c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_b-1.0.0.tar.gz#sha256=c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1", hash = "sha256:c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_incomplete_markers_b-1.0.0-py3-none-any.whl#sha256=5c2a5f446580787ed7b3673431b112474237ddeaf1c81325bb30b86e7ee76adb", hash = "sha256:5c2a5f446580787ed7b3673431b112474237ddeaf1c81325bb30b86e7ee76adb" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_b-1.0.0-py3-none-any.whl#sha256=5c2a5f446580787ed7b3673431b112474237ddeaf1c81325bb30b86e7ee76adb", hash = "sha256:5c2a5f446580787ed7b3673431b112474237ddeaf1c81325bb30b86e7ee76adb" },
         ]
 
         [[distribution]]
         name = "package-c"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_incomplete_markers_c-1.0.0.tar.gz#sha256=ecc02ea1cc8d3b561c8dcb9d2ba1abcdae2dd32de608bf8e8ed2878118426022", hash = "sha256:ecc02ea1cc8d3b561c8dcb9d2ba1abcdae2dd32de608bf8e8ed2878118426022" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_c-1.0.0.tar.gz#sha256=ecc02ea1cc8d3b561c8dcb9d2ba1abcdae2dd32de608bf8e8ed2878118426022", hash = "sha256:ecc02ea1cc8d3b561c8dcb9d2ba1abcdae2dd32de608bf8e8ed2878118426022" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_incomplete_markers_c-1.0.0-py3-none-any.whl#sha256=03fa287aa4cb78457211cb3df7459b99ba1ee2259aae24bc745eaab45e7eaaee", hash = "sha256:03fa287aa4cb78457211cb3df7459b99ba1ee2259aae24bc745eaab45e7eaaee" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_c-1.0.0-py3-none-any.whl#sha256=03fa287aa4cb78457211cb3df7459b99ba1ee2259aae24bc745eaab45e7eaaee", hash = "sha256:03fa287aa4cb78457211cb3df7459b99ba1ee2259aae24bc745eaab45e7eaaee" },
         ]
 
         [[distribution]]
@@ -721,8 +758,8 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "python_version < '3.10'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "python_version >= '3.11'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version < '3.10'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version >= '3.11'" },
             { name = "package-b", marker = "python_version < '3.10' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.10')" },
         ]
         "###
@@ -782,8 +819,7 @@ fn fork_marker_accrue() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -807,34 +843,34 @@ fn fork_marker_accrue() -> Result<()> {
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
             { name = "package-c", marker = "sys_platform == 'linux'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_accrue_a-1.0.0.tar.gz#sha256=c791e6062a510c63bff857ca6f7a921a7795bfbc588f21a51124e091fb0343d6", hash = "sha256:c791e6062a510c63bff857ca6f7a921a7795bfbc588f21a51124e091fb0343d6" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_accrue_a-1.0.0.tar.gz#sha256=c791e6062a510c63bff857ca6f7a921a7795bfbc588f21a51124e091fb0343d6", hash = "sha256:c791e6062a510c63bff857ca6f7a921a7795bfbc588f21a51124e091fb0343d6" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_accrue_a-1.0.0-py3-none-any.whl#sha256=cba9cb55cca41833a15c9f8eb75045236cf80cad5d663f7fb7ecae18dad79538", hash = "sha256:cba9cb55cca41833a15c9f8eb75045236cf80cad5d663f7fb7ecae18dad79538" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_accrue_a-1.0.0-py3-none-any.whl#sha256=cba9cb55cca41833a15c9f8eb75045236cf80cad5d663f7fb7ecae18dad79538", hash = "sha256:cba9cb55cca41833a15c9f8eb75045236cf80cad5d663f7fb7ecae18dad79538" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
             { name = "package-c", marker = "sys_platform == 'darwin'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_accrue_b-1.0.0.tar.gz#sha256=32e7ea1022061783857c3f6fec5051b4b320630fe8a5aec6523cd565db350387", hash = "sha256:32e7ea1022061783857c3f6fec5051b4b320630fe8a5aec6523cd565db350387" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_accrue_b-1.0.0.tar.gz#sha256=32e7ea1022061783857c3f6fec5051b4b320630fe8a5aec6523cd565db350387", hash = "sha256:32e7ea1022061783857c3f6fec5051b4b320630fe8a5aec6523cd565db350387" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_accrue_b-1.0.0-py3-none-any.whl#sha256=c5202800c26be15ecaf5560e09ad1df710778bb9debd3c267be1c76f44fbc0c9", hash = "sha256:c5202800c26be15ecaf5560e09ad1df710778bb9debd3c267be1c76f44fbc0c9" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_accrue_b-1.0.0-py3-none-any.whl#sha256=c5202800c26be15ecaf5560e09ad1df710778bb9debd3c267be1c76f44fbc0c9", hash = "sha256:c5202800c26be15ecaf5560e09ad1df710778bb9debd3c267be1c76f44fbc0c9" },
         ]
 
         [[distribution]]
         name = "package-c"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_accrue_c-1.0.0.tar.gz#sha256=a3e09ac3dc8e787a08ebe8d5d6072e09720c76cbbcb76a6645d6f59652742015", hash = "sha256:a3e09ac3dc8e787a08ebe8d5d6072e09720c76cbbcb76a6645d6f59652742015" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_accrue_c-1.0.0.tar.gz#sha256=a3e09ac3dc8e787a08ebe8d5d6072e09720c76cbbcb76a6645d6f59652742015", hash = "sha256:a3e09ac3dc8e787a08ebe8d5d6072e09720c76cbbcb76a6645d6f59652742015" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_accrue_c-1.0.0-py3-none-any.whl#sha256=b0c8719d38c91b2a8548bd065b1d2153fbe031b37775ed244e76fe5bdfbb502e", hash = "sha256:b0c8719d38c91b2a8548bd065b1d2153fbe031b37775ed244e76fe5bdfbb502e" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_accrue_c-1.0.0-py3-none-any.whl#sha256=b0c8719d38c91b2a8548bd065b1d2153fbe031b37775ed244e76fe5bdfbb502e", hash = "sha256:b0c8719d38c91b2a8548bd065b1d2153fbe031b37775ed244e76fe5bdfbb502e" },
         ]
 
         [[distribution]]
@@ -899,8 +935,7 @@ fn fork_marker_disjoint() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -971,8 +1006,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -992,57 +1026,78 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "implementation_name == 'cpython'" },
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_a-1.0.0.tar.gz#sha256=c7232306e8597d46c3fe53a3b1472f99b8ff36b3169f335ba0a5b625e193f7d4", hash = "sha256:c7232306e8597d46c3fe53a3b1472f99b8ff36b3169f335ba0a5b625e193f7d4" }
+        dependencies = [
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_a-1.0.0.tar.gz#sha256=c7232306e8597d46c3fe53a3b1472f99b8ff36b3169f335ba0a5b625e193f7d4", hash = "sha256:c7232306e8597d46c3fe53a3b1472f99b8ff36b3169f335ba0a5b625e193f7d4" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_a-1.0.0-py3-none-any.whl#sha256=198ae54c02a59734dc009bfcee1148d40f56c605b62f9f1a00467e09ebf2ff07", hash = "sha256:198ae54c02a59734dc009bfcee1148d40f56c605b62f9f1a00467e09ebf2ff07" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_a-1.0.0-py3-none-any.whl#sha256=198ae54c02a59734dc009bfcee1148d40f56c605b62f9f1a00467e09ebf2ff07", hash = "sha256:198ae54c02a59734dc009bfcee1148d40f56c605b62f9f1a00467e09ebf2ff07" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_a-2.0.0.tar.gz#sha256=0dcb58c8276afbe439e1c94708fb71954fb8869cc65c230ce8f462c911992ceb", hash = "sha256:0dcb58c8276afbe439e1c94708fb71954fb8869cc65c230ce8f462c911992ceb" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_a-2.0.0.tar.gz#sha256=0dcb58c8276afbe439e1c94708fb71954fb8869cc65c230ce8f462c911992ceb", hash = "sha256:0dcb58c8276afbe439e1c94708fb71954fb8869cc65c230ce8f462c911992ceb" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_a-2.0.0-py3-none-any.whl#sha256=61b7d273468584342de4c0185beed5b128797ce95ec9ec4a670fe30f73351cf7", hash = "sha256:61b7d273468584342de4c0185beed5b128797ce95ec9ec4a670fe30f73351cf7" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_a-2.0.0-py3-none-any.whl#sha256=61b7d273468584342de4c0185beed5b128797ce95ec9ec4a670fe30f73351cf7", hash = "sha256:61b7d273468584342de4c0185beed5b128797ce95ec9ec4a670fe30f73351cf7" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+        ]
         dependencies = [
             { name = "package-c", marker = "implementation_name == 'pypy' or sys_platform == 'linux'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_b-1.0.0.tar.gz#sha256=d6bd196a0a152c1b32e09f08e554d22ae6a6b3b916e39ad4552572afae5f5492", hash = "sha256:d6bd196a0a152c1b32e09f08e554d22ae6a6b3b916e39ad4552572afae5f5492" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-1.0.0.tar.gz#sha256=d6bd196a0a152c1b32e09f08e554d22ae6a6b3b916e39ad4552572afae5f5492", hash = "sha256:d6bd196a0a152c1b32e09f08e554d22ae6a6b3b916e39ad4552572afae5f5492" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_b-1.0.0-py3-none-any.whl#sha256=e1deba885509945ef087e4f31c7dba3ee436fc8284b360fe207a3c42f2f9e22f", hash = "sha256:e1deba885509945ef087e4f31c7dba3ee436fc8284b360fe207a3c42f2f9e22f" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-1.0.0-py3-none-any.whl#sha256=e1deba885509945ef087e4f31c7dba3ee436fc8284b360fe207a3c42f2f9e22f", hash = "sha256:e1deba885509945ef087e4f31c7dba3ee436fc8284b360fe207a3c42f2f9e22f" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_b-2.0.0.tar.gz#sha256=4533845ba671575a25ceb32f10f0bc6836949bef37b7da6e7dd37d9be389871c", hash = "sha256:4533845ba671575a25ceb32f10f0bc6836949bef37b7da6e7dd37d9be389871c" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-2.0.0.tar.gz#sha256=4533845ba671575a25ceb32f10f0bc6836949bef37b7da6e7dd37d9be389871c", hash = "sha256:4533845ba671575a25ceb32f10f0bc6836949bef37b7da6e7dd37d9be389871c" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_b-2.0.0-py3-none-any.whl#sha256=736d1b59cb46a0b889614bc7557c293de245fe8954e3200e786500ae8e42504b", hash = "sha256:736d1b59cb46a0b889614bc7557c293de245fe8954e3200e786500ae8e42504b" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-2.0.0-py3-none-any.whl#sha256=736d1b59cb46a0b889614bc7557c293de245fe8954e3200e786500ae8e42504b", hash = "sha256:736d1b59cb46a0b889614bc7557c293de245fe8954e3200e786500ae8e42504b" },
         ]
 
         [[distribution]]
         name = "package-c"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_c-1.0.0.tar.gz#sha256=7ce8efca029cfa952e64f55c2d47fe33975c7f77ec689384bda11cbc3b7ef1db", hash = "sha256:7ce8efca029cfa952e64f55c2d47fe33975c7f77ec689384bda11cbc3b7ef1db" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_c-1.0.0.tar.gz#sha256=7ce8efca029cfa952e64f55c2d47fe33975c7f77ec689384bda11cbc3b7ef1db", hash = "sha256:7ce8efca029cfa952e64f55c2d47fe33975c7f77ec689384bda11cbc3b7ef1db" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_allowed_c-1.0.0-py3-none-any.whl#sha256=6a6b776dedabceb6a6c4f54a5d932076fa3fed1380310491999ca2d31e13b41c", hash = "sha256:6a6b776dedabceb6a6c4f54a5d932076fa3fed1380310491999ca2d31e13b41c" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_c-1.0.0-py3-none-any.whl#sha256=6a6b776dedabceb6a6c4f54a5d932076fa3fed1380310491999ca2d31e13b41c", hash = "sha256:6a6b776dedabceb6a6c4f54a5d932076fa3fed1380310491999ca2d31e13b41c" },
         ]
 
         [[distribution]]
@@ -1050,8 +1105,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -1115,8 +1170,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1136,45 +1190,66 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+        ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "implementation_name == 'cpython'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_disallowed_a-1.0.0.tar.gz#sha256=92081d91570582f3a94ed156f203de53baca5b3fdc350aa1c831c7c42723e798", hash = "sha256:92081d91570582f3a94ed156f203de53baca5b3fdc350aa1c831c7c42723e798" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_a-1.0.0.tar.gz#sha256=92081d91570582f3a94ed156f203de53baca5b3fdc350aa1c831c7c42723e798", hash = "sha256:92081d91570582f3a94ed156f203de53baca5b3fdc350aa1c831c7c42723e798" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_disallowed_a-1.0.0-py3-none-any.whl#sha256=ee2dc68d5b33c0318183431cebf99ccca63d98601b936e5d3eae804c73f2b154", hash = "sha256:ee2dc68d5b33c0318183431cebf99ccca63d98601b936e5d3eae804c73f2b154" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_a-1.0.0-py3-none-any.whl#sha256=ee2dc68d5b33c0318183431cebf99ccca63d98601b936e5d3eae804c73f2b154", hash = "sha256:ee2dc68d5b33c0318183431cebf99ccca63d98601b936e5d3eae804c73f2b154" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_disallowed_a-2.0.0.tar.gz#sha256=9d48383b0699f575af15871f6f7a928b835cd5ad4e13f91a675ee5aba722dabc", hash = "sha256:9d48383b0699f575af15871f6f7a928b835cd5ad4e13f91a675ee5aba722dabc" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_a-2.0.0.tar.gz#sha256=9d48383b0699f575af15871f6f7a928b835cd5ad4e13f91a675ee5aba722dabc", hash = "sha256:9d48383b0699f575af15871f6f7a928b835cd5ad4e13f91a675ee5aba722dabc" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_disallowed_a-2.0.0-py3-none-any.whl#sha256=099db8d3af6c9dfc10589ab0f1e2e6a74276a167afb39322ddaf657791247456", hash = "sha256:099db8d3af6c9dfc10589ab0f1e2e6a74276a167afb39322ddaf657791247456" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_a-2.0.0-py3-none-any.whl#sha256=099db8d3af6c9dfc10589ab0f1e2e6a74276a167afb39322ddaf657791247456", hash = "sha256:099db8d3af6c9dfc10589ab0f1e2e6a74276a167afb39322ddaf657791247456" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_disallowed_b-1.0.0.tar.gz#sha256=d44b87bd8d39240bca55eaae84a245e74197ed0b7897c27af9f168c713cc63bd", hash = "sha256:d44b87bd8d39240bca55eaae84a245e74197ed0b7897c27af9f168c713cc63bd" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_b-1.0.0.tar.gz#sha256=d44b87bd8d39240bca55eaae84a245e74197ed0b7897c27af9f168c713cc63bd", hash = "sha256:d44b87bd8d39240bca55eaae84a245e74197ed0b7897c27af9f168c713cc63bd" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_disallowed_b-1.0.0-py3-none-any.whl#sha256=999b3d0029ea0131272257e2b04c0e673defa6c25be6efc411e04936bce72ef6", hash = "sha256:999b3d0029ea0131272257e2b04c0e673defa6c25be6efc411e04936bce72ef6" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_b-1.0.0-py3-none-any.whl#sha256=999b3d0029ea0131272257e2b04c0e673defa6c25be6efc411e04936bce72ef6", hash = "sha256:999b3d0029ea0131272257e2b04c0e673defa6c25be6efc411e04936bce72ef6" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_disallowed_b-2.0.0.tar.gz#sha256=75a48bf2d44a0a0be6ca33820f5076665765be7b43dabf5f94f7fd5247071097", hash = "sha256:75a48bf2d44a0a0be6ca33820f5076665765be7b43dabf5f94f7fd5247071097" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_b-2.0.0.tar.gz#sha256=75a48bf2d44a0a0be6ca33820f5076665765be7b43dabf5f94f7fd5247071097", hash = "sha256:75a48bf2d44a0a0be6ca33820f5076665765be7b43dabf5f94f7fd5247071097" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_disallowed_b-2.0.0-py3-none-any.whl#sha256=2c6aedd257d0ed21bb96f6e0baba8314c001d4078d09413cda147fb6badb39a2", hash = "sha256:2c6aedd257d0ed21bb96f6e0baba8314c001d4078d09413cda147fb6badb39a2" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_b-2.0.0-py3-none-any.whl#sha256=2c6aedd257d0ed21bb96f6e0baba8314c001d4078d09413cda147fb6badb39a2", hash = "sha256:2c6aedd257d0ed21bb96f6e0baba8314c001d4078d09413cda147fb6badb39a2" },
         ]
 
         [[distribution]]
@@ -1182,8 +1257,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -1248,8 +1323,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1269,45 +1343,66 @@ fn fork_marker_inherit_combined() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+        ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "implementation_name == 'cpython'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_a-1.0.0.tar.gz#sha256=2ec4c9dbb7078227d996c344b9e0c1b365ed0000de9527b2ba5b616233636f07", hash = "sha256:2ec4c9dbb7078227d996c344b9e0c1b365ed0000de9527b2ba5b616233636f07" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_a-1.0.0.tar.gz#sha256=2ec4c9dbb7078227d996c344b9e0c1b365ed0000de9527b2ba5b616233636f07", hash = "sha256:2ec4c9dbb7078227d996c344b9e0c1b365ed0000de9527b2ba5b616233636f07" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_a-1.0.0-py3-none-any.whl#sha256=1150f6d977824bc0260cfb5fcf34816424ed4602d5df316c291b8df3f723c888", hash = "sha256:1150f6d977824bc0260cfb5fcf34816424ed4602d5df316c291b8df3f723c888" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_a-1.0.0-py3-none-any.whl#sha256=1150f6d977824bc0260cfb5fcf34816424ed4602d5df316c291b8df3f723c888", hash = "sha256:1150f6d977824bc0260cfb5fcf34816424ed4602d5df316c291b8df3f723c888" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_a-2.0.0.tar.gz#sha256=47958d1659220ee7722b0f26e8c1fe41217a2816881ffa929f0ba794a87ceebf", hash = "sha256:47958d1659220ee7722b0f26e8c1fe41217a2816881ffa929f0ba794a87ceebf" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_a-2.0.0.tar.gz#sha256=47958d1659220ee7722b0f26e8c1fe41217a2816881ffa929f0ba794a87ceebf", hash = "sha256:47958d1659220ee7722b0f26e8c1fe41217a2816881ffa929f0ba794a87ceebf" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_a-2.0.0-py3-none-any.whl#sha256=67e142d749674a27c872db714d50fda083010789da51291e3c30b4daf0e96b3b", hash = "sha256:67e142d749674a27c872db714d50fda083010789da51291e3c30b4daf0e96b3b" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_a-2.0.0-py3-none-any.whl#sha256=67e142d749674a27c872db714d50fda083010789da51291e3c30b4daf0e96b3b", hash = "sha256:67e142d749674a27c872db714d50fda083010789da51291e3c30b4daf0e96b3b" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_b-1.0.0.tar.gz#sha256=6992d194cb5a0f0eed9ed6617d3212af4e3ff09274bf7622c8a1008b072128da", hash = "sha256:6992d194cb5a0f0eed9ed6617d3212af4e3ff09274bf7622c8a1008b072128da" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_b-1.0.0.tar.gz#sha256=6992d194cb5a0f0eed9ed6617d3212af4e3ff09274bf7622c8a1008b072128da", hash = "sha256:6992d194cb5a0f0eed9ed6617d3212af4e3ff09274bf7622c8a1008b072128da" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_b-1.0.0-py3-none-any.whl#sha256=d9b50d8a0968d65af338e27d6b2a58eea59c514e47b820752a2c068b5a8333a7", hash = "sha256:d9b50d8a0968d65af338e27d6b2a58eea59c514e47b820752a2c068b5a8333a7" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_b-1.0.0-py3-none-any.whl#sha256=d9b50d8a0968d65af338e27d6b2a58eea59c514e47b820752a2c068b5a8333a7", hash = "sha256:d9b50d8a0968d65af338e27d6b2a58eea59c514e47b820752a2c068b5a8333a7" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_b-2.0.0.tar.gz#sha256=e340061505d621a340d10ec1dbaf02dfce0c66358ee8190f61f78018f9999989", hash = "sha256:e340061505d621a340d10ec1dbaf02dfce0c66358ee8190f61f78018f9999989" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_b-2.0.0.tar.gz#sha256=e340061505d621a340d10ec1dbaf02dfce0c66358ee8190f61f78018f9999989", hash = "sha256:e340061505d621a340d10ec1dbaf02dfce0c66358ee8190f61f78018f9999989" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_combined_b-2.0.0-py3-none-any.whl#sha256=ff364fd590d05651579d8bea621b069934470106b9a82ab960fb93dfd88ea038", hash = "sha256:ff364fd590d05651579d8bea621b069934470106b9a82ab960fb93dfd88ea038" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_b-2.0.0-py3-none-any.whl#sha256=ff364fd590d05651579d8bea621b069934470106b9a82ab960fb93dfd88ea038", hash = "sha256:ff364fd590d05651579d8bea621b069934470106b9a82ab960fb93dfd88ea038" },
         ]
 
         [[distribution]]
@@ -1315,8 +1410,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -1375,8 +1470,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1396,35 +1490,46 @@ fn fork_marker_inherit_isolated() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_isolated_a-1.0.0.tar.gz#sha256=724ffc24debfa2bc6b5c2457df777c523638ec3586cc953f8509dad581aa6887", hash = "sha256:724ffc24debfa2bc6b5c2457df777c523638ec3586cc953f8509dad581aa6887" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_isolated_a-1.0.0.tar.gz#sha256=724ffc24debfa2bc6b5c2457df777c523638ec3586cc953f8509dad581aa6887", hash = "sha256:724ffc24debfa2bc6b5c2457df777c523638ec3586cc953f8509dad581aa6887" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_isolated_a-1.0.0-py3-none-any.whl#sha256=6823b88bf6debf2ec6195d82943c2812235a642438f007c0a3c95d745a5b95ba", hash = "sha256:6823b88bf6debf2ec6195d82943c2812235a642438f007c0a3c95d745a5b95ba" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_isolated_a-1.0.0-py3-none-any.whl#sha256=6823b88bf6debf2ec6195d82943c2812235a642438f007c0a3c95d745a5b95ba", hash = "sha256:6823b88bf6debf2ec6195d82943c2812235a642438f007c0a3c95d745a5b95ba" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
         dependencies = [
             { name = "package-b", marker = "sys_platform == 'linux'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_isolated_a-2.0.0.tar.gz#sha256=bc4567da4349a9c09b7fb4733f0b9f6476249240192291cf051c2b1d28b829fd", hash = "sha256:bc4567da4349a9c09b7fb4733f0b9f6476249240192291cf051c2b1d28b829fd" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_isolated_a-2.0.0.tar.gz#sha256=bc4567da4349a9c09b7fb4733f0b9f6476249240192291cf051c2b1d28b829fd", hash = "sha256:bc4567da4349a9c09b7fb4733f0b9f6476249240192291cf051c2b1d28b829fd" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_isolated_a-2.0.0-py3-none-any.whl#sha256=16986b43ef61e3f639b61fc9c22ede133864606d3d72716161a59acd64793c02", hash = "sha256:16986b43ef61e3f639b61fc9c22ede133864606d3d72716161a59acd64793c02" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_isolated_a-2.0.0-py3-none-any.whl#sha256=16986b43ef61e3f639b61fc9c22ede133864606d3d72716161a59acd64793c02", hash = "sha256:16986b43ef61e3f639b61fc9c22ede133864606d3d72716161a59acd64793c02" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_isolated_b-1.0.0.tar.gz#sha256=96f8c3cabc5795e08a064c89ec76a4bfba8afe3c13d647161b4a1568b4584ced", hash = "sha256:96f8c3cabc5795e08a064c89ec76a4bfba8afe3c13d647161b4a1568b4584ced" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_isolated_b-1.0.0.tar.gz#sha256=96f8c3cabc5795e08a064c89ec76a4bfba8afe3c13d647161b4a1568b4584ced", hash = "sha256:96f8c3cabc5795e08a064c89ec76a4bfba8afe3c13d647161b4a1568b4584ced" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_isolated_b-1.0.0-py3-none-any.whl#sha256=c8affc2f13f9bcd08b3d1601a21a1781ea14d52a8cddc708b29428c9c3d53ea5", hash = "sha256:c8affc2f13f9bcd08b3d1601a21a1781ea14d52a8cddc708b29428c9c3d53ea5" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_isolated_b-1.0.0-py3-none-any.whl#sha256=c8affc2f13f9bcd08b3d1601a21a1781ea14d52a8cddc708b29428c9c3d53ea5", hash = "sha256:c8affc2f13f9bcd08b3d1601a21a1781ea14d52a8cddc708b29428c9c3d53ea5" },
         ]
 
         [[distribution]]
@@ -1432,8 +1537,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -1497,8 +1602,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1518,47 +1622,58 @@ fn fork_marker_inherit_transitive() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        dependencies = [
-            { name = "package-b" },
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_transitive_a-1.0.0.tar.gz#sha256=8bcab85231487b9350471da0c4c22dc3d69dfe4a1198d16b5f81b0235d7112ce", hash = "sha256:8bcab85231487b9350471da0c4c22dc3d69dfe4a1198d16b5f81b0235d7112ce" }
+        dependencies = [
+            { name = "package-b", marker = "sys_platform == 'darwin'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_a-1.0.0.tar.gz#sha256=8bcab85231487b9350471da0c4c22dc3d69dfe4a1198d16b5f81b0235d7112ce", hash = "sha256:8bcab85231487b9350471da0c4c22dc3d69dfe4a1198d16b5f81b0235d7112ce" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_transitive_a-1.0.0-py3-none-any.whl#sha256=84d650ff1a909198ba82cbe0f697e836d8a570fb71faa6ad4a30c4df332dfde6", hash = "sha256:84d650ff1a909198ba82cbe0f697e836d8a570fb71faa6ad4a30c4df332dfde6" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_a-1.0.0-py3-none-any.whl#sha256=84d650ff1a909198ba82cbe0f697e836d8a570fb71faa6ad4a30c4df332dfde6", hash = "sha256:84d650ff1a909198ba82cbe0f697e836d8a570fb71faa6ad4a30c4df332dfde6" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_transitive_a-2.0.0.tar.gz#sha256=4437ac14c340fec0b451cbc9486f5b8e106568634264ecad339a8de565a93be6", hash = "sha256:4437ac14c340fec0b451cbc9486f5b8e106568634264ecad339a8de565a93be6" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_a-2.0.0.tar.gz#sha256=4437ac14c340fec0b451cbc9486f5b8e106568634264ecad339a8de565a93be6", hash = "sha256:4437ac14c340fec0b451cbc9486f5b8e106568634264ecad339a8de565a93be6" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_transitive_a-2.0.0-py3-none-any.whl#sha256=420c4c6b02d22c33f7f8ae9f290acc5b4c372fc2e49c881d259237a31c76dc0b", hash = "sha256:420c4c6b02d22c33f7f8ae9f290acc5b4c372fc2e49c881d259237a31c76dc0b" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_a-2.0.0-py3-none-any.whl#sha256=420c4c6b02d22c33f7f8ae9f290acc5b4c372fc2e49c881d259237a31c76dc0b", hash = "sha256:420c4c6b02d22c33f7f8ae9f290acc5b4c372fc2e49c881d259237a31c76dc0b" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-c" },
+            { name = "package-c", marker = "sys_platform == 'darwin'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_transitive_b-1.0.0.tar.gz#sha256=03b4b0e323c36bd4a1e51a65e1489715da231d44d26e12b54544e3bf9a9f6129", hash = "sha256:03b4b0e323c36bd4a1e51a65e1489715da231d44d26e12b54544e3bf9a9f6129" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_b-1.0.0.tar.gz#sha256=03b4b0e323c36bd4a1e51a65e1489715da231d44d26e12b54544e3bf9a9f6129", hash = "sha256:03b4b0e323c36bd4a1e51a65e1489715da231d44d26e12b54544e3bf9a9f6129" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_transitive_b-1.0.0-py3-none-any.whl#sha256=c9738afccc13d7d5bd7be85abf5dc77f88c43c577fb2f90dfa2abf1ffa0c8db6", hash = "sha256:c9738afccc13d7d5bd7be85abf5dc77f88c43c577fb2f90dfa2abf1ffa0c8db6" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_b-1.0.0-py3-none-any.whl#sha256=c9738afccc13d7d5bd7be85abf5dc77f88c43c577fb2f90dfa2abf1ffa0c8db6", hash = "sha256:c9738afccc13d7d5bd7be85abf5dc77f88c43c577fb2f90dfa2abf1ffa0c8db6" },
         ]
 
         [[distribution]]
         name = "package-c"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_transitive_c-1.0.0.tar.gz#sha256=58bb788896b2297f2948f51a27fc48cfe44057c687a3c0c4d686b107975f7f32", hash = "sha256:58bb788896b2297f2948f51a27fc48cfe44057c687a3c0c4d686b107975f7f32" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_c-1.0.0.tar.gz#sha256=58bb788896b2297f2948f51a27fc48cfe44057c687a3c0c4d686b107975f7f32", hash = "sha256:58bb788896b2297f2948f51a27fc48cfe44057c687a3c0c4d686b107975f7f32" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_transitive_c-1.0.0-py3-none-any.whl#sha256=ad2cbb0582ec6f4dc9549d1726d2aae66cd1fdf0e355acc70cd720cf65ae4d86", hash = "sha256:ad2cbb0582ec6f4dc9549d1726d2aae66cd1fdf0e355acc70cd720cf65ae4d86" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_transitive_c-1.0.0-py3-none-any.whl#sha256=ad2cbb0582ec6f4dc9549d1726d2aae66cd1fdf0e355acc70cd720cf65ae4d86", hash = "sha256:ad2cbb0582ec6f4dc9549d1726d2aae66cd1fdf0e355acc70cd720cf65ae4d86" },
         ]
 
         [[distribution]]
@@ -1566,8 +1681,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -1626,8 +1741,7 @@ fn fork_marker_inherit() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1647,23 +1761,34 @@ fn fork_marker_inherit() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_a-1.0.0.tar.gz#sha256=177511ec69a2f04de39867d43f167a33194ae983e8f86a1cc9b51f59fc379d4b", hash = "sha256:177511ec69a2f04de39867d43f167a33194ae983e8f86a1cc9b51f59fc379d4b" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_a-1.0.0.tar.gz#sha256=177511ec69a2f04de39867d43f167a33194ae983e8f86a1cc9b51f59fc379d4b", hash = "sha256:177511ec69a2f04de39867d43f167a33194ae983e8f86a1cc9b51f59fc379d4b" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_a-1.0.0-py3-none-any.whl#sha256=16447932477c5feaa874b4e7510023c6f732578cec07158bc0e872af887a77d6", hash = "sha256:16447932477c5feaa874b4e7510023c6f732578cec07158bc0e872af887a77d6" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_a-1.0.0-py3-none-any.whl#sha256=16447932477c5feaa874b4e7510023c6f732578cec07158bc0e872af887a77d6", hash = "sha256:16447932477c5feaa874b4e7510023c6f732578cec07158bc0e872af887a77d6" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_a-2.0.0.tar.gz#sha256=43e24ce6fcbfbbff1db5eb20b583c20c2aa0888138bfafeab205c4ccc6e7e0a4", hash = "sha256:43e24ce6fcbfbbff1db5eb20b583c20c2aa0888138bfafeab205c4ccc6e7e0a4" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_a-2.0.0.tar.gz#sha256=43e24ce6fcbfbbff1db5eb20b583c20c2aa0888138bfafeab205c4ccc6e7e0a4", hash = "sha256:43e24ce6fcbfbbff1db5eb20b583c20c2aa0888138bfafeab205c4ccc6e7e0a4" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_inherit_a-2.0.0-py3-none-any.whl#sha256=d650b6acf8f68d85e210ceb3e7802fbe84aad2b918b06a72dee534fe5474852b", hash = "sha256:d650b6acf8f68d85e210ceb3e7802fbe84aad2b918b06a72dee534fe5474852b" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_a-2.0.0-py3-none-any.whl#sha256=d650b6acf8f68d85e210ceb3e7802fbe84aad2b918b06a72dee534fe5474852b", hash = "sha256:d650b6acf8f68d85e210ceb3e7802fbe84aad2b918b06a72dee534fe5474852b" },
         ]
 
         [[distribution]]
@@ -1671,8 +1796,8 @@ fn fork_marker_inherit() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -1736,8 +1861,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1757,44 +1881,55 @@ fn fork_marker_limited_inherit() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_limited_inherit_a-1.0.0.tar.gz#sha256=ab1fde8d0acb9a2fe99b7a005939962b1c26c6d876e4a55e81fb9d1a1e5e9f76", hash = "sha256:ab1fde8d0acb9a2fe99b7a005939962b1c26c6d876e4a55e81fb9d1a1e5e9f76" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_a-1.0.0.tar.gz#sha256=ab1fde8d0acb9a2fe99b7a005939962b1c26c6d876e4a55e81fb9d1a1e5e9f76", hash = "sha256:ab1fde8d0acb9a2fe99b7a005939962b1c26c6d876e4a55e81fb9d1a1e5e9f76" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_limited_inherit_a-1.0.0-py3-none-any.whl#sha256=0dcb9659eeb891701535005a2afd7c579f566d3908e96137db74129924ae6a7e", hash = "sha256:0dcb9659eeb891701535005a2afd7c579f566d3908e96137db74129924ae6a7e" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_a-1.0.0-py3-none-any.whl#sha256=0dcb9659eeb891701535005a2afd7c579f566d3908e96137db74129924ae6a7e", hash = "sha256:0dcb9659eeb891701535005a2afd7c579f566d3908e96137db74129924ae6a7e" },
         ]
 
         [[distribution]]
         name = "package-a"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_limited_inherit_a-2.0.0.tar.gz#sha256=009fdb8872cf52324c1bcdebef31feaba3c262fd76d150a753152aeee3d55b10", hash = "sha256:009fdb8872cf52324c1bcdebef31feaba3c262fd76d150a753152aeee3d55b10" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_a-2.0.0.tar.gz#sha256=009fdb8872cf52324c1bcdebef31feaba3c262fd76d150a753152aeee3d55b10", hash = "sha256:009fdb8872cf52324c1bcdebef31feaba3c262fd76d150a753152aeee3d55b10" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_limited_inherit_a-2.0.0-py3-none-any.whl#sha256=10957fddbd5611e0db154744a01d588c7105e26fd5f6a8150956ca9542d844c5", hash = "sha256:10957fddbd5611e0db154744a01d588c7105e26fd5f6a8150956ca9542d844c5" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_a-2.0.0-py3-none-any.whl#sha256=10957fddbd5611e0db154744a01d588c7105e26fd5f6a8150956ca9542d844c5", hash = "sha256:10957fddbd5611e0db154744a01d588c7105e26fd5f6a8150956ca9542d844c5" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
             { name = "package-c", marker = "sys_platform == 'linux'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_limited_inherit_b-1.0.0.tar.gz#sha256=4c04e090df03e308ecd38a9b8db9813a09fb20a747a89f86c497702c3e5a9001", hash = "sha256:4c04e090df03e308ecd38a9b8db9813a09fb20a747a89f86c497702c3e5a9001" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_b-1.0.0.tar.gz#sha256=4c04e090df03e308ecd38a9b8db9813a09fb20a747a89f86c497702c3e5a9001", hash = "sha256:4c04e090df03e308ecd38a9b8db9813a09fb20a747a89f86c497702c3e5a9001" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_limited_inherit_b-1.0.0-py3-none-any.whl#sha256=17365faaf25dba08be579867f219f914a0ff3298441f8d7b6201625a253333ec", hash = "sha256:17365faaf25dba08be579867f219f914a0ff3298441f8d7b6201625a253333ec" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_b-1.0.0-py3-none-any.whl#sha256=17365faaf25dba08be579867f219f914a0ff3298441f8d7b6201625a253333ec", hash = "sha256:17365faaf25dba08be579867f219f914a0ff3298441f8d7b6201625a253333ec" },
         ]
 
         [[distribution]]
         name = "package-c"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_limited_inherit_c-1.0.0.tar.gz#sha256=8dcb05f5dff09fec52ab507b215ff367fe815848319a17929db997ad3afe88ae", hash = "sha256:8dcb05f5dff09fec52ab507b215ff367fe815848319a17929db997ad3afe88ae" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_c-1.0.0.tar.gz#sha256=8dcb05f5dff09fec52ab507b215ff367fe815848319a17929db997ad3afe88ae", hash = "sha256:8dcb05f5dff09fec52ab507b215ff367fe815848319a17929db997ad3afe88ae" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_limited_inherit_c-1.0.0-py3-none-any.whl#sha256=877a87a4987ad795ddaded3e7266ed7defdd3cfbe07a29500cb6047637db4065", hash = "sha256:877a87a4987ad795ddaded3e7266ed7defdd3cfbe07a29500cb6047637db4065" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_limited_inherit_c-1.0.0-py3-none-any.whl#sha256=877a87a4987ad795ddaded3e7266ed7defdd3cfbe07a29500cb6047637db4065", hash = "sha256:877a87a4987ad795ddaded3e7266ed7defdd3cfbe07a29500cb6047637db4065" },
         ]
 
         [[distribution]]
@@ -1802,8 +1937,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-b", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
         ]
         "###
@@ -1865,8 +2000,7 @@ fn fork_marker_selection() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -1886,32 +2020,43 @@ fn fork_marker_selection() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "0.1.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_selection_a-0.1.0.tar.gz#sha256=ece83ba864a62d5d747439f79a0bf36aa4c18d15bca96aab855ffc2e94a8eef7", hash = "sha256:ece83ba864a62d5d747439f79a0bf36aa4c18d15bca96aab855ffc2e94a8eef7" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_selection_a-0.1.0.tar.gz#sha256=ece83ba864a62d5d747439f79a0bf36aa4c18d15bca96aab855ffc2e94a8eef7", hash = "sha256:ece83ba864a62d5d747439f79a0bf36aa4c18d15bca96aab855ffc2e94a8eef7" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_selection_a-0.1.0-py3-none-any.whl#sha256=a3b9d6e46cc226d20994cc60653fd59d81d96527749f971a6f59ef8cbcbc7c01", hash = "sha256:a3b9d6e46cc226d20994cc60653fd59d81d96527749f971a6f59ef8cbcbc7c01" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_selection_a-0.1.0-py3-none-any.whl#sha256=a3b9d6e46cc226d20994cc60653fd59d81d96527749f971a6f59ef8cbcbc7c01", hash = "sha256:a3b9d6e46cc226d20994cc60653fd59d81d96527749f971a6f59ef8cbcbc7c01" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_selection_b-1.0.0.tar.gz#sha256=6f5ea28cadb8b5dfa15d32c9e38818f8f7150fc4f9a58e49aec4e10b23342be4", hash = "sha256:6f5ea28cadb8b5dfa15d32c9e38818f8f7150fc4f9a58e49aec4e10b23342be4" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_selection_b-1.0.0.tar.gz#sha256=6f5ea28cadb8b5dfa15d32c9e38818f8f7150fc4f9a58e49aec4e10b23342be4", hash = "sha256:6f5ea28cadb8b5dfa15d32c9e38818f8f7150fc4f9a58e49aec4e10b23342be4" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_selection_b-1.0.0-py3-none-any.whl#sha256=5eb8c7fc25dfe94c8a3b71bc09eadb8cd4c7e55b974cee851b848c3856d6a4f9", hash = "sha256:5eb8c7fc25dfe94c8a3b71bc09eadb8cd4c7e55b974cee851b848c3856d6a4f9" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_selection_b-1.0.0-py3-none-any.whl#sha256=5eb8c7fc25dfe94c8a3b71bc09eadb8cd4c7e55b974cee851b848c3856d6a4f9", hash = "sha256:5eb8c7fc25dfe94c8a3b71bc09eadb8cd4c7e55b974cee851b848c3856d6a4f9" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_selection_b-2.0.0.tar.gz#sha256=d32033ecdf37d605e4b3b3e88df6562bb7ca01c6ed3fb9a55ec078eccc1df9d1", hash = "sha256:d32033ecdf37d605e4b3b3e88df6562bb7ca01c6ed3fb9a55ec078eccc1df9d1" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_selection_b-2.0.0.tar.gz#sha256=d32033ecdf37d605e4b3b3e88df6562bb7ca01c6ed3fb9a55ec078eccc1df9d1", hash = "sha256:d32033ecdf37d605e4b3b3e88df6562bb7ca01c6ed3fb9a55ec078eccc1df9d1" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_selection_b-2.0.0-py3-none-any.whl#sha256=163fbcd238a66243064d41bd383657a63e45155f63bf92668c23af5245307380", hash = "sha256:163fbcd238a66243064d41bd383657a63e45155f63bf92668c23af5245307380" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_selection_b-2.0.0-py3-none-any.whl#sha256=163fbcd238a66243064d41bd383657a63e45155f63bf92668c23af5245307380", hash = "sha256:163fbcd238a66243064d41bd383657a63e45155f63bf92668c23af5245307380" },
         ]
 
         [[distribution]]
@@ -1920,8 +2065,8 @@ fn fork_marker_selection() -> Result<()> {
         source = { editable = "." }
         dependencies = [
             { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -1993,8 +2138,7 @@ fn fork_marker_track() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2014,44 +2158,55 @@ fn fork_marker_track() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-a"
         version = "1.3.1"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
             { name = "package-c", marker = "implementation_name == 'iron'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_track_a-1.3.1.tar.gz#sha256=ffc490c887058825e96a0cc4a270cf56b72f7f28b927c450086603317bb8c120", hash = "sha256:ffc490c887058825e96a0cc4a270cf56b72f7f28b927c450086603317bb8c120" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_a-1.3.1.tar.gz#sha256=ffc490c887058825e96a0cc4a270cf56b72f7f28b927c450086603317bb8c120", hash = "sha256:ffc490c887058825e96a0cc4a270cf56b72f7f28b927c450086603317bb8c120" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_track_a-1.3.1-py3-none-any.whl#sha256=d9dc6a64400a041199df2d37182582ff7cc986bac486da273d814627e9b86648", hash = "sha256:d9dc6a64400a041199df2d37182582ff7cc986bac486da273d814627e9b86648" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_a-1.3.1-py3-none-any.whl#sha256=d9dc6a64400a041199df2d37182582ff7cc986bac486da273d814627e9b86648", hash = "sha256:d9dc6a64400a041199df2d37182582ff7cc986bac486da273d814627e9b86648" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "2.7"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_track_b-2.7.tar.gz#sha256=855bf45837a4ba669a5850b14b0253cb138925fdd2b06a2f15c6582b8fabb8a0", hash = "sha256:855bf45837a4ba669a5850b14b0253cb138925fdd2b06a2f15c6582b8fabb8a0" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_b-2.7.tar.gz#sha256=855bf45837a4ba669a5850b14b0253cb138925fdd2b06a2f15c6582b8fabb8a0", hash = "sha256:855bf45837a4ba669a5850b14b0253cb138925fdd2b06a2f15c6582b8fabb8a0" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_track_b-2.7-py3-none-any.whl#sha256=544eb2b567d2293c47da724af91fec59c2d3e06675617d29068864ec3a4e390f", hash = "sha256:544eb2b567d2293c47da724af91fec59c2d3e06675617d29068864ec3a4e390f" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_b-2.7-py3-none-any.whl#sha256=544eb2b567d2293c47da724af91fec59c2d3e06675617d29068864ec3a4e390f", hash = "sha256:544eb2b567d2293c47da724af91fec59c2d3e06675617d29068864ec3a4e390f" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "2.8"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_track_b-2.8.tar.gz#sha256=2e14b0ff1fb7f5cf491bd31d876218adee1d6a208ff197dc30363cdf25262e80", hash = "sha256:2e14b0ff1fb7f5cf491bd31d876218adee1d6a208ff197dc30363cdf25262e80" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_b-2.8.tar.gz#sha256=2e14b0ff1fb7f5cf491bd31d876218adee1d6a208ff197dc30363cdf25262e80", hash = "sha256:2e14b0ff1fb7f5cf491bd31d876218adee1d6a208ff197dc30363cdf25262e80" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_track_b-2.8-py3-none-any.whl#sha256=5aba691ce804ee39b2464c7757f8680786a1468e152ee845ff841c37f8112e21", hash = "sha256:5aba691ce804ee39b2464c7757f8680786a1468e152ee845ff841c37f8112e21" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_b-2.8-py3-none-any.whl#sha256=5aba691ce804ee39b2464c7757f8680786a1468e152ee845ff841c37f8112e21", hash = "sha256:5aba691ce804ee39b2464c7757f8680786a1468e152ee845ff841c37f8112e21" },
         ]
 
         [[distribution]]
         name = "package-c"
         version = "1.10"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_track_c-1.10.tar.gz#sha256=c89006d893254790b0fcdd1b33520241c8ff66ab950c6752b745e006bdeff144", hash = "sha256:c89006d893254790b0fcdd1b33520241c8ff66ab950c6752b745e006bdeff144" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_c-1.10.tar.gz#sha256=c89006d893254790b0fcdd1b33520241c8ff66ab950c6752b745e006bdeff144", hash = "sha256:c89006d893254790b0fcdd1b33520241c8ff66ab950c6752b745e006bdeff144" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_marker_track_c-1.10-py3-none-any.whl#sha256=cedcb8fbcdd9fbde4eea76612e57536c8b56507a9d7f7a92e483cb56b18c57a3", hash = "sha256:cedcb8fbcdd9fbde4eea76612e57536c8b56507a9d7f7a92e483cb56b18c57a3" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_track_c-1.10-py3-none-any.whl#sha256=cedcb8fbcdd9fbde4eea76612e57536c8b56507a9d7f7a92e483cb56b18c57a3", hash = "sha256:cedcb8fbcdd9fbde4eea76612e57536c8b56507a9d7f7a92e483cb56b18c57a3" },
         ]
 
         [[distribution]]
@@ -2060,8 +2215,8 @@ fn fork_marker_track() -> Result<()> {
         source = { editable = "." }
         dependencies = [
             { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "package-b", version = "2.7", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'darwin'" },
-            { name = "package-b", version = "2.8", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-b", version = "2.7", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
+            { name = "package-b", version = "2.8", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
         "###
         );
@@ -2119,8 +2274,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2144,34 +2298,34 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
             { name = "package-c", marker = "sys_platform == 'linux'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_non_fork_marker_transitive_a-1.0.0.tar.gz#sha256=68cff02c9f4a0b3014fdce524982a3cbf3a2ecaf0291c32c824cadb19f1e7cd0", hash = "sha256:68cff02c9f4a0b3014fdce524982a3cbf3a2ecaf0291c32c824cadb19f1e7cd0" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_non_fork_marker_transitive_a-1.0.0.tar.gz#sha256=68cff02c9f4a0b3014fdce524982a3cbf3a2ecaf0291c32c824cadb19f1e7cd0", hash = "sha256:68cff02c9f4a0b3014fdce524982a3cbf3a2ecaf0291c32c824cadb19f1e7cd0" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_non_fork_marker_transitive_a-1.0.0-py3-none-any.whl#sha256=6c49aef823d3544d795c05497ca2dbd5c419cad4454e4d41b8f4860be45bd4bf", hash = "sha256:6c49aef823d3544d795c05497ca2dbd5c419cad4454e4d41b8f4860be45bd4bf" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_non_fork_marker_transitive_a-1.0.0-py3-none-any.whl#sha256=6c49aef823d3544d795c05497ca2dbd5c419cad4454e4d41b8f4860be45bd4bf", hash = "sha256:6c49aef823d3544d795c05497ca2dbd5c419cad4454e4d41b8f4860be45bd4bf" },
         ]
 
         [[distribution]]
         name = "package-b"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
             { name = "package-c", marker = "sys_platform == 'darwin'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_non_fork_marker_transitive_b-1.0.0.tar.gz#sha256=ae7abe9cde79b810f91dff7329b63788a8253250053fe4e82563f0b2d0877182", hash = "sha256:ae7abe9cde79b810f91dff7329b63788a8253250053fe4e82563f0b2d0877182" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_non_fork_marker_transitive_b-1.0.0.tar.gz#sha256=ae7abe9cde79b810f91dff7329b63788a8253250053fe4e82563f0b2d0877182", hash = "sha256:ae7abe9cde79b810f91dff7329b63788a8253250053fe4e82563f0b2d0877182" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_non_fork_marker_transitive_b-1.0.0-py3-none-any.whl#sha256=6f301799cb51d920c7bef0120d5914f8315758ddc9f856b88783efae706dac16", hash = "sha256:6f301799cb51d920c7bef0120d5914f8315758ddc9f856b88783efae706dac16" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_non_fork_marker_transitive_b-1.0.0-py3-none-any.whl#sha256=6f301799cb51d920c7bef0120d5914f8315758ddc9f856b88783efae706dac16", hash = "sha256:6f301799cb51d920c7bef0120d5914f8315758ddc9f856b88783efae706dac16" },
         ]
 
         [[distribution]]
         name = "package-c"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_non_fork_marker_transitive_c-2.0.0.tar.gz#sha256=ffab9124854f64c8b5059ccaed481547f54abac868ba98aa6a454c0163cdb1c7", hash = "sha256:ffab9124854f64c8b5059ccaed481547f54abac868ba98aa6a454c0163cdb1c7" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_non_fork_marker_transitive_c-2.0.0.tar.gz#sha256=ffab9124854f64c8b5059ccaed481547f54abac868ba98aa6a454c0163cdb1c7", hash = "sha256:ffab9124854f64c8b5059ccaed481547f54abac868ba98aa6a454c0163cdb1c7" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_non_fork_marker_transitive_c-2.0.0-py3-none-any.whl#sha256=2b72d6af81967e1c55f30d920d6a7b913fce6ad0a0658ec79972a3d1a054e85f", hash = "sha256:2b72d6af81967e1c55f30d920d6a7b913fce6ad0a0658ec79972a3d1a054e85f" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_non_fork_marker_transitive_c-2.0.0-py3-none-any.whl#sha256=2b72d6af81967e1c55f30d920d6a7b913fce6ad0a0658ec79972a3d1a054e85f", hash = "sha256:2b72d6af81967e1c55f30d920d6a7b913fce6ad0a0658ec79972a3d1a054e85f" },
         ]
 
         [[distribution]]
@@ -2239,8 +2393,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -2314,8 +2467,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: false
     exit_code: 1
@@ -2421,8 +2573,7 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2519,8 +2670,7 @@ fn preferences_dependent_forking() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2540,45 +2690,55 @@ fn preferences_dependent_forking() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.8"
+        environment-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
 
         [[distribution]]
         name = "package-bar"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/preferences_dependent_forking_bar-1.0.0.tar.gz#sha256=7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e", hash = "sha256:7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0.tar.gz#sha256=7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e", hash = "sha256:7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/preferences_dependent_forking_bar-1.0.0-py3-none-any.whl#sha256=3cdaac4b0ba330f902d0628c0b1d6e62692f52255d02718d04f46ade7c8ad6a6", hash = "sha256:3cdaac4b0ba330f902d0628c0b1d6e62692f52255d02718d04f46ade7c8ad6a6" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0-py3-none-any.whl#sha256=3cdaac4b0ba330f902d0628c0b1d6e62692f52255d02718d04f46ade7c8ad6a6", hash = "sha256:3cdaac4b0ba330f902d0628c0b1d6e62692f52255d02718d04f46ade7c8ad6a6" },
         ]
 
         [[distribution]]
         name = "package-cleaver"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
             { name = "package-bar", marker = "sys_platform != 'linux'" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/preferences_dependent_forking_cleaver-1.0.0.tar.gz#sha256=0347b927fdf7731758ea53e1594309fc6311ca6983f36553bc11654a264062b2", hash = "sha256:0347b927fdf7731758ea53e1594309fc6311ca6983f36553bc11654a264062b2" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_cleaver-1.0.0.tar.gz#sha256=0347b927fdf7731758ea53e1594309fc6311ca6983f36553bc11654a264062b2", hash = "sha256:0347b927fdf7731758ea53e1594309fc6311ca6983f36553bc11654a264062b2" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/preferences_dependent_forking_cleaver-1.0.0-py3-none-any.whl#sha256=855467570c9da8e92ce37d0ebd0653cfa50d5d88b9540beca94feaa37a539dc3", hash = "sha256:855467570c9da8e92ce37d0ebd0653cfa50d5d88b9540beca94feaa37a539dc3" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_cleaver-1.0.0-py3-none-any.whl#sha256=855467570c9da8e92ce37d0ebd0653cfa50d5d88b9540beca94feaa37a539dc3", hash = "sha256:855467570c9da8e92ce37d0ebd0653cfa50d5d88b9540beca94feaa37a539dc3" },
         ]
 
         [[distribution]]
         name = "package-foo"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/preferences_dependent_forking_foo-1.0.0.tar.gz#sha256=abf1c0ac825ee5961e683067634916f98c6651a6d4473ff87d8b57c17af8fed2", hash = "sha256:abf1c0ac825ee5961e683067634916f98c6651a6d4473ff87d8b57c17af8fed2" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-1.0.0.tar.gz#sha256=abf1c0ac825ee5961e683067634916f98c6651a6d4473ff87d8b57c17af8fed2", hash = "sha256:abf1c0ac825ee5961e683067634916f98c6651a6d4473ff87d8b57c17af8fed2" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/preferences_dependent_forking_foo-1.0.0-py3-none-any.whl#sha256=85348e8df4892b9f297560c16abcf231828f538dc07339ed121197a00a0626a5", hash = "sha256:85348e8df4892b9f297560c16abcf231828f538dc07339ed121197a00a0626a5" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-1.0.0-py3-none-any.whl#sha256=85348e8df4892b9f297560c16abcf231828f538dc07339ed121197a00a0626a5", hash = "sha256:85348e8df4892b9f297560c16abcf231828f538dc07339ed121197a00a0626a5" },
         ]
 
         [[distribution]]
         name = "package-foo"
         version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/preferences_dependent_forking_foo-2.0.0.tar.gz#sha256=ad54d14a4fd931b8ccb6412edef71fe223c36362d0ccfe3fa251c17d4f07e4a9", hash = "sha256:ad54d14a4fd931b8ccb6412edef71fe223c36362d0ccfe3fa251c17d4f07e4a9" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-2.0.0.tar.gz#sha256=ad54d14a4fd931b8ccb6412edef71fe223c36362d0ccfe3fa251c17d4f07e4a9", hash = "sha256:ad54d14a4fd931b8ccb6412edef71fe223c36362d0ccfe3fa251c17d4f07e4a9" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/preferences_dependent_forking_foo-2.0.0-py3-none-any.whl#sha256=bae278cf259c0e031e52b6cbb537d945e0e606d045e980b90d406d0f1e06aae9", hash = "sha256:bae278cf259c0e031e52b6cbb537d945e0e606d045e980b90d406d0f1e06aae9" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-2.0.0-py3-none-any.whl#sha256=bae278cf259c0e031e52b6cbb537d945e0e606d045e980b90d406d0f1e06aae9", hash = "sha256:bae278cf259c0e031e52b6cbb537d945e0e606d045e980b90d406d0f1e06aae9" },
         ]
 
         [[distribution]]
@@ -2588,8 +2748,8 @@ fn preferences_dependent_forking() -> Result<()> {
         dependencies = [
             { name = "package-bar" },
             { name = "package-cleaver" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" } },
-            { name = "package-foo", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" } },
+            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-foo", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
         ]
         "###
         );
@@ -2636,8 +2796,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2708,8 +2867,7 @@ fn fork_requires_python_full() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2783,8 +2941,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
@@ -2808,10 +2965,10 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         [[distribution]]
         name = "package-a"
         version = "1.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/0.3.31/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_requires_python_patch_overlap_a-1.0.0.tar.gz#sha256=ac2820ee4808788674295192d79a709e3259aa4eef5b155e77f719ad4eaa324d", hash = "sha256:ac2820ee4808788674295192d79a709e3259aa4eef5b155e77f719ad4eaa324d" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_requires_python_patch_overlap_a-1.0.0.tar.gz#sha256=ac2820ee4808788674295192d79a709e3259aa4eef5b155e77f719ad4eaa324d", hash = "sha256:ac2820ee4808788674295192d79a709e3259aa4eef5b155e77f719ad4eaa324d" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/0.3.31/files/fork_requires_python_patch_overlap_a-1.0.0-py3-none-any.whl#sha256=43a750ba4eaab749d608d70e94d3d51e083cc21f5a52ac99b5967b26486d5ef1", hash = "sha256:43a750ba4eaab749d608d70e94d3d51e083cc21f5a52ac99b5967b26486d5ef1" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_requires_python_patch_overlap_a-1.0.0-py3-none-any.whl#sha256=43a750ba4eaab749d608d70e94d3d51e083cc21f5a52ac99b5967b26486d5ef1", hash = "sha256:43a750ba4eaab749d608d70e94d3d51e083cc21f5a52ac99b5967b26486d5ef1" },
         ]
 
         [[distribution]]
@@ -2865,8 +3022,7 @@ fn fork_requires_python() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/");
+    cmd.arg("--index-url").arg(packse_index_url());
     uv_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0

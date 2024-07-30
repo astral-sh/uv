@@ -2033,3 +2033,71 @@ fn add_frozen() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn add_reject_multiple_git_ref_flags() {
+    let context = TestContext::new("3.12");
+
+    // --tag and --branch
+    uv_snapshot!(context
+        .add(&[])
+        .arg("foo")
+        .arg("--tag")
+        .arg("0.0.1")
+        .arg("--branch")
+        .arg("test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--tag <TAG>' cannot be used with '--branch <BRANCH>'
+
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+
+    For more information, try '--help'.
+    "###
+    );
+
+    // --tag and --rev
+    uv_snapshot!(context
+        .add(&[])
+        .arg("foo")
+        .arg("--tag")
+        .arg("0.0.1")
+        .arg("--rev")
+        .arg("326b943"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--tag <TAG>' cannot be used with '--rev <REV>'
+
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+
+    For more information, try '--help'.
+    "###
+    );
+
+    // --tag and --tag
+    uv_snapshot!(context
+        .add(&[])
+        .arg("foo")
+        .arg("--tag")
+        .arg("0.0.1")
+        .arg("--tag")
+        .arg("0.0.2"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--tag <TAG>' cannot be used multiple times
+
+    Usage: uv add [OPTIONS] <REQUIREMENTS>...
+
+    For more information, try '--help'.
+    "###
+    );
+}

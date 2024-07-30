@@ -4,8 +4,8 @@ uv accepts the following command-line arguments as environment variables:
 
 - `UV_INDEX_URL`: Equivalent to the `--index-url` command-line argument. If set, uv will use this
   URL as the base index for searching for packages.
-- `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv
-  will use this space-separated list of URLs as additional indexes when searching for packages.
+- `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv will
+  use this space-separated list of URLs as additional indexes when searching for packages.
 - `UV_CACHE_DIR`: Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
   directory for caching instead of the default cache directory.
 - `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
@@ -14,30 +14,28 @@ uv accepts the following command-line arguments as environment variables:
   `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
 - `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. For example, if set to
   `allow`, uv will allow pre-release versions for all dependencies.
-- `UV_SYSTEM_PYTHON`: Equivalent to the `--system` command-line argument. If set to `true`, uv
-  will use the first Python interpreter found in the system `PATH`.
-  WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) or
-  containerized environments and should be used with caution, as modifying the system Python
-  can lead to unexpected behavior.
-- `UV_PYTHON`: Equivalent to the `--python` command-line argument. If set to a path, uv will
-  use this Python interpreter for all operations.
+- `UV_SYSTEM_PYTHON`: Equivalent to the `--system` command-line argument. If set to `true`, uv will
+  use the first Python interpreter found in the system `PATH`. WARNING: `UV_SYSTEM_PYTHON=true` is
+  intended for use in continuous integration (CI) or containerized environments and should be used
+  with caution, as modifying the system Python can lead to unexpected behavior.
+- `UV_PYTHON`: Equivalent to the `--python` command-line argument. If set to a path, uv will use
+  this Python interpreter for all operations.
 - `UV_BREAK_SYSTEM_PACKAGES`: Equivalent to the `--break-system-packages` command-line argument. If
   set to `true`, uv will allow the installation of packages that conflict with system-installed
-  packages.
-  WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integration (CI) or
-  containerized environments and should be used with caution, as modifying the system Python
+  packages. WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integration
+  (CI) or containerized environments and should be used with caution, as modifying the system Python
   can lead to unexpected behavior.
-- `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv
-  will use the system's trust store instead of the bundled `webpki-roots` crate.
+- `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
+  use the system's trust store instead of the bundled `webpki-roots` crate.
 - `UV_INDEX_STRATEGY`: Equivalent to the `--index-strategy` command-line argument. For example, if
-  set to `unsafe-any-match`, uv will consider versions of a given package available across all
-  index URLs, rather than limiting its search to the first index URL that contains the package.
+  set to `unsafe-any-match`, uv will consider versions of a given package available across all index
+  URLs, rather than limiting its search to the first index URL that contains the package.
 - `UV_REQUIRE_HASHES`: Equivalent to the `--require-hashes` command-line argument. If set to `true`,
   uv will require that all dependencies have a hash specified in the requirements file.
 - `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use this
   file as the constraints file. Uses space-separated list of files.
-- `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this
-  as a link mode.
+- `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
+  a link mode.
 - `UV_NO_BUILD_ISOLATION`: Equivalent to the `--no-build-isolation` command-line argument. If set,
   uv will skip isolation when building source distributions.
 - `UV_CUSTOM_COMPILE_COMMAND`: Used to override uv in the output header of the `requirements.txt`
@@ -47,8 +45,8 @@ uv accepts the following command-line arguments as environment variables:
   will use this value as the keyring provider.
 - `UV_CONFIG_FILE`: Equivalent to the `--config-file` command-line argument. Expects a path to a
   local `uv.toml` file to use as the configuration file.
-- `UV_CONCURRENT_DOWNLOADS`: Sets the maximum number of in-flight concurrent downloads that uv
-  will perform at any given time.
+- `UV_CONCURRENT_DOWNLOADS`: Sets the maximum number of in-flight concurrent downloads that uv will
+  perform at any given time.
 - `UV_CONCURRENT_BUILDS`: Sets the maximum number of source distributions that uv will build
   concurrently at any given time.
 - `UV_CONCURRENT_INSTALLS`: Used to control the number of threads used when installing and unzipping
@@ -66,13 +64,14 @@ In addition, uv respects the following environment variables:
   file containing both the certificate and the private key in PEM format.
 - `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
   any filter compatible with the `tracing_subscriber` crate. For example, `RUST_LOG=trace` will
-  enable trace-level logging. See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
+  enable trace-level logging. See the [tracing
+  documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
   for more.
 - `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: The proxy to use for all HTTP/HTTPS requests.
 - `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
   for HTTP reads (default: 30 s).
-- `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`.
-  See: [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
+- `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`. See:
+  [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
 - `CONDA_PREFIX`: Used to detect an activated Conda environment.
 - `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
@@ -83,5 +82,7 @@ In addition, uv respects the following environment variables:
 - `MACOSX_DEPLOYMENT_TARGET`: Used with `--python-platform macos` and related variants to set the
   deployment target (i.e., the minimum supported macOS version). Defaults to `12.0`, the
   least-recent non-EOL macOS version at time of writing.
-- `NO_COLOR`: Disable colors. Takes precedence over `FORCE_COLOR`. See [no-color.org](https://no-color.org).
-- `FORCE_COLOR`: Enforce colors regardless of TTY support. See [force-color.org](https://force-color.org).
+- `NO_COLOR`: Disable colors. Takes precedence over `FORCE_COLOR`. See
+  [no-color.org](https://no-color.org).
+- `FORCE_COLOR`: Enforce colors regardless of TTY support. See
+  [force-color.org](https://force-color.org).

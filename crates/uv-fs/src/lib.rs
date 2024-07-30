@@ -1,7 +1,6 @@
+use fs2::FileExt;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-
-use fs2::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, trace, warn};
 
@@ -155,6 +154,23 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
             format!(
                 "Failed to persist temporary file to {}: {}",
                 path.user_display(),
+                err.error
+            ),
+        )
+    })?;
+    Ok(())
+}
+
+/// Copy `from` to `to` atomically using a temporary file and atomic rename.
+pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Result<()> {
+    let temp_file = tempfile_in(to.as_ref().parent().expect("Write path must have a parent"))?;
+    fs_err::copy(from.as_ref(), &temp_file)?;
+    temp_file.persist(&to).map_err(|err| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!(
+                "Failed to persist temporary file to {}: {}",
+                to.user_display(),
                 err.error
             ),
         )

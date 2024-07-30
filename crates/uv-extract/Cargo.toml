@@ -19,7 +19,7 @@ async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz
 async_zip = { workspace = true, features = ["tokio"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-md-5.workspace = true
+md-5 = { workspace = true }
 rayon = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
@@ -29,4 +29,8 @@ tokio = { workspace = true }
 tokio-tar = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
+xz2 = { workspace = true, features = ["static"] }
 zip = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["xz2"]

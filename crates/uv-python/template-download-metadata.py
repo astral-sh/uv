@@ -11,7 +11,7 @@ Generates the `downloads.inc` file from the `downloads.inc.mustache` template.
 
 Usage:
 
-    uv run --isolated -- crates/uv-python/template-download-metadata.py
+    uv run -- crates/uv-python/template-download-metadata.py
 """
 
 import argparse

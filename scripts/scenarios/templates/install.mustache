@@ -13,7 +13,7 @@ use assert_cmd::prelude::*;
 
 use common::{venv_to_interpreter};
 
-use crate::common::{get_bin, uv_snapshot, TestContext};
+use crate::common::{build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, TestContext};
 
 mod common;
 
@@ -47,9 +47,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("{{index_url}}")
+        .arg(packse_index_url())
         .arg("--find-links")
-        .arg("{{vendor_links}}");
+        .arg(build_vendor_links_url());
     context.add_shared_args(&mut command);
     command.env_remove("UV_EXCLUDE_NEWER");
     command

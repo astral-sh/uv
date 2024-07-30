@@ -3,12 +3,13 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+
 use pep440_rs::Version;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::PreviewMode;
-use uv_fs::{absolutize_path, Simplified};
+use uv_fs::{absolutize_path, Simplified, CWD};
 use uv_python::{
     EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
     VersionRequest,
@@ -31,7 +32,7 @@ pub(crate) async fn init(
     r#virtual: bool,
     no_readme: bool,
     python: Option<String>,
-    isolated: bool,
+    no_workspace: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
@@ -46,7 +47,7 @@ pub(crate) async fn init(
 
     // Default to the current directory if a path was not provided.
     let path = match explicit_path {
-        None => std::env::current_dir()?.canonicalize()?,
+        None => CWD.to_path_buf(),
         Some(ref path) => absolutize_path(Path::new(path))?.to_path_buf(),
     };
 
@@ -76,14 +77,14 @@ pub(crate) async fn init(
     };
 
     if r#virtual {
-        init_virtual_workspace(&path, isolated)?;
+        init_virtual_workspace(&path, no_workspace)?;
     } else {
         init_project(
             &path,
             &name,
             no_readme,
             python,
-            isolated,
+            no_workspace,
             python_preference,
             python_fetch,
             connectivity,
@@ -133,9 +134,9 @@ pub(crate) async fn init(
 }
 
 /// Initialize a virtual workspace at the given path.
-fn init_virtual_workspace(path: &Path, isolated: bool) -> Result<()> {
+fn init_virtual_workspace(path: &Path, no_workspace: bool) -> Result<()> {
     // Ensure that we aren't creating a nested workspace.
-    if !isolated {
+    if !no_workspace {
         check_nested_workspaces(path, &DiscoveryOptions::default());
     }
 
@@ -157,7 +158,7 @@ async fn init_project(
     name: &PackageName,
     no_readme: bool,
     python: Option<String>,
-    isolated: bool,
+    no_workspace: bool,
     python_preference: PythonPreference,
     python_fetch: PythonFetch,
     connectivity: Connectivity,
@@ -166,7 +167,7 @@ async fn init_project(
     printer: Printer,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
-    let workspace = if isolated {
+    let workspace = if no_workspace {
         None
     } else {
         // Attempt to find a workspace root.
@@ -261,6 +262,10 @@ async fn init_project(
         description = "Add your description here"{readme}
         requires-python = "{requires_python}"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
         requires_python = requires_python.specifiers(),
@@ -269,7 +274,7 @@ async fn init_project(
     fs_err::create_dir_all(path)?;
     fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-    // Create `src/{name}/__init__.py` if it does not already exist.
+    // Create `src/{name}/__init__.py`, if it doesn't exist already.
     let src_dir = path.join("src").join(&*name.as_dist_info_name());
     let init_py = src_dir.join("__init__.py");
     if !init_py.try_exists()? {

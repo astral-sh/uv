@@ -10,7 +10,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use common::{uv_snapshot, TestContext};
+use common::{packse_index_url, TestContext, uv_snapshot};
 
 mod common;
 
@@ -53,7 +53,7 @@ fn {{module_name}}() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url").arg("{{index_url}}");
+    cmd.arg("--index-url").arg(packse_index_url());
     {{#expected.explanation_lines}}
     // {{.}}
     {{/expected.explanation_lines}}

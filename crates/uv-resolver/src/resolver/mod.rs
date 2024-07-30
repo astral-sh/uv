@@ -403,7 +403,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .clone());
                         existing_resolution.markers = normalize(new_markers, None)
                             .map(ResolverMarkers::Fork)
-                            .unwrap_or(ResolverMarkers::Universal);
+                            .unwrap_or(ResolverMarkers::universal(None));
                         continue 'FORK;
                     }
 
@@ -1155,7 +1155,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             }),
-            ResolverMarkers::Universal | ResolverMarkers::Fork(_) => Ok(result?.fork()),
+            ResolverMarkers::Universal { .. } | ResolverMarkers::Fork(_) => Ok(result?.fork()),
         }
     }
 
@@ -1770,7 +1770,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     // We don't have access to the fork state when prefetching, so assume that
                     // pre-release versions are allowed.
-                    &ResolverMarkers::Universal,
+                    &ResolverMarkers::universal(None),
                 ) else {
                     return Ok(None);
                 };
@@ -2301,7 +2301,36 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
-                            marker: None,
+                            // This propagates markers from the fork to
+                            // packages without any markers. These might wind
+                            // up be duplicative (and are even further merged
+                            // via disjunction when a ResolutionGraph is
+                            // constructed), but normalization should simplify
+                            // most such cases.
+                            //
+                            // In a previous implementation of marker
+                            // propagation, markers were propagated at the
+                            // time a fork was created. But this was crucially
+                            // missing a key detail: the specific version of
+                            // a package outside of a fork can be determined
+                            // by the forks of its dependencies, even when
+                            // that package is not part of a fork at the time
+                            // the forks were created. In that case, it was
+                            // possible for two versions of the same package
+                            // to be unconditionally included in a resolution,
+                            // which must never be.
+                            //
+                            // See https://github.com/astral-sh/uv/pull/5583
+                            // for an example of where this occurs with
+                            // `Sphinx`.
+                            //
+                            // Here, instead, we do the marker propagation
+                            // after resolution has completed. This relies
+                            // on the fact that the markers aren't otherwise
+                            // needed during resolution (which I believe is
+                            // true), but is a more robust approach that should
+                            // capture all cases.
+                            marker: self.markers.fork_markers().cloned(),
                         };
                         edges.insert(edge);
                     }
@@ -2476,6 +2505,12 @@ impl Resolution {
         // is still the same graph since the presence or absence of the bar -> foo edge cannot
         // change which packages and versions are installed.
         self.nodes == other.nodes && self.edges == other.edges
+    }
+}
+
+impl ResolutionPackage {
+    pub(crate) fn is_base(&self) -> bool {
+        self.extra.is_none() && self.dev.is_none()
     }
 }
 
@@ -2730,9 +2765,6 @@ impl Dependencies {
             forks = new_forks;
             diverging_packages.push(name.clone());
         }
-        for fork in &mut forks {
-            fork.propagate_markers();
-        }
         ForkedDependencies::Forked {
             forks,
             diverging_packages,
@@ -2826,21 +2858,6 @@ impl Fork {
                 .marker()
                 .map_or(true, |pkg_marker| !is_disjoint(pkg_marker, &self.markers))
         });
-    }
-
-    /// This attaches the marker in this fork to each of its dependencies.
-    ///
-    /// In effect, this "propagates" the markers to each individual dependency
-    /// that was spawned as the result of a fork. While in many cases the
-    /// markers will be combined when multiple forks choose the same version of
-    /// a dependency, in some cases, the version chosen can be specific to a
-    /// particular set of marker environments. In this case, the dependencies
-    /// will be platform specific and thus require marker expressions to appear
-    /// in the lock file.
-    fn propagate_markers(&mut self) {
-        for dependency in &mut self.dependencies {
-            dependency.and_markers(&self.markers);
-        }
     }
 }
 

@@ -251,7 +251,7 @@ dependencies = [
 [[package]]
 name = "async_zip"
 version = "0.0.17"
-source = "git+https://github.com/charliermarsh/rs-async-zip?rev=1dcb40cfe1bf5325a6fd4bfcf9894db40241f585#1dcb40cfe1bf5325a6fd4bfcf9894db40241f585"
+source = "git+https://github.com/charliermarsh/rs-async-zip?rev=011b24604fa7bc223daaad7712c0694bac8f0a87#011b24604fa7bc223daaad7712c0694bac8f0a87"
 dependencies = [
  "async-compression",
  "crc32fast",
@@ -316,9 +316,9 @@ dependencies = [
 
 [[package]]
 name = "axoupdater"
-version = "0.6.9"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "720e671dc9dd9da3394476339a1f947d5af473fd106037e25218a59664c059be"
+checksum = "3adfac228780fcf162617739408bd8edeb1ae1d497c95082759c5e607cac1e71"
 dependencies = [
  "axoasset",
  "axoprocess",
@@ -2725,7 +2725,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.3",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -4432,7 +4432,7 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 
 [[package]]
 name = "uv"
-version = "0.2.30"
+version = "0.2.31"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4808,6 +4808,7 @@ dependencies = [
  "tokio-tar",
  "tokio-util",
  "tracing",
+ "xz2",
  "zip",
 ]
 
@@ -4957,7 +4958,7 @@ dependencies = [
  "uv-state",
  "uv-warnings",
  "which",
- "winapi",
+ "windows-sys 0.52.0",
  "winsafe",
 ]
 
@@ -5156,7 +5157,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.2.30"
+version = "0.2.31"
 
 [[package]]
 name = "uv-virtualenv"

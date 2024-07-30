@@ -31,7 +31,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 
 use crate::commands::project::resolve_names;
 use crate::commands::{
-    project, project::environment::CachedEnvironment, tool::common::matching_packages,
+    project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
 };
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -56,9 +56,10 @@ impl Display for ToolRunCommand {
 
 /// Run a command.
 pub(crate) async fn run(
-    command: ExternalCommand,
+    command: Option<ExternalCommand>,
     from: Option<String>,
     with: &[RequirementsSource],
+    show_resolution: bool,
     python: Option<String>,
     settings: ResolverInstallerSettings,
     invocation_source: ToolRunCommand,
@@ -75,6 +76,11 @@ pub(crate) async fn run(
     if preview.is_disabled() {
         warn_user_once!("`{invocation_source}` is experimental and may change without warning");
     }
+
+    // treat empty command as `uv tool list`
+    let Some(command) = command else {
+        return tool_list(false, PreviewMode::Enabled, cache, printer).await;
+    };
 
     let (target, args) = command.split();
     let Some(target) = target else {
@@ -101,7 +107,7 @@ pub(crate) async fn run(
         concurrency,
         native_tls,
         cache,
-        printer,
+        printer.filter(show_resolution),
     )
     .await?;
 
@@ -310,7 +316,7 @@ async fn get_or_create_environment(
 
     // Resolve the `from` requirement.
     let from = {
-        project::resolve_names(
+        resolve_names(
             vec![RequirementsSpecification::parse_package(from)?],
             &interpreter,
             settings,

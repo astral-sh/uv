@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.31
+
+### Preview features
+
+- Allow `uv pip install` for unmanaged projects ([#5504](https://github.com/astral-sh/uv/pull/5504))
+- Compare simplified paths in Windows exclusion tests ([#5525](https://github.com/astral-sh/uv/pull/5525))
+- Respect reinstalls in cached environments ([#5499](https://github.com/astral-sh/uv/pull/5499))
+- Use `hatchling` rather than implicit `setuptools` default ([#5527](https://github.com/astral-sh/uv/pull/5527))
+- Use relocatable installs to support concurrency-safe cached environments ([#5509](https://github.com/astral-sh/uv/pull/5509))
+- Support `--editable` installs for `uv tool` ([#5454](https://github.com/astral-sh/uv/pull/5454))
+- Fix basic case of overlapping markers ([#5488](https://github.com/astral-sh/uv/pull/5488))
+
 ## 0.2.30
 
 ### Preview features

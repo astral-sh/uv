@@ -1,10 +1,16 @@
 # Locking environments
 
-Locking is to take a dependency, e.g., `ruff`, and write an exact version to use to a file. When working with many dependencies, it is useful to lock the exact versions so the environment can be reproduced. Without locking, the versions of dependencies could change over time, when using a different tool, or across platforms.
+Locking is to take a dependency, e.g., `ruff`, and write an exact version to use to a file. When
+working with many dependencies, it is useful to lock the exact versions so the environment can be
+reproduced. Without locking, the versions of dependencies could change over time, when using a
+different tool, or across platforms.
 
 ## Locking requirements
 
-uv allows dependencies to be locked in the `requirements.txt` format. It is recommended to use the standard `pyproject.toml` to define dependencies, but other dependency formats are supported as well. See the documentation on [declaring dependencies](dependencies.md) for more details on how to define dependencies.
+uv allows dependencies to be locked in the `requirements.txt` format. It is recommended to use the
+standard `pyproject.toml` to define dependencies, but other dependency formats are supported as
+well. See the documentation on [declaring dependencies](dependencies.md) for more details on how to
+define dependencies.
 
 To lock dependencies declared in a `pyproject.toml`:
 
@@ -12,7 +18,8 @@ To lock dependencies declared in a `pyproject.toml`:
 uv pip compile pyproject.toml -o requirements.txt
 ```
 
-Note by default the `uv pip compile` output is just displayed and `--output-file` / `-o` argument is needed to write to a file.
+Note by default the `uv pip compile` output is just displayed and `--output-file` / `-o` argument is
+needed to write to a file.
 
 To lock dependencies declared in a `requirements.in`:
 
@@ -26,7 +33,8 @@ To lock dependencies declared in multiple files:
 uv pip compile pyproject.toml requirements-dev.in -o requirements-dev.txt`
 ```
 
-uv also supports legacy `setup.py` and `setup.cfg` formats. To lock dependencies declared in a `setup.py`:
+uv also supports legacy `setup.py` and `setup.cfg` formats. To lock dependencies declared in a
+`setup.py`:
 
 ```bash
 uv pip compile setup.py -o requirements.txt
@@ -54,7 +62,8 @@ Note extras are not supported with the `requirements.in` format.
 
 ## Upgrading requirements
 
-When using an output file, uv will consider the versions pinned in an existing output file. If a dependency is pinned it will not be upgraded on a subsequent compile run. For example:
+When using an output file, uv will consider the versions pinned in an existing output file. If a
+dependency is pinned it will not be upgraded on a subsequent compile run. For example:
 
 ```console
 $ echo "ruff==0.3.0" > requirements.txt
@@ -74,9 +83,14 @@ To upgrade all dependencies, there is an `--upgrade` flag.
 
 ## Syncing an environment
 
-Dependencies can be installed directly from their definition files or from compiled `requirements.txt` files with `uv pip install`. See the documentation on [installing packages from files](packages.md#installing-packages-from-files) for more details.
+Dependencies can be installed directly from their definition files or from compiled
+`requirements.txt` files with `uv pip install`. See the documentation on [installing packages from
+files](packages.md#installing-packages-from-files) for more details.
 
-When installing with `uv pip install`, packages that are already installed will not be removed unless they conflict with the lock file. This means that the environment can have dependencies that aren't declared in the lock file, which isn't great for reproducibility. To ensure the environment exactly matches the lock file, use `uv pip sync` instead.
+When installing with `uv pip install`, packages that are already installed will not be removed
+unless they conflict with the lockfile. This means that the environment can have dependencies that
+aren't declared in the lockfile, which isn't great for reproducibility. To ensure the environment
+exactly matches the lockfile, use `uv pip sync` instead.
 
 To sync an environment with a `requirements.txt` file:
 
@@ -92,8 +106,10 @@ uv pip sync pyproject.toml
 
 ## Adding constraints
 
-Constraints files are `requirements.txt`-like files that only control the _version_ of a requirement that's installed. However,
-including a package in a constraints file will _not_ trigger the installation of that package. Constraints can be used to add bounds to dependencies that are not dependencies of the current project.
+Constraints files are `requirements.txt`-like files that only control the _version_ of a requirement
+that's installed. However, including a package in a constraints file will _not_ trigger the
+installation of that package. Constraints can be used to add bounds to dependencies that are not
+dependencies of the current project.
 
 To define a constraint, define a bound for a package:
 
@@ -111,13 +127,17 @@ Note that multiple constraints can be defined in each file and multiple files ca
 
 ## Overriding dependency versions
 
-Overrides files are `requirements.txt`-like files that force a specific version of a requirement to be installed, regardless of
-the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.
+Overrides files are `requirements.txt`-like files that force a specific version of a requirement to
+be installed, regardless of the requirements declared by any constituent package, and regardless of
+whether this would be considered an invalid resolution.
 
-While constraints are _additive_, in that they're combined with the requirements of the constituent packages, overrides are
-_absolute_, in that they completely replace the requirements of the constituent packages.
+While constraints are _additive_, in that they're combined with the requirements of the constituent
+packages, overrides are _absolute_, in that they completely replace the requirements of the
+constituent packages.
 
-Overrides are most often used to remove upper bounds from a transtive dependency. For example, if `a` requires `c>=1.0,<2.0` and `b` requires `c>=2.0` and the current project requires `a` and `b` then the dependencies cannot be resolved.
+Overrides are most often used to remove upper bounds from a transtive dependency. For example, if
+`a` requires `c>=1.0,<2.0` and `b` requires `c>=2.0` and the current project requires `a` and `b`
+then the dependencies cannot be resolved.
 
 To define an override, define the new requirement for the problematic package:
 
@@ -131,6 +151,7 @@ To use an overrides file:
 uv pip compile requirements.in --override overrides.txt
 ```
 
-Now, resolution can succeed. However, note that if `a` is _correct_ that it does not support `c>=2.0` then a runtime error will likely be encountered when using the packages.
+Now, resolution can succeed. However, note that if `a` is _correct_ that it does not support
+`c>=2.0` then a runtime error will likely be encountered when using the packages.
 
 Note that multiple overrides can be defined in each file and multiple files can be used.

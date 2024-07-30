@@ -237,7 +237,7 @@ pub(crate) async fn pip_compile(
 
     // Determine the environment for the resolution.
     let (tags, markers) = if universal {
-        (None, ResolverMarkers::Universal)
+        (None, ResolverMarkers::universal(None))
     } else {
         let (tags, markers) =
             resolution_environment(python_version, python_platform, &interpreter)?;

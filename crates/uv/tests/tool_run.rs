@@ -139,12 +139,12 @@ fn tool_run_at_version() {
 
     // When `--from` is used, `@` is not treated as a version request
     uv_snapshot!(filters, context.tool_run()
-    .arg("--from")
-    .arg("pytest")
-    .arg("pytest@8.0.0")
-    .arg("--version")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .arg("--from")
+        .arg("pytest")
+        .arg("pytest@8.0.0")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -262,13 +262,13 @@ fn tool_run_warn_executable_not_in_from() {
     filters.push(("(?s)fastapi` instead.*", "fastapi` instead."));
 
     uv_snapshot!(filters, context.tool_run()
-    .arg("--from")
-    .arg("fastapi")
-    .arg("fastapi")
-    .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
-    // (FastAPI 0.111 is only available from this date onwards)
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .arg("--from")
+        .arg("fastapi")
+        .arg("fastapi")
+        .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
+        // (FastAPI 0.111 is only available from this date onwards)
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -764,5 +764,74 @@ fn tool_run_requirements_txt_arguments() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
+    "###);
+}
+
+/// List installed tools when no command arg is given (e.g. `uv tool run`).
+#[test]
+fn tool_run_list_installed() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // No tools installed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    No tools installed
+    "###);
+
+    // Install `black`.
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // List installed tools.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0
+    - black
+    - blackd
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    "###);
+}
+
+/// By default, omit resolver and installer output.
+#[test]
+fn tool_run_without_output() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .env_remove("UV_SHOW_RESOLUTION")
+        .arg("--")
+        .arg("pytest")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
     "###);
 }

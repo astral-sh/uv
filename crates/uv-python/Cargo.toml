@@ -55,7 +55,7 @@ which = { workspace = true }
 rustix = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { workspace = true }
+windows-sys = { workspace = true }
 winsafe = { workspace = true }
 
 [dev-dependencies]

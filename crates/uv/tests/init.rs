@@ -39,6 +39,10 @@ fn init() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -97,6 +101,10 @@ fn init_no_readme() -> Result<()> {
         description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -137,6 +145,10 @@ fn init_current_dir() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -200,6 +212,10 @@ fn init_dot_args() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -276,6 +292,10 @@ fn init_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -368,6 +388,10 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -461,6 +485,10 @@ fn init_workspace_outside() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -539,6 +567,10 @@ fn init_invalid_names() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -558,7 +590,7 @@ fn init_invalid_names() -> Result<()> {
 }
 
 #[test]
-fn init_workspace_isolated() -> Result<()> {
+fn init_isolated() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -575,6 +607,56 @@ fn init_workspace_isolated() -> Result<()> {
     fs_err::create_dir(&child)?;
 
     uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--isolated"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.
+    warning: `uv init` is experimental and may change without warning
+    Adding `foo` as member of workspace `[TEMP_DIR]/`
+    Initialized project `foo`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["foo"]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn init_no_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    })?;
+
+    let child = context.temp_dir.join("foo");
+    fs_err::create_dir(&child)?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--no-workspace"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -671,6 +753,10 @@ fn init_project_inside_project() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -969,6 +1055,10 @@ fn init_requires_python_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.10"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -1019,6 +1109,10 @@ fn init_requires_python_version() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.8"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
@@ -1070,6 +1164,10 @@ fn init_requires_python_specifiers() -> Result<()> {
         readme = "README.md"
         requires-python = "==3.8.*"
         dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "###
         );
     });
