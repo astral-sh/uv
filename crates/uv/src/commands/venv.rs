@@ -20,7 +20,7 @@ use uv_configuration::{
     NoBuild, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_python::{
     request_from_version_file, EnvironmentPreference, PythonFetch, PythonInstallation,
     PythonPreference, PythonRequest, VersionRequest,
@@ -132,25 +132,27 @@ async fn venv_impl(
     printer: Printer,
     relocatable: bool,
 ) -> miette::Result<ExitStatus> {
+    if preview.is_disabled() && relocatable {
+        warn_user_once!("`--relocatable` is experimental and may change without warning");
+    }
+
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let client_builder_clone = client_builder.clone();
-
     let reporter = PythonDownloadReporter::single(printer);
 
+    // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
+
+    // (2) Request from `.python-version`
     if preview.is_enabled() && interpreter_request.is_none() {
         interpreter_request = request_from_version_file().await.into_diagnostic()?;
     }
+
+    // (3) `Requires-Python` in `pyproject.toml`
     if preview.is_enabled() && interpreter_request.is_none() {
-        let project = match VirtualProject::discover(
-            &std::env::current_dir().into_diagnostic()?,
-            &DiscoveryOptions::default(),
-        )
-        .await
-        {
+        let project = match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
             Ok(project) => Some(project),
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(WorkspaceError::NonWorkspace(_)) => None,
@@ -166,9 +168,6 @@ async fn venv_impl(
                     PythonRequest::Version(VersionRequest::Range(specifiers.clone()))
                 });
         }
-    }
-    if preview.is_disabled() && relocatable {
-        warn_user_once!("`--relocatable` is experimental and may change without warning");
     }
 
     // Locate the Python interpreter to use in the environment
@@ -239,7 +238,7 @@ async fn venv_impl(
         }
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::from(client_builder_clone)
+        let client = RegistryClientBuilder::from(client_builder)
             .cache(cache.clone())
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
