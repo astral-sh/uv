@@ -240,7 +240,7 @@ pub(crate) async fn add(
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let extras = ExtrasSpecification::All;
-    let dev = true;
+    let dev = matches!(dependency_type, DependencyType::Dev);
 
     project::sync::do_sync(
         &VirtualProject::Project(project),

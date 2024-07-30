@@ -2101,3 +2101,113 @@ fn add_reject_multiple_git_ref_flags() {
     "###
     );
 }
+
+/// Add path dependencies should respect dependency type
+#[test]
+fn add_path_respect_dependency_type() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // foo package with dependencies and development dependencies
+    let foo_dir = context.temp_dir.child("foo");
+    let pyproject_toml = foo_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = ["sniffio==1.3.1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["anyio==3.7.0"]).current_dir(foo_dir.as_os_str()).arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(foo_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = ["sniffio==1.3.1"]
+
+        [tool.uv]
+        dev-dependencies = [
+            "anyio==3.7.0",
+        ]
+        "###
+        );
+    });
+
+    // bar package should respect dependency type and only install dependencies
+    let bar_dir = context.temp_dir.child("bar");
+    let pyproject_toml = bar_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["../foo"]).current_dir(bar_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(bar_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo",
+        ]
+
+        [tool.uv.sources]
+        foo = { path = "../foo" }
+        "###
+        );
+    });
+
+    Ok(())
+}
