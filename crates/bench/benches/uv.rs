@@ -151,10 +151,12 @@ mod resolver {
         let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
+        let build_constraints = [];
 
         let build_context = BuildDispatch::new(
             client,
             &cache,
+            &build_constraints,
             interpreter,
             &index_locations,
             &flat_index,

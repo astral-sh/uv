@@ -48,6 +48,7 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     extras: ExtrasSpecification,
@@ -142,6 +143,20 @@ pub(crate) async fn pip_compile(
                 .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
+
+    // Read build constraints and overrides
+    let RequirementsSpecification {
+        constraints: build_constraints,
+        overrides: _build_overrides,
+        ..
+    } = operations::read_requirements(
+        &[],
+        build_constraints,
+        &[],
+        &ExtrasSpecification::None,
+        &client_builder,
+    )
+    .await?;
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -304,6 +319,7 @@ pub(crate) async fn pip_compile(
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
+        &build_constraints,
         &interpreter,
         &index_locations,
         &flat_index,

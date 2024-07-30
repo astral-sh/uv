@@ -6244,3 +6244,58 @@ fn install_relocatable() -> Result<()> {
 
     Ok(())
 }
+
+/// Include a `build_constraints.txt` file with an incompatible constraint.
+#[test]
+fn incompatible_build_constraint() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==1")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to build: `requests==1.2.0`
+      Caused by: Failed to install requirements from setup.py build (resolve)
+      Caused by: No solution found when resolving: setuptools>=40.8.0
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with a compatible constraint.
+#[test]
+fn compatible_build_constraint() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
+
+    Ok(())
+}

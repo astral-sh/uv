@@ -38,6 +38,7 @@ use crate::printer::Printer;
 pub(crate) async fn pip_sync(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -99,6 +100,20 @@ pub(crate) async fn pip_sync(
         constraints,
         overrides,
         &extras,
+        &client_builder,
+    )
+    .await?;
+
+    // Read build constraints and overrides
+    let RequirementsSpecification {
+        constraints: build_constraints,
+        overrides: _build_overrides,
+        ..
+    } = operations::read_requirements(
+        &[],
+        build_constraints,
+        &[],
+        &ExtrasSpecification::None,
         &client_builder,
     )
     .await?;
@@ -240,6 +255,7 @@ pub(crate) async fn pip_sync(
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
+        &build_constraints,
         interpreter,
         &index_locations,
         &flat_index,

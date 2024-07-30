@@ -792,6 +792,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) r#override: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -806,6 +807,7 @@ impl PipCompileSettings {
             extra,
             all_extras,
             no_all_extras,
+            build_constraint,
             refresh,
             no_deps,
             deps,
@@ -886,6 +888,10 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraint: build_constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             r#override: r#override
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -939,6 +945,7 @@ impl PipCompileSettings {
 pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) dry_run: bool,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -950,6 +957,7 @@ impl PipSyncSettings {
         let PipSyncArgs {
             src_file,
             constraint,
+            build_constraint,
             installer,
             refresh,
             require_hashes,
@@ -984,6 +992,10 @@ impl PipSyncSettings {
         Self {
             src_file,
             constraint: constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraint: build_constraint
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -1030,6 +1042,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) editable: Vec<String>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) dry_run: bool,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
@@ -1049,6 +1062,7 @@ impl PipInstallSettings {
             extra,
             all_extras,
             no_all_extras,
+            build_constraint,
             refresh,
             no_deps,
             deps,
@@ -1117,6 +1131,10 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             r#override: r#override
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraint: build_constraint
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),

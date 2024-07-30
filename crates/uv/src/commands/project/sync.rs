@@ -199,10 +199,13 @@ pub(super) async fn do_sync(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
+    // TODO: read locked build constraints
+    let build_constraints = [];
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         venv.interpreter(),
         index_locations,
         &flat_index,

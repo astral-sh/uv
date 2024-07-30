@@ -40,6 +40,7 @@ pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
@@ -101,6 +102,20 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         extras,
+        &client_builder,
+    )
+    .await?;
+
+    // Read build constraints and overrides
+    let RequirementsSpecification {
+        constraints: build_constraints,
+        overrides: _build_overrides,
+        ..
+    } = operations::read_requirements(
+        &[],
+        build_constraints,
+        &[],
+        &ExtrasSpecification::None,
         &client_builder,
     )
     .await?;
@@ -294,6 +309,7 @@ pub(crate) async fn pip_install(
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
+        &build_constraints,
         interpreter,
         &index_locations,
         &flat_index,

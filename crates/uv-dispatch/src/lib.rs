@@ -17,7 +17,8 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, IndexStrategy, Reinstall, SetupPyStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Overrides, Reinstall,
+    SetupPyStrategy,
 };
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
@@ -25,8 +26,8 @@ use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
-    ResolverMarkers,
+    ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Preferences,
+    PythonRequirement, Resolver, ResolverMarkers,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -35,6 +36,7 @@ use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrateg
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
+    constraints: Constraints,
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
@@ -58,6 +60,7 @@ impl<'a> BuildDispatch<'a> {
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
+        constraints: &'a [Requirement],
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
@@ -77,6 +80,7 @@ impl<'a> BuildDispatch<'a> {
         Self {
             client,
             cache,
+            constraints: Constraints::from_requirements(constraints.iter().cloned()),
             interpreter,
             index_locations,
             flat_index,
@@ -140,8 +144,19 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
+        let manifest = Manifest::new(
+            requirements.to_vec(),
+            self.constraints.clone(),
+            Overrides::default(),
+            Vec::new(),
+            Preferences::default(),
+            None,
+            Exclusions::default(),
+            Vec::new(),
+        );
+
         let resolver = Resolver::new(
-            Manifest::simple(requirements.to_vec()),
+            manifest,
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer)
                 .index_strategy(self.index_strategy)
