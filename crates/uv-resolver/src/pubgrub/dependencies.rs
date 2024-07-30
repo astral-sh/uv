@@ -14,7 +14,7 @@ use uv_normalize::{ExtraName, PackageName};
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::{PubGrubSpecifier, ResolveError};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Range<Version>,

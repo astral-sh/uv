@@ -1,6 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter, Write};
@@ -575,6 +576,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state.markers,
                             start.elapsed().as_secs_f32()
                         );
+
                         for new_fork_state in self.forks_to_fork_states(
                             state,
                             &version,
@@ -2765,6 +2767,12 @@ impl Dependencies {
             forks = new_forks;
             diverging_packages.push(name.clone());
         }
+
+        // Prioritize the forks. Prefer solving forks with lower Python bounds, since they're more
+        // likely to produce solutions that work for forks with higher Python bounds (whereas the
+        // inverse is not true).
+        forks.sort();
+
         ForkedDependencies::Forked {
             forks,
             diverging_packages,
@@ -2807,7 +2815,7 @@ enum ForkedDependencies {
 /// have the same name and because the marker expressions are disjoint,
 /// a fork occurs. One fork will contain `a<2` but not `a>=2`, while
 /// the other fork will contain `a>=2` but not `a<2`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct Fork {
     /// The list of dependencies for this fork, guaranteed to be conflict
     /// free. (i.e., There are no two packages with the same name with
@@ -2826,6 +2834,23 @@ struct Fork {
     ///
     /// (This doesn't include any marker expressions from a parent fork.)
     markers: MarkerTree,
+}
+
+impl Ord for Fork {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // A higher `requires-python` requirement indicates a _lower-priority_ fork. We'd prefer
+        // to solve `<3.7` before solving `>=3.7`, since the resolution produced by the former might
+        // work for the latter, but the inverse is unlikely to be true.
+        let self_bound = requires_python_marker(&self.markers).unwrap_or_default();
+        let other_bound = requires_python_marker(&other.markers).unwrap_or_default();
+        other_bound.cmp(&self_bound)
+    }
+}
+
+impl PartialOrd for Fork {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Fork {
