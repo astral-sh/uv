@@ -388,9 +388,10 @@ impl Ord for RequiresPythonBound {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self.as_ref(), other.as_ref()) {
             (Bound::Included(a), Bound::Included(b)) => a.cmp(b),
-            (Bound::Included(_), Bound::Excluded(_)) => Ordering::Less,
-            (Bound::Excluded(_), Bound::Included(_)) => Ordering::Greater,
+            (Bound::Included(a), Bound::Excluded(b)) => a.cmp(b).then(Ordering::Less),
+            (Bound::Excluded(a), Bound::Included(b)) => a.cmp(b).then(Ordering::Greater),
             (Bound::Excluded(a), Bound::Excluded(b)) => a.cmp(b),
+            (Bound::Unbounded, Bound::Unbounded) => Ordering::Equal,
             (Bound::Unbounded, _) => Ordering::Less,
             (_, Bound::Unbounded) => Ordering::Greater,
         }
@@ -399,12 +400,14 @@ impl Ord for RequiresPythonBound {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+    use std::collections::Bound;
     use std::str::FromStr;
 
     use distribution_filename::WheelFilename;
-    use pep440_rs::VersionSpecifiers;
+    use pep440_rs::{Version, VersionSpecifiers};
 
-    use crate::RequiresPython;
+    use crate::{RequiresPython, RequiresPythonBound};
 
     #[test]
     fn requires_python_included() {
@@ -471,6 +474,27 @@ mod tests {
                 !requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
                 "{wheel_name}"
             );
+        }
+    }
+
+    #[test]
+    fn ordering() {
+        let versions = &[
+            // No bound
+            RequiresPythonBound::new(Bound::Unbounded),
+            // >=3.8
+            RequiresPythonBound::new(Bound::Included(Version::new([3, 8]))),
+            // >3.8
+            RequiresPythonBound::new(Bound::Excluded(Version::new([3, 8]))),
+            // >=3.8.1
+            RequiresPythonBound::new(Bound::Included(Version::new([3, 8, 1]))),
+            // >3.8.1
+            RequiresPythonBound::new(Bound::Excluded(Version::new([3, 8, 1]))),
+        ];
+        for (i, v1) in versions.iter().enumerate() {
+            for v2 in &versions[i + 1..] {
+                assert_eq!(v1.cmp(v2), Ordering::Less, "less: {v1:?}\ngreater: {v2:?}",);
+            }
         }
     }
 }
