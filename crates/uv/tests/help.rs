@@ -38,8 +38,8 @@ fn help() {
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, installed,
-              managed, system, only-system]
+              those that are downloaded and installed by uv [possible values: only-managed, managed,
+              system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -104,8 +104,8 @@ fn help_flag() {
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, installed,
-              managed, system, only-system]
+              those that are downloaded and installed by uv [possible values: only-managed, managed,
+              system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -169,8 +169,8 @@ fn help_short_flag() {
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, installed,
-              managed, system, only-system]
+              those that are downloaded and installed by uv [possible values: only-managed, managed,
+              system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -264,10 +264,7 @@ fn help_subcommand() {
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
                 installations
-              - installed:    Prefer installed Python installations, only download managed Python
-                installations if no system Python installation is found
-              - managed:      Prefer managed Python installations over system Python installations, even
-                if fetching is required
+              - managed:      Prefer managed Python installations over system Python installations
               - system:       Prefer system Python installations over managed Python installations
               - only-system:  Only use system Python installations; never use managed Python
                 installations
@@ -392,10 +389,7 @@ fn help_subsubcommand() {
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
                 installations
-              - installed:    Prefer installed Python installations, only download managed Python
-                installations if no system Python installation is found
-              - managed:      Prefer managed Python installations over system Python installations, even
-                if fetching is required
+              - managed:      Prefer managed Python installations over system Python installations
               - system:       Prefer system Python installations over managed Python installations
               - only-system:  Only use system Python installations; never use managed Python
                 installations
@@ -485,8 +479,8 @@ fn help_flag_subcommand() {
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, installed,
-              managed, system, only-system]
+              those that are downloaded and installed by uv [possible values: only-managed, managed,
+              system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -547,8 +541,8 @@ fn help_flag_subsubcommand() {
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, installed,
-              managed, system, only-system]
+              those that are downloaded and installed by uv [possible values: only-managed, managed,
+              system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -666,8 +660,8 @@ fn help_with_global_option() {
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, installed,
-              managed, system, only-system]
+              those that are downloaded and installed by uv [possible values: only-managed, managed,
+              system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -729,7 +723,7 @@ fn help_with_version() {
 }
 
 #[test]
-fn test_with_no_pager() {
+fn help_with_no_pager() {
     let context = TestContext::new_with_versions(&[]);
 
     // We can't really test whether the --no-pager option works with a snapshot test.
@@ -765,8 +759,8 @@ fn test_with_no_pager() {
               Disable network access, relying only on locally cached data and locally available files
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, installed,
-              managed, system, only-system]
+              those that are downloaded and installed by uv [possible values: only-managed, managed,
+              system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
