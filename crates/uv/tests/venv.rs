@@ -4,6 +4,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use uv_python::{PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME};
+use indoc::indoc;
 
 use crate::common::{uv_snapshot, TestContext};
 
@@ -169,6 +170,173 @@ fn create_venv_reads_request_from_python_versions_file() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.10", "3.12"]);
+
+    // Without the file, we should use the first on the PATH
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With `requires-python = "<3.11"`, we should prefer newest possible version 3.10
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r###"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = "<3.11"
+        dependencies = []
+        "###
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.10.[X] interpreter at: [PYTHON-3.10]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With `requires-python = "==3.11.*"`, we should prefer exact version 3.11
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r###"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = "==3.11.*"
+        dependencies = []
+        "###
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With `requires-python = ">=3.11,<3.12"`, we should prefer exact version 3.11
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r###"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = "==3.11.*"
+        dependencies = []
+        "###
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With `requires-python = ">=3.10"`, we should prefer first possible version 3.11
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r###"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        "###
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With `requires-python = ">=3.11"`, we should prefer first possible version 3.11
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r###"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        "###
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    // With `requires-python = ">=3.12"`, we should prefer first possible version 3.12
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r###"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        "###
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+
+    Ok(())
 }
 
 #[test]
