@@ -20,8 +20,8 @@ jobs:
       - uses: hynek/setup-cached-uv@v2
       - name: Sync Python Releases
         run: |
-          uv run --isolated -- fetch-download-metadata.py
-          uv run --isolated -- template-download-metadata.py
+          uv run -- fetch-download-metadata.py
+          uv run -- template-download-metadata.py
         working-directory: ./crates/uv-python
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -600,6 +600,14 @@ fn test_uv_run_isolate() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
+     + idna==3.6
+     + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
+     + sniffio==1.3.1
     Traceback (most recent call last):
       File "[TEMP_DIR]/albatross-root-workspace/check_installed_albatross.py", line 1, in <module>
         from albatross import fly

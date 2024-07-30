@@ -255,7 +255,7 @@ project-level settings appearing earlier in the merged array.
 Settings provided via environment variables take precedence over persistent configuration, and
 settings provided via the command line take precedence over both.
 
-uv accepts a `--isolated` command-line argument which, when provided, disables the discovery of any
+uv accepts a `--no-config` command-line argument which, when provided, disables the discovery of any
 persistent configuration.
 
 uv also accepts a `--config-file` command-line argument, which accepts a path to a `uv.toml` to use

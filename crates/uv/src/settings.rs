@@ -43,7 +43,6 @@ pub(crate) struct GlobalSettings {
     pub(crate) color: ColorChoice,
     pub(crate) native_tls: bool,
     pub(crate) connectivity: Connectivity,
-    pub(crate) isolated: bool,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
     pub(crate) python_preference: PythonPreference,
@@ -108,7 +107,6 @@ impl GlobalSettings {
             } else {
                 Connectivity::Online
             },
-            isolated: args.isolated,
             show_settings: args.show_settings,
             preview,
             python_preference: args

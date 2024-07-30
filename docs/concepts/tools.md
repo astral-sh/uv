@@ -125,13 +125,13 @@ fail. The `--force` flag can be used to override this behavior.
 The invocation `uv tool run <name>` is nearly equivalent to:
 
 ```console
-$ uv run --isolated --with <name> -- <name>
+$ uv run --no-project --with <name> -- <name>
 ```
 
 However, there are a couple notable differences when using uv's tool interface:
 
 - The `--with` option is not needed — the required package is inferred from the command name.
 - The temporary environment is cached in a dedicated location.
-- The `--isolated` flag is not needed — tools are always run isolated from the project.
+- The `--no-project` flag is not needed — tools are always run isolated from the project.
 - If a tool is already installed, `uv tool run` will use the installed version but `uv run` will
   not.
