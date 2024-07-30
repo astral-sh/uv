@@ -1847,6 +1847,11 @@ pub struct InitArgs {
     #[arg(long)]
     pub no_readme: bool,
 
+    /// Avoid discovering the workspace in the current directory or any parent directory. Instead,
+    /// create a standalone project.
+    #[arg(long, alias = "no_project")]
+    pub no_workspace: bool,
+
     /// The Python interpreter to use to determine the minimum supported Python version.
     ///
     /// By default, uv uses the virtual environment in the current working directory or any parent
@@ -1920,8 +1925,13 @@ pub struct RunArgs {
     pub refresh: RefreshArgs,
 
     /// Run the command in a specific package in the workspace.
-    #[arg(long, conflicts_with = "isolated")]
+    #[arg(long)]
     pub package: Option<PackageName>,
+
+    /// Avoid discovering the project or workspace in the current directory or any parent directory.
+    /// Instead, run in an isolated, ephemeral environment populated by the `--with` requirements.
+    #[arg(long, alias = "no_workspace", conflicts_with = "package")]
+    pub no_project: bool,
 
     /// The Python interpreter to use to build the run environment.
     ///
