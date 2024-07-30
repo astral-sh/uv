@@ -38,6 +38,7 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn run(
     command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
+    show_resolution: bool,
     locked: bool,
     frozen: bool,
     package: Option<PackageName>,
@@ -87,7 +88,7 @@ pub(crate) async fn run(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    let reporter = PythonDownloadReporter::single(printer);
+    let reporter = PythonDownloadReporter::single(printer.filter(show_resolution));
 
     // Determine whether the command to execute is a PEP 723 script.
     let script_interpreter = if let RunCommand::Python(target, _) = &command {
@@ -144,7 +145,7 @@ pub(crate) async fn run(
                 concurrency,
                 native_tls,
                 cache,
-                printer,
+                printer.filter(show_resolution),
             )
             .await?;
 
@@ -202,7 +203,7 @@ pub(crate) async fn run(
                 connectivity,
                 native_tls,
                 cache,
-                printer,
+                printer.filter(show_resolution),
             )
             .await?;
 
@@ -218,7 +219,7 @@ pub(crate) async fn run(
                 concurrency,
                 native_tls,
                 cache,
-                printer,
+                printer.filter(show_resolution),
             )
             .await
             {
@@ -247,7 +248,7 @@ pub(crate) async fn run(
                 concurrency,
                 native_tls,
                 cache,
-                printer,
+                printer.filter(show_resolution),
             )
             .await?;
 
@@ -403,7 +404,7 @@ pub(crate) async fn run(
                         concurrency,
                         native_tls,
                         cache,
-                        printer,
+                        printer.filter(show_resolution),
                     )
                     .await?,
                 )

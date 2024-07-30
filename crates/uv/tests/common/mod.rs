@@ -481,7 +481,7 @@ impl TestContext {
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command.arg("run");
+        command.arg("run").env("UV_SHOW_RESOLUTION", "1");
         self.add_shared_args(&mut command);
         command
     }
@@ -489,13 +489,16 @@ impl TestContext {
     /// Create a `uv tool run` command with options shared across scenarios.
     pub fn tool_run(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command.arg("tool").arg("run");
+        command
+            .arg("tool")
+            .arg("run")
+            .env("UV_SHOW_RESOLUTION", "1");
         self.add_shared_args(&mut command);
         command
     }
 
     /// Create a `uv tool install` command with options shared across scenarios.
-    pub fn tool_install(&self) -> std::process::Command {
+    pub fn tool_install(&self) -> Command {
         let mut command = self.tool_install_without_exclude_newer();
         command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
         command
@@ -507,16 +510,16 @@ impl TestContext {
     /// it can result in tests failing when the index state changes. Therefore,
     /// if you use this, there should be some other kind of mitigation in place.
     /// For example, pinning package versions.
-    pub fn tool_install_without_exclude_newer(&self) -> std::process::Command {
-        let mut command = std::process::Command::new(get_bin());
+    pub fn tool_install_without_exclude_newer(&self) -> Command {
+        let mut command = Command::new(get_bin());
         command.arg("tool").arg("install");
         self.add_shared_args(&mut command);
         command
     }
 
     /// Create a `uv tool list` command with options shared across scenarios.
-    pub fn tool_list(&self) -> std::process::Command {
-        let mut command = std::process::Command::new(get_bin());
+    pub fn tool_list(&self) -> Command {
+        let mut command = Command::new(get_bin());
         command.arg("tool").arg("list");
         self.add_shared_args(&mut command);
         command
@@ -531,8 +534,8 @@ impl TestContext {
     }
 
     /// Create a `uv tool uninstall` command with options shared across scenarios.
-    pub fn tool_uninstall(&self) -> std::process::Command {
-        let mut command = std::process::Command::new(get_bin());
+    pub fn tool_uninstall(&self) -> Command {
+        let mut command = Command::new(get_bin());
         command.arg("tool").arg("uninstall");
         self.add_shared_args(&mut command);
         command

@@ -45,6 +45,16 @@ impl Printer {
             Self::NoProgress => Stderr::Enabled,
         }
     }
+
+    /// Filter the [`Printer`], casting to [`Printer::Quiet`] if the condition is false.
+    #[must_use]
+    pub(crate) fn filter(self, condition: bool) -> Self {
+        if condition {
+            self
+        } else {
+            Self::Quiet
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

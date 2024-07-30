@@ -882,3 +882,36 @@ fn run_from_directory() -> Result<()> {
 
     Ok(())
 }
+
+/// By default, omit resolver and installer output.
+#[test]
+fn run_without_output() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    "###);
+
+    Ok(())
+}
