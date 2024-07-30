@@ -1,6 +1,7 @@
 # Using tools
 
-Many Python packages provide applications that can be used as tools. uv has specialized support for easily invoking and installing tools.
+Many Python packages provide applications that can be used as tools. uv has specialized support for
+easily invoking and installing tools.
 
 ## Using `uvx`
 
@@ -40,9 +41,11 @@ $ uvx pycowsay hello from uv
 
 ## Commands with different package names
 
-When you invoke `uvx ruff`, uv installs the `ruff` package which provides the `ruff` command. However, sometimes the package and command names differ.
+When you invoke `uvx ruff`, uv installs the `ruff` package which provides the `ruff` command.
+However, sometimes the package and command names differ.
 
-The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is provided by `httpie`:
+The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is
+provided by `httpie`:
 
 ```console
 $ uvx --from httpie http
@@ -90,7 +93,8 @@ $ uvx --with mkdocs-material mkdocs --help
 
 ## Installing tools
 
-If a tool is used often, it can be useful to install it to a persistent environment and add it to the `PATH` instead of invoking `uvx` repeatedly.
+If a tool is used often, it can be useful to install it to a persistent environment and add it to
+the `PATH` instead of invoking `uvx` repeatedly.
 
 To install `ruff`:
 
@@ -98,7 +102,9 @@ To install `ruff`:
 $ uv tool install ruff
 ```
 
-When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and `uv tool update-shell` can be used to add it to the `PATH`.
+When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows
+the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and `uv tool
+update-shell` can be used to add it to the `PATH`.
 
 After installing `ruff`, it should be available:
 
@@ -106,15 +112,18 @@ After installing `ruff`, it should be available:
 $ ruff --version
 ```
 
-Unlike `uv pip install`, installing a tool does not make its modules available in the current environment. For example, the following command will fail:
+Unlike `uv pip install`, installing a tool does not make its modules available in the current
+environment. For example, the following command will fail:
 
 ```console
 $ python -c "import ruff"
 ```
 
-This isolation is important for reducing interactions and conflicts between dependencies of tools, scripts, and projects.
+This isolation is important for reducing interactions and conflicts between dependencies of tools,
+scripts, and projects.
 
-Unlike `uvx`, `uv tool install` operates on a _package_ and will install all executables provided by the tool.
+Unlike `uvx`, `uv tool install` operates on a _package_ and will install all executables provided by
+the tool.
 
 For example, the following will install the `http`, `https`, and `httpie` executables:
 
@@ -142,4 +151,5 @@ $ uv tool install mkdocs --with mkdocs-material
 
 ## Next steps
 
-See the [tools concept](../concepts/tools.md) documentation for more details on how tools are managed.
+See the [tools concept](../concepts/tools.md) documentation for more details on how tools are
+managed.

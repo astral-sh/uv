@@ -1,6 +1,7 @@
 # Using uv in pre-commit
 
-An official pre-commit hook is provided at [`astral-sh/uv-pre-commit`](https://github.com/astral-sh/uv-pre-commit).
+An official pre-commit hook is provided at
+[`astral-sh/uv-pre-commit`](https://github.com/astral-sh/uv-pre-commit).
 
 To compile requirements via pre-commit, add the following to the `.pre-commit-config.yaml`:
 

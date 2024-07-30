@@ -1,6 +1,8 @@
 # Python versions
 
-A Python version is composed of a Python interpreter (i.e. the `python` executable), the standard library, and other supporting files. It is common for an operating system to come with a Python version installed.
+A Python version is composed of a Python interpreter (i.e. the `python` executable), the standard
+library, and other supporting files. It is common for an operating system to come with a Python
+version installed.
 
 ## Requesting a version
 
@@ -12,7 +14,8 @@ For example, when creating a virtual environment:
 uv venv --python 3.11.6
 ```
 
-uv will ensure that Python 3.11.6 is available — downloading and installing it if necessary — then create the virtual environment with it.
+uv will ensure that Python 3.11.6 is available — downloading and installing it if necessary — then
+create the virtual environment with it.
 
 Many Python version request formats are supported:
 
@@ -56,15 +59,18 @@ uv python install 3.9 3.10 3.11
 
 ## Project Python versions
 
-By default `uv python install` will verify that a managed Python version is installed or install the latest version.
+By default `uv python install` will verify that a managed Python version is installed or install the
+latest version.
 
-However, a project may define a `.python-version` file specifying the default Python version to be used. If present,
-uv will install the Python version listed in the file.
+However, a project may define a `.python-version` file specifying the default Python version to be
+used. If present, uv will install the Python version listed in the file.
 
-Alternatively, a project that requires multiple Python versions may also define a `.python-versions` file. If present,
-uv will install all of the Python versions listed in the file. This file takes precedence over the `.python-version` file.
+Alternatively, a project that requires multiple Python versions may also define a `.python-versions`
+file. If present, uv will install all of the Python versions listed in the file. This file takes
+precedence over the `.python-version` file.
 
-uv will also respect Python requirements defined in a `pyproject.toml` file during project command invocations.
+uv will also respect Python requirements defined in a `pyproject.toml` file during project command
+invocations.
 
 ## Viewing available Python versions
 
@@ -96,16 +102,20 @@ uv python list --only-installed
 
 ## Adjusting Python version preferences
 
-By default, uv will attempt to use Python versions found on the system and only download managed interpreters when necessary.
-However, It's possible to adjust uv's Python version selection preference with the `python-preference` option.
+By default, uv will attempt to use Python versions found on the system and only download managed
+interpreters when necessary. However, It's possible to adjust uv's Python version selection
+preference with the `python-preference` option.
 
 - `only-managed`: Only use managed Python installations; never use system Python installations
-- `installed`:    Prefer installed Python installations, only download managed Python installations if no system Python installation is found
-- `managed`:      Prefer managed Python installations over system Python installations, even if fetching is required
+- `installed`:    Prefer installed Python installations, only download managed Python installations
+  if no system Python installation is found
+- `managed`:      Prefer managed Python installations over system Python installations, even if
+  fetching is required
 - `system`:       Prefer system Python installations over managed Python installations
 - `only-system`:  Only use system Python installations; never use managed Python installations
 
-These options allow disabling uv's managed Python versions entirely or always using them and ignoring any existing system installations.
+These options allow disabling uv's managed Python versions entirely or always using them and
+ignoring any existing system installations.
 
 ## Discovery order
 
@@ -116,16 +126,24 @@ When searching for a Python version, the following locations are checked:
 - On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
   version.
 
-If a specific Python version is requested, e.g. `--python 3.7`, additional executable names are included in the search:
+If a specific Python version is requested, e.g. `--python 3.7`, additional executable names are
+included in the search:
 
 - A Python interpreter on the `PATH` as, e.g., `python3.7` on macOS and Linux.
 
 ## Python distributions
 
-Python does not publish official distributable CPython binaries, uv uses third-party standalone distributions from the [`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The project is partially maintained by the uv maintainers and is used by many other Python projects.
+Python does not publish official distributable CPython binaries, uv uses third-party standalone
+distributions from the
+[`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The
+project is partially maintained by the uv maintainers and is used by many other Python projects.
 
-The Python distributions are self-contained and highly-portable. Additionally, these distributions have various build-time optimizations enabled to ensure they are performant.
+The Python distributions are self-contained and highly-portable. Additionally, these distributions
+have various build-time optimizations enabled to ensure they are performant.
 
-These distributions have some behavior quirks, generally as a consequence of portability. See the [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html) documentation for details. 
+These distributions have some behavior quirks, generally as a consequence of portability. See the
+[`python-build-standalone`
+quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html) documentation for
+details. 
 
 PyPy distributions are provided by the PyPy project.

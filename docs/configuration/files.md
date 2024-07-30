@@ -5,16 +5,16 @@ uv supports persistent configuration files at both the project- and user-level.
 Specifically, uv will search for a `pyproject.toml` or `uv.toml` file in the current directory, or
 in the nearest parent directory.
 
-If a `pyproject.toml` file is found, uv will read configuration from the `[tool.uv.pip]` table.
-For example, to set a persistent index URL, add the following to a `pyproject.toml`:
+If a `pyproject.toml` file is found, uv will read configuration from the `[tool.uv.pip]` table. For
+example, to set a persistent index URL, add the following to a `pyproject.toml`:
 
 ```toml title="project.toml"
 [tool.uv.pip]
 index-url = "https://test.pypi.org/simple"
 ```
 
-(If there is no such table, the `pyproject.toml` file will be ignored, and uv will continue searching in
-the directory hierarchy.)
+(If there is no such table, the `pyproject.toml` file will be ignored, and uv will continue
+searching in the directory hierarchy.)
 
 If a `uv.toml` file is found, uv will read from the `[pip]` table. For example:
 

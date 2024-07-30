@@ -1,23 +1,26 @@
 # Specifying dependencies
 
-In uv, project dependency specification is divided between two `pyproject.toml` tables: `project.dependencies` and
-`tool.uv.sources`.
+In uv, project dependency specification is divided between two `pyproject.toml` tables:
+`project.dependencies` and `tool.uv.sources`.
 
-`project.dependencies` is used to define the standards-compliant dependency metadata,
-propagated when uploading to PyPI or building a wheel. `tool.uv.sources` is used to specify the _sources_
+`project.dependencies` is used to define the standards-compliant dependency metadata, propagated
+when uploading to PyPI or building a wheel. `tool.uv.sources` is used to specify the _sources_
 required to install the dependencies, which can come from a Git repository, a URL, a local path, a
-different index, etc. This metadata must be expressed separately because the `project.dependencies` standard does not allow these common patterns.
+different index, etc. This metadata must be expressed separately because the `project.dependencies`
+standard does not allow these common patterns.
 
 ## Project dependencies
 
 The `project.dependencies` table represents the dependencies that are used when uploading to PyPI or
-building a wheel. Individual dependencies are specified using [PEP 508](#pep-508) syntax, and the table follows the [PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/)
+building a wheel. Individual dependencies are specified using [PEP 508](#pep-508) syntax, and the
+table follows the [PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/)
 standard.
 
-`project.dependencies` defines the packages that are required for the project, along with the version constraints that should be used when installing them.
+`project.dependencies` defines the packages that are required for the project, along with the
+version constraints that should be used when installing them.
 
-`project.dependencies` is structured as a list. Each entry includes a dependency name and
-version. An entry may include extras or environment markers for platform-specific packages. For example:
+`project.dependencies` is structured as a list. Each entry includes a dependency name and version.
+An entry may include extras or environment markers for platform-specific packages. For example:
 
 ```toml title="pyproject.toml"
 [project]
@@ -37,11 +40,14 @@ dependencies = [
 ]
 ```
 
-If the project only requires packages from standard package indexes, then `project.dependencies` is sufficient. If, the project depends on packages from Git, remote URLs, or local sources, `tool.uv.sources` is needed.
+If the project only requires packages from standard package indexes, then `project.dependencies` is
+sufficient. If, the project depends on packages from Git, remote URLs, or local sources,
+`tool.uv.sources` is needed.
 
 ## Dependency sources
 
-During development, the project may rely on a package that isn't available on PyPI. The following additional sources are supported by uv:
+During development, the project may rely on a package that isn't available on PyPI. The following
+additional sources are supported by uv:
 
 - Git
 - URL
@@ -51,8 +57,8 @@ During development, the project may rely on a package that isn't available on Py
 Only a single source may be defined for each dependency.
 
 Note that if a non-uv project uses a project with sources as a Git- or path-dependency, only
-`project.dependencies` is respected, the information in the source table
-will need to be re-specified in a format specific to the other package manager.
+`project.dependencies` is respected, the information in the source table will need to be
+re-specified in a format specific to the other package manager.
 
 ### Git
 
@@ -84,11 +90,14 @@ $ uv add git+https://github.com/encode/httpx --branch main
 $ uv add git+https://github.com/encode/httpx --rev 326b943
 ```
 
-Git dependencies can also be manually added or edited in the `pyproject.toml` with the `{ git = <url> }` syntax. A target revision may be specified with one of: `rev`, `tag`, or `branch`. A `subdirectory` may be specified if the package isn't in the repository root.
+Git dependencies can also be manually added or edited in the `pyproject.toml` with the `{ git =
+<url> }` syntax. A target revision may be specified with one of: `rev`, `tag`, or `branch`. A
+`subdirectory` may be specified if the package isn't in the repository root.
 
 ### URL
 
-To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source distribution (ending in `.zip` or `.tar.gz`).
+To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source
+distribution (ending in `.zip` or `.tar.gz`).
 
 For example:
 
@@ -108,11 +117,14 @@ dependencies = [
 httpx = { url = "https://files.pythonhosted.org/packages/5c/2d/3da5bdf4408b8b2800061c339f240c1802f2e82d55e50bd39c5a881f47f0/httpx-0.27.0.tar.gz" }
 ```
 
-URL dependencies can also be manually added or edited in the `pyproject.toml` with the `{ url = <url> }` syntax.  A `subdirectory` may be specified if the if the source distribution isn't in the archive root.
+URL dependencies can also be manually added or edited in the `pyproject.toml` with the `{ url =
+<url> }` syntax.  A `subdirectory` may be specified if the if the source distribution isn't in the
+archive root.
 
 ### Path
 
-To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution (ending in `.zip` or `.tar.gz`), or a directory containing a `pyproject.toml`.
+To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution (ending
+in `.zip` or `.tar.gz`), or a directory containing a `pyproject.toml`.
 
 For example:
 
@@ -138,7 +150,8 @@ The path may also be a relative path, e.g.:
 $ uv add ./foo
 ```
 
-Note an [editable installation](#editables-dependencies) is not used for path dependencies. However, for directories, an editable installation may be requested, e.g.:
+Note an [editable installation](#editables-dependencies) is not used for path dependencies. However,
+for directories, an editable installation may be requested, e.g.:
 
 ```console
 $ uv add --editable ./foo
@@ -148,7 +161,10 @@ However, it is recommended to use [_workspaces_](#workspaces) instead of manual 
 
 ### Workspace member
 
-To declare a workspace member, add the dependency with `{ workspace = true }`. All workspace members must be explicitly stated. Workspace members are [editable](#editables-dependencies) by default; `editable = false` may be included to install them as regular dependencies. See the [workspace](./workspaces.md) documentation for more details on workspaces.
+To declare a workspace member, add the dependency with `{ workspace = true }`. All workspace members
+must be explicitly stated. Workspace members are [editable](#editables-dependencies) by default;
+`editable = false` may be included to install them as regular dependencies. See the
+[workspace](./workspaces.md) documentation for more details on workspaces.
 
 ```toml title="pyproject.toml"
 [project]
@@ -167,9 +183,12 @@ include = [
 
 ## Optional dependencies
 
-It is common for projects that are published as libraries to make some features optional to reduce the default dependency tree. For example,
-Pandas has an [`excel` extra](https://pandas.pydata.org/docs/getting_started/install.html#excel-files)
-and a [`plot` extra](https://pandas.pydata.org/docs/getting_started/install.html#visualization) to avoid installation of Excel parsers and `matplotlib` unless someone explicitly requires them. Extras are requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
+It is common for projects that are published as libraries to make some features optional to reduce
+the default dependency tree. For example, Pandas has an [`excel`
+extra](https://pandas.pydata.org/docs/getting_started/install.html#excel-files) and a [`plot`
+extra](https://pandas.pydata.org/docs/getting_started/install.html#visualization) to avoid
+installation of Excel parsers and `matplotlib` unless someone explicitly requires them. Extras are
+requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
 
 Optional dependencies are specified in `[project.optional-dependencies]`, a TOML table that maps
 from extra name to its dependencies, following [PEP 508](#pep-508) syntax.
@@ -203,7 +222,9 @@ $ uv add httpx --optional network
 
 ## Development dependencies
 
-Unlike optional dependencies, development dependencies are local-only and will _not_ be included in the project requirements when published to PyPI or other indexes. As such, development dependencies are included under `[tool.uv]` instead of `[project]`. 
+Unlike optional dependencies, development dependencies are local-only and will _not_ be included in
+the project requirements when published to PyPI or other indexes. As such, development dependencies
+are included under `[tool.uv]` instead of `[project]`. 
 
 Development dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
@@ -222,7 +243,8 @@ $ uv add ruff --dev`
 
 ## PEP 508
 
-[PEP 508](https://peps.python.org/pep-0508/) defines a syntax for dependency specification. It is composed of, in order:
+[PEP 508](https://peps.python.org/pep-0508/) defines a syntax for dependency specification. It is
+composed of, in order:
 
 - The dependency name
 - The extras you want (optional)
@@ -238,30 +260,31 @@ A star can be used for the last digit with equals, e.g. `foo ==2.1.*` will accep
 the 2.1 series. Similarly, `~=` matches where the last digit is equal or higher, e.g., `foo ~=1.2`
 is equal to `foo >=1.2,<2`, and `foo ~=1.2.3` is equal to `foo >=1.2.3,<1.3`.
 
-Extras are comma-separated in square bracket between name and version, e.g., `pandas[excel,plot] ==2.2`. Whitespace between extra names is ignored.
+Extras are comma-separated in square bracket between name and version, e.g., `pandas[excel,plot]
+==2.2`. Whitespace between extra names is ignored.
 
 Some dependencies are only required in specific environments, e.g., a specific Python version or
 operating system. For example to install the `importlib-metadata` backport for the
-`importlib.metadata` module, use `importlib-metadata >=7.1.0,<8; python_version < '3.10'`.
-To install `colorama` on Windows (but omit it on other platforms), use
-`colorama >=0.4.6,<5; platform_system == "Windows"`.
+`importlib.metadata` module, use `importlib-metadata >=7.1.0,<8; python_version < '3.10'`. To
+install `colorama` on Windows (but omit it on other platforms), use `colorama >=0.4.6,<5;
+platform_system == "Windows"`.
 
-Markers are combined with `and`, `or`, and parentheses, e.g., `aiohttp >=3.7.4,<4; (sys_platform != 'win32' or implementation_name != 'pypy') and python_version >= '3.10'`.
-Note that versions within markers must be quoted, while versions _outside_ of markers must _not_ be
-quoted.
+Markers are combined with `and`, `or`, and parentheses, e.g., `aiohttp >=3.7.4,<4; (sys_platform !=
+'win32' or implementation_name != 'pypy') and python_version >= '3.10'`. Note that versions within
+markers must be quoted, while versions _outside_ of markers must _not_ be quoted.
 
 ## Editable dependencies
 
 A regular installation of a directory with a Python package first builds a wheel and then installs
-that wheel into your virtual environment, copying all source files. When the package source files are edited,
-the virtual environment will contain outdated versions.
+that wheel into your virtual environment, copying all source files. When the package source files
+are edited, the virtual environment will contain outdated versions.
 
-Editable installations solve this problem by adding a link to the project within the virtual environment
-(a `.pth` file), which instructs the interpreter to include the source files directly.
+Editable installations solve this problem by adding a link to the project within the virtual
+environment (a `.pth` file), which instructs the interpreter to include the source files directly.
 
-There are some limitations to editables (mainly: the build backend needs to support them, and
-native modules aren't recompiled before import), but they are useful for development, as the
-virtual environment will always use the latest changes to the package.
+There are some limitations to editables (mainly: the build backend needs to support them, and native
+modules aren't recompiled before import), but they are useful for development, as the virtual
+environment will always use the latest changes to the package.
 
 uv uses editable installation for workspace packages by default.
 

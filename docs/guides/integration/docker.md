@@ -2,7 +2,8 @@
 
 ## Running in Docker
 
-A Docker image is published with a built version of uv available. To run a uv command in a container:
+A Docker image is published with a built version of uv available. To run a uv command in a
+container:
 
 ```bash
 docker run ghcr.io/astral-sh/uv --help
@@ -34,7 +35,8 @@ In either case, it is best practice to pin to a specific uv version.
 
 Once uv is installed in an image, it can be used to install some packages.
 
-The system Python environment is safe to use this context, since a container is already isolated. The `--system` flag can be used to install in the system environment:
+The system Python environment is safe to use this context, since a container is already isolated.
+The `--system` flag can be used to install in the system environment:
 
 ```dockerfile title="Dockerfile"
 RUN uv pip install --system ruff
@@ -73,7 +75,9 @@ RUN uv pip install -r requirements.txt
 
 ## Installing a project
 
-When installing a project alongside requirements, it is prudent to separate copying the requirements from the rest of the source code. This allows the dependencies of the project (which do not change often) to be cached separately from the project itself (which changes very frequently).
+When installing a project alongside requirements, it is prudent to separate copying the requirements
+from the rest of the source code. This allows the dependencies of the project (which do not change
+often) to be cached separately from the project itself (which changes very frequently).
 
 ```dockerfile title="Dockerfile"
 COPY pyproject.toml .
@@ -95,7 +99,8 @@ RUN --mount=from=uv,source=/uv,target=/bin/uv \
 
 ### Caching
 
-A [cache mount](https://docs.docker.com/build/guide/mounts/#add-a-cache-mount) can be used to improve performance across builds:
+A [cache mount](https://docs.docker.com/build/guide/mounts/#add-a-cache-mount) can be used to
+improve performance across builds:
 
 ```dockerfile title="Dockerfile"
 RUN --mount=type=cache,target=/root/.cache/uv \
