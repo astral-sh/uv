@@ -69,6 +69,15 @@ extra_css:
 extra:
   analytics:
     provider: fathom
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/astral-sh/uv
+    - icon: fontawesome/brands/discord
+      link: https://discord.com/invite/astral-sh
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/uv/
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/astral_sh
 nav:
   - Introduction: index.md
   - Getting started:
