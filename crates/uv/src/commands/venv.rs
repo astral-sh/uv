@@ -23,13 +23,15 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_python::{
     request_from_version_file, EnvironmentPreference, PythonFetch, PythonInstallation,
-    PythonPreference, PythonRequest,
+    PythonPreference, PythonRequest, VersionRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
+use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{pip, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -141,6 +143,29 @@ async fn venv_impl(
     let mut interpreter_request = python_request.map(PythonRequest::parse);
     if preview.is_enabled() && interpreter_request.is_none() {
         interpreter_request = request_from_version_file().await.into_diagnostic()?;
+    }
+    if preview.is_enabled() && interpreter_request.is_none() {
+        let project = match VirtualProject::discover(
+            &std::env::current_dir().into_diagnostic()?,
+            &DiscoveryOptions::default(),
+        )
+        .await
+        {
+            Ok(project) => Some(project),
+            Err(WorkspaceError::MissingPyprojectToml) => None,
+            Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(err) => return Err(err).into_diagnostic(),
+        };
+
+        if let Some(project) = project {
+            interpreter_request = find_requires_python(project.workspace())
+                .into_diagnostic()?
+                .as_ref()
+                .map(RequiresPython::specifiers)
+                .map(|specifiers| {
+                    PythonRequest::Version(VersionRequest::Range(specifiers.clone()))
+                });
+        }
     }
     if preview.is_disabled() && relocatable {
         warn_user_once!("`--relocatable` is experimental and may change without warning");
