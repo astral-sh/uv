@@ -20,10 +20,10 @@ use cache_key::RepositoryUrl;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, PathBuiltDist,
-    PathSourceDist, PrioritizedDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Resolution, ResolvedDist, SourceDistCompatibility, ToUrlError, UrlString,
-    VersionId, WheelCompatibility,
+    DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, PrioritizedDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, SourceDistCompatibility,
+    ToUrlError, UrlString, VersionId, WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifier};
 use pep508_rs::{
@@ -53,7 +53,10 @@ const VERSION: u32 = 1;
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     version: u32,
-    distributions: Vec<Distribution>,
+    /// If this lockfile was built from a forking resolution with non-identical forks, store the
+    /// forks in the lockfile so we can recreate them in subsequent resolutions.
+    #[serde(rename = "environment-markers")]
+    fork_markers: Option<BTreeSet<MarkerTree>>,
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
     /// The [`ResolutionMode`] used to generate this lock.
@@ -62,6 +65,8 @@ pub struct Lock {
     prerelease_mode: PreReleaseMode,
     /// The [`ExcludeNewer`] used to generate this lock.
     exclude_newer: Option<ExcludeNewer>,
+    /// The actual locked version and their metadata.
+    distributions: Vec<Distribution>,
     /// A map from distribution ID to index in `distributions`.
     ///
     /// This can be used to quickly lookup the full distribution for any ID
@@ -87,7 +92,12 @@ impl Lock {
                 continue;
             };
             if dist.is_base() {
-                let mut locked_dist = Distribution::from_annotated_dist(dist)?;
+                let fork_markers = graph
+                    .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
+                    .cloned();
+                let mut locked_dist = Distribution::from_annotated_dist(dist, fork_markers)?;
+
+                // Add all dependencies
                 for edge in graph.petgraph.edges(node_index) {
                     let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
                     else {
@@ -159,6 +169,7 @@ impl Lock {
             options.resolution_mode,
             options.prerelease_mode,
             options.exclude_newer,
+            graph.fork_markers.clone(),
         )?;
         Ok(lock)
     }
@@ -171,6 +182,7 @@ impl Lock {
         resolution_mode: ResolutionMode,
         prerelease_mode: PreReleaseMode,
         exclude_newer: Option<ExcludeNewer>,
+        fork_markers: Option<BTreeSet<MarkerTree>>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each distribution in a canonical order and
         // check for duplicates.
@@ -324,11 +336,12 @@ impl Lock {
         }
         Ok(Self {
             version,
-            distributions,
+            fork_markers,
             requires_python,
             resolution_mode,
             prerelease_mode,
             exclude_newer,
+            distributions,
             by_id,
         })
     }
@@ -361,6 +374,12 @@ impl Lock {
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
         self.exclude_newer
+    }
+
+    /// If this lockfile was built from a forking resolution with non-identical forks, return the
+    /// markers of those forks, otherwise `None`.
+    pub fn fork_markers(&self) -> &Option<BTreeSet<MarkerTree>> {
+        &self.fork_markers
     }
 
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
@@ -450,6 +469,11 @@ impl Lock {
 
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
+        }
+        if let Some(ref fork_markers) = self.fork_markers {
+            let fork_markers =
+                each_element_on_its_line_array(fork_markers.iter().map(ToString::to_string));
+            doc.insert("environment-markers", value(fork_markers));
         }
 
         // Write the settings that were used to generate the resolution.
@@ -571,31 +595,36 @@ impl Lock {
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
-    #[serde(rename = "distribution", default)]
-    distributions: Vec<DistributionWire>,
     #[serde(default)]
     requires_python: Option<RequiresPython>,
+    /// If this lockfile was built from a forking resolution with non-identical forks, store the
+    /// forks in the lockfile so we can recreate them in subsequent resolutions.
+    #[serde(rename = "environment-markers")]
+    fork_markers: Option<BTreeSet<MarkerTree>>,
     #[serde(default)]
     resolution_mode: ResolutionMode,
     #[serde(default)]
     prerelease_mode: PreReleaseMode,
     #[serde(default)]
     exclude_newer: Option<ExcludeNewer>,
+    #[serde(rename = "distribution", default)]
+    distributions: Vec<DistributionWire>,
 }
 
 impl From<Lock> for LockWire {
     fn from(lock: Lock) -> LockWire {
         LockWire {
             version: lock.version,
+            requires_python: lock.requires_python,
+            fork_markers: lock.fork_markers,
+            resolution_mode: lock.resolution_mode,
+            prerelease_mode: lock.prerelease_mode,
+            exclude_newer: lock.exclude_newer,
             distributions: lock
                 .distributions
                 .into_iter()
                 .map(DistributionWire::from)
                 .collect(),
-            requires_python: lock.requires_python,
-            resolution_mode: lock.resolution_mode,
-            prerelease_mode: lock.prerelease_mode,
-            exclude_newer: lock.exclude_newer,
         }
     }
 }
@@ -633,6 +662,7 @@ impl TryFrom<LockWire> for Lock {
             wire.resolution_mode,
             wire.prerelease_mode,
             wire.exclude_newer,
+            wire.fork_markers,
         )
     }
 }
@@ -642,13 +672,22 @@ pub struct Distribution {
     pub(crate) id: DistributionId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
+    /// If there are multiple distributions for the same package name, we add the markers of the
+    /// fork(s) that contained this distribution, so we can set the correct preferences in the next
+    /// resolution.
+    ///
+    /// Named `environment-markers` in `uv.lock`.
+    fork_markers: Option<BTreeSet<MarkerTree>>,
     dependencies: Vec<Dependency>,
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
     dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
 }
 
 impl Distribution {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Self, LockError> {
+    fn from_annotated_dist(
+        annotated_dist: &AnnotatedDist,
+        fork_markers: Option<BTreeSet<MarkerTree>>,
+    ) -> Result<Self, LockError> {
         let id = DistributionId::from_annotated_dist(annotated_dist);
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
@@ -656,6 +695,7 @@ impl Distribution {
             id,
             sdist,
             wheels,
+            fork_markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dev_dependencies: BTreeMap::default(),
@@ -1005,6 +1045,12 @@ impl Distribution {
 
         self.id.to_toml(None, &mut table);
 
+        if let Some(ref fork_markers) = self.fork_markers {
+            let wheels =
+                each_element_on_its_line_array(fork_markers.iter().map(ToString::to_string));
+            table.insert("environment-markers", value(wheels));
+        }
+
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(
                 self.dependencies
@@ -1145,6 +1191,8 @@ struct DistributionWire {
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
+    #[serde(default, rename = "environment-markers")]
+    fork_markers: BTreeSet<MarkerTree>,
     #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
@@ -1167,6 +1215,7 @@ impl DistributionWire {
             id: self.id,
             sdist: self.sdist,
             wheels: self.wheels,
+            fork_markers: (!self.fork_markers.is_empty()).then_some(self.fork_markers),
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
                 .optional_dependencies
@@ -1191,6 +1240,7 @@ impl From<Distribution> for DistributionWire {
             id: dist.id,
             sdist: dist.sdist,
             wheels: dist.wheels,
+            fork_markers: dist.fork_markers.unwrap_or_default(),
             dependencies: wire_deps(dist.dependencies),
             optional_dependencies: dist
                 .optional_dependencies
@@ -2546,12 +2596,13 @@ impl std::fmt::Display for HashParseError {
 ///     { name = "sniffio" },
 /// ]
 /// ```
-fn each_element_on_its_line_array(elements: impl Iterator<Item = InlineTable>) -> Array {
+fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value>>) -> Array {
     let mut array = elements
-        .map(|mut inline_table| {
+        .map(|item| {
+            let mut value = item.into();
             // Each dependency is on its own line and indented.
-            inline_table.decor_mut().set_prefix("\n    ");
-            inline_table
+            value.decor_mut().set_prefix("\n    ");
+            value
         })
         .collect::<Array>();
     // With a trailing comma, inserting another entry doesn't change the preceding line,

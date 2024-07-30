@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use indexmap::IndexSet;
 use petgraph::{
     graph::{Graph, NodeIndex},
@@ -10,7 +12,7 @@ use distribution_types::{
     VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
-use pep508_rs::{MarkerEnvironment, MarkerTree};
+use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
@@ -25,8 +27,11 @@ use crate::resolution::AnnotatedDist;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
-    VersionsResponse,
+    ResolverMarkers, VersionsResponse,
 };
+
+pub(crate) type MarkersForDistribution =
+    FxHashMap<(Version, Option<VerbatimUrl>), BTreeSet<MarkerTree>>;
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
@@ -36,6 +41,9 @@ pub struct ResolutionGraph {
     pub(crate) petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: Option<RequiresPython>,
+    /// If the resolution had non-identical forks, store the forks in the lockfile so we can
+    /// recreate them in subsequent resolutions.
+    pub(crate) fork_markers: Option<BTreeSet<MarkerTree>>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
@@ -46,6 +54,9 @@ pub struct ResolutionGraph {
     pub(crate) overrides: Overrides,
     /// The options that were used to build the graph.
     pub(crate) options: Options,
+    /// If there are multiple options for a package, track which fork they belong to so we
+    /// can write that to the lockfile and later get the correct preference per fork back.
+    pub(crate) package_markers: FxHashMap<PackageName, MarkersForDistribution>,
 }
 
 #[derive(Debug)]
@@ -86,10 +97,28 @@ impl ResolutionGraph {
         // Add the root node.
         let root_index = petgraph.add_node(ResolutionGraphNode::Root);
 
+        let mut package_markers: FxHashMap<PackageName, MarkersForDistribution> =
+            FxHashMap::default();
+
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
             // Add every package to the graph.
             for (package, version) in &resolution.nodes {
+                if package.is_base() {
+                    // For packages with diverging versions, store which version comes from which
+                    // fork.
+                    if let Some(markers) = resolution.markers.fork_markers() {
+                        let entry = package_markers
+                            .entry(package.name.clone())
+                            .or_default()
+                            .entry((version.clone(), package.url.clone().map(|url| url.verbatim)))
+                            .or_default();
+                        if !entry.contains(markers) {
+                            entry.insert(markers.clone());
+                        }
+                    }
+                }
+
                 if !seen.insert((package, version)) {
                     // Insert each node only once.
                     continue;
@@ -138,14 +167,38 @@ impl ResolutionGraph {
             }
         }
 
+        let fork_markers = if let [resolution] = resolutions {
+            match resolution.markers {
+                ResolverMarkers::Universal { .. } | ResolverMarkers::SpecificEnvironment(_) => None,
+                ResolverMarkers::Fork(_) => {
+                    panic!("A single fork must be universal");
+                }
+            }
+        } else {
+            Some(
+                resolutions
+                    .iter()
+                    .map(|resolution| {
+                        resolution
+                            .markers
+                            .fork_markers()
+                            .expect("A non-forking resolution exists in forking mode")
+                            .clone()
+                    })
+                    .collect(),
+            )
+        };
+
         Ok(Self {
             petgraph,
             requires_python,
+            package_markers,
             diagnostics,
             requirements: requirements.to_vec(),
             constraints: constraints.clone(),
             overrides: overrides.clone(),
             options,
+            fork_markers,
         })
     }
 
@@ -548,6 +601,22 @@ impl ResolutionGraph {
             conjuncts.push(MarkerTree::Expression(expr));
         }
         Ok(MarkerTree::And(conjuncts))
+    }
+
+    /// If there are multiple distributions for the same package name, return the markers of the
+    /// fork(s) that contained this distribution, otherwise return `None`.
+    pub fn fork_markers(
+        &self,
+        package_name: &PackageName,
+        version: &Version,
+        url: Option<&VerbatimUrl>,
+    ) -> Option<&BTreeSet<MarkerTree>> {
+        let package_markers = &self.package_markers.get(package_name)?;
+        if package_markers.len() == 1 {
+            None
+        } else {
+            Some(&package_markers[&(version.clone(), url.cloned())])
+        }
     }
 }
 

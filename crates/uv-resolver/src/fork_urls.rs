@@ -40,7 +40,8 @@ impl ForkUrls {
                     ];
                     conflicting_url.sort();
                     return match fork_markers {
-                        ResolverMarkers::Universal | ResolverMarkers::SpecificEnvironment(_) => {
+                        ResolverMarkers::Universal { .. }
+                        | ResolverMarkers::SpecificEnvironment(_) => {
                             Err(ResolveError::ConflictingUrlsUniversal(
                                 package_name.clone(),
                                 conflicting_url,
