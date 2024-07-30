@@ -124,3 +124,11 @@ This is a consequence of the reduced nav spacing below. */
 .md-nav--secondary .md-nav__link {
   margin-top: 0.5em;
 }
+
+/* Bold section names
+See: https://github.com/astral-sh/uv/issues/5614 */
+[for="__toc"] + .md-nav__link .md-ellipsis,
+.md-nav__link[for^="__nav_"] .md-ellipsis,
+.md-nav__container .md-ellipsis {
+  font-weight: bold;
+}
