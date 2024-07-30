@@ -615,7 +615,7 @@ fn verify_pyvenv_cfg_relocatable() {
 
     let activate_sh = scripts.child("activate");
     activate_sh.assert(predicates::path::is_file());
-    activate_sh.assert(predicates::str::contains(r#"VIRTUAL_ENV=''"$(dirname -- "$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && echo "$PWD")")"''"#));
+    activate_sh.assert(predicates::str::contains(r#"VIRTUAL_ENV=''"$(dirname -- "$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" > /dev/null && echo "$PWD")")"''"#));
 
     let activate_bat = scripts.child("activate.bat");
     activate_bat.assert(predicates::path::is_file());
