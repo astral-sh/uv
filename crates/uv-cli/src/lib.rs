@@ -1907,6 +1907,11 @@ pub struct RunArgs {
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
+    /// Run the tool in an isolated virtual environment, rather than leveraging the base environment
+    /// for the current project, to enforce strict isolation between dependencies.
+    #[arg(long)]
+    pub isolated: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,

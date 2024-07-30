@@ -194,6 +194,7 @@ pub(crate) struct RunSettings {
     pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
+    pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) no_project: bool,
@@ -215,7 +216,7 @@ impl RunSettings {
             command,
             with,
             with_requirements,
-            show_resolution,
+            isolated,
             locked,
             frozen,
             installer,
@@ -224,6 +225,7 @@ impl RunSettings {
             package,
             no_project,
             python,
+            show_resolution,
         } = args;
 
         Self {
@@ -240,6 +242,7 @@ impl RunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            isolated,
             show_resolution,
             package,
             no_project,
