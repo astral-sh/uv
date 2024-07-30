@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.32
+
+### Preview features
+
+- Implement `uv run --directory` ([#5566](https://github.com/astral-sh/uv/pull/5566))
+- Add `--isolated` support to `uv run` ([#5471](https://github.com/astral-sh/uv/pull/5471))
+- Add `--no-workspace` and `--no-project` in lieu of `--isolated` ([#5465](https://github.com/astral-sh/uv/pull/5465))
+- Add documentation for cache clearing ([#5517](https://github.com/astral-sh/uv/pull/5517))
+- Add forks to lockfile, don't read them yet ([#5480](https://github.com/astral-sh/uv/pull/5480))
+- Add links to documentation footer ([#5616](https://github.com/astral-sh/uv/pull/5616))
+- Error when multiple git references are provided in `uv add` ([#5502](https://github.com/astral-sh/uv/pull/5502))
+- Improvements to the project concept docs ([#5634](https://github.com/astral-sh/uv/pull/5634))
+- List installed tools when no command is provided to `uv tool run` ([#5553](https://github.com/astral-sh/uv/pull/5553))
+- Make `--directory` a global argument ([#5579](https://github.com/astral-sh/uv/pull/5579))
+- Reframe use of `--isolated` in `tool run` ([#5470](https://github.com/astral-sh/uv/pull/5470))
+- Remove `--isolated` usages from the `uv python` API ([#5468](https://github.com/astral-sh/uv/pull/5468))
+- Rename more use of "lock file" to "lockfile" ([#5629](https://github.com/astral-sh/uv/pull/5629))
+- Suppress resolver output by default in `uv run` and `uv tool run` ([#5580](https://github.com/astral-sh/uv/pull/5580))
+- Wrap documentation at 100 characters ([#5635](https://github.com/astral-sh/uv/pull/5635))
+
 ## 0.2.31
 
 ### Preview features

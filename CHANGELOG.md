@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.32
+
+### Enhancements
+
+- Deprecate the `--isolated` flag in favor of `--no-config` ([#5466](https://github.com/astral-sh/uv/pull/5466))
+- Re-enable `requires-python` narrowing in forks ([#5583](https://github.com/astral-sh/uv/pull/5583))
+
+### Performance
+
+- Skip copying to empty entries in seekable zip ([#5571](https://github.com/astral-sh/uv/pull/5571))
+- Use a consistent buffer size for downloads ([#5569](https://github.com/astral-sh/uv/pull/5569))
+- Use a consistent buffer size when writing out zip files ([#5570](https://github.com/astral-sh/uv/pull/5570))
+
+### Bug fixes
+
+- Avoid setting executable permissions on files we might not own ([#5582](https://github.com/astral-sh/uv/pull/5582))
+- Statically link liblzma ([#5577](https://github.com/astral-sh/uv/pull/5577))
+
 ## 0.2.31
 
 ### Enhancements
