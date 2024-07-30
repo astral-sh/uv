@@ -1089,6 +1089,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
 #[pymodule]
 #[pyo3(name = "pep508_rs")]
 pub fn python_module(py: Python<'_>, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
+    use pyo3::prelude::*;
     // Allowed to fail if we embed this module in another
 
     #[allow(unused_must_use)]
