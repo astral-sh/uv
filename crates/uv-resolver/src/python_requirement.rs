@@ -50,19 +50,7 @@ impl PythonRequirement {
 
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
     /// than the current `Requires-Python` minimum.
-    pub fn narrow(&self, _target: &RequiresPythonBound) -> Option<Self> {
-        // This represents a "small revert" of the PR that added
-        // Requires-Python version narrowing[1]. But narrowing has
-        // led to at least one bug[2] whose fix is not clear. We
-        // decided to revert narrowing under the idea that it is better
-        // to be strict (i.e., fail to resolve in some cases, like
-        // universal_requires_python in uv/tests/pip_compile) than it
-        // is to output an incorrect lock, as in [2].
-        //
-        // [1]: https://github.com/astral-sh/uv/pull/4707
-        // [2]: https://github.com/astral-sh/uv/issues/4885
-        None
-        /*
+    pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
         let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() else {
             return None;
         };
@@ -71,7 +59,6 @@ impl PythonRequirement {
             installed: self.installed.clone(),
             target: Some(PythonTarget::RequiresPython(requires_python)),
         })
-        */
     }
 
     /// Return the installed version of Python.
