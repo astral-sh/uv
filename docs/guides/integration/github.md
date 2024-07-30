@@ -109,7 +109,8 @@ steps:
     run: uv python install ${{ matrix.python-version }}
 ```
 
-Alternatively, the official GitHub `setup-python` action can be used. This is generally faster, but will not respect the project's pinned Python version.
+Alternatively, the official GitHub `setup-python` action can be used. This is generally faster, but
+will not respect the project's pinned Python version.
 
 ```yaml title="example.yml"
 steps:
@@ -121,7 +122,8 @@ steps:
 
 ## Syncing and running
 
-Once uv and Python are installed, the project can be installed with `uv sync` and commands can be run in the environment with `uv run`:
+Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
+run in the environment with `uv run`:
 
 ```yaml title="example.yml"
 steps:
@@ -137,7 +139,9 @@ steps:
 
 ## Using `uv pip`
 
-If using the `uv pip` interface instead of the uv project interface, uv requires a virtual environment by default. To allow installing packages into the system environment, use the `--system` flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
+If using the `uv pip` interface instead of the uv project interface, uv requires a virtual
+environment by default. To allow installing packages into the system environment, use the `--system`
+flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
 
 ### Setting `UV_SYSTEM_PYTHON`
 
@@ -178,7 +182,8 @@ steps:
       UV_SYSTEM_PYTHON: 1
 ```
 
-Now, `uv pip` can modify the system environment without creating and activating a virtual environment.
+Now, `uv pip` can modify the system environment without creating and activating a virtual
+environment.
 
 ```yaml title="example.yml"
 steps:

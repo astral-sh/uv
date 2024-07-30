@@ -24,17 +24,20 @@ An extremely fast Python package and project manager, written in Rust.
 
 - 🐍 [Installs and manages](./guides/install-python.md) Python versions.
 - 🛠️ [Runs and installs](./guides/tools.md) Python applications.
-- ❇️ [Runs scripts](./guides/scripts.md), with support for [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
-- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a [universal lockfile](./concepts/projects.md#lockfile).
+- ❇️ [Runs scripts](./guides/scripts.md), with support for [inline dependency
+  metadata](./guides/scripts.md#declaring-script-dependencies).
+- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a [universal
+  lockfile](./concepts/projects.md#lockfile).
 - 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
 - 🚀 A replacement for `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
-- ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`
-  and `pip-tools` (`pip-compile` and `pip-sync`).
+- ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip` and
+  `pip-tools` (`pip-compile` and `pip-sync`).
 - 💾 Disk-space efficient, with a [global cache](./concepts/cache.md) for dependency deduplication.
 - ⏬ Installable without Rust or Python via `curl` or `pip`.
 - 🖥️ Supports macOS, Linux, and Windows.
 
-uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
+uv is backed by [Astral](https://astral.sh), the creators of
+[Ruff](https://github.com/astral-sh/ruff).
 
 ## Getting started
 
@@ -50,7 +53,8 @@ Or, on Windows:
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Then, check out the [first steps](./first-steps.md), see more [installation methods](./installation.md), or read on for a brief overview.
+Then, check out the [first steps](./first-steps.md), see more [installation
+methods](./installation.md), or read on for a brief overview.
 
 ## Project management
 
@@ -159,10 +163,13 @@ See the [installing Python guide](./guides/install-python.md) to get started.
 
 ## The pip interface
 
-uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands with support for
-a wide range of advanced `pip` features, including editable installs, Git dependencies, direct URL dependencies, local dependencies, constraints, source distributions, HTML and JSON indexes, and more.
+uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands with
+support for a wide range of advanced `pip` features, including editable installs, Git dependencies,
+direct URL dependencies, local dependencies, constraints, source distributions, HTML and JSON
+indexes, and more.
 
-uv extends these interfaces with advanced features, such as dependency version overrides, multi-platform resolutions, reproducible resolutions, alternative resolution strategies, and more.
+uv extends these interfaces with advanced features, such as dependency version overrides,
+multi-platform resolutions, reproducible resolutions, alternative resolution strategies, and more.
 
 Compile requirements into a multi-platform requirements file:
 
@@ -196,4 +203,5 @@ See the [uv pip documentation](./pip/index.md) to get started.
 
 ## Next steps
 
-See the [first steps](./first-steps.md) or jump straight into the [guides](./guides/index.md) to start using uv.
+See the [first steps](./first-steps.md) or jump straight into the [guides](./guides/index.md) to
+start using uv.

@@ -1,6 +1,7 @@
 # Style guide
 
-_The following is a work-in-progress style guide for our user-facing messaging in the CLI output and documentation_.
+_The following is a work-in-progress style guide for our user-facing messaging in the CLI output and
+documentation_.
 
 ## General
 
@@ -9,9 +10,12 @@ _The following is a work-in-progress style guide for our user-facing messaging i
 1. Always wrap em-dashes in spaces, e.g., "hello — world" not "hello—world".
 1. Hyphenate compound words, e.g., use "platform-specific" not "platform specific".
 1. Use backticks to escape: commands, code expressions, package names, and file paths.
-1. Use less than and greater than symbols to wrap bare URLs, e.g., `<https://astral.sh>` (unless it is an example; then, use backticks).
+1. Use less than and greater than symbols to wrap bare URLs, e.g., `<https://astral.sh>` (unless it
+   is an example; then, use backticks).
 1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.
-1. If a message ends with a single relevant value, precede it with a colon, e.g., `This is the value: value`. If the value is a literal, wrap it in backticks.
+1. If a message ends with a single relevant value, precede it with a colon, e.g., `This is the
+   value: value`. If the value is a literal, wrap it in backticks.
+1. Markdown files should be wrapped at 100 characters
 
 ## Styling uv
 
@@ -82,12 +86,14 @@ The documentation is divided into:
 
 ## CLI
 
-1. Do not use periods at the end of sentences :), unless the message spans more than a single sentence.
+1. Do not use periods at the end of sentences :), unless the message spans more than a single
+   sentence.
 1. May use the second-person point of view, e.g., "Did you mean...?".
 
 ### Colors and style
 
-1. All CLI output must be interpretable and understandable _without_ the use of color and other styling. (For example: even if a command is rendered in green, wrap it in backticks.)
+1. All CLI output must be interpretable and understandable _without_ the use of color and other
+   styling. (For example: even if a command is rendered in green, wrap it in backticks.)
 1. `NO_COLOR` must be respected when using any colors or styling.
 1. `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
 1. In general, use:
