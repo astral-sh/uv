@@ -174,7 +174,7 @@ jobs:
         run: |
           uv="./target/debug/uv"
           $uv venv
-          $uv pip install ruff
+          $uv pip install deepspeed==0.14.4 --link-mode=copy  --no-deps
 
   cargo-test-macos:
     needs: determine_changes
