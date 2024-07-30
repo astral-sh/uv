@@ -85,7 +85,7 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
                             .and_then(|name| name.to_str())
                             .unwrap_or("");
 
-                        if pager_name.is_empty() {
+                        if pager_command.is_empty() {
                             writeln!(printer.stdout(), "{help_ansi}")?;
                         } else if pager_name == "less" {
                             let prompt = format!("help: uv {}", query.join(" "));
