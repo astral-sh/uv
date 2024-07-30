@@ -654,7 +654,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.python,
                 args.settings,
                 invocation_source,
-                globals.isolated,
+                args.isolated || globals.isolated,
                 globals.preview,
                 globals.python_preference,
                 globals.python_fetch,
