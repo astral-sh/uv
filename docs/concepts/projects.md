@@ -46,7 +46,7 @@ When `uv run` is invoked, it will create the project environment if it does not 
 
 It is _not_ recommended to modify the project environment manually, e.g., with `uv pip install`. For project dependencies, use `uv add` to add a package to the environment. For one-off requirements, use [`uvx`](../guides/tools.md) or [`uv run --with`](#running-commands-with-additional-dependencies).
 
-## Lock file
+## Lockfile
 
 uv creates a `uv.lock` file next to the `pyproject.toml`.
 
@@ -56,18 +56,18 @@ broad requirements of your project, the lockfile contains the exact resolved ver
 that are installed in the project environment. This file should be checked into version
 control, allowing for consistent and reproducible installations across machines.
 
-A "universal" lock file captures packages that would be installed across all possible Python markers such as operating system, architecture, and Python version.
+A "universal" lockfile captures packages that would be installed across all possible Python markers such as operating system, architecture, and Python version.
 
-A lock file ensures that developers working on the project are using a consistent set of package versions. Additionally, it ensures when deploying the project as an application that the exact set of used package versions is known. 
+A lockfile ensures that developers working on the project are using a consistent set of package versions. Additionally, it ensures when deploying the project as an application that the exact set of used package versions is known. 
 
-The lock file is created and updated during uv invocations that use the project environment, i.e., `uv sync` and `uv run`. The lock file may also be explicitly updated using `uv lock`.
+The lockfile is created and updated during uv invocations that use the project environment, i.e., `uv sync` and `uv run`. The lockfile may also be explicitly updated using `uv lock`.
 
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be
-edited manually. There is no Python standard for lock files at this time, so the format of this file is specific to uv and not generally not usable by other tools. 
+edited manually. There is no Python standard for lockfiles at this time, so the format of this file is specific to uv and not generally not usable by other tools. 
 
-To avoid updating the lock file during `uv sync` and `uv run` invocations, use the `--frozen` flag.
+To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
-To assert the lock file is up to date, use the `--locked` flag. If the lock file is not up to date, an error will be raised instead of updating the lock file.
+To assert the lockfile is up to date, use the `--locked` flag. If the lockfile is not up to date, an error will be raised instead of updating the lockfile.
 
 ## Managing dependencies
 

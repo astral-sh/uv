@@ -573,7 +573,7 @@ fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
     Ok(())
 }
 
-/// Extract just the sources from the lock file, to test path resolution.
+/// Extract just the sources from the lockfile, to test path resolution.
 #[derive(Deserialize, Serialize)]
 struct SourceLock {
     distribution: Vec<Distribution>,
