@@ -350,6 +350,12 @@ impl<'de> serde::Deserialize<'de> for RequiresPython {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequiresPythonBound(Bound<Version>);
 
+impl Default for RequiresPythonBound {
+    fn default() -> Self {
+        Self(Bound::Unbounded)
+    }
+}
+
 impl RequiresPythonBound {
     pub fn new(bound: Bound<Version>) -> Self {
         Self(match bound {
