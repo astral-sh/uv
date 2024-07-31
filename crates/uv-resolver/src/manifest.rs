@@ -181,7 +181,7 @@ impl Manifest {
         &'a self,
         markers: Option<&'a MarkerEnvironment>,
         mode: DependencyMode,
-    ) -> impl Iterator<Item = Cow<'a, PackageName>> + 'a {
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         match mode {
             // Include direct requirements, dependencies of editables, and transitive dependencies
             // of local packages.
@@ -200,24 +200,30 @@ impl Manifest {
                         self.overrides
                             .apply(&self.requirements)
                             .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
-                    )
-                    .map(|requirement| match requirement {
-                        Cow::Borrowed(requirement) => Cow::Borrowed(&requirement.name),
-                        Cow::Owned(requirement) => Cow::Owned(requirement.name),
-                    }),
+                    ),
             ),
 
             // Restrict to the direct requirements.
             DependencyMode::Direct => Either::Right(
                 self.overrides
                     .apply(self.requirements.iter())
-                    .filter(move |requirement| requirement.evaluate_markers(markers, &[]))
-                    .map(|requirement| match requirement {
-                        Cow::Borrowed(requirement) => Cow::Borrowed(&requirement.name),
-                        Cow::Owned(requirement) => Cow::Owned(requirement.name),
-                    }),
+                    .filter(move |requirement| requirement.evaluate_markers(markers, &[])),
             ),
         }
+    }
+
+    /// Returns an iterator over the direct requirements, with overrides applied.
+    ///
+    /// At time of writing, this is used for:
+    /// - Determining which packages should have development dependencies included in the
+    ///   resolution (assuming the user enabled development dependencies).
+    pub fn direct_requirements<'a>(
+        &'a self,
+        markers: Option<&'a MarkerEnvironment>,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.overrides
+            .apply(self.requirements.iter())
+            .filter(move |requirement| requirement.evaluate_markers(markers, &[]))
     }
 
     /// Apply the overrides and constraints to a set of requirements.

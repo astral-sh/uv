@@ -60,6 +60,7 @@ pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
+use crate::resolver::groups::Groups;
 pub(crate) use crate::resolver::index::FxOnceMap;
 pub use crate::resolver::index::InMemoryIndex;
 pub use crate::resolver::provider::{
@@ -74,6 +75,7 @@ use crate::{DependencyMode, Exclusions, FlatIndex, Options};
 mod availability;
 mod batch_prefetch;
 mod fork_map;
+mod groups;
 mod index;
 mod locals;
 mod provider;
@@ -93,7 +95,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
-    dev: Vec<GroupName>,
+    groups: Groups,
     preferences: Preferences,
     git: GitResolver,
     exclusions: Exclusions,
@@ -224,11 +226,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
                 markers.marker_environment(),
                 options.dependency_mode,
             ),
+            groups: Groups::from_manifest(&manifest, markers.marker_environment()),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
-            dev: manifest.dev,
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -1308,7 +1310,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // add a dependency from it to the same package with the group
                 // enabled.
                 if extra.is_none() && dev.is_none() {
-                    for group in &self.dev {
+                    for group in self.groups.get(name).into_iter().flatten() {
                         if !metadata.dev_dependencies.contains_key(group) {
                             continue;
                         }
