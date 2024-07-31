@@ -1,11 +1,3 @@
-
-<div align="center">
-  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" /></a>
-  <a href="https://pypi.python.org/pypi/uv"><img src="https://img.shields.io/pypi/v/uv.svg" /></a>
-  <a href="https://pypi.python.org/pypi/uv"><img src="https://img.shields.io/pypi/l/uv.svg" /></a>
-  <a href="https://discord.gg/astral-sh"><img src="https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white" /></a>
-</div>
-
 An extremely fast Python package and project manager, written in Rust.
 
 <p align="center">
