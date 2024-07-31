@@ -1,7 +1,7 @@
 use std::ops::Bound;
 
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 use thiserror::Error;
 
 use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier, VersionSpecifiers};

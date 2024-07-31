@@ -1,7 +1,7 @@
 use std::iter;
 
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 use tracing::warn;
 
 use pep440_rs::{Version, VersionSpecifiers};

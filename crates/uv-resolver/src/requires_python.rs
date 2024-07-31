@@ -3,7 +3,7 @@ use std::collections::Bound;
 use std::ops::Deref;
 
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 
 use distribution_filename::WheelFilename;
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
