@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
+use clap::builder::styling::Style;
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
@@ -246,10 +247,20 @@ pub enum Commands {
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion { shell: clap_complete_command::Shell },
     /// Display documentation for a command.
+    // To avoid showing the global options when displaying help for the help command, we are
+    // responsible for maintaining the options using the `after_help`.
     #[command(help_template = "\
 {about-with-newline}
-{usage-heading} {usage}
-")]
+{usage-heading} {usage}{after-help}
+",
+        after_help = format!("\
+{heading}Options:{heading:#}
+  {option}--no-pager{option:#}  Disable pager when printing help
+",
+            heading = Style::new().bold().underline(),
+            option = Style::new().bold(),
+        ),
+    )]
     Help(HelpArgs),
 }
 

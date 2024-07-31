@@ -678,6 +678,9 @@ fn help_with_help() {
 
     Usage: uv help [OPTIONS] [COMMAND]...
 
+    Options:
+      --no-pager  Disable pager when printing help
+
     ----- stderr -----
     "###);
 }
