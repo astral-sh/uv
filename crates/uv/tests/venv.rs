@@ -244,7 +244,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
         [project]
         name = "foo"
         version = "1.0.0"
-        requires-python = "==3.11.*"
+        requires-python = ">=3.11,<3.12"
         dependencies = []
         "#
     })?;
@@ -268,7 +268,18 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
         [project]
         name = "foo"
         version = "1.0.0"
-        requires-python = ">=3.10"
+        requires-python = ">=3.11"
+        dependencies = []
+        "#
+    })?;
+
+    // With `requires-python = ">=3.11"`, we should prefer first possible version 3.11
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11"
         dependencies = []
         "#
     })?;
@@ -286,13 +297,13 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
     "#
     );
 
-    // With `requires-python = ">=3.11"`, we should prefer first possible version 3.11
+    // With `requires-python = ">3.11"`, we should prefer first possible version 3.11
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
         name = "foo"
         version = "1.0.0"
-        requires-python = ">=3.10"
+        requires-python = ">3.11"
         dependencies = []
         "#
     })?;
@@ -316,7 +327,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
         [project]
         name = "foo"
         version = "1.0.0"
-        requires-python = ">=3.10"
+        requires-python = ">=3.12"
         dependencies = []
         "#
     })?;
@@ -328,7 +339,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.11.[X] interpreter at: [PYTHON-3.11]
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "#
