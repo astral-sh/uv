@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter, Write};
 use std::ops::Bound;
@@ -326,7 +325,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.requires_python.clone(),
         );
         let mut preferences = self.preferences.clone();
-        let mut forked_states = vec![state];
+        let mut forked_states = if let ResolverMarkers::Universal {
+            fork_preferences: Some(fork_preferences),
+        } = &self.markers
+        {
+            fork_preferences
+                .iter()
+                .map(|fork_preference| state.clone().with_markers(fork_preference.clone()))
+                .collect()
+        } else {
+            vec![state]
+        };
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
@@ -381,11 +390,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     let resolution = state.into_resolution();
 
-                    // Walk over the selected versions, and mark them as preferences.
+                    // Walk over the selected versions, and mark them as preferences. We have to
+                    // add forks back as to not override the preferences from the lockfile for
+                    // the next fork
                     for (package, version) in &resolution.nodes {
-                        if let Entry::Vacant(entry) = preferences.entry(package.name.clone()) {
-                            entry.insert(version.clone().into());
-                        }
+                        preferences.insert(
+                            package.name.clone(),
+                            resolution.markers.fork_markers().cloned(),
+                            version.clone(),
+                        );
                     }
 
                     // If another fork had the same resolution, merge into that fork instead.

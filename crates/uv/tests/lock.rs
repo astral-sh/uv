@@ -1580,6 +1580,10 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        environment-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
