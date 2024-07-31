@@ -112,6 +112,20 @@ This is a consequence of the reduced nav spacing below. */
   box-shadow: none;
 }
 
+/* Omits the nav title "uv" entirely unless on a small screen, in which case
+the nav title is needed for backwards navigation in the collapsible
+nav variant.
+
+See https://github.com/astral-sh/uv/issues/5130 */
+.md-nav__title {
+  display: none;
+}
+@media screen and (max-width: 1219px) {
+  .md-nav__title {
+    display: flex ;
+  }
+}
+
 /* Reducing spacing between nav items to fit more content */
 .md-nav__link {
   margin-top: 0.25em;
