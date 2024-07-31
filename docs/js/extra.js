@@ -23,7 +23,7 @@ function setCopyText() {
   const attr = "clipboardText";
   // all "copy" buttons whose target selector is a <code> element
   const elements = document.querySelectorAll(
- 'button[data-clipboard-target$="code"]',
+   'button[data-clipboard-target$="code"]',
   );
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
