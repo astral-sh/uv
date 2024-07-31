@@ -408,7 +408,7 @@ fn tool_install_editable() {
 
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
-    `black` is already installed
+    Installed 1 executable: black
     "###);
 
     insta::with_settings!({
@@ -417,7 +417,7 @@ fn tool_install_editable() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
+        requirements = [{ name = "black" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
         ]

@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
 use thiserror::Error;
 use url::Url;
 
@@ -29,7 +30,6 @@ pub enum RequirementError {
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
 /// [`VersionOrUrl`], which collapses all URL sources into a single stringly type.
 #[derive(Hash, Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
 pub struct Requirement {
     pub name: PackageName,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -476,12 +476,6 @@ impl Display for RequirementSource {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 enum RequirementSourceWire {
-    /// Ex) `source = { specifier = "foo >1,<2" }`
-    Registry {
-        #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
-        specifier: VersionSpecifiers,
-        index: Option<String>,
-    },
     /// Ex) `source = { git = "<https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979>" }`
     Git { git: String },
     /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
@@ -495,6 +489,12 @@ enum RequirementSourceWire {
     Directory { directory: PortablePathBuf },
     /// Ex) `source = { editable = "/home/ferris/iniconfig" }`
     Editable { editable: PortablePathBuf },
+    /// Ex) `source = { specifier = "foo >1,<2" }`
+    Registry {
+        #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
+        specifier: VersionSpecifiers,
+        index: Option<String>,
+    },
 }
 
 impl From<RequirementSource> for RequirementSourceWire {
@@ -594,7 +594,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
     fn try_from(wire: RequirementSourceWire) -> Result<RequirementSource, RequirementError> {
         match wire {
             RequirementSourceWire::Registry { specifier, index } => {
-                Ok(RequirementSource::Registry { specifier, index })
+                Ok(Self::Registry { specifier, index })
             }
             RequirementSourceWire::Git { git } => {
                 let mut url = Url::parse(&git)?;
@@ -616,7 +616,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 url.set_query(None);
                 url.set_fragment(None);
 
-                Ok(RequirementSource::Git {
+                Ok(Self::Git {
                     repository: url.clone(),
                     reference,
                     precise,
@@ -624,14 +624,14 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                     url: VerbatimUrl::from_url(url),
                 })
             }
-            RequirementSourceWire::Direct { url, subdirectory } => Ok(RequirementSource::Url {
+            RequirementSourceWire::Direct { url, subdirectory } => Ok(Self::Url {
                 url: VerbatimUrl::from_url(url.clone()),
                 subdirectory: subdirectory.map(PathBuf::from),
                 location: url.clone(),
             }),
             RequirementSourceWire::Path { path } => {
                 let path = PathBuf::from(path);
-                Ok(RequirementSource::Path {
+                Ok(Self::Path {
                     url: VerbatimUrl::from_path(path.as_path())?,
                     install_path: path.clone(),
                     lock_path: path,
@@ -639,7 +639,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Directory { directory } => {
                 let directory = PathBuf::from(directory);
-                Ok(RequirementSource::Directory {
+                Ok(Self::Directory {
                     url: VerbatimUrl::from_path(directory.as_path())?,
                     install_path: directory.clone(),
                     lock_path: directory,
@@ -648,7 +648,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
             RequirementSourceWire::Editable { editable } => {
                 let editable = PathBuf::from(editable);
-                Ok(RequirementSource::Directory {
+                Ok(Self::Directory {
                     url: VerbatimUrl::from_path(editable.as_path())?,
                     install_path: editable.clone(),
                     lock_path: editable,
@@ -656,5 +656,54 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    use pep508_rs::VerbatimUrl;
+
+    use crate::{Requirement, RequirementSource};
+
+    #[test]
+    fn roundtrip() {
+        let requirement = Requirement {
+            name: "foo".parse().unwrap(),
+            extras: vec![],
+            marker: None,
+            source: RequirementSource::Registry {
+                specifier: ">1,<2".parse().unwrap(),
+                index: None,
+            },
+            origin: None,
+        };
+
+        let raw = toml::to_string(&requirement).unwrap();
+        let deserialized: Requirement = toml::from_str(&raw).unwrap();
+        assert_eq!(requirement, deserialized);
+
+        let path = if cfg!(windows) {
+            "C:\\home\\ferris\\foo"
+        } else {
+            "/home/ferris/foo"
+        };
+        let requirement = Requirement {
+            name: "foo".parse().unwrap(),
+            extras: vec![],
+            marker: None,
+            source: RequirementSource::Directory {
+                install_path: PathBuf::from(path),
+                lock_path: PathBuf::from(path),
+                editable: false,
+                url: VerbatimUrl::from_path(Path::new(path)).unwrap(),
+            },
+            origin: None,
+        };
+
+        let raw = toml::to_string(&requirement).unwrap();
+        let deserialized: Requirement = toml::from_str(&raw).unwrap();
+        assert_eq!(requirement, deserialized);
     }
 }
