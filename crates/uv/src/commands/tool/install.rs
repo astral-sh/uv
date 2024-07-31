@@ -435,10 +435,7 @@ pub(crate) async fn install(
 
     debug!("Adding receipt for tool `{}`", from.name);
     let tool = Tool::new(
-        requirements
-            .into_iter()
-            .map(pep508_rs::Requirement::from)
-            .collect(),
+        requirements.into_iter().collect(),
         python,
         target_entry_points
             .into_iter()

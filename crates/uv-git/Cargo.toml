@@ -22,6 +22,7 @@ dashmap = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 reqwest = { workspace = true, features = ["blocking"] }
 reqwest-middleware = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

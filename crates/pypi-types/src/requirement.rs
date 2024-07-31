@@ -1,10 +1,12 @@
 use std::fmt::{Display, Formatter};
-use std::path::PathBuf;
-
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use thiserror::Error;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
+use uv_fs::PortablePathBuf;
 use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -12,16 +14,30 @@ use crate::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 
+#[derive(Debug, Error)]
+pub enum RequirementError {
+    #[error(transparent)]
+    VerbatimUrlError(#[from] pep508_rs::VerbatimUrlError),
+    #[error(transparent)]
+    UrlParseError(#[from] url::ParseError),
+    #[error(transparent)]
+    OidParseError(#[from] uv_git::OidParseError),
+}
+
 /// A representation of dependency on a package, an extension over a PEP 508's requirement.
 ///
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
 /// [`VersionOrUrl`], which collapses all URL sources into a single stringly type.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Requirement {
     pub name: PackageName,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub extras: Vec<ExtraName>,
     pub marker: Option<MarkerTree>,
+    #[serde(flatten)]
     pub source: RequirementSource,
+    #[serde(skip)]
     pub origin: Option<RequirementOrigin>,
 }
 
@@ -228,7 +244,8 @@ impl Display for Requirement {
 /// We store both the parsed fields (such as the plain url and the subdirectory) and the joined
 /// PEP 508 style url (e.g. `file:///<path>#subdirectory=<subdirectory>`) since we need both in
 /// different locations.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "RequirementSourceWire", into = "RequirementSourceWire")]
 pub enum RequirementSource {
     /// The requirement has a version specifier, such as `foo >1,<2`.
     Registry {
@@ -398,7 +415,7 @@ impl RequirementSource {
     pub fn version_or_url(&self) -> Option<VersionOrUrl<VerbatimParsedUrl>> {
         match self {
             Self::Registry { specifier, .. } => {
-                if specifier.len() == 0 {
+                if specifier.is_empty() {
                     None
                 } else {
                     Some(VersionOrUrl::VersionSpecifier(specifier.clone()))
@@ -413,5 +430,231 @@ impl RequirementSource {
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Directory { editable: true, .. })
+    }
+}
+
+impl Display for RequirementSource {
+    /// Display the [`RequirementSource`], with the intention of being shown directly to a user,
+    /// rather than for inclusion in a `requirements.txt` file.
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Registry { specifier, index } => {
+                write!(f, "{specifier}")?;
+                if let Some(index) = index {
+                    write!(f, " (index: {index})")?;
+                }
+            }
+            Self::Url { url, .. } => {
+                write!(f, " {url}")?;
+            }
+            Self::Git {
+                url: _,
+                repository,
+                reference,
+                precise: _,
+                subdirectory,
+            } => {
+                write!(f, " git+{repository}")?;
+                if let Some(reference) = reference.as_str() {
+                    write!(f, "@{reference}")?;
+                }
+                if let Some(subdirectory) = subdirectory {
+                    writeln!(f, "#subdirectory={}", subdirectory.display())?;
+                }
+            }
+            Self::Path { url, .. } => {
+                write!(f, "{url}")?;
+            }
+            Self::Directory { url, .. } => {
+                write!(f, "{url}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+enum RequirementSourceWire {
+    /// Ex) `source = { specifier = "foo >1,<2" }`
+    Registry {
+        #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
+        specifier: VersionSpecifiers,
+        index: Option<String>,
+    },
+    /// Ex) `source = { git = "<https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979>" }`
+    Git { git: String },
+    /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
+    Direct {
+        url: Url,
+        subdirectory: Option<String>,
+    },
+    /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
+    Path { path: PortablePathBuf },
+    /// Ex) `source = { directory = "/home/ferris/iniconfig" }`
+    Directory { directory: PortablePathBuf },
+    /// Ex) `source = { editable = "/home/ferris/iniconfig" }`
+    Editable { editable: PortablePathBuf },
+}
+
+impl From<RequirementSource> for RequirementSourceWire {
+    fn from(value: RequirementSource) -> Self {
+        match value {
+            RequirementSource::Registry { specifier, index } => Self::Registry { specifier, index },
+            RequirementSource::Url {
+                subdirectory,
+                location,
+                url: _,
+            } => Self::Direct {
+                url: location,
+                subdirectory: subdirectory
+                    .as_deref()
+                    .and_then(Path::to_str)
+                    .map(str::to_string),
+            },
+            RequirementSource::Git {
+                repository,
+                reference,
+                precise,
+                subdirectory,
+                url: _,
+            } => {
+                let mut url = repository;
+
+                // Clear out any existing state.
+                url.set_fragment(None);
+                url.set_query(None);
+
+                // Put the subdirectory in the query.
+                if let Some(subdirectory) = subdirectory.as_deref().and_then(Path::to_str) {
+                    url.query_pairs_mut()
+                        .append_pair("subdirectory", subdirectory);
+                }
+
+                // Put the requested reference in the query.
+                match reference {
+                    GitReference::Branch(branch) => {
+                        url.query_pairs_mut()
+                            .append_pair("branch", branch.to_string().as_str());
+                    }
+                    GitReference::Tag(tag) => {
+                        url.query_pairs_mut()
+                            .append_pair("tag", tag.to_string().as_str());
+                    }
+                    GitReference::ShortCommit(rev)
+                    | GitReference::BranchOrTag(rev)
+                    | GitReference::BranchOrTagOrCommit(rev)
+                    | GitReference::NamedRef(rev)
+                    | GitReference::FullCommit(rev) => {
+                        url.query_pairs_mut()
+                            .append_pair("rev", rev.to_string().as_str());
+                    }
+                    GitReference::DefaultBranch => {}
+                }
+
+                // Put the precise commit in the fragment.
+                if let Some(precise) = precise {
+                    url.set_fragment(Some(&precise.to_string()));
+                }
+
+                Self::Git {
+                    git: url.to_string(),
+                }
+            }
+            RequirementSource::Path {
+                install_path,
+                lock_path: _,
+                url: _,
+            } => Self::Path {
+                path: PortablePathBuf::from(install_path),
+            },
+            RequirementSource::Directory {
+                install_path,
+                lock_path: _,
+                editable,
+                url: _,
+            } => {
+                if editable {
+                    Self::Editable {
+                        editable: PortablePathBuf::from(install_path),
+                    }
+                } else {
+                    Self::Directory {
+                        directory: PortablePathBuf::from(install_path),
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<RequirementSourceWire> for RequirementSource {
+    type Error = RequirementError;
+
+    fn try_from(wire: RequirementSourceWire) -> Result<RequirementSource, RequirementError> {
+        match wire {
+            RequirementSourceWire::Registry { specifier, index } => {
+                Ok(RequirementSource::Registry { specifier, index })
+            }
+            RequirementSourceWire::Git { git } => {
+                let mut url = Url::parse(&git)?;
+
+                let mut reference = GitReference::DefaultBranch;
+                let mut subdirectory = None;
+                for (key, val) in url.query_pairs() {
+                    match &*key {
+                        "tag" => reference = GitReference::Tag(val.into_owned()),
+                        "branch" => reference = GitReference::Branch(val.into_owned()),
+                        "rev" => reference = GitReference::from_rev(val.into_owned()),
+                        "subdirectory" => subdirectory = Some(PathBuf::from(val.into_owned())),
+                        _ => continue,
+                    };
+                }
+
+                let precise = url.fragment().map(GitSha::from_str).transpose()?;
+
+                url.set_query(None);
+                url.set_fragment(None);
+
+                Ok(RequirementSource::Git {
+                    repository: url.clone(),
+                    reference,
+                    precise,
+                    subdirectory,
+                    url: VerbatimUrl::from_url(url),
+                })
+            }
+            RequirementSourceWire::Direct { url, subdirectory } => Ok(RequirementSource::Url {
+                url: VerbatimUrl::from_url(url.clone()),
+                subdirectory: subdirectory.map(PathBuf::from),
+                location: url.clone(),
+            }),
+            RequirementSourceWire::Path { path } => {
+                let path = PathBuf::from(path);
+                Ok(RequirementSource::Path {
+                    url: VerbatimUrl::from_path(path.as_path())?,
+                    install_path: path.clone(),
+                    lock_path: path,
+                })
+            }
+            RequirementSourceWire::Directory { directory } => {
+                let directory = PathBuf::from(directory);
+                Ok(RequirementSource::Directory {
+                    url: VerbatimUrl::from_path(directory.as_path())?,
+                    install_path: directory.clone(),
+                    lock_path: directory,
+                    editable: false,
+                })
+            }
+            RequirementSourceWire::Editable { editable } => {
+                let editable = PathBuf::from(editable);
+                Ok(RequirementSource::Directory {
+                    url: VerbatimUrl::from_path(editable.as_path())?,
+                    install_path: editable.clone(),
+                    lock_path: editable,
+                    editable: true,
+                })
+            }
+        }
     }
 }

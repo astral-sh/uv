@@ -20,7 +20,9 @@ use crate::sha::GitOid;
 const CHECKOUT_READY_LOCK: &str = ".ok";
 
 /// A reference to commit or commit-ish.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum GitReference {
     /// A specific branch.
     Branch(String),
