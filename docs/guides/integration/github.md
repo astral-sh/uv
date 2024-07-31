@@ -134,8 +134,47 @@ steps:
 
   - name: Run tests
     # For example, using `pytest`
-    run: uv run -- pytest tests
+    run: uv run pytest tests
 ```
+
+## Caching
+
+It may improve CI times to store uv's cache across workflow runs.
+
+The cache can be saved and restored with the official GitHub `cache` action:
+
+```yaml title="example.yml"
+jobs:
+  install_job:
+    env:
+      # Configure a constant location for the uv cache
+      UV_CACHE_DIR: /tmp/.uv-cache
+
+    steps:
+      # ... setup up Python and uv ...
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+            uv-${{ runner.os }}
+
+     
+      # ... install packages, run tests, etc ...
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
+```
+
+The `uv cache prune --ci` command is used to reduce the size of the cache and is optimized for CI.
+Its effect on performance is dependent on the packages being installed.
+
+!!! tip
+
+    If using `uv pip`, use `requirements.txt` instead of `uv.lock` in the cache key.
 
 ## Using `uv pip`
 
