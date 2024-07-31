@@ -168,6 +168,11 @@ impl ResolutionGraph {
                     Range::from(requires_python.bound().clone()),
                 );
             }
+            // The above simplification may turn some markers into
+            // "always false." In which case, we should remove that
+            // edge since it can never be traversed in any marker
+            // environment.
+            petgraph.retain_edges(|graph, edge| !graph[edge].is_false());
         }
 
         let fork_markers = if let [resolution] = resolutions {
