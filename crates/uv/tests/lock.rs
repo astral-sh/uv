@@ -10,7 +10,7 @@ use common::{uv_snapshot, TestContext};
 
 mod common;
 
-// Wraps a group of snapshots and runs them multiple times in sequence.
+/// Wraps a group of snapshots and runs them multiple times in sequence.
 ///
 /// This is useful to ensure that resolution runs independent of an existing lockfile
 /// and does not change across repeated calls to `uv lock`.
@@ -4248,6 +4248,139 @@ fn lock_exclusion() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { directory = "../" }
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Ensure that development dependencies are omitted for non-workspace members. Below, `bar` depends
+/// on `foo`, but `bar/uv.lock` should omit `anyio`, but should include `typing-extensions`.
+#[test]
+fn lock_dev_transitive() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let foo = context.temp_dir.child("foo");
+    fs_err::create_dir_all(&foo)?;
+
+    let pyproject_toml = foo.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+        "#,
+    )?;
+
+    let bar = context.temp_dir.child("bar");
+    fs_err::create_dir_all(&bar)?;
+
+    let pyproject_toml = bar.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo", "baz", "iniconfig>1"]
+
+        [tool.uv.sources]
+        foo = { path = "../foo" }
+        baz = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["baz"]
+        "#,
+    )?;
+
+    let baz = bar.child("baz");
+    fs_err::create_dir_all(&baz)?;
+
+    let pyproject_toml = baz.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "baz"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["typing-extensions>4"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&bar), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(bar.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[distribution]]
+        name = "bar"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "baz" },
+            { name = "foo" },
+            { name = "iniconfig" },
+        ]
+
+        [[distribution]]
+        name = "baz"
+        version = "0.1.0"
+        source = { editable = "baz" }
+
+        [distribution.dev-dependencies]
+        dev = [
+            { name = "typing-extensions" },
+        ]
+
+        [[distribution]]
+        name = "foo"
+        version = "0.1.0"
+        source = { directory = "../foo" }
+
+        [[distribution]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[distribution]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+        ]
         "###
         );
     });
