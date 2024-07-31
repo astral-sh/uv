@@ -73,6 +73,26 @@ fn init() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that `uv init` initializes the cache.
+#[test]
+fn init_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.init().arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    Ok(())
+}
+
 #[test]
 fn init_no_readme() -> Result<()> {
     let context = TestContext::new("3.12");
