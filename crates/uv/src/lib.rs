@@ -904,6 +904,9 @@ async fn run_project(
             let args = settings::InitSettings::resolve(args, filesystem);
             show_settings!(args);
 
+            // Initialize the cache.
+            let cache = cache.init()?;
+
             commands::init(
                 args.path,
                 args.name,
