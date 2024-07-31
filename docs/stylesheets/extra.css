@@ -142,3 +142,8 @@ See https://github.com/astral-sh/uv/issues/5130 */
 .highlight .gp, .highlight .go { /* Generic.Prompt, Generic.Output */
     user-select: none;
 }
+
+/* Bold the active nav link for accessibility */
+.md-nav__link--active {
+  font-weight: bold;
+}
