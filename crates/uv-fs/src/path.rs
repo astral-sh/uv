@@ -303,6 +303,100 @@ pub fn relative_to(
     Ok(up.join(stripped))
 }
 
+/// A path that can be serialized and deserialized in a portable way by converting Windows-style
+/// backslashes to forward slashes, and using a `.` for an empty path.
+///
+/// This implementation assumes that the path is valid UTF-8; otherwise, it won't roundtrip.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortablePath<'a>(&'a Path);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortablePathBuf(PathBuf);
+
+impl AsRef<Path> for PortablePath<'_> {
+    fn as_ref(&self) -> &Path {
+        self.0
+    }
+}
+
+impl<'a, T> From<&'a T> for PortablePath<'a>
+where
+    T: AsRef<Path> + ?Sized,
+{
+    fn from(path: &'a T) -> Self {
+        PortablePath(path.as_ref())
+    }
+}
+
+impl std::fmt::Display for PortablePath<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let path = self.0.to_slash_lossy();
+        if path.is_empty() {
+            write!(f, ".")
+        } else {
+            write!(f, "{path}")
+        }
+    }
+}
+
+impl std::fmt::Display for PortablePathBuf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let path = self.0.to_slash_lossy();
+        if path.is_empty() {
+            write!(f, ".")
+        } else {
+            write!(f, "{path}")
+        }
+    }
+}
+
+impl From<PortablePathBuf> for PathBuf {
+    fn from(portable: PortablePathBuf) -> Self {
+        portable.0
+    }
+}
+
+impl From<PathBuf> for PortablePathBuf {
+    fn from(path: PathBuf) -> Self {
+        Self(path)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for PortablePathBuf {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for PortablePath<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::de::Deserialize<'de> for PortablePathBuf {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "." {
+            Ok(Self(PathBuf::new()))
+        } else {
+            Ok(Self(PathBuf::from(s)))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
