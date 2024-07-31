@@ -50,6 +50,12 @@ impl PartialEq for PyProjectToml {
 
 impl Eq for PyProjectToml {}
 
+impl AsRef<[u8]> for PyProjectToml {
+    fn as_ref(&self) -> &[u8] {
+        self.raw.as_bytes()
+    }
+}
+
 /// PEP 621 project metadata (`project`).
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.

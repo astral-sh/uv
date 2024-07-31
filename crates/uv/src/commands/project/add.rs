@@ -20,8 +20,9 @@ use uv_workspace::{DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
+use crate::commands::project::ProjectError;
 use crate::commands::reporters::ResolverReporter;
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -154,7 +155,8 @@ pub(crate) async fn add(
     .await?;
 
     // Add the requirements to the `pyproject.toml`.
-    let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
+    let existing = project.current_project().pyproject_toml();
+    let mut pyproject = PyProjectTomlMut::from_toml(existing)?;
     for mut req in requirements {
         // Add the specified extras.
         req.extras.extend(extras.iter().cloned());
@@ -221,7 +223,7 @@ pub(crate) async fn add(
     let state = SharedState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = project::lock::do_safe_lock(
+    let lock = match project::lock::do_safe_lock(
         locked,
         frozen,
         project.workspace(),
@@ -235,7 +237,26 @@ pub(crate) async fn add(
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(lock) => lock,
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::NoSolution(err),
+        ))) => {
+            let header = err.header();
+            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
+            anstream::eprint!("{report:?}");
+
+            // Revert the changes to the `pyproject.toml`.
+            fs_err::write(
+                project.current_project().root().join("pyproject.toml"),
+                existing,
+            )?;
+
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
@@ -261,4 +282,21 @@ pub(crate) async fn add(
     .await?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Render a [`uv_resolver::NoSolutionError`] with a help message.
+#[derive(Debug, miette::Diagnostic, thiserror::Error)]
+#[error("{header}")]
+#[diagnostic()]
+struct WithHelp {
+    /// The header to render in the error message.
+    header: String,
+
+    /// The underlying error.
+    #[source]
+    cause: uv_resolver::NoSolutionError,
+
+    /// The help message to display.
+    #[help]
+    help: Option<&'static str>,
 }
