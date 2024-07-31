@@ -11,21 +11,8 @@ $ uv
 
 You should see a help menu listing the available commands.
 
-## Viewing the version
-
-To check the installed version:
-
-```console
-$ uv version
-```
-
-The following are also valid:
-
-```console
-$ uv --version      # Same output as `uv version`
-$ uv -V             # Will not include the build commit and date
-$ uv pip --version  # Can be used with a subcommand
-```
+Read on for a brief overview of the help menu and version command, or jump to an [overview of
+features](./features.md) to start using uv.
 
 ## Help menus
 
@@ -56,6 +43,23 @@ $ uv help init
 
 When using the long help menu, uv will attempt to use `less` or `more` to "page" the output so it is
 not all displayed at once. To exit the pager, press `q`.
+
+
+## Viewing the version
+
+To check the installed version:
+
+```console
+$ uv version
+```
+
+The following are also valid:
+
+```console
+$ uv --version      # Same output as `uv version`
+$ uv -V             # Will not include the build commit and date
+$ uv pip --version  # Can be used with a subcommand
+```
 
 ## Next steps
 
