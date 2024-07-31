@@ -150,7 +150,9 @@ mod control;
 /// At time of writing, we don't expose any way of modifying these since I
 /// suspect we won't ever need to. We split them out into their own type so
 /// that they can be shared between `CachePolicyBuilder` and `CachePolicy`.
-#[derive(Clone, Debug, rkyv::Archive, rkyv::CheckBytes, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(
+    Clone, Debug, Default, rkyv::Archive, rkyv::CheckBytes, rkyv::Deserialize, rkyv::Serialize,
+)]
 // Since `CacheConfig` is so simple, we can use itself as the archived type.
 // But note that this will fall apart if even something like an Option<u8> is
 // added.
@@ -158,21 +160,6 @@ mod control;
 #[repr(C)]
 struct CacheConfig {
     shared: bool,
-    heuristic_percent: u8,
-}
-
-impl Default for CacheConfig {
-    fn default() -> Self {
-        Self {
-            // The caching uv does ought to be considered
-            // private.
-            shared: false,
-            // This is only used to heuristically guess at a freshness lifetime
-            // when other indicators (such as `max-age` and `Expires` are
-            // absent.
-            heuristic_percent: 10,
-        }
-    }
 }
 
 /// A builder for constructing a `CachePolicy`.
@@ -934,23 +921,55 @@ impl ArchivedCachePolicy {
     fn freshness_lifetime(&self) -> Duration {
         if self.config.shared {
             if let Some(&s_maxage) = self.response.headers.cc.s_maxage_seconds.as_ref() {
-                return Duration::from_secs(s_maxage);
+                let duration = Duration::from_secs(s_maxage);
+                tracing::trace!(
+                    "freshness lifetime found via shared \
+                     cache-control max age setting: {duration:?}"
+                );
+                return duration;
             }
         }
         if let Some(&max_age) = self.response.headers.cc.max_age_seconds.as_ref() {
-            return Duration::from_secs(max_age);
+            let duration = Duration::from_secs(max_age);
+            tracing::trace!(
+                "freshness lifetime found via cache-control max age setting: {duration:?}"
+            );
+            return duration;
         }
         if let Some(&expires) = self.response.headers.expires_unix_timestamp.as_ref() {
-            return Duration::from_secs(expires.saturating_sub(self.response.header_date()));
+            let duration = Duration::from_secs(expires.saturating_sub(self.response.header_date()));
+            tracing::trace!("freshness lifetime found via expires header: {duration:?}");
+            return duration;
         }
-        if let Some(&last_modified) = self.response.headers.last_modified_unix_timestamp.as_ref() {
-            let interval = self.response.header_date().saturating_sub(last_modified);
-            let percent = u64::from(self.config.heuristic_percent);
-            return Duration::from_secs(interval.saturating_mul(percent).saturating_div(100));
+        if self.response.headers.last_modified_unix_timestamp.is_some() {
+            // We previously computed this heuristic freshness lifetime by
+            // looking at the difference between the last modified header and
+            // the response's date header. We then asserted that the cached
+            // response ought to be "fresh" for 10% of that interval.
+            //
+            // It turns out that this can result in very long freshness
+            // lifetimes[1] that lead to uv caching too aggressively.
+            //
+            // Since PyPI sets a max-age of 600 seconds and since we're
+            // principally just interacting with Python package indices here,
+            // we just assume a freshness lifetime equal to what PyPI has.
+            //
+            // Note though that a better solution here is for the index to
+            // support proper HTTP caching headers (ideally Cache-Control, but
+            // Expires also works too, as above).
+            //
+            // [1]: https://github.com/astral-sh/uv/issues/5351#issuecomment-2260588764
+            let duration = Duration::from_secs(600);
+            tracing::trace!(
+                "freshness lifetime heuristically assumed \
+                 because of presence of last-modified header: {duration:?}"
+            );
+            return duration;
         }
         // Without any indicators as to the freshness lifetime, we act
         // conservatively and use a value that will always result in a response
         // being treated as stale.
+        tracing::trace!("could not determine freshness lifetime, assuming none exists");
         Duration::ZERO
     }
 
