@@ -648,8 +648,7 @@ those that are downloaded and installed by uv.
 **Possible values**:
 
 - `"only-managed"`: Only use managed Python installations; never use system Python installations
-- `"installed"`: Prefer installed Python installations, only download managed Python installations if no system Python installation is found
-- `"managed"`: Prefer managed Python installations over system Python installations, even if fetching is required
+- `"managed"`: Prefer managed Python installations over system Python installations
 - `"system"`: Prefer system Python installations over managed Python installations
 - `"only-system"`: Only use system Python installations; never use managed Python installations
 
