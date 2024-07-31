@@ -240,12 +240,7 @@ pub(crate) async fn install(
     // If the requested and receipt requirements are the same...
     if existing_environment.is_some() {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
-            let receipt = tool_receipt
-                .requirements()
-                .iter()
-                .cloned()
-                .map(Requirement::from)
-                .collect::<Vec<_>>();
+            let receipt = tool_receipt.requirements().to_vec();
             if requirements == receipt {
                 // And the user didn't request a reinstall or upgrade...
                 if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
