@@ -13,7 +13,6 @@ theme:
     - content.code.annotate
     - toc.follow
     - navigation.footer
-    - navigation.path
     - navigation.top
     - content.code.copy
     - content.tabs.link
