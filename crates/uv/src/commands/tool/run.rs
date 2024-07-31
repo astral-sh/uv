@@ -158,7 +158,17 @@ pub(crate) async fn run(
                         "The executable `{}` was not found.",
                         executable.to_string_lossy().cyan(),
                     )?;
-                    if !entrypoints.is_empty() {
+                    if entrypoints.is_empty() {
+                        warn_user!(
+                            "Package `{}` does not provide any executables.",
+                            from.name.red()
+                        );
+                    } else {
+                        warn_user!(
+                            "An executable named `{}` is not provided by package `{}`.",
+                            executable.to_string_lossy().cyan(),
+                            from.name.red()
+                        );
                         writeln!(
                             printer.stdout(),
                             "The following executables are provided by `{}`:",
@@ -230,13 +240,7 @@ fn warn_executable_not_provided_by_package(
             .any(|package| package.name() == from_package)
         {
             match packages.as_slice() {
-                [] => {
-                    warn_user!(
-                        "An executable named `{}` is not provided by package `{}`.",
-                        executable.cyan(),
-                        from_package.red()
-                    );
-                }
+                [] => {}
                 [package] => {
                     let suggested_command = format!(
                         "{invocation_source} --from {} {}",
