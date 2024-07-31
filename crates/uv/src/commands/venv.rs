@@ -331,7 +331,7 @@ async fn venv_impl(
     // Determine the appropriate activation command.
     let activation = match Shell::from_env() {
         None => None,
-        Some(Shell::Bash | Shell::Zsh) => Some(format!(
+        Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
             "source {}",
             shlex_posix(venv.scripts().join("activate"))
         )),

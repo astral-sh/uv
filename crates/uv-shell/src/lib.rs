@@ -21,6 +21,8 @@ pub enum Shell {
     Nushell,
     /// C SHell (csh)
     Csh,
+    /// Korn SHell (ksh)
+    Ksh,
 }
 
 impl Shell {
@@ -43,6 +45,8 @@ impl Shell {
             Some(Shell::Bash)
         } else if std::env::var_os("ZSH_VERSION").is_some() {
             Some(Shell::Zsh)
+        } else if std::env::var_os("KSH_VERSION").is_some() {
+            Some(Shell::Ksh)
         } else if let Some(env_shell) = std::env::var_os("SHELL") {
             Shell::from_shell_path(env_shell)
         } else if cfg!(windows) {
@@ -98,6 +102,10 @@ impl Shell {
                         .unwrap_or_else(|| home_dir.join(".bash_profile")),
                     home_dir.join(".bashrc"),
                 ]
+            }
+            Shell::Ksh => {
+                // On Ksh it's standard POSIX `.profile` for login shells, and `.kshrc` for non-login.
+                vec![home_dir.join(".profile"), home_dir.join(".kshrc")]
             }
             Shell::Zsh => {
                 // On Zsh, we only need to update `.zshenv`. This file is sourced for both login and
@@ -174,7 +182,7 @@ impl Shell {
     pub fn prepend_path(self, path: &Path) -> Option<String> {
         match self {
             Shell::Nushell => None,
-            Shell::Bash | Shell::Zsh => Some(format!(
+            Shell::Bash | Shell::Zsh | Shell::Ksh => Some(format!(
                 "export PATH=\"{}:$PATH\"",
                 backslash_escape(&path.simplified_display().to_string()),
             )),
@@ -208,6 +216,7 @@ impl std::fmt::Display for Shell {
             Shell::Zsh => write!(f, "Zsh"),
             Shell::Nushell => write!(f, "Nushell"),
             Shell::Csh => write!(f, "Csh"),
+            Shell::Ksh => write!(f, "Ksh"),
         }
     }
 }
@@ -220,6 +229,7 @@ fn parse_shell_from_path(path: &Path) -> Option<Shell> {
         "zsh" => Some(Shell::Zsh),
         "fish" => Some(Shell::Fish),
         "csh" => Some(Shell::Csh),
+        "ksh" => Some(Shell::Ksh),
         "powershell" | "powershell_ise" => Some(Shell::Powershell),
         _ => None,
     }

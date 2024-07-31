@@ -298,7 +298,7 @@ pub(crate) fn create(
             (true, "activate") => {
                 // Extremely verbose, but should cover all major POSIX shells,
                 // as well as platforms where `readlink` does not implement `-f`.
-                r#"'"$(dirname -- "$(CDPATH= cd -- "$(dirname -- ${BASH_SOURCE[0]:-${(%):-%x}})" && echo "$PWD")")"'"#
+                r#"'"$(dirname -- "$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" > /dev/null && echo "$PWD")")"'"#
             }
             (true, "activate.bat") => r"%~dp0..",
             (true, "activate.fish") => {
