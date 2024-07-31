@@ -1,7 +1,7 @@
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, FromPyObject, IntoPy, PyAny,
-    PyObject, PyResult, Python,
+    basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, Bound, FromPyObject, IntoPy,
+    PyAny, PyObject, PyResult, Python,
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::sync::LazyLock;
@@ -29,7 +29,7 @@ use std::{
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(eq, eq_int))]
 pub enum Operator {
     /// `== 1.2.3`
     Equal,
@@ -1378,7 +1378,7 @@ pub struct PreRelease {
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(eq, eq_int))]
 pub enum PreReleaseKind {
     /// alpha prerelease
     Alpha,
@@ -2391,7 +2391,8 @@ impl IntoPy<PyObject> for Version {
 
 #[cfg(feature = "pyo3")]
 impl<'source> FromPyObject<'source> for Version {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
+    fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
+        use pyo3::prelude::*;
         Ok(ob.extract::<PyVersion>()?.0)
     }
 }

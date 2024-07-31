@@ -58,6 +58,7 @@ pub fn python_module(
     _py: pyo3::Python,
     module: &pyo3::Bound<'_, pyo3::types::PyModule>,
 ) -> pyo3::PyResult<()> {
+    use pyo3::prelude::*;
     module.add_class::<PyVersion>()?;
     module.add_class::<Operator>()?;
     module.add_class::<VersionSpecifier>()?;

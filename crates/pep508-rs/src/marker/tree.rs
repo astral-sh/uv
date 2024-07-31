@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 #[cfg(feature = "pyo3")]
-use pyo3::{basic::CompareOp, pyclass, pymethods};
+use pyo3::{exceptions::PyValueError, prelude::PyAnyMethods, pyclass, pymethods, PyResult, Python};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use pep440_rs::{Version, VersionParseError, VersionPattern, VersionSpecifier};
@@ -18,7 +18,10 @@ use crate::{
 
 /// Ways in which marker evaluation can fail
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(module = "pep508", frozen, hash, ord, eq, eq_int)
+)]
 pub enum MarkerWarningKind {
     /// Using an old name from PEP 345 instead of the modern equivalent
     /// <https://peps.python.org/pep-0345/#environment-markers>
@@ -34,20 +37,6 @@ pub enum MarkerWarningKind {
     Pep440Error,
     /// Comparing two strings, such as `"3.9" > "3.10"`
     StringStringComparison,
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl MarkerWarningKind {
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn __hash__(&self) -> u8 {
-        *self as u8
-    }
-
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn __richcmp__(&self, other: Self, op: CompareOp) -> bool {
-        op.matches(self.cmp(&other))
-    }
 }
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
