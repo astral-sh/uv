@@ -7,7 +7,7 @@ theme:
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.instant.progress
-    - navigation.expand
+    - navigation.sections
     - navigation.indexes
     - navigation.tracking
     - content.code.annotate
