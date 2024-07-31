@@ -120,7 +120,7 @@ nav:
       - Inspecting packages: pip/inspection.md
       - Declaring dependencies: pip/dependencies.md
       - Locking environments: pip/compile.md
+      - Compatibility with pip: pip/compatibility.md
   - Policies:
       - Versioning: versioning.md
       - Platform support: platforms.md
-      - Compatibility with pip: pip/compatibility.md
