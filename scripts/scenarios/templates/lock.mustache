@@ -7,6 +7,7 @@
 #![allow(clippy::needless_raw_string_hashes)]
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
@@ -71,6 +72,17 @@ fn {{module_name}}() -> Result<()> {
             "###
         );
     });
+
+    // Assert the idempotence of `uv lock`
+    context
+        .lock()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .assert()
+        .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
     {{/expected.satisfiable}}
 
     Ok(())
