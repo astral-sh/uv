@@ -64,19 +64,19 @@ impl RequiresPython {
         })
     }
 
-    /// Returns a [`RequiresPython`] to express the union of the given version specifiers.
+    /// Returns a [`RequiresPython`] to express the intersection of the given version specifiers.
     ///
-    /// For example, given `>=3.8` and `>=3.9`, this would return `>=3.8`.
-    pub fn union<'a>(
+    /// For example, given `>=3.8` and `>=3.9`, this would return `>=3.9`.
+    pub fn intersection<'a>(
         specifiers: impl Iterator<Item = &'a VersionSpecifiers>,
     ) -> Result<Option<Self>, RequiresPythonError> {
-        // Convert to PubGrub range and perform a union.
+        // Convert to PubGrub range and perform an intersection.
         let range = specifiers
             .into_iter()
             .map(crate::pubgrub::PubGrubSpecifier::from_release_specifiers)
             .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
                 if let Some(range) = range {
-                    Some(range.union(&requires_python.into()))
+                    Some(range.intersection(&requires_python.into()))
                 } else {
                     Some(requires_python.into())
                 }
@@ -107,11 +107,14 @@ impl RequiresPython {
     /// Narrow the [`RequiresPython`] to the given version, if it's stricter (i.e., greater) than
     /// the current target.
     pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
-        let target = VersionSpecifiers::from(VersionSpecifier::from_lower_bound(target)?);
-        Self::union(std::iter::once(&target))
-            .ok()
-            .flatten()
-            .filter(|next| next.bound > self.bound)
+        if target > &self.bound {
+            Some(Self {
+                specifiers: VersionSpecifiers::from(VersionSpecifier::from_lower_bound(target)?),
+                bound: target.clone(),
+            })
+        } else {
+            None
+        }
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version.
@@ -418,9 +421,7 @@ mod tests {
     #[test]
     fn requires_python_included() {
         let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
-            .unwrap()
-            .unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
         let wheel_names = &[
             "bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl",
             "black-24.4.2-cp310-cp310-win_amd64.whl",
@@ -437,9 +438,7 @@ mod tests {
         }
 
         let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
-        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
-            .unwrap()
-            .unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
         let wheel_names = &["dearpygui-1.11.1-cp312-cp312-win_amd64.whl"];
         for wheel_name in wheel_names {
             assert!(
@@ -452,9 +451,7 @@ mod tests {
     #[test]
     fn requires_python_dropped() {
         let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
-            .unwrap()
-            .unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
         let wheel_names = &[
             "PySocks-1.7.1-py27-none-any.whl",
             "black-24.4.2-cp39-cp39-win_amd64.whl",
@@ -471,9 +468,7 @@ mod tests {
         }
 
         let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
-        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
-            .unwrap()
-            .unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
         let wheel_names = &["dearpygui-1.11.1-cp310-cp310-win_amd64.whl"];
         for wheel_name in wheel_names {
             assert!(
