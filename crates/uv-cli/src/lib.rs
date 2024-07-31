@@ -2008,6 +2008,10 @@ pub struct SyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Sync a specific package in the workspace.
+    #[arg(long)]
+    pub package: Option<PackageName>,
+
     /// The Python interpreter to use to build the run environment.
     ///
     /// By default, uv uses the virtual environment in the current working directory or any parent
