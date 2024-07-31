@@ -2,11 +2,11 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
-use path_slash::PathExt;
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 
 use pep508_rs::{ExtraName, PackageName, Requirement, VersionOrUrl};
+use uv_fs::PortablePath;
 
 use crate::pyproject::{DependencyType, PyProjectToml, Source};
 
@@ -65,8 +65,7 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedWorkspace)?;
 
         // Add the path to the workspace.
-        // Use cross-platform slashes so the toml string type does not change
-        members.push(path.as_ref().to_slash_lossy().to_string());
+        members.push(PortablePath::from(path.as_ref()).to_string());
 
         Ok(())
     }

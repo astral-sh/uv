@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::convert::Infallible;
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -9,10 +10,8 @@ use std::sync::Arc;
 
 use either::Either;
 use itertools::Itertools;
-use path_slash::PathExt;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
-use serde::{Deserialize, Deserializer};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -35,6 +34,7 @@ use pypi_types::{
 };
 use uv_configuration::{ExtrasSpecification, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
+use uv_fs::{PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_workspace::VirtualProject;
@@ -1370,19 +1370,6 @@ enum Source {
     Editable(PathBuf),
 }
 
-/// A [`PathBuf`], but we show `.` instead of an empty path.
-///
-/// We also normalize backslashes to forward slashes on Windows, to ensure
-/// that the lockfile contains portable paths.
-fn serialize_path_with_dot(path: &Path) -> Cow<str> {
-    let path = path.to_slash_lossy();
-    if path.is_empty() {
-        Cow::Borrowed(".")
-    } else {
-        path
-    }
-}
-
 impl Source {
     fn from_resolved_dist(resolved_dist: &ResolvedDist) -> Source {
         match *resolved_dist {
@@ -1514,21 +1501,18 @@ impl Source {
                 }
             }
             Source::Path(ref path) => {
-                source_table.insert(
-                    "path",
-                    Value::from(serialize_path_with_dot(path).into_owned()),
-                );
+                source_table.insert("path", Value::from(PortablePath::from(path).to_string()));
             }
             Source::Directory(ref path) => {
                 source_table.insert(
                     "directory",
-                    Value::from(serialize_path_with_dot(path).into_owned()),
+                    Value::from(PortablePath::from(path).to_string()),
                 );
             }
             Source::Editable(ref path) => {
                 source_table.insert(
                     "editable",
-                    Value::from(serialize_path_with_dot(path).into_owned()),
+                    Value::from(PortablePath::from(path).to_string()),
                 );
             }
         }
@@ -1543,7 +1527,7 @@ impl std::fmt::Display for Source {
                 write!(f, "{}+{}", self.name(), url)
             }
             Source::Path(path) | Source::Directory(path) | Source::Editable(path) => {
-                write!(f, "{}+{}", self.name(), serialize_path_with_dot(path))
+                write!(f, "{}+{}", self.name(), PortablePath::from(path))
             }
         }
     }
@@ -1592,16 +1576,13 @@ enum SourceWire {
         subdirectory: Option<String>,
     },
     Path {
-        #[serde(deserialize_with = "deserialize_path_with_dot")]
-        path: PathBuf,
+        path: PortablePathBuf,
     },
     Directory {
-        #[serde(deserialize_with = "deserialize_path_with_dot")]
-        directory: PathBuf,
+        directory: PortablePathBuf,
     },
     Editable {
-        #[serde(deserialize_with = "deserialize_path_with_dot")]
-        editable: PathBuf,
+        editable: PortablePathBuf,
     },
 }
 
@@ -1634,9 +1615,9 @@ impl TryFrom<SourceWire> for Source {
                 Ok(Source::Git(url, git_source))
             }
             Direct { url, subdirectory } => Ok(Source::Direct(url, DirectSource { subdirectory })),
-            Path { path } => Ok(Source::Path(path)),
-            Directory { directory } => Ok(Source::Directory(directory)),
-            Editable { editable } => Ok(Source::Editable(editable)),
+            Path { path } => Ok(Source::Path(path.into())),
+            Directory { directory } => Ok(Source::Directory(directory.into())),
+            Editable { editable } => Ok(Source::Editable(editable.into())),
         }
     }
 }
@@ -1719,7 +1700,7 @@ struct SourceDistMetadata {
 /// future, so this should be treated as only a hint to where to look
 /// and/or recording where the source dist file originally came from.
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(untagged)]
+#[serde(try_from = "SourceDistWire")]
 enum SourceDist {
     Url {
         url: UrlString,
@@ -1727,24 +1708,10 @@ enum SourceDist {
         metadata: SourceDistMetadata,
     },
     Path {
-        #[serde(deserialize_with = "deserialize_path_with_dot")]
         path: PathBuf,
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
-}
-
-/// A [`PathBuf`], but we show `.` instead of an empty path.
-fn deserialize_path_with_dot<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let path = String::deserialize(deserializer)?;
-    if path == "." {
-        Ok(PathBuf::new())
-    } else {
-        Ok(PathBuf::from(path))
-    }
 }
 
 impl SourceDist {
@@ -1780,26 +1747,6 @@ impl SourceDist {
 }
 
 impl SourceDist {
-    /// Returns the TOML representation of this source distribution.
-    fn to_toml(&self) -> anyhow::Result<InlineTable> {
-        let mut table = InlineTable::new();
-        match &self {
-            SourceDist::Url { url, .. } => {
-                table.insert("url", Value::from(url.as_ref()));
-            }
-            SourceDist::Path { path, .. } => {
-                table.insert("path", Value::from(serialize_path_with_dot(path).as_ref()));
-            }
-        }
-        if let Some(hash) = self.hash() {
-            table.insert("hash", Value::from(hash.to_string()));
-        }
-        if let Some(size) = self.size() {
-            table.insert("size", Value::from(i64::try_from(size)?));
-        }
-        Ok(table)
-    }
-
     fn from_annotated_dist(
         id: &DistributionId,
         annotated_dist: &AnnotatedDist,
@@ -1887,6 +1834,57 @@ impl SourceDist {
                 size: None,
             },
         })
+    }
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum SourceDistWire {
+    Url {
+        url: UrlString,
+        #[serde(flatten)]
+        metadata: SourceDistMetadata,
+    },
+    Path {
+        path: PortablePathBuf,
+        #[serde(flatten)]
+        metadata: SourceDistMetadata,
+    },
+}
+
+impl SourceDist {
+    /// Returns the TOML representation of this source distribution.
+    fn to_toml(&self) -> anyhow::Result<InlineTable> {
+        let mut table = InlineTable::new();
+        match &self {
+            SourceDist::Url { url, .. } => {
+                table.insert("url", Value::from(url.as_ref()));
+            }
+            SourceDist::Path { path, .. } => {
+                table.insert("path", Value::from(PortablePath::from(path).to_string()));
+            }
+        }
+        if let Some(hash) = self.hash() {
+            table.insert("hash", Value::from(hash.to_string()));
+        }
+        if let Some(size) = self.size() {
+            table.insert("size", Value::from(i64::try_from(size)?));
+        }
+        Ok(table)
+    }
+}
+
+impl TryFrom<SourceDistWire> for SourceDist {
+    type Error = Infallible;
+
+    fn try_from(wire: SourceDistWire) -> Result<SourceDist, Infallible> {
+        match wire {
+            SourceDistWire::Url { url, metadata } => Ok(SourceDist::Url { url, metadata }),
+            SourceDistWire::Path { path, metadata } => Ok(SourceDist::Path {
+                path: path.into(),
+                metadata,
+            }),
+        }
     }
 }
 
