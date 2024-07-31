@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 use std::fmt::{Display, Formatter};
 use tracing::debug;
 

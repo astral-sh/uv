@@ -13,8 +13,7 @@ use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use pubgrub::range::Range;
-use pubgrub::solver::{Incompatibility, State};
+use pubgrub::{Incompatibility, Range, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -1885,7 +1884,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     fn convert_no_solution_err(
         &self,
-        mut err: pubgrub::error::NoSolutionError<UvDependencyProvider>,
+        mut err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
         visited: &FxHashSet<PackageName>,
@@ -2245,7 +2244,7 @@ impl ForkState {
         let mut edges: FxHashSet<ResolutionDependencyEdge> = FxHashSet::default();
         for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
-                let pubgrub::solver::Kind::FromDependencyOf(
+                let pubgrub::Kind::FromDependencyOf(
                     ref self_package,
                     ref self_range,
                     ref dependency_package,

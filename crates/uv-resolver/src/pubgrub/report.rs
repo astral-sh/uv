@@ -6,10 +6,7 @@ use std::ops::Bound;
 use derivative::Derivative;
 use indexmap::IndexSet;
 use owo_colors::OwoColorize;
-use pubgrub::range::Range;
-use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
-use pubgrub::term::Term;
-use pubgrub::type_aliases::Map;
+use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
 use distribution_types::IndexLocations;

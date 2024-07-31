@@ -2,8 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
 use std::sync::Arc;
 
-use pubgrub::range::Range;
-use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
+use pubgrub::{DefaultStringReporter, DerivationTree, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
 use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
@@ -117,7 +116,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 #[derive(Debug)]
 pub struct NoSolutionError {
-    error: pubgrub::error::NoSolutionError<UvDependencyProvider>,
+    error: pubgrub::NoSolutionError<UvDependencyProvider>,
     available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
@@ -141,7 +140,7 @@ impl NoSolutionError {
     }
 
     pub(crate) fn new(
-        error: pubgrub::error::NoSolutionError<UvDependencyProvider>,
+        error: pubgrub::NoSolutionError<UvDependencyProvider>,
         available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
