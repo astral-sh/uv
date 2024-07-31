@@ -979,6 +979,7 @@ async fn run_project(
             commands::sync(
                 args.locked,
                 args.frozen,
+                args.package,
                 args.extras,
                 args.dev,
                 args.modifications,

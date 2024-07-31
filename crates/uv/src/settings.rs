@@ -543,6 +543,7 @@ pub(crate) struct SyncSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) modifications: Modifications,
+    pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -564,6 +565,7 @@ impl SyncSettings {
             installer,
             build,
             refresh,
+            package,
             python,
         } = args;
 
@@ -582,6 +584,7 @@ impl SyncSettings {
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
             modifications,
+            package,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
