@@ -173,10 +173,10 @@ fn create_venv_reads_request_from_python_versions_file() {
 }
 
 #[test]
-fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.10", "3.12"]);
+fn create_venv_respects_pyproject_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.9", "3.10", "3.12"]);
 
-    // Without the file, we should use the first on the PATH
+    // Without a Python requirement, we use the first on the PATH
     uv_snapshot!(context.filters(), context.venv()
         .arg("--preview"), @r#"
     success: true
@@ -190,7 +190,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
     "#
     );
 
-    // With `requires-python = "<3.11"`, we should prefer newest possible version 3.10
+    // With `requires-python = "<3.11"`, we prefer the first available version
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -202,19 +202,19 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.venv()
-        .arg("--preview"), @r#"
+        .arg("--preview"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.10.[X] interpreter at: [PYTHON-3.10]
+    Using Python 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
-    "#
+    "###
     );
 
-    // With `requires-python = "==3.11.*"`, we should prefer exact version 3.11
+    // With `requires-python = "==3.11.*"`, we prefer exact version (3.11)
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -238,7 +238,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
     "#
     );
 
-    // With `requires-python = ">=3.11,<3.12"`, we should prefer exact version 3.11
+    // With `requires-python = ">=3.11,<3.12"`, we prefer exact version (3.11)
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -262,7 +262,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
     "#
     );
 
-    // With `requires-python = ">=3.10"`, we should prefer first possible version 3.11
+    // With `requires-python = ">=3.10"`, we prefer first compatible version (3.11)
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -273,7 +273,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
         "#
     })?;
 
-    // With `requires-python = ">=3.11"`, we should prefer first possible version 3.11
+    // With `requires-python = ">=3.11"`, we prefer first compatible version (3.11)
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -297,7 +297,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
     "#
     );
 
-    // With `requires-python = ">3.11"`, we should prefer first possible version 3.11
+    // With `requires-python = ">3.11"`, we prefer first compatible version (3.11)
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -321,7 +321,7 @@ fn create_venv_reads_request_from_pyproject_toml() -> Result<()> {
     "#
     );
 
-    // With `requires-python = ">=3.12"`, we should prefer first possible version 3.12
+    // With `requires-python = ">=3.12"`, we prefer first compatible version (3.12)
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
