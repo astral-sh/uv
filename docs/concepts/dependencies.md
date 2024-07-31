@@ -16,11 +16,10 @@ building a wheel. Individual dependencies are specified using [PEP 508](#pep-508
 table follows the [PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/)
 standard.
 
-`project.dependencies` defines the packages that are required for the project, along with the
-version constraints that should be used when installing them.
-
-`project.dependencies` is structured as a list. Each entry includes a dependency name and version.
-An entry may include extras or environment markers for platform-specific packages. For example:
+`project.dependencies` defines the list of packages that are required for the project, along with
+the version constraints that should be used when installing them. Each entry includes a dependency
+name and version. An entry may include extras or environment markers for platform-specific packages.
+For example:
 
 ```toml title="pyproject.toml"
 [project]
@@ -49,16 +48,16 @@ sufficient. If, the project depends on packages from Git, remote URLs, or local 
 During development, the project may rely on a package that isn't available on PyPI. The following
 additional sources are supported by uv:
 
-- Git
-- URL
-- Path
-- Workspace
+- Git: A Git repository.
+- URL: A remote wheel or source distribution.
+- Path: A local wheel, source distribution, or project directory.
+- Workspace: A member of the current workspace.
 
 Only a single source may be defined for each dependency.
 
 Note that if a non-uv project uses a project with sources as a Git- or path-dependency, only
-`project.dependencies` is respected, the information in the source table will need to be
-re-specified in a format specific to the other package manager.
+`project.dependencies` and `project.optional-dependencies` are respected, the information in the
+source table will need to be re-specified in a format specific to the other package manager.
 
 ### Git
 
@@ -82,7 +81,7 @@ dependencies = [
 httpx = { git = "https://github.com/encode/httpx" }
 ```
 
-A revision, tag, or branch may also be included, e.g.:
+A revision, tag, or branch may also be included:
 
 ```console
 $ uv add git+https://github.com/encode/httpx --tag 0.27.0
@@ -129,7 +128,7 @@ in `.zip` or `.tar.gz`), or a directory containing a `pyproject.toml`.
 For example:
 
 ```console
-$ uv add /example/foo.whl
+$ uv add /example/foo-0.1.0-py3-none-any.whl
 ```
 
 Will result in a `pyproject.toml` with:
@@ -141,30 +140,40 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-foo = { path = "/example/foo.whl" }
+foo = { path = "/example/foo-0.1.0-py3-none-any.whl" }
 ```
 
-The path may also be a relative path, e.g.:
+The path may also be a relative path:
 
 ```console
-$ uv add ./foo
+$ uv add ./foo-0.1.0-py3-none-any.whl
 ```
 
-Note an [editable installation](#editables-dependencies) is not used for path dependencies. However,
-for directories, an editable installation may be requested, e.g.:
+Or, a path to a project directory:
 
 ```console
-$ uv add --editable ./foo
+$ uv add ~/projects/bar/
 ```
 
-However, it is recommended to use [_workspaces_](#workspaces) instead of manual path dependencies. 
+!!! important
+
+    An [editable installation](#editables-dependencies) is not used for path dependencies by 
+    default. An editable installation may be requested for project directories:
+
+    ```console
+    $ uv add --editable ~/projects/bar/
+    ```
+
+    However, it is recommended to use [_workspaces_](#workspaces) instead of manual path 
+    dependencies. 
 
 ### Workspace member
 
-To declare a workspace member, add the dependency with `{ workspace = true }`. All workspace members
-must be explicitly stated. Workspace members are [editable](#editables-dependencies) by default;
-`editable = false` may be included to install them as regular dependencies. See the
-[workspace](./workspaces.md) documentation for more details on workspaces.
+To declare a dependency on a workspace member, add the member name with `{ workspace = true }`. All
+workspace members must be explicitly stated. Workspace members are
+[editable](#editables-dependencies) by default; `editable = false` may be included to install them
+as regular dependencies. See the [workspace](./workspaces.md) documentation for more details on
+workspaces.
 
 ```toml title="pyproject.toml"
 [project]
