@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -51,3 +52,10 @@ impl AsRef<str> for GroupName {
         &self.0
     }
 }
+
+/// The name of the global `dev-dependencies` group.
+///
+/// Internally, we model dependency groups as a generic concept; but externally, we only expose the
+/// `dev-dependencies` group.
+pub static DEV_DEPENDENCIES: LazyLock<GroupName> =
+    LazyLock::new(|| GroupName::new("dev".to_string()).unwrap());

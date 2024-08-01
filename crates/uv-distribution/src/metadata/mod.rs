@@ -4,7 +4,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::metadata::lowering::LoweringError;
-pub use crate::metadata::requires_dist::{RequiresDist, DEV_DEPENDENCIES};
+pub use crate::metadata::requires_dist::RequiresDist;
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{HashDigest, Metadata23};
 use uv_configuration::PreviewMode;

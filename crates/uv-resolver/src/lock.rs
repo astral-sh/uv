@@ -420,6 +420,18 @@ impl Lock {
             }
         }
 
+        // Add any dependency groups that are exclusive to the workspace root (e.g., dev
+        // dependencies in virtual workspaces).
+        for group in dev {
+            for dependency in project.group(group) {
+                let root = self
+                    .find_by_name(dependency)
+                    .expect("found too many distributions matching root")
+                    .expect("could not find root");
+                queue.push_back((root, None));
+            }
+        }
+
         let mut map = BTreeMap::default();
         let mut hashes = BTreeMap::default();
         while let Some((dist, extra)) = queue.pop_front() {

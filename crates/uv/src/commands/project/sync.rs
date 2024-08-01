@@ -7,10 +7,9 @@ use uv_configuration::{
     Concurrency, ExtrasSpecification, HashCheckingMode, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DEV_DEPENDENCIES;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};

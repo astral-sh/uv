@@ -15,10 +15,9 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DEV_DEPENDENCIES;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{
@@ -228,8 +227,8 @@ async fn do_lock(
 
     // When locking, include the project itself (as editable).
     let requirements = workspace
-        .members_as_requirements()
-        .into_iter()
+        .members_requirements()
+        .chain(workspace.root_requirements())
         .map(UnresolvedRequirementSpecification::from)
         .collect::<Vec<_>>();
     let overrides = workspace
