@@ -156,7 +156,8 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run python install
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -193,7 +194,8 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run python install
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
