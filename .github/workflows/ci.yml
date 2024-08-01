@@ -139,12 +139,45 @@ jobs:
   # For Ubuntu and Windows, this requires Organization-level configuration
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
-  cargo-test-linux:
+  cargo-build-test-linux:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: "ubuntu-latest-large"
-    name: "cargo test | ubuntu"
+    name: "build tests | ubuntu"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Build tests
+        run: cargo nextest archive --archive-file nextest-archive.tar.zst --all --all-features
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive-linux
+          path: nextest-archive.tar.zst
+
+  cargo-test-linux:
+    needs: [determine_changes, cargo-build-test-linux]
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    strategy:
+      matrix:
+        partition: [1, 2]
+      fail-fast: false
+    runs-on:
+      labels: "ubuntu-latest-large"
+    name: "cargo test | ubuntu [${{ matrix.partition }}/2]"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
@@ -163,11 +196,16 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive-linux
+
       - name: "Cargo test"
         run: |
           cargo nextest run \
-            --features python-patch \
-            --workspace \
+            --archive-file nextest-archive.tar.zst \
+            --partition count:${{ matrix.partition }}/2 \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
@@ -176,1324 +214,1324 @@ jobs:
           $uv venv
           $uv pip install ruff
 
-  cargo-test-macos:
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "macos-14"
-    name: "cargo test | macos"
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - uses: rui314/setup-mold@v1
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Install required Python versions"
-        run: |
-          cargo run python install
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-
-      - name: "Cargo test"
-        run: |
-          cargo nextest run \
-            --features python-patch \
-            --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
-
-      - name: "Smoke test"
-        run: |
-          uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
-
-  cargo-test-windows:
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "windows-latest-large"
-    name: "cargo test | windows"
-    steps:
-      - name: Create Dev Drive using ReFS
-        run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 14GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
-
-      - uses: actions/checkout@v4
-
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
-
-      - name: "Install Rust toolchain"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: rustup show
-
-      # We do not test with Python patch versions on Windows
-      # so we can use `setup-python` instead of our bootstrapping code
-      # this is much faster on the extremely slow GitHub Windows runners.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: |
-            3.8
-            3.9
-            3.10
-            3.11
-            3.12
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-
-      - name: "Cargo test"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: |
-          cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
-
-      - name: "Smoke test"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-        run: |
-          Set-Alias -Name uv -Value ./target/debug/uv
-          uv venv
-          uv pip install ruff
-
-  # Separate jobs for the nightly crate
-  windows-trampoline-check:
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: ubuntu-latest
-    name: "check windows trampoline | ${{ matrix.target-arch }}"
-    strategy:
-      fail-fast: false
-      matrix:
-        target-arch: ["x86_64", "i686", "aarch64"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Rust toolchain"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: |
-          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
-          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
-
-      - name: Load xwin cache
-        uses: actions/cache@v4
-        with:
-          path: "${{ github.workspace }}/.xwin"
-          key: cargo-xwin-${{ matrix.target-arch }}
-
-      - uses: rui314/setup-mold@v1
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ github.workspace }}/crates/uv-trampoline
-
-      - name: "Install cargo-xwin and cargo-bloat"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-xwin,cargo-bloat
-
-      - name: "Install xwin dependencies"
-        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
-
-      - name: "Clippy"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        if: matrix.target-arch == 'x86_64'
-        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
-        env:
-          XWIN_ARCH: "x86_64"
-          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
-
-      - name: "Bloat Check"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        if: matrix.target-arch == 'x86_64'
-        run: |
-          cargo xwin bloat --release --target x86_64-pc-windows-msvc | \
-          grep -q -E 'core::fmt|std::panicking|std::backtrace_rs' && exit 1 || exit 0
-        env:
-          XWIN_ARCH: "x86_64"
-          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
-
-  # Separate jobs for the nightly crate
-  windows-trampoline-test:
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: windows-latest
-    name: "test windows trampoline | ${{ matrix.target-arch }}"
-    strategy:
-      fail-fast: false
-      matrix:
-        target-arch: ["x86_64", "i686"]
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: |
-          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
-          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ github.workspace }}/crates/uv-trampoline
-      # Build and copy the new binaries
-      - name: "Build"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: |
-          cargo build --target ${{ matrix.target-arch }}-pc-windows-msvc
-          cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
-          cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
-      - name: "Test"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc --test *
-
-  typos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: crate-ci/typos@master
-
-  docs:
-    name: "mkdocs"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-      - name: "Add SSH key"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY }}
-      - name: "Install Insiders dependencies"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        run: pip install -r docs/requirements-insiders.txt
-      - name: "Install dependencies"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
-        run: pip install -r docs/requirements.txt
-      - name: "Build Insiders docs"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        run: mkdocs build --strict -f mkdocs.insiders.yml
-      - name: "Build docs"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
-        run: mkdocs build --strict -f mkdocs.public.yml
-
-  build-binary-linux:
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: ubuntu-latest-large
-    name: "build binary | linux"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: rui314/setup-mold@v1
-
-      - name: "Setup musl"
-        run: |
-          sudo apt-get install musl-tools
-          rustup target add x86_64-unknown-linux-musl
-
-      - uses: Swatinem/rust-cache@v2
-      - name: "Build"
-        run: cargo build --target x86_64-unknown-linux-musl
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-          path: ./target/x86_64-unknown-linux-musl/debug/uv
-          retention-days: 1
-
-  build-binary-macos-aarch64:
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: macos-14
-    name: "build binary | macos aarch64"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: rui314/setup-mold@v1
-
-      - uses: Swatinem/rust-cache@v2
-      - name: "Build"
-        run: cargo build
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@v4
-        with:
-          name: uv-macos-aarch64-${{ github.sha }}
-          path: ./target/debug/uv
-          retention-days: 1
-
-  build-binary-macos-x86_64:
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: macos-14-large
-    name: "build binary | macos x86_64"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: rui314/setup-mold@v1
-
-      - uses: Swatinem/rust-cache@v2
-      - name: "Build"
-        run: cargo build
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@v4
-        with:
-          name: uv-macos-x86_64-${{ github.sha }}
-          path: ./target/debug/uv
-          retention-days: 1
-
-  build-binary-windows:
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: windows-latest-large
-    name: "build binary | windows"
-    steps:
-      - name: Create Dev Drive using ReFS
-        run: |
-          $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
-                    Mount-VHD -Passthru |
-                    Initialize-Disk -Passthru |
-                    New-Partition -AssignDriveLetter -UseMaximumSize |
-                    Format-Volume -FileSystem ReFS -Confirm:$false -Force
-          Write-Output $Volume
-          Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
-
-      - uses: actions/checkout@v4
-
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
-
-      - uses: rui314/setup-mold@v1
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-
-      - name: "Build"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: cargo build
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@v4
-        with:
-          name: uv-windows-${{ github.sha }}
-          path: ${{ env.DEV_DRIVE }}/uv/target/debug/uv.exe
-          retention-days: 1
-
-  ecosystem-test:
-    needs: build-binary-linux
-    name: "ecosystem test | ${{ matrix.repo }}"
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - repo: "prefecthq/prefect"
-            command: "uv pip install -e '.[dev]'"
-            python: "3.9"
-          - repo: "pallets/flask"
-            command: "uv pip install -r requirements/dev.txt"
-            python: "3.12"
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ matrix.repo }}
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Test"
-        run: |
-          ./uv venv
-          ./${{ matrix.command }}
-
-  integration-test-conda:
-    needs: build-binary-linux
-    name: "integration test | conda on ubuntu"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: conda-incubator/setup-miniconda@v3
-        with:
-          miniconda-version: latest
-          activate-environment: uv
-          python-version: "3.12"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: Conda info
-        shell: bash -el {0}
-        run: conda info
-
-      - name: "Install a package"
-        shell: bash -el {0}
-        run: |
-          echo "$CONDA_PREFIX"
-          ./uv pip install anyio
-
-  integration-test-pypy-linux:
-    needs: build-binary-linux
-    name: "integration test | pypy on ubuntu"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Install PyPy"
-        run: ./uv python install pypy3.9
-
-      - name: "Create a virtual environment"
-        run: |
-          ./uv venv -p pypy3.9 --python-preference only-managed
-
-      - name: "Check for executables"
-        run: |
-          check_in_bin() {
-              local executable_name=$1
-              local bin_path=".venv/bin"
-
-              if [[ -x "$bin_path/$executable_name" ]]; then
-                  return 0
-              else
-                  echo "Executable '$executable_name' not found in folder '$bin_path'."
-                  return 1
-              fi
-          }
-
-          executables=("pypy" "pypy3" "python")
-
-          all_found=true
-          for executable_name in "${executables[@]}"; do
-              check_in_bin "$executable_name" "$folder_path"
-              result=$?
-
-              if [[ $result -ne 0 ]]; then
-                  all_found=false
-              fi
-          done
-
-          if ! $all_found; then
-            echo "One or more expected executables were not found."
-            exit 1
-          fi
-
-      - name: "Check version"
-        run: |
-          .venv/bin/pypy --version
-          .venv/bin/pypy3 --version
-          .venv/bin/python --version
-
-      - name: "Check install"
-        run: |
-          ./uv pip install anyio
-
-  integration-test-pypy-windows:
-    needs: build-binary-windows
-    name: "integration test | pypy on windows"
-    runs-on: windows-latest
-
-    steps:
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-${{ github.sha }}
-
-      - name: "Install PyPy"
-        run: .\uv.exe python install pypy3.9
-
-      - name: "Create a virtual environment"
-        run: |
-          .\uv.exe venv -p pypy3.9 --python-preference only-managed
-
-      - name: "Check for executables"
-        shell: python
-        run: |
-          import sys
-          from pathlib import Path
-
-          def binary_exist(binary):
-            binaries_path = Path(".venv\\Scripts")
-            if (binaries_path / binary).exists():
-              return True
-            print(f"Executable '{binary}' not found in folder '{binaries_path}'.")
-
-          all_found = True
-          expected_binaries = [
-              "pypy3.9.exe",
-              "pypy3.9w.exe",
-              "pypy3.exe",
-              "pypyw.exe",
-              "python.exe",
-              "python3.9.exe",
-              "python3.exe",
-              "pythonw.exe",
-          ]
-          for binary in expected_binaries:
-            if not binary_exist(binary):
-              all_found = False
-
-          if not all_found:
-            print("One or more expected executables were not found.")
-            sys.exit(1)
-
-      - name: "Check version"
-        run: |
-          & .venv\Scripts\pypy3.9.exe --version
-          & .venv\Scripts\pypy3.exe --version
-          & .venv\Scripts\python.exe --version
-
-      - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-        run: |
-          .\uv.exe pip install anyio
-
-  integration-test-graalpy-linux:
-    needs: build-binary-linux
-    name: "integration test | graalpy on ubuntu"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "graalpy24.0"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: Graalpy info
-        run: |
-          which graalpy
-          echo "GRAAL_PYTHONHOME=$(graalpy -c 'print(__graalpython__.home)')" >> $GITHUB_ENV
-
-      - name: "Create a virtual environment"
-        run: |
-          ./uv venv -p $(which graalpy)
-
-      - name: "Check for executables"
-        run: |
-          check_in_bin() {
-              local executable_name=$1
-              local bin_path=".venv/bin"
-
-              if [[ -x "$bin_path/$executable_name" ]]; then
-                  return 0
-              else
-                  echo "Executable '$executable_name' not found in folder '$bin_path'."
-                  return 1
-              fi
-          }
-
-          executables=("graalpy" "python3" "python")
-
-          all_found=true
-          for executable_name in "${executables[@]}"; do
-              check_in_bin "$executable_name" "$folder_path"
-              result=$?
-
-              if [[ $result -ne 0 ]]; then
-                  all_found=false
-              fi
-          done
-
-          if ! $all_found; then
-            echo "One or more expected executables were not found."
-            exit 1
-          fi
-
-      - name: "Check version"
-        run: |
-          .venv/bin/graalpy --version
-          .venv/bin/python3 --version
-          .venv/bin/python --version
-
-      - name: "Check install"
-        run: |
-          ./uv pip install anyio
-
-  integration-test-graalpy-windows:
-    needs: build-binary-windows
-    name: "integration test | graalpy on windows"
-    runs-on: windows-latest
-
-    steps:
-      - uses: timfel/setup-python@fc9bcb4a04f5b1ea7d678c2ca7ea1c479a2468d7
-        with:
-          python-version: "graalpy24.0"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-${{ github.sha }}
-
-      - name: Graalpy info
-        run: Get-Command graalpy
-
-      - name: "Create a virtual environment"
-        run: |
-          $graalpy = (Get-Command graalpy).source
-          .\uv.exe venv -p $graalpy
-
-      - name: "Check for executables"
-        shell: python
-        run: |
-          import sys
-          from pathlib import Path
-
-          def binary_exist(binary):
-            binaries_path = Path(".venv\\Scripts")
-            if (binaries_path / binary).exists():
-              return True
-            print(f"Executable '{binary}' not found in folder '{binaries_path}'.")
-
-          all_found = True
-          expected_binaries = [
-              "graalpy.exe",
-              "python.exe",
-              "python3.exe",
-          ]
-          for binary in expected_binaries:
-            if not binary_exist(binary):
-              all_found = False
-
-          if not all_found:
-            print("One or more expected executables were not found.")
-            sys.exit(1)
-
-      - name: "Check version"
-        run: |
-          & .venv\Scripts\graalpy.exe --version
-          & .venv\Scripts\python3.exe --version
-          & .venv\Scripts\python.exe --version
-
-      - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-        run: |
-          .\uv.exe pip install anyio
-
-  integration-test-github-actions:
-    needs: build-binary-linux
-    name: "integration test | github actions"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Install a package without system opt-in"
-        run: |
-          ./uv pip install anyio && exit 1 || echo "Failed as expected"
-
-      - name: "Install a package with system opt-in"
-        run: |
-          ./uv pip install anyio --system
-
-      - name: Configure uv to use the system Python by default
-        run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
-
-      - name: "Install a package with environment system opt-in"
-        run: |
-          ./uv pip install anyio --reinstall
-
-  cache-test-ubuntu:
-    needs: build-binary-linux
-    name: "check cache | ubuntu"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Download binary for last version"
-        run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xvz
-
-      - name: "Check cache compatibility"
-        run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-x86_64-unknown-linux-gnu/uv
-
-  cache-test-macos-aarch64:
-    needs: build-binary-macos-aarch64
-    name: "check cache | macos aarch64"
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-macos-aarch64-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Download binary for last version"
-        run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz" | tar -xvz
-
-      - name: "Check cache compatibility"
-        run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
-
-  system-test-debian:
-    needs: build-binary-linux
-    name: "check system | python on debian"
-    runs-on: ubuntu-latest
-    container: debian:bookworm
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Python"
-        run: apt-get update && apt-get install -y python3.11 python3-pip python3.11-venv
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3.11)
-
-      - name: "Validate global Python install"
-        run: python3.11 scripts/check_system_python.py --uv ./uv --externally-managed
-
-  system-test-fedora:
-    needs: build-binary-linux
-    name: "check system | python on fedora"
-    runs-on: ubuntu-latest
-    container: fedora:41
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Python"
-        run: dnf install python3 which -y && python3 -m ensurepip
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv
-
-  system-test-ubuntu:
-    needs: build-binary-linux
-    name: "check system | python on ubuntu"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python)
-
-      - name: "Validate global Python install"
-        run: python scripts/check_system_python.py --uv ./uv
-
-  system-test-opensuse:
-    needs: build-binary-linux
-    name: "check system | python on opensuse"
-    runs-on: ubuntu-latest
-    container: opensuse/tumbleweed
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Python"
-        run: >
-          until
-          zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3;
-          do sleep 10;
-          done
-
-          # We retry because `zypper` can fail during remote repository updates
-          # The above will not sleep forever due to the job level timeout
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv
-
-  # Note: rockylinux is a 1-1 code compatible distro to rhel
-  # rockylinux mimics centos but with added maintenance stability
-  # and avoids issues with centos stream uptime concerns
-  system-test-rocky-linux:
-    needs: build-binary-linux
-    name: "check system | python on rocky linux ${{ matrix.rocky-version }}"
-    runs-on: ubuntu-latest
-    container: rockylinux:${{ matrix.rocky-version }}
-    strategy:
-      fail-fast: false
-      matrix:
-        rocky-version: ["8", "9"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Python"
-        if: matrix.rocky-version == '8'
-        run: |
-          dnf install python39 python39-pip which -y
-
-      - name: "Install Python"
-        if: matrix.rocky-version == '9'
-        run: |
-          dnf install python3.9 python3.9-pip which -y
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv
-
-  system-test-pypy:
-    needs: build-binary-linux
-    name: "check system | pypy on ubuntu"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "pypy3.9"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which pypy)
-
-      - name: "Validate global Python install"
-        run: pypy scripts/check_system_python.py --uv ./uv
-
-  system-test-pyston:
-    needs: build-binary-linux
-    name: "check system | pyston"
-    runs-on: ubuntu-latest
-    container: pyston/pyston:2.3.5
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which pyston)
-
-      - name: "Validate global Python install"
-        run: pyston scripts/check_system_python.py --uv ./uv
-
-  system-test-alpine:
-    needs: build-binary-linux
-    name: "check system | alpine"
-    runs-on: ubuntu-latest
-    container: alpine:latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Python"
-        run: apk add --update --no-cache python3 py3-pip
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
-
-  system-test-macos-aarch64:
-    needs: build-binary-macos-aarch64
-    name: "check system | python on macos aarch64"
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-macos-aarch64-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      # This should be the macOS system Python
-      # We'd like to test with Homebrew but this Python takes precedence in system Python discovery
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
-
-  system-test-macos-aarch64-homebrew:
-    needs: build-binary-macos-aarch64
-    name: "check system | homebrew python on macos aarch64"
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Python"
-        run: brew install python3
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-macos-aarch64-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
-
-  system-test-macos-x86_64:
-    needs: build-binary-macos-x86_64
-    name: "check system | python on macos x86_64"
-    runs-on: macos-12
-    steps:
-      - uses: actions/checkout@v4
-
-      # We test with GitHub's Python as a regression test for
-      # https://github.com/astral-sh/uv/issues/2450
-      - uses: actions/setup-python@v5
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-macos-x86_64-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv
-
-  system-test-windows-python-310:
-    needs: build-binary-windows
-    name: "check system | python3.10 on windows"
-    runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-${{ github.sha }}
-
-      - name: "Print Python path"
-        run: echo $(which python)
-
-      - name: "Validate global Python install"
-        run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
-
-  system-test-windows-x86-python-310:
-    needs: build-binary-windows
-    name: "check system | python3.10 on windows x86"
-    runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-          architecture: "x86"
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-${{ github.sha }}
-
-      - name: "Print Python path"
-        run: echo $(which python)
-
-      - name: "Validate global Python install"
-        run: python ./scripts/check_system_python.py --uv ./uv.exe
-
-  system-test-windows-python-313:
-    needs: build-binary-windows
-    name: "check system | python3.13 on windows"
-    runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          allow-prereleases: true
-          cache: pip
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-${{ github.sha }}
-
-      - name: "Print Python path"
-        run: echo $(which python)
-
-      - name: "Validate global Python install"
-        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
-
-  system-test-choco:
-    needs: build-binary-windows
-    name: "check system | python3.12 via chocolatey"
-    runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Python"
-        run: choco install python3 --verbose --version=3.9.13
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-${{ github.sha }}
-
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
-
-  system-test-pyenv:
-    needs: build-binary-linux
-    name: "check system | python via pyenv"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install pyenv"
-        uses: "gabrielfalcao/pyenv-action@v18"
-        with:
-          default: 3.9.7
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3.9)
-
-      - name: "Validate global Python install"
-        run: python3.9 scripts/check_system_python.py --uv ./uv
-
-  system-test-conda:
-    needs:
-      [build-binary-windows, build-binary-macos-aarch64, build-binary-linux]
-    name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["linux", "windows", "macos"]
-        python-version: ["3.8", "3.11"]
-        include:
-          - { os: "linux", target: "linux", runner: "ubuntu-latest" }
-          - { os: "windows", target: "windows", runner: "windows-latest" }
-          - { os: "macos", target: "macos-aarch64", runner: "macos-14" }
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: conda-incubator/setup-miniconda@v3
-        with:
-          miniconda-version: "latest"
-          activate-environment: uv
-          python-version: ${{ matrix.python-version }}
-
-      - name: Conda info
-        shell: bash -el {0}
-        run: conda info
-
-      - name: Conda list
-        shell: pwsh
-        run: conda list
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-${{ matrix.target }}-${{ github.sha }}
-
-      - name: "Prepare binary"
-        if: ${{ matrix.os != 'windows' }}
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        shell: bash -el {0}
-        run: echo $(which python)
-
-      - name: "Validate global Python install"
-        shell: bash -el {0}
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-        run: python ./scripts/check_system_python.py --uv ./uv
-
-  system-test-amazonlinux:
-    needs: build-binary-linux
-    name: "check system | amazonlinux"
-    runs-on: ubuntu-latest
-    container: amazonlinux:2023
-    steps:
-      - name: "Install base requirements"
-        run: |
-          # Needed for `actions/checkout`
-          yum install tar gzip which -y
-      - uses: actions/checkout@v4
-      - name: "Install Python"
-        run: yum install python3 python3-pip -y
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-linux-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: echo $(which python3)
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv
-
-  system-test-windows-embedded-python-310:
-    needs: build-binary-windows
-    name: "check system | embedded python3.10 on windows"
-    runs-on: windows-latest
-    env:
-      # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Download binary"
-        uses: actions/download-artifact@v4
-        with:
-          name: uv-windows-${{ github.sha }}
-
-      # Download embedded Python.
-      - name: "Download embedded Python"
-        run: curl -LsSf https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-amd64.zip -o python-3.11.8-embed-amd64.zip
-
-      - name: "Unzip embedded Python"
-        run: 7z x python-3.11.8-embed-amd64.zip -oembedded-python
-
-      - name: "Show embedded Python contents"
-        run: ls embedded-python
-
-      - name: "Set PATH"
-        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH
-
-      - name: "Print Python path"
-        run: echo $(which python)
-
-      - name: "Validate embedded Python install"
-        run: python ./scripts/check_embedded_python.py --uv ./uv.exe
-
-  benchmarks:
-    runs-on: ubuntu-latest
-    needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    timeout-minutes: 20
-    steps:
-      - name: "Checkout Branch"
-        uses: actions/checkout@v4
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - name: "Install codspeed"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-codspeed
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Install requirements and prime cache"
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
-          cargo run --bin uv -- venv --cache-dir .cache
-          cargo run --bin uv -- pip compile scripts/requirements/airflow.in --exclude-newer 2024-06-20 --cache-dir .cache
-
-      - name: "Build benchmarks"
-        run: cargo codspeed build --features codspeed -p bench
-
-      - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@v3
-        with:
-          run: cargo codspeed run
-          token: ${{ secrets.CODSPEED_TOKEN }}
+  # cargo-test-macos:
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   runs-on:
+  #     labels: "macos-14"
+  #   name: "cargo test | macos"
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: "Install Rust toolchain"
+  #       run: rustup show
+
+  #     - uses: rui314/setup-mold@v1
+
+  #     - uses: Swatinem/rust-cache@v2
+
+  #     - name: "Install required Python versions"
+  #       run: |
+  #         cargo run python install
+
+  #     - name: "Install cargo nextest"
+  #       uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: cargo-nextest
+
+  #     - name: "Cargo test"
+  #       run: |
+  #         cargo nextest run \
+  #           --features python-patch \
+  #           --workspace \
+  #           --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+
+  #     - name: "Smoke test"
+  #       run: |
+  #         uv="./target/debug/uv"
+  #         $uv venv
+  #         $uv pip install ruff
+
+  # cargo-test-windows:
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   runs-on:
+  #     labels: "windows-latest-large"
+  #   name: "cargo test | windows"
+  #   steps:
+  #     - name: Create Dev Drive using ReFS
+  #       run: |
+  #         $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 14GB |
+  #                   Mount-VHD -Passthru |
+  #                   Initialize-Disk -Passthru |
+  #                   New-Partition -AssignDriveLetter -UseMaximumSize |
+  #                   Format-Volume -FileSystem ReFS -Confirm:$false -Force
+  #         Write-Output $Volume
+  #         Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
+  #     - uses: actions/checkout@v4
+
+  #     # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+  #     - name: Copy Git Repo to Dev Drive
+  #       run: |
+  #         Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+
+  #     - name: "Install Rust toolchain"
+  #       working-directory: ${{ env.DEV_DRIVE }}/uv
+  #       env:
+  #         CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+  #         RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+  #       run: rustup show
+
+  #     # We do not test with Python patch versions on Windows
+  #     # so we can use `setup-python` instead of our bootstrapping code
+  #     # this is much faster on the extremely slow GitHub Windows runners.
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: |
+  #           3.8
+  #           3.9
+  #           3.10
+  #           3.11
+  #           3.12
+
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         workspaces: ${{ env.DEV_DRIVE }}/uv
+  #       env:
+  #         CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+  #         RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
+  #     - name: "Install cargo nextest"
+  #       uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: cargo-nextest
+  #       env:
+  #         CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+  #         RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
+  #     - name: "Cargo test"
+  #       working-directory: ${{ env.DEV_DRIVE }}/uv
+  #       env:
+  #         CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+  #         RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+  #       run: |
+  #         cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+
+  #     - name: "Smoke test"
+  #       working-directory: ${{ env.DEV_DRIVE }}/uv
+  #       env:
+  #         CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+  #         RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+  #         # Avoid debug build stack overflows.
+  #         UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #       run: |
+  #         Set-Alias -Name uv -Value ./target/debug/uv
+  #         uv venv
+  #         uv pip install ruff
+
+  # # Separate jobs for the nightly crate
+  # windows-trampoline-check:
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   runs-on: ubuntu-latest
+  #   name: "check windows trampoline | ${{ matrix.target-arch }}"
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       target-arch: ["x86_64", "i686", "aarch64"]
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install Rust toolchain"
+  #       working-directory: ${{ github.workspace }}/crates/uv-trampoline
+  #       run: |
+  #         rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+  #         rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
+
+  #     - name: Load xwin cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: "${{ github.workspace }}/.xwin"
+  #         key: cargo-xwin-${{ matrix.target-arch }}
+
+  #     - uses: rui314/setup-mold@v1
+
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         workspaces: ${{ github.workspace }}/crates/uv-trampoline
+
+  #     - name: "Install cargo-xwin and cargo-bloat"
+  #       uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: cargo-xwin,cargo-bloat
+
+  #     - name: "Install xwin dependencies"
+  #       run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
+
+  #     - name: "Clippy"
+  #       working-directory: ${{ github.workspace }}/crates/uv-trampoline
+  #       if: matrix.target-arch == 'x86_64'
+  #       run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
+  #       env:
+  #         XWIN_ARCH: "x86_64"
+  #         XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+
+  #     - name: "Bloat Check"
+  #       working-directory: ${{ github.workspace }}/crates/uv-trampoline
+  #       if: matrix.target-arch == 'x86_64'
+  #       run: |
+  #         cargo xwin bloat --release --target x86_64-pc-windows-msvc | \
+  #         grep -q -E 'core::fmt|std::panicking|std::backtrace_rs' && exit 1 || exit 0
+  #       env:
+  #         XWIN_ARCH: "x86_64"
+  #         XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+
+  # # Separate jobs for the nightly crate
+  # windows-trampoline-test:
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   runs-on: windows-latest
+  #   name: "test windows trampoline | ${{ matrix.target-arch }}"
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       target-arch: ["x86_64", "i686"]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: "Install Rust toolchain"
+  #       working-directory: ${{ github.workspace }}/crates/uv-trampoline
+  #       run: |
+  #         rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+  #         rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         workspaces: ${{ github.workspace }}/crates/uv-trampoline
+  #     # Build and copy the new binaries
+  #     - name: "Build"
+  #       working-directory: ${{ github.workspace }}/crates/uv-trampoline
+  #       run: |
+  #         cargo build --target ${{ matrix.target-arch }}-pc-windows-msvc
+  #         cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
+  #         cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
+  #     - name: "Test"
+  #       working-directory: ${{ github.workspace }}/crates/uv-trampoline
+  #       run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc --test *
+
+  # typos:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: crate-ci/typos@master
+
+  # docs:
+  #   name: "mkdocs"
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   env:
+  #     MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #     - name: "Add SSH key"
+  #       if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
+  #       uses: webfactory/ssh-agent@v0.9.0
+  #       with:
+  #         ssh-private-key: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY }}
+  #     - name: "Install Insiders dependencies"
+  #       if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
+  #       run: pip install -r docs/requirements-insiders.txt
+  #     - name: "Install dependencies"
+  #       if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
+  #       run: pip install -r docs/requirements.txt
+  #     - name: "Build Insiders docs"
+  #       if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
+  #       run: mkdocs build --strict -f mkdocs.insiders.yml
+  #     - name: "Build docs"
+  #       if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS != 'true' }}
+  #       run: mkdocs build --strict -f mkdocs.public.yml
+
+  # build-binary-linux:
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   runs-on:
+  #     labels: ubuntu-latest-large
+  #   name: "build binary | linux"
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: rui314/setup-mold@v1
+
+  #     - name: "Setup musl"
+  #       run: |
+  #         sudo apt-get install musl-tools
+  #         rustup target add x86_64-unknown-linux-musl
+
+  #     - uses: Swatinem/rust-cache@v2
+  #     - name: "Build"
+  #       run: cargo build --target x86_64-unknown-linux-musl
+
+  #     - name: "Upload binary"
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+  #         path: ./target/x86_64-unknown-linux-musl/debug/uv
+  #         retention-days: 1
+
+  # build-binary-macos-aarch64:
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   runs-on:
+  #     labels: macos-14
+  #   name: "build binary | macos aarch64"
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: rui314/setup-mold@v1
+
+  #     - uses: Swatinem/rust-cache@v2
+  #     - name: "Build"
+  #       run: cargo build
+
+  #     - name: "Upload binary"
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: uv-macos-aarch64-${{ github.sha }}
+  #         path: ./target/debug/uv
+  #         retention-days: 1
+
+  # build-binary-macos-x86_64:
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   runs-on:
+  #     labels: macos-14-large
+  #   name: "build binary | macos x86_64"
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: rui314/setup-mold@v1
+
+  #     - uses: Swatinem/rust-cache@v2
+  #     - name: "Build"
+  #       run: cargo build
+
+  #     - name: "Upload binary"
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: uv-macos-x86_64-${{ github.sha }}
+  #         path: ./target/debug/uv
+  #         retention-days: 1
+
+  # build-binary-windows:
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   runs-on:
+  #     labels: windows-latest-large
+  #   name: "build binary | windows"
+  #   steps:
+  #     - name: Create Dev Drive using ReFS
+  #       run: |
+  #         $Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 10GB |
+  #                   Mount-VHD -Passthru |
+  #                   Initialize-Disk -Passthru |
+  #                   New-Partition -AssignDriveLetter -UseMaximumSize |
+  #                   Format-Volume -FileSystem ReFS -Confirm:$false -Force
+  #         Write-Output $Volume
+  #         Write-Output "DEV_DRIVE=$($Volume.DriveLetter):" >> $env:GITHUB_ENV
+
+  #     - uses: actions/checkout@v4
+
+  #     # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+  #     - name: Copy Git Repo to Dev Drive
+  #       run: |
+  #         Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
+
+  #     - uses: rui314/setup-mold@v1
+
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         workspaces: ${{ env.DEV_DRIVE }}/uv
+  #       env:
+  #         CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+  #         RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
+  #     - name: "Build"
+  #       working-directory: ${{ env.DEV_DRIVE }}/uv
+  #       env:
+  #         CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+  #         RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+  #       run: cargo build
+
+  #     - name: "Upload binary"
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: uv-windows-${{ github.sha }}
+  #         path: ${{ env.DEV_DRIVE }}/uv/target/debug/uv.exe
+  #         retention-days: 1
+
+  # ecosystem-test:
+  #   needs: build-binary-linux
+  #   name: "ecosystem test | ${{ matrix.repo }}"
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - repo: "prefecthq/prefect"
+  #           command: "uv pip install -e '.[dev]'"
+  #           python: "3.9"
+  #         - repo: "pallets/flask"
+  #           command: "uv pip install -r requirements/dev.txt"
+  #           python: "3.12"
+  #     fail-fast: false
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         repository: ${{ matrix.repo }}
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: ${{ matrix.python }}
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Test"
+  #       run: |
+  #         ./uv venv
+  #         ./${{ matrix.command }}
+
+  # integration-test-conda:
+  #   needs: build-binary-linux
+  #   name: "integration test | conda on ubuntu"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: conda-incubator/setup-miniconda@v3
+  #       with:
+  #         miniconda-version: latest
+  #         activate-environment: uv
+  #         python-version: "3.12"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: Conda info
+  #       shell: bash -el {0}
+  #       run: conda info
+
+  #     - name: "Install a package"
+  #       shell: bash -el {0}
+  #       run: |
+  #         echo "$CONDA_PREFIX"
+  #         ./uv pip install anyio
+
+  # integration-test-pypy-linux:
+  #   needs: build-binary-linux
+  #   name: "integration test | pypy on ubuntu"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Install PyPy"
+  #       run: ./uv python install pypy3.9
+
+  #     - name: "Create a virtual environment"
+  #       run: |
+  #         ./uv venv -p pypy3.9 --python-preference only-managed
+
+  #     - name: "Check for executables"
+  #       run: |
+  #         check_in_bin() {
+  #             local executable_name=$1
+  #             local bin_path=".venv/bin"
+
+  #             if [[ -x "$bin_path/$executable_name" ]]; then
+  #                 return 0
+  #             else
+  #                 echo "Executable '$executable_name' not found in folder '$bin_path'."
+  #                 return 1
+  #             fi
+  #         }
+
+  #         executables=("pypy" "pypy3" "python")
+
+  #         all_found=true
+  #         for executable_name in "${executables[@]}"; do
+  #             check_in_bin "$executable_name" "$folder_path"
+  #             result=$?
+
+  #             if [[ $result -ne 0 ]]; then
+  #                 all_found=false
+  #             fi
+  #         done
+
+  #         if ! $all_found; then
+  #           echo "One or more expected executables were not found."
+  #           exit 1
+  #         fi
+
+  #     - name: "Check version"
+  #       run: |
+  #         .venv/bin/pypy --version
+  #         .venv/bin/pypy3 --version
+  #         .venv/bin/python --version
+
+  #     - name: "Check install"
+  #       run: |
+  #         ./uv pip install anyio
+
+  # integration-test-pypy-windows:
+  #   needs: build-binary-windows
+  #   name: "integration test | pypy on windows"
+  #   runs-on: windows-latest
+
+  #   steps:
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-windows-${{ github.sha }}
+
+  #     - name: "Install PyPy"
+  #       run: .\uv.exe python install pypy3.9
+
+  #     - name: "Create a virtual environment"
+  #       run: |
+  #         .\uv.exe venv -p pypy3.9 --python-preference only-managed
+
+  #     - name: "Check for executables"
+  #       shell: python
+  #       run: |
+  #         import sys
+  #         from pathlib import Path
+
+  #         def binary_exist(binary):
+  #           binaries_path = Path(".venv\\Scripts")
+  #           if (binaries_path / binary).exists():
+  #             return True
+  #           print(f"Executable '{binary}' not found in folder '{binaries_path}'.")
+
+  #         all_found = True
+  #         expected_binaries = [
+  #             "pypy3.9.exe",
+  #             "pypy3.9w.exe",
+  #             "pypy3.exe",
+  #             "pypyw.exe",
+  #             "python.exe",
+  #             "python3.9.exe",
+  #             "python3.exe",
+  #             "pythonw.exe",
+  #         ]
+  #         for binary in expected_binaries:
+  #           if not binary_exist(binary):
+  #             all_found = False
+
+  #         if not all_found:
+  #           print("One or more expected executables were not found.")
+  #           sys.exit(1)
+
+  #     - name: "Check version"
+  #       run: |
+  #         & .venv\Scripts\pypy3.9.exe --version
+  #         & .venv\Scripts\pypy3.exe --version
+  #         & .venv\Scripts\python.exe --version
+
+  #     - name: "Check install"
+  #       env:
+  #         # Avoid debug build stack overflows.
+  #         UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #       run: |
+  #         .\uv.exe pip install anyio
+
+  # integration-test-graalpy-linux:
+  #   needs: build-binary-linux
+  #   name: "integration test | graalpy on ubuntu"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "graalpy24.0"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: Graalpy info
+  #       run: |
+  #         which graalpy
+  #         echo "GRAAL_PYTHONHOME=$(graalpy -c 'print(__graalpython__.home)')" >> $GITHUB_ENV
+
+  #     - name: "Create a virtual environment"
+  #       run: |
+  #         ./uv venv -p $(which graalpy)
+
+  #     - name: "Check for executables"
+  #       run: |
+  #         check_in_bin() {
+  #             local executable_name=$1
+  #             local bin_path=".venv/bin"
+
+  #             if [[ -x "$bin_path/$executable_name" ]]; then
+  #                 return 0
+  #             else
+  #                 echo "Executable '$executable_name' not found in folder '$bin_path'."
+  #                 return 1
+  #             fi
+  #         }
+
+  #         executables=("graalpy" "python3" "python")
+
+  #         all_found=true
+  #         for executable_name in "${executables[@]}"; do
+  #             check_in_bin "$executable_name" "$folder_path"
+  #             result=$?
+
+  #             if [[ $result -ne 0 ]]; then
+  #                 all_found=false
+  #             fi
+  #         done
+
+  #         if ! $all_found; then
+  #           echo "One or more expected executables were not found."
+  #           exit 1
+  #         fi
+
+  #     - name: "Check version"
+  #       run: |
+  #         .venv/bin/graalpy --version
+  #         .venv/bin/python3 --version
+  #         .venv/bin/python --version
+
+  #     - name: "Check install"
+  #       run: |
+  #         ./uv pip install anyio
+
+  # integration-test-graalpy-windows:
+  #   needs: build-binary-windows
+  #   name: "integration test | graalpy on windows"
+  #   runs-on: windows-latest
+
+  #   steps:
+  #     - uses: timfel/setup-python@fc9bcb4a04f5b1ea7d678c2ca7ea1c479a2468d7
+  #       with:
+  #         python-version: "graalpy24.0"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-windows-${{ github.sha }}
+
+  #     - name: Graalpy info
+  #       run: Get-Command graalpy
+
+  #     - name: "Create a virtual environment"
+  #       run: |
+  #         $graalpy = (Get-Command graalpy).source
+  #         .\uv.exe venv -p $graalpy
+
+  #     - name: "Check for executables"
+  #       shell: python
+  #       run: |
+  #         import sys
+  #         from pathlib import Path
+
+  #         def binary_exist(binary):
+  #           binaries_path = Path(".venv\\Scripts")
+  #           if (binaries_path / binary).exists():
+  #             return True
+  #           print(f"Executable '{binary}' not found in folder '{binaries_path}'.")
+
+  #         all_found = True
+  #         expected_binaries = [
+  #             "graalpy.exe",
+  #             "python.exe",
+  #             "python3.exe",
+  #         ]
+  #         for binary in expected_binaries:
+  #           if not binary_exist(binary):
+  #             all_found = False
+
+  #         if not all_found:
+  #           print("One or more expected executables were not found.")
+  #           sys.exit(1)
+
+  #     - name: "Check version"
+  #       run: |
+  #         & .venv\Scripts\graalpy.exe --version
+  #         & .venv\Scripts\python3.exe --version
+  #         & .venv\Scripts\python.exe --version
+
+  #     - name: "Check install"
+  #       env:
+  #         # Avoid debug build stack overflows.
+  #         UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #       run: |
+  #         .\uv.exe pip install anyio
+
+  # integration-test-github-actions:
+  #   needs: build-binary-linux
+  #   name: "integration test | github actions"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Install a package without system opt-in"
+  #       run: |
+  #         ./uv pip install anyio && exit 1 || echo "Failed as expected"
+
+  #     - name: "Install a package with system opt-in"
+  #       run: |
+  #         ./uv pip install anyio --system
+
+  #     - name: Configure uv to use the system Python by default
+  #       run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
+
+  #     - name: "Install a package with environment system opt-in"
+  #       run: |
+  #         ./uv pip install anyio --reinstall
+
+  # cache-test-ubuntu:
+  #   needs: build-binary-linux
+  #   name: "check cache | ubuntu"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Download binary for last version"
+  #       run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xvz
+
+  #     - name: "Check cache compatibility"
+  #       run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-x86_64-unknown-linux-gnu/uv
+
+  # cache-test-macos-aarch64:
+  #   needs: build-binary-macos-aarch64
+  #   name: "check cache | macos aarch64"
+  #   runs-on: macos-14
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-macos-aarch64-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Download binary for last version"
+  #       run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz" | tar -xvz
+
+  #     - name: "Check cache compatibility"
+  #       run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
+
+  # system-test-debian:
+  #   needs: build-binary-linux
+  #   name: "check system | python on debian"
+  #   runs-on: ubuntu-latest
+  #   container: debian:bookworm
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install Python"
+  #       run: apt-get update && apt-get install -y python3.11 python3-pip python3.11-venv
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3.11)
+
+  #     - name: "Validate global Python install"
+  #       run: python3.11 scripts/check_system_python.py --uv ./uv --externally-managed
+
+  # system-test-fedora:
+  #   needs: build-binary-linux
+  #   name: "check system | python on fedora"
+  #   runs-on: ubuntu-latest
+  #   container: fedora:41
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install Python"
+  #       run: dnf install python3 which -y && python3 -m ensurepip
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv
+
+  # system-test-ubuntu:
+  #   needs: build-binary-linux
+  #   name: "check system | python on ubuntu"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python)
+
+  #     - name: "Validate global Python install"
+  #       run: python scripts/check_system_python.py --uv ./uv
+
+  # system-test-opensuse:
+  #   needs: build-binary-linux
+  #   name: "check system | python on opensuse"
+  #   runs-on: ubuntu-latest
+  #   container: opensuse/tumbleweed
+  #   timeout-minutes: 5
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install Python"
+  #       run: >
+  #         until
+  #         zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3;
+  #         do sleep 10;
+  #         done
+
+  #         # We retry because `zypper` can fail during remote repository updates
+  #         # The above will not sleep forever due to the job level timeout
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv
+
+  # # Note: rockylinux is a 1-1 code compatible distro to rhel
+  # # rockylinux mimics centos but with added maintenance stability
+  # # and avoids issues with centos stream uptime concerns
+  # system-test-rocky-linux:
+  #   needs: build-binary-linux
+  #   name: "check system | python on rocky linux ${{ matrix.rocky-version }}"
+  #   runs-on: ubuntu-latest
+  #   container: rockylinux:${{ matrix.rocky-version }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       rocky-version: ["8", "9"]
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install Python"
+  #       if: matrix.rocky-version == '8'
+  #       run: |
+  #         dnf install python39 python39-pip which -y
+
+  #     - name: "Install Python"
+  #       if: matrix.rocky-version == '9'
+  #       run: |
+  #         dnf install python3.9 python3.9-pip which -y
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv
+
+  # system-test-pypy:
+  #   needs: build-binary-linux
+  #   name: "check system | pypy on ubuntu"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "pypy3.9"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which pypy)
+
+  #     - name: "Validate global Python install"
+  #       run: pypy scripts/check_system_python.py --uv ./uv
+
+  # system-test-pyston:
+  #   needs: build-binary-linux
+  #   name: "check system | pyston"
+  #   runs-on: ubuntu-latest
+  #   container: pyston/pyston:2.3.5
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which pyston)
+
+  #     - name: "Validate global Python install"
+  #       run: pyston scripts/check_system_python.py --uv ./uv
+
+  # system-test-alpine:
+  #   needs: build-binary-linux
+  #   name: "check system | alpine"
+  #   runs-on: ubuntu-latest
+  #   container: alpine:latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install Python"
+  #       run: apk add --update --no-cache python3 py3-pip
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
+
+  # system-test-macos-aarch64:
+  #   needs: build-binary-macos-aarch64
+  #   name: "check system | python on macos aarch64"
+  #   runs-on: macos-14
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-macos-aarch64-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     # This should be the macOS system Python
+  #     # We'd like to test with Homebrew but this Python takes precedence in system Python discovery
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
+
+  # system-test-macos-aarch64-homebrew:
+  #   needs: build-binary-macos-aarch64
+  #   name: "check system | homebrew python on macos aarch64"
+  #   runs-on: macos-14
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install Python"
+  #       run: brew install python3
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-macos-aarch64-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
+
+  # system-test-macos-x86_64:
+  #   needs: build-binary-macos-x86_64
+  #   name: "check system | python on macos x86_64"
+  #   runs-on: macos-12
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     # We test with GitHub's Python as a regression test for
+  #     # https://github.com/astral-sh/uv/issues/2450
+  #     - uses: actions/setup-python@v5
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-macos-x86_64-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv
+
+  # system-test-windows-python-310:
+  #   needs: build-binary-windows
+  #   name: "check system | python3.10 on windows"
+  #   runs-on: windows-latest
+  #   env:
+  #     # Avoid debug build stack overflows.
+  #     UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.10"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-windows-${{ github.sha }}
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python)
+
+  #     - name: "Validate global Python install"
+  #       run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
+
+  # system-test-windows-x86-python-310:
+  #   needs: build-binary-windows
+  #   name: "check system | python3.10 on windows x86"
+  #   runs-on: windows-latest
+  #   env:
+  #     # Avoid debug build stack overflows.
+  #     UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.10"
+  #         architecture: "x86"
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-windows-${{ github.sha }}
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python)
+
+  #     - name: "Validate global Python install"
+  #       run: python ./scripts/check_system_python.py --uv ./uv.exe
+
+  # system-test-windows-python-313:
+  #   needs: build-binary-windows
+  #   name: "check system | python3.13 on windows"
+  #   runs-on: windows-latest
+  #   env:
+  #     # Avoid debug build stack overflows.
+  #     UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.13"
+  #         allow-prereleases: true
+  #         cache: pip
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-windows-${{ github.sha }}
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python)
+
+  #     - name: "Validate global Python install"
+  #       run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
+
+  # system-test-choco:
+  #   needs: build-binary-windows
+  #   name: "check system | python3.12 via chocolatey"
+  #   runs-on: windows-latest
+  #   env:
+  #     # Avoid debug build stack overflows.
+  #     UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install Python"
+  #       run: choco install python3 --verbose --version=3.9.13
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-windows-${{ github.sha }}
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
+
+  # system-test-pyenv:
+  #   needs: build-binary-linux
+  #   name: "check system | python via pyenv"
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Install pyenv"
+  #       uses: "gabrielfalcao/pyenv-action@v18"
+  #       with:
+  #         default: 3.9.7
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3.9)
+
+  #     - name: "Validate global Python install"
+  #       run: python3.9 scripts/check_system_python.py --uv ./uv
+
+  # system-test-conda:
+  #   needs:
+  #     [build-binary-windows, build-binary-macos-aarch64, build-binary-linux]
+  #   name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
+  #   runs-on: ${{ matrix.runner }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: ["linux", "windows", "macos"]
+  #       python-version: ["3.8", "3.11"]
+  #       include:
+  #         - { os: "linux", target: "linux", runner: "ubuntu-latest" }
+  #         - { os: "windows", target: "windows", runner: "windows-latest" }
+  #         - { os: "macos", target: "macos-aarch64", runner: "macos-14" }
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - uses: conda-incubator/setup-miniconda@v3
+  #       with:
+  #         miniconda-version: "latest"
+  #         activate-environment: uv
+  #         python-version: ${{ matrix.python-version }}
+
+  #     - name: Conda info
+  #       shell: bash -el {0}
+  #       run: conda info
+
+  #     - name: Conda list
+  #       shell: pwsh
+  #       run: conda list
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-${{ matrix.target }}-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       if: ${{ matrix.os != 'windows' }}
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       shell: bash -el {0}
+  #       run: echo $(which python)
+
+  #     - name: "Validate global Python install"
+  #       shell: bash -el {0}
+  #       env:
+  #         # Avoid debug build stack overflows.
+  #         UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #       run: python ./scripts/check_system_python.py --uv ./uv
+
+  # system-test-amazonlinux:
+  #   needs: build-binary-linux
+  #   name: "check system | amazonlinux"
+  #   runs-on: ubuntu-latest
+  #   container: amazonlinux:2023
+  #   steps:
+  #     - name: "Install base requirements"
+  #       run: |
+  #         # Needed for `actions/checkout`
+  #         yum install tar gzip which -y
+  #     - uses: actions/checkout@v4
+  #     - name: "Install Python"
+  #       run: yum install python3 python3-pip -y
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-linux-${{ github.sha }}
+
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
+
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv
+
+  # system-test-windows-embedded-python-310:
+  #   needs: build-binary-windows
+  #   name: "check system | embedded python3.10 on windows"
+  #   runs-on: windows-latest
+  #   env:
+  #     # Avoid debug build stack overflows.
+  #     UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: uv-windows-${{ github.sha }}
+
+  #     # Download embedded Python.
+  #     - name: "Download embedded Python"
+  #       run: curl -LsSf https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-amd64.zip -o python-3.11.8-embed-amd64.zip
+
+  #     - name: "Unzip embedded Python"
+  #       run: 7z x python-3.11.8-embed-amd64.zip -oembedded-python
+
+  #     - name: "Show embedded Python contents"
+  #       run: ls embedded-python
+
+  #     - name: "Set PATH"
+  #       run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH
+
+  #     - name: "Print Python path"
+  #       run: echo $(which python)
+
+  #     - name: "Validate embedded Python install"
+  #       run: python ./scripts/check_embedded_python.py --uv ./uv.exe
+
+  # benchmarks:
+  #   runs-on: ubuntu-latest
+  #   needs: determine_changes
+  #   if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+  #   timeout-minutes: 20
+  #   steps:
+  #     - name: "Checkout Branch"
+  #       uses: actions/checkout@v4
+
+  #     - name: "Install Rust toolchain"
+  #       run: rustup show
+
+  #     - name: "Install codspeed"
+  #       uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: cargo-codspeed
+
+  #     - uses: Swatinem/rust-cache@v2
+
+  #     - name: "Install requirements and prime cache"
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
+  #         cargo run --bin uv -- venv --cache-dir .cache
+  #         cargo run --bin uv -- pip compile scripts/requirements/airflow.in --exclude-newer 2024-06-20 --cache-dir .cache
+
+  #     - name: "Build benchmarks"
+  #       run: cargo codspeed build --features codspeed -p bench
+
+  #     - name: "Run benchmarks"
+  #       uses: CodSpeedHQ/action@v3
+  #       with:
+  #         run: cargo codspeed run
+  #         token: ${{ secrets.CODSPEED_TOKEN }}
