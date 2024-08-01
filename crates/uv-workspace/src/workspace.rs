@@ -1483,7 +1483,7 @@ mod tests {
                     "root": "[ROOT]/albatross-root-workspace/packages/bird-feeder",
                     "project": {
                       "name": "bird-feeder",
-                      "requires-python": ">=3.12",
+                      "requires-python": ">=3.8",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"
