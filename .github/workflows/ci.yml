@@ -173,11 +173,11 @@ jobs:
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     strategy:
       matrix:
-        partition: [1, 2]
+        partition: [1, 2, 3, 4]
       fail-fast: false
     runs-on:
       labels: "ubuntu-latest-large"
-    name: "cargo test | ubuntu [${{ matrix.partition }}/2]"
+    name: "cargo test | ubuntu [${{ matrix.partition }}/4]"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
@@ -205,7 +205,7 @@ jobs:
         run: |
           cargo nextest run \
             --archive-file nextest-archive.tar.zst \
-            --partition count:${{ matrix.partition }}/2 \
+            --partition count:${{ matrix.partition }}/4 \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
