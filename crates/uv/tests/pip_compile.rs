@@ -7523,7 +7523,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
     Ok(())
 }
 
-// Requested distinct prerelease strategies with disjoint markers.
+/// Requested distinct pre-release strategies with disjoint markers.
 #[test]
 fn universal_disjoint_prereleases() -> Result<()> {
     static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
@@ -7559,8 +7559,8 @@ fn universal_disjoint_prereleases() -> Result<()> {
     Ok(())
 }
 
-// Requested distinct prerelease strategies with disjoint markers for a package
-// that is also present as a transitive dependency.
+/// Requested distinct pre-release strategies with disjoint markers for a package
+/// that is also present as a transitive dependency.
 #[test]
 fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
     static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
@@ -7603,7 +7603,7 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
     Ok(())
 }
 
-// Ensure that the global prerelease mode is respected across forks.
+/// Ensure that the global pre-release mode is respected across forks.
 #[test]
 fn universal_prerelease_mode() -> Result<()> {
     static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
@@ -7638,8 +7638,8 @@ fn universal_prerelease_mode() -> Result<()> {
     Ok(())
 }
 
-/// If a dependency requests a prerelease version with an overlapping marker expression,
-/// we should prefer the prerelease version in both forks.
+/// If a dependency requests a pre-release version with an overlapping marker expression,
+/// we should prefer the pre-release version in both forks.
 #[test]
 fn universal_overlapping_prerelease_requirement() -> Result<()> {
     static EXCLUDE_NEWER: &str = "2024-07-17T00:00:00Z";
@@ -7689,7 +7689,7 @@ fn universal_overlapping_prerelease_requirement() -> Result<()> {
     Ok(())
 }
 
-/// If a dependency requests distinct prerelease strategies with disjoint marker expressions,
+/// If a dependency requests distinct pre-release strategies with disjoint marker expressions,
 /// we should fork the root requirement.
 #[test]
 fn universal_disjoint_prerelease_requirement() -> Result<()> {
@@ -7716,7 +7716,7 @@ fn universal_disjoint_prerelease_requirement() -> Result<()> {
     "})?;
 
     // Some marker expressions on the output here are missing due to https://github.com/astral-sh/uv/issues/5086,
-    // but the prerelease versions are still respected correctly.
+    // but the pre-release versions are still respected correctly.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
             .arg("requirements.in")
@@ -8418,7 +8418,7 @@ fn unsafe_package() -> Result<()> {
 /// Resolve a package with a strict upper bound, allowing pre-releases. Per PEP 440, pre-releases
 /// that match the bound (e.g., `2.0.0rc1`) should be _not_ allowed.
 #[test]
-fn pre_release_upper_bound_exclude() -> Result<()> {
+fn prerelease_upper_bound_exclude() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask<2.0.0")?;
@@ -8455,7 +8455,7 @@ fn pre_release_upper_bound_exclude() -> Result<()> {
 /// Resolve a package with a strict upper bound that includes a pre-release. Per PEP 440,
 /// pre-releases _should_ be allowed.
 #[test]
-fn pre_release_upper_bound_include() -> Result<()> {
+fn prerelease_upper_bound_include() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask<2.0.0rc4")?;
@@ -8529,7 +8529,7 @@ fn pre_alias() -> Result<()> {
 
 /// Allow a pre-release for a version specifier in a constraint file.
 #[test]
-fn pre_release_constraint() -> Result<()> {
+fn prerelease_constraint() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask")?;
@@ -10349,7 +10349,7 @@ requires-python = ">3.8"
 
 /// Allow pre-releases for dependencies of source path requirements.
 #[test]
-fn pre_release_path_requirement() -> Result<()> {
+fn prerelease_path_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an a package that requires a pre-release version of `flask`.
@@ -10403,7 +10403,7 @@ requires-python = ">3.8"
 
 /// Allow pre-releases for dependencies of editable requirements.
 #[test]
-fn pre_release_editable_requirement() -> Result<()> {
+fn prerelease_editable_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an a package that requires a pre-release version of `flask`.r

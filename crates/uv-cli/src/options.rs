@@ -1,6 +1,6 @@
 use uv_cache::Refresh;
 use uv_configuration::ConfigSettings;
-use uv_resolver::PreReleaseMode;
+use uv_resolver::PrereleaseMode;
 use uv_settings::{PipOptions, ResolverInstallerOptions, ResolverOptions};
 
 use crate::{
@@ -53,7 +53,7 @@ impl From<ResolverArgs> for PipOptions {
             keyring_provider,
             resolution,
             prerelease: if pre {
-                Some(PreReleaseMode::Allow)
+                Some(PrereleaseMode::Allow)
             } else {
                 prerelease
             },
@@ -128,7 +128,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             keyring_provider,
             resolution,
             prerelease: if pre {
-                Some(PreReleaseMode::Allow)
+                Some(PrereleaseMode::Allow)
             } else {
                 prerelease
             },
@@ -212,7 +212,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         keyring_provider,
         resolution,
         prerelease: if pre {
-            Some(PreReleaseMode::Allow)
+            Some(PrereleaseMode::Allow)
         } else {
             prerelease
         },
@@ -283,7 +283,7 @@ pub fn resolver_installer_options(
         keyring_provider,
         resolution,
         prerelease: if pre {
-            Some(PreReleaseMode::Allow)
+            Some(PrereleaseMode::Allow)
         } else {
             prerelease
         },

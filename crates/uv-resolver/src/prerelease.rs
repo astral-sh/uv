@@ -10,7 +10,7 @@ use crate::{DependencyMode, Manifest, ResolverMarkers};
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub enum PreReleaseMode {
+pub enum PrereleaseMode {
     /// Disallow all pre-release versions.
     Disallow,
 
@@ -30,7 +30,7 @@ pub enum PreReleaseMode {
     IfNecessaryOrExplicit,
 }
 
-impl std::fmt::Display for PreReleaseMode {
+impl std::fmt::Display for PrereleaseMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Disallow => write!(f, "disallow"),
@@ -42,10 +42,10 @@ impl std::fmt::Display for PreReleaseMode {
     }
 }
 
-/// Like [`PreReleaseMode`], but with any additional information required to select a candidate,
+/// Like [`PrereleaseMode`], but with any additional information required to select a candidate,
 /// like the set of direct dependencies.
 #[derive(Debug, Clone)]
-pub(crate) enum PreReleaseStrategy {
+pub(crate) enum PrereleaseStrategy {
     /// Disallow all pre-release versions.
     Disallow,
 
@@ -64,9 +64,9 @@ pub(crate) enum PreReleaseStrategy {
     IfNecessaryOrExplicit(ForkSet),
 }
 
-impl PreReleaseStrategy {
+impl PrereleaseStrategy {
     pub(crate) fn from_mode(
-        mode: PreReleaseMode,
+        mode: PrereleaseMode,
         manifest: &Manifest,
         markers: Option<&MarkerEnvironment>,
         dependencies: DependencyMode,
@@ -74,9 +74,9 @@ impl PreReleaseStrategy {
         let mut packages = ForkSet::default();
 
         match mode {
-            PreReleaseMode::Disallow => Self::Disallow,
-            PreReleaseMode::Allow => Self::Allow,
-            PreReleaseMode::IfNecessary => Self::IfNecessary,
+            PrereleaseMode::Disallow => Self::Disallow,
+            PrereleaseMode::Allow => Self::Allow,
+            PrereleaseMode::IfNecessary => Self::IfNecessary,
             _ => {
                 for requirement in manifest.requirements(markers, dependencies) {
                     let RequirementSource::Registry { specifier, .. } = &requirement.source else {
@@ -92,8 +92,8 @@ impl PreReleaseStrategy {
                 }
 
                 match mode {
-                    PreReleaseMode::Explicit => Self::Explicit(packages),
-                    PreReleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(packages),
+                    PrereleaseMode::Explicit => Self::Explicit(packages),
+                    PrereleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(packages),
                     _ => unreachable!(),
                 }
             }
@@ -105,23 +105,23 @@ impl PreReleaseStrategy {
         &self,
         package_name: &PackageName,
         markers: &ResolverMarkers,
-    ) -> AllowPreRelease {
+    ) -> AllowPrerelease {
         match self {
-            PreReleaseStrategy::Disallow => AllowPreRelease::No,
-            PreReleaseStrategy::Allow => AllowPreRelease::Yes,
-            PreReleaseStrategy::IfNecessary => AllowPreRelease::IfNecessary,
-            PreReleaseStrategy::Explicit(packages) => {
+            PrereleaseStrategy::Disallow => AllowPrerelease::No,
+            PrereleaseStrategy::Allow => AllowPrerelease::Yes,
+            PrereleaseStrategy::IfNecessary => AllowPrerelease::IfNecessary,
+            PrereleaseStrategy::Explicit(packages) => {
                 if packages.contains(package_name, markers) {
-                    AllowPreRelease::Yes
+                    AllowPrerelease::Yes
                 } else {
-                    AllowPreRelease::No
+                    AllowPrerelease::No
                 }
             }
-            PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
+            PrereleaseStrategy::IfNecessaryOrExplicit(packages) => {
                 if packages.contains(package_name, markers) {
-                    AllowPreRelease::Yes
+                    AllowPrerelease::Yes
                 } else {
-                    AllowPreRelease::IfNecessary
+                    AllowPrerelease::IfNecessary
                 }
             }
         }
@@ -130,7 +130,7 @@ impl PreReleaseStrategy {
 
 /// The pre-release strategy for a given package.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum AllowPreRelease {
+pub(crate) enum AllowPrerelease {
     /// Allow all pre-release versions.
     Yes,
 

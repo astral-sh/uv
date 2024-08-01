@@ -16,7 +16,7 @@ use uv_configuration::{
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonFetch, PythonPreference, PythonVersion};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 pub mod compat;
 pub mod options;
@@ -2868,7 +2868,7 @@ pub struct ResolverArgs {
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
     #[arg(long, value_enum, env = "UV_PRERELEASE")]
-    pub prerelease: Option<PreReleaseMode>,
+    pub prerelease: Option<PrereleaseMode>,
 
     #[arg(long, hide = true)]
     pub pre: bool,
@@ -2957,7 +2957,7 @@ pub struct ResolverInstallerArgs {
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
     #[arg(long, value_enum, env = "UV_PRERELEASE")]
-    pub prerelease: Option<PreReleaseMode>,
+    pub prerelease: Option<PrereleaseMode>,
 
     #[arg(long, hide = true)]
     pub pre: bool,

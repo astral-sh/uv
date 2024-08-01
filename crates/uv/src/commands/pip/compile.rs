@@ -32,7 +32,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
-    InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, RequiresPython,
+    InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
@@ -53,7 +53,7 @@ pub(crate) async fn pip_compile(
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
-    prerelease_mode: PreReleaseMode,
+    prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,

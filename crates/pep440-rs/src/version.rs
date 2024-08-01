@@ -371,7 +371,7 @@ impl Version {
 
     /// Returns the pre-release part of this version, if it exists.
     #[inline]
-    pub fn pre(&self) -> Option<PreRelease> {
+    pub fn pre(&self) -> Option<Prerelease> {
         match *self.inner {
             VersionInner::Small { ref small } => small.pre(),
             VersionInner::Full { ref full } => full.pre,
@@ -501,7 +501,7 @@ impl Version {
     /// Set the pre-release component and return the updated version.
     #[inline]
     #[must_use]
-    pub fn with_pre(mut self, value: Option<PreRelease>) -> Self {
+    pub fn with_pre(mut self, value: Option<Prerelease>) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_pre(value) {
                 return self;
@@ -709,7 +709,7 @@ impl std::fmt::Display for Version {
         let pre = self
             .pre()
             .as_ref()
-            .map(|PreRelease { kind, number }| format!("{kind}{number}"))
+            .map(|Prerelease { kind, number }| format!("{kind}{number}"))
             .unwrap_or_default();
         let post = self
             .post()
@@ -1014,21 +1014,21 @@ impl VersionSmall {
     }
 
     #[inline]
-    fn pre(&self) -> Option<PreRelease> {
+    fn pre(&self) -> Option<Prerelease> {
         let (kind, number) = (self.suffix_kind(), self.suffix_version());
         if kind == Self::SUFFIX_PRE_ALPHA {
-            Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number,
             })
         } else if kind == Self::SUFFIX_PRE_BETA {
-            Some(PreRelease {
-                kind: PreReleaseKind::Beta,
+            Some(Prerelease {
+                kind: PrereleaseKind::Beta,
                 number,
             })
         } else if kind == Self::SUFFIX_PRE_RC {
-            Some(PreRelease {
-                kind: PreReleaseKind::Rc,
+            Some(Prerelease {
+                kind: PrereleaseKind::Rc,
                 number,
             })
         } else {
@@ -1037,7 +1037,7 @@ impl VersionSmall {
     }
 
     #[inline]
-    fn set_pre(&mut self, value: Option<PreRelease>) -> bool {
+    fn set_pre(&mut self, value: Option<Prerelease>) -> bool {
         if self.min().is_some()
             || self.dev().is_some()
             || self.post().is_some()
@@ -1049,18 +1049,18 @@ impl VersionSmall {
             None => {
                 self.set_suffix_kind(Self::SUFFIX_NONE);
             }
-            Some(PreRelease { kind, number }) => {
+            Some(Prerelease { kind, number }) => {
                 if number > Self::SUFFIX_MAX_VERSION {
                     return false;
                 }
                 match kind {
-                    PreReleaseKind::Alpha => {
+                    PrereleaseKind::Alpha => {
                         self.set_suffix_kind(Self::SUFFIX_PRE_ALPHA);
                     }
-                    PreReleaseKind::Beta => {
+                    PrereleaseKind::Beta => {
                         self.set_suffix_kind(Self::SUFFIX_PRE_BETA);
                     }
-                    PreReleaseKind::Rc => {
+                    PrereleaseKind::Rc => {
                         self.set_suffix_kind(Self::SUFFIX_PRE_RC);
                     }
                 }
@@ -1234,8 +1234,8 @@ struct VersionFull {
     /// i.e. alpha, beta or rc plus a number
     ///
     /// Note that whether this is Some influences the version range
-    /// matching since normally we exclude all prerelease versions
-    pre: Option<PreRelease>,
+    /// matching since normally we exclude all pre-release versions
+    pre: Option<Prerelease>,
     /// The [Post release
     /// version](https://peps.python.org/pep-0440/#post-releases), higher
     /// post version are preferred over lower post or none-post versions
@@ -1353,14 +1353,14 @@ impl FromStr for VersionPattern {
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
-pub struct PreRelease {
+pub struct Prerelease {
     /// The kind of pre-release.
-    pub kind: PreReleaseKind,
+    pub kind: PrereleaseKind,
     /// The number associated with the pre-release.
     pub number: u64,
 }
 
-/// Optional prerelease modifier (alpha, beta or release candidate) appended to version
+/// Optional pre-release modifier (alpha, beta or release candidate) appended to version
 ///
 /// <https://peps.python.org/pep-0440/#pre-releases>
 #[derive(
@@ -1379,16 +1379,16 @@ pub struct PreRelease {
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug, Eq, PartialEq, PartialOrd, Ord))]
 #[cfg_attr(feature = "pyo3", pyclass)]
-pub enum PreReleaseKind {
-    /// alpha prerelease
+pub enum PrereleaseKind {
+    /// alpha pre-release
     Alpha,
-    /// beta prerelease
+    /// beta pre-release
     Beta,
-    /// release candidate prerelease
+    /// release candidate pre-release
     Rc,
 }
 
-impl std::fmt::Display for PreReleaseKind {
+impl std::fmt::Display for PrereleaseKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Alpha => write!(f, "a"),
@@ -1470,7 +1470,7 @@ struct Parser<'a> {
     /// The release numbers extracted from the version.
     release: ReleaseNumbers,
     /// The pre-release version, if any.
-    pre: Option<PreRelease>,
+    pre: Option<Prerelease>,
     /// The post-release version, if any.
     post: Option<u64>,
     /// The dev release, if any.
@@ -1687,22 +1687,22 @@ impl<'a> Parser<'a> {
         // SPELLINGS and MAP are in correspondence. SPELLINGS is used to look
         // for what spelling is used in the version string (if any), and
         // the index of the element found is used to lookup which type of
-        // PreRelease it is.
+        // pre-release it is.
         //
         // Note also that the order of the strings themselves matters. If 'pre'
         // were before 'preview' for example, then 'preview' would never match
         // since the strings are matched in order.
         const SPELLINGS: StringSet =
             StringSet::new(&["alpha", "beta", "preview", "pre", "rc", "a", "b", "c"]);
-        const MAP: &[PreReleaseKind] = &[
-            PreReleaseKind::Alpha,
-            PreReleaseKind::Beta,
-            PreReleaseKind::Rc,
-            PreReleaseKind::Rc,
-            PreReleaseKind::Rc,
-            PreReleaseKind::Alpha,
-            PreReleaseKind::Beta,
-            PreReleaseKind::Rc,
+        const MAP: &[PrereleaseKind] = &[
+            PrereleaseKind::Alpha,
+            PrereleaseKind::Beta,
+            PrereleaseKind::Rc,
+            PrereleaseKind::Rc,
+            PrereleaseKind::Rc,
+            PrereleaseKind::Alpha,
+            PrereleaseKind::Beta,
+            PrereleaseKind::Rc,
         ];
 
         let oldpos = self.i;
@@ -1720,7 +1720,7 @@ impl<'a> Parser<'a> {
         // Under the normalization rules, a pre-release without an
         // explicit number defaults to `0`.
         let number = self.parse_number()?.unwrap_or(0);
-        self.pre = Some(PreRelease { kind, number });
+        self.pre = Some(Prerelease { kind, number });
         Ok(())
     }
 
@@ -2294,13 +2294,13 @@ impl PyVersion {
     pub fn release(&self) -> Vec<u64> {
         self.0.release().to_vec()
     }
-    /// The [prerelease](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
+    /// The [pre-release](https://peps.python.org/pep-0440/#pre-releases), i.e. alpha, beta or rc
     /// plus a number
     ///
     /// Note that whether this is Some influences the version
-    /// range matching since normally we exclude all prerelease versions
+    /// range matching since normally we exclude all pre-release versions
     #[getter]
-    pub fn pre(&self) -> Option<PreRelease> {
+    pub fn pre(&self) -> Option<Prerelease> {
         self.0.pre()
     }
     /// The [Post release version](https://peps.python.org/pep-0440/#post-releases),
@@ -2452,8 +2452,8 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
         (None, None, Some(n), None) => (1, 0, None, n, version.local()),
         // alpha release
         (
-            Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: n,
             }),
             post,
@@ -2462,8 +2462,8 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
         ) => (2, n, post, dev.unwrap_or(u64::MAX), version.local()),
         // beta release
         (
-            Some(PreRelease {
-                kind: PreReleaseKind::Beta,
+            Some(Prerelease {
+                kind: PrereleaseKind::Beta,
                 number: n,
             }),
             post,
@@ -2472,8 +2472,8 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
         ) => (3, n, post, dev.unwrap_or(u64::MAX), version.local()),
         // alpha release
         (
-            Some(PreRelease {
-                kind: PreReleaseKind::Rc,
+            Some(Prerelease {
+                kind: PrereleaseKind::Rc,
                 number: n,
             }),
             post,
@@ -2554,16 +2554,16 @@ mod tests {
             ("1.0.dev456", Version::new([1, 0]).with_dev(Some(456))),
             (
                 "1.0a1",
-                Version::new([1, 0]).with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Alpha,
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
                     number: 1,
                 })),
             ),
             (
                 "1.0a2.dev456",
                 Version::new([1, 0])
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Alpha,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
                         number: 2,
                     }))
                     .with_dev(Some(456)),
@@ -2571,40 +2571,40 @@ mod tests {
             (
                 "1.0a12.dev456",
                 Version::new([1, 0])
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Alpha,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
                         number: 12,
                     }))
                     .with_dev(Some(456)),
             ),
             (
                 "1.0a12",
-                Version::new([1, 0]).with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Alpha,
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
                     number: 12,
                 })),
             ),
             (
                 "1.0b1.dev456",
                 Version::new([1, 0])
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 1,
                     }))
                     .with_dev(Some(456)),
             ),
             (
                 "1.0b2",
-                Version::new([1, 0]).with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Beta,
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Beta,
                     number: 2,
                 })),
             ),
             (
                 "1.0b2.post345.dev456",
                 Version::new([1, 0])
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 2,
                     }))
                     .with_dev(Some(456))
@@ -2613,8 +2613,8 @@ mod tests {
             (
                 "1.0b2.post345",
                 Version::new([1, 0])
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 2,
                     }))
                     .with_post(Some(345)),
@@ -2622,8 +2622,8 @@ mod tests {
             (
                 "1.0b2-346",
                 Version::new([1, 0])
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 2,
                     }))
                     .with_post(Some(346)),
@@ -2631,30 +2631,30 @@ mod tests {
             (
                 "1.0c1.dev456",
                 Version::new([1, 0])
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Rc,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
                         number: 1,
                     }))
                     .with_dev(Some(456)),
             ),
             (
                 "1.0c1",
-                Version::new([1, 0]).with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Rc,
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Rc,
                     number: 1,
                 })),
             ),
             (
                 "1.0rc2",
-                Version::new([1, 0]).with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Rc,
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Rc,
                     number: 2,
                 })),
             ),
             (
                 "1.0c3",
-                Version::new([1, 0]).with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Rc,
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Rc,
                     number: 3,
                 })),
             ),
@@ -2719,8 +2719,8 @@ mod tests {
                 "1!1.0a1",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Alpha,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
                         number: 1,
                     })),
             ),
@@ -2728,8 +2728,8 @@ mod tests {
                 "1!1.0a2.dev456",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Alpha,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
                         number: 2,
                     }))
                     .with_dev(Some(456)),
@@ -2738,8 +2738,8 @@ mod tests {
                 "1!1.0a12.dev456",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Alpha,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
                         number: 12,
                     }))
                     .with_dev(Some(456)),
@@ -2748,8 +2748,8 @@ mod tests {
                 "1!1.0a12",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Alpha,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
                         number: 12,
                     })),
             ),
@@ -2757,8 +2757,8 @@ mod tests {
                 "1!1.0b1.dev456",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 1,
                     }))
                     .with_dev(Some(456)),
@@ -2767,8 +2767,8 @@ mod tests {
                 "1!1.0b2",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 2,
                     })),
             ),
@@ -2776,8 +2776,8 @@ mod tests {
                 "1!1.0b2.post345.dev456",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 2,
                     }))
                     .with_post(Some(345))
@@ -2787,8 +2787,8 @@ mod tests {
                 "1!1.0b2.post345",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 2,
                     }))
                     .with_post(Some(345)),
@@ -2797,8 +2797,8 @@ mod tests {
                 "1!1.0b2-346",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Beta,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
                         number: 2,
                     }))
                     .with_post(Some(346)),
@@ -2807,8 +2807,8 @@ mod tests {
                 "1!1.0c1.dev456",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Rc,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
                         number: 1,
                     }))
                     .with_dev(Some(456)),
@@ -2817,8 +2817,8 @@ mod tests {
                 "1!1.0c1",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Rc,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
                         number: 1,
                     })),
             ),
@@ -2826,8 +2826,8 @@ mod tests {
                 "1!1.0rc2",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Rc,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
                         number: 2,
                     })),
             ),
@@ -2835,8 +2835,8 @@ mod tests {
                 "1!1.0c3",
                 Version::new([1, 0])
                     .with_epoch(1)
-                    .with_pre(Some(PreRelease {
-                        kind: PreReleaseKind::Rc,
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
                         number: 3,
                     })),
             ),
@@ -3254,134 +3254,134 @@ mod tests {
         // pre-release tests
         assert_eq!(
             p("5a1"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 1
             }))
         );
         assert_eq!(
             p("5alpha1"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 1
             }))
         );
         assert_eq!(
             p("5b1"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Beta,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Beta,
                 number: 1
             }))
         );
         assert_eq!(
             p("5beta1"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Beta,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Beta,
                 number: 1
             }))
         );
         assert_eq!(
             p("5rc1"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Rc,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
                 number: 1
             }))
         );
         assert_eq!(
             p("5c1"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Rc,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
                 number: 1
             }))
         );
         assert_eq!(
             p("5preview1"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Rc,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
                 number: 1
             }))
         );
         assert_eq!(
             p("5pre1"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Rc,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
                 number: 1
             }))
         );
         assert_eq!(
             p("5.6.7pre1"),
-            Version::new([5, 6, 7]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Rc,
+            Version::new([5, 6, 7]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
                 number: 1
             }))
         );
         assert_eq!(
             p("5alpha789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5.alpha789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5-alpha789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5_alpha789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5alpha.789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5alpha-789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5alpha_789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5ALPHA789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5aLpHa789"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 789
             }))
         );
         assert_eq!(
             p("5alpha"),
-            Version::new([5]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 0
             }))
         );
@@ -3501,8 +3501,8 @@ mod tests {
         assert_eq!(
             p("5a2post3"),
             Version::new([5])
-                .with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Alpha,
+                .with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
                     number: 2
                 }))
                 .with_post(Some(3))
@@ -3510,8 +3510,8 @@ mod tests {
         assert_eq!(
             p("5.a-2_post-3"),
             Version::new([5])
-                .with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Alpha,
+                .with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
                     number: 2
                 }))
                 .with_post(Some(3))
@@ -3519,8 +3519,8 @@ mod tests {
         assert_eq!(
             p("5a2-3"),
             Version::new([5])
-                .with_pre(Some(PreRelease {
-                    kind: PreReleaseKind::Alpha,
+                .with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
                     number: 2
                 }))
                 .with_post(Some(3))
@@ -3769,8 +3769,8 @@ mod tests {
 
         // Ensure that the `.max` suffix plays nicely with pre-release versions.
         let greater = Version::new([1, 0])
-            .with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            .with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 1,
             }))
             .with_max(Some(0));
@@ -3790,8 +3790,8 @@ mod tests {
 
         // Ensure that the `.max` suffix plays nicely with pre-release versions.
         let less = Version::new([1, 0])
-            .with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            .with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 1,
             }))
             .with_max(Some(0));
