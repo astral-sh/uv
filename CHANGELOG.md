@@ -98,7 +98,7 @@
 - Match wheel tags against `Requires-Python` major-minor ([#5289](https://github.com/astral-sh/uv/pull/5289))
 - Remove Simple API cache files for alternative indexes in `cache clean` ([#5353](https://github.com/astral-sh/uv/pull/5353))
 - Remove extraneous `are` from wheel tag error messages ([#5303](https://github.com/astral-sh/uv/pull/5303))
-- Allow conflicting prerelease strategies when forking ([#5150](https://github.com/astral-sh/uv/pull/5150))
+- Allow conflicting pre-release strategies when forking ([#5150](https://github.com/astral-sh/uv/pull/5150))
 - Use tag error rather than requires-python error for ABI filtering ([#5296](https://github.com/astral-sh/uv/pull/5296))
 
 ## 0.2.27
@@ -1107,7 +1107,7 @@ See [#2976](https://github.com/astral-sh/uv/pull/2976#discussion_r1566521453) fo
 
 - Accept `setup.py` and `setup.cfg` files in compile ([#2634](https://github.com/astral-sh/uv/pull/2634))
 - Add `--no-binary` and `--only-binary` support to `requirements.txt` ([#2680](https://github.com/astral-sh/uv/pull/2680))
-- Allow prereleases, locals, and URLs in non-editable path requirements ([#2671](https://github.com/astral-sh/uv/pull/2671))
+- Allow pre-releases, locals, and URLs in non-editable path requirements ([#2671](https://github.com/astral-sh/uv/pull/2671))
 - Use PEP 517 to extract dynamic `pyproject.toml` metadata ([#2633](https://github.com/astral-sh/uv/pull/2633))
 - Add `Editable project location` and `Required-by` to `pip show` ([#2589](https://github.com/astral-sh/uv/pull/2589))
 - Avoid `prepare_metadata_for_build_wheel` calls for Hatch packages with dynamic dependencies ([#2645](https://github.com/astral-sh/uv/pull/2645))
@@ -1457,7 +1457,7 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Expand scope of archive timestamping ([#1960](https://github.com/astral-sh/uv/pull/1960))
 - Gracefully handle virtual environments with conflicting packages ([#1893](https://github.com/astral-sh/uv/pull/1893))
 - Invalidate dependencies when editables are updated ([#1955](https://github.com/astral-sh/uv/pull/1955))
-- Make < exclusive for non-prerelease markers ([#1878](https://github.com/astral-sh/uv/pull/1878))
+- Make < exclusive for non-pre-release markers ([#1878](https://github.com/astral-sh/uv/pull/1878))
 - Properly apply constraints in venv audit ([#1956](https://github.com/astral-sh/uv/pull/1956))
 - Re-sync editables on-change ([#1959](https://github.com/astral-sh/uv/pull/1959))
 - Remove current directory from PATH in PEP 517 hooks ([#1975](https://github.com/astral-sh/uv/pull/1975))

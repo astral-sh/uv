@@ -42,7 +42,7 @@ use uv_workspace::VirtualProject;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::resolver::FxOnceMap;
 use crate::{
-    ExcludeNewer, InMemoryIndex, MetadataResponse, PreReleaseMode, RequiresPython, ResolutionGraph,
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
     ResolutionMode, VersionMap, VersionsResponse,
 };
 
@@ -61,8 +61,8 @@ pub struct Lock {
     requires_python: Option<RequiresPython>,
     /// The [`ResolutionMode`] used to generate this lock.
     resolution_mode: ResolutionMode,
-    /// The [`PreReleaseMode`] used to generate this lock.
-    prerelease_mode: PreReleaseMode,
+    /// The [`PrereleaseMode`] used to generate this lock.
+    prerelease_mode: PrereleaseMode,
     /// The [`ExcludeNewer`] used to generate this lock.
     exclude_newer: Option<ExcludeNewer>,
     /// The actual locked version and their metadata.
@@ -180,7 +180,7 @@ impl Lock {
         mut distributions: Vec<Distribution>,
         requires_python: Option<RequiresPython>,
         resolution_mode: ResolutionMode,
-        prerelease_mode: PreReleaseMode,
+        prerelease_mode: PrereleaseMode,
         exclude_newer: Option<ExcludeNewer>,
         fork_markers: Option<BTreeSet<MarkerTree>>,
     ) -> Result<Self, LockError> {
@@ -367,7 +367,7 @@ impl Lock {
     }
 
     /// Returns the pre-release mode used to generate this lock.
-    pub fn prerelease_mode(&self) -> PreReleaseMode {
+    pub fn prerelease_mode(&self) -> PrereleaseMode {
         self.prerelease_mode
     }
 
@@ -482,7 +482,7 @@ impl Lock {
         if self.resolution_mode != ResolutionMode::default() {
             doc.insert("resolution-mode", value(self.resolution_mode.to_string()));
         }
-        if self.prerelease_mode != PreReleaseMode::default() {
+        if self.prerelease_mode != PrereleaseMode::default() {
             doc.insert("prerelease-mode", value(self.prerelease_mode.to_string()));
         }
         if let Some(exclude_newer) = self.exclude_newer {
@@ -604,7 +604,7 @@ struct LockWire {
     #[serde(default)]
     resolution_mode: ResolutionMode,
     #[serde(default)]
-    prerelease_mode: PreReleaseMode,
+    prerelease_mode: PrereleaseMode,
     #[serde(default)]
     exclude_newer: Option<ExcludeNewer>,
     #[serde(rename = "distribution", default)]

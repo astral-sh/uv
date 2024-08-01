@@ -312,7 +312,7 @@ async fn do_lock(
         if lock.prerelease_mode() != options.prerelease_mode {
             let _ = writeln!(
                 printer.stderr(),
-                "Ignoring existing lockfile due to change in prerelease mode: `{}` vs. `{}`",
+                "Ignoring existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
                 lock.prerelease_mode().cyan(),
                 options.prerelease_mode.cyan()
             );

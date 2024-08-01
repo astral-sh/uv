@@ -4,7 +4,7 @@ use itertools::Itertools;
 use pubgrub::Range;
 use thiserror::Error;
 
-use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier, VersionSpecifiers};
+use pep440_rs::{Operator, Prerelease, Version, VersionSpecifier, VersionSpecifiers};
 
 #[derive(Debug, Error)]
 pub enum PubGrubSpecifierError {
@@ -115,7 +115,7 @@ impl PubGrubSpecifier {
                 if let Some(post) = high.post() {
                     high = high.with_post(Some(post + 1));
                 } else if let Some(pre) = high.pre() {
-                    high = high.with_pre(Some(PreRelease {
+                    high = high.with_pre(Some(Prerelease {
                         kind: pre.kind,
                         number: pre.number + 1,
                     }));
@@ -132,7 +132,7 @@ impl PubGrubSpecifier {
                 if let Some(post) = high.post() {
                     high = high.with_post(Some(post + 1));
                 } else if let Some(pre) = high.pre() {
-                    high = high.with_pre(Some(PreRelease {
+                    high = high.with_pre(Some(Prerelease {
                         kind: pre.kind,
                         number: pre.number + 1,
                     }));

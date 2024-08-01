@@ -23,7 +23,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PreReleaseMode, PythonRequirement,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
     ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, HashStrategy};
@@ -77,7 +77,7 @@ pub(crate) async fn pip_sync(
     let extras = ExtrasSpecification::default();
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
-    let prerelease_mode = PreReleaseMode::default();
+    let prerelease_mode = PrereleaseMode::default();
     let dependency_mode = DependencyMode::Direct;
 
     // Read all requirements from the provided sources.

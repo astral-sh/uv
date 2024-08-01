@@ -28,6 +28,7 @@ Just uv, please.
 ## Terminology
 
 1. Use "lockfile" not "lock file".
+2. Use "pre-release", not "prerelease" (except in code, in which case: use `Prerelease`, not `PreRelease`; and `prerelease`, not `pre_release`).
 
 ## Documentation
 
