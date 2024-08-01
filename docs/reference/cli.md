@@ -12,25 +12,25 @@ uv [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="uv-pip"><code>uv pip</code></a></dt><dd><p>Resolve and install Python packages</p>
+<dl class="cli-reference"><dt><a href="uv-pip"><code>uv pip</code></a></dt><dd><p>Manage Python packages with a pip-compatible interface</p>
 </dd>
-<dt><a href="uv-tool"><code>uv tool</code></a></dt><dd><p>Run and manage executable Python packages</p>
+<dt><a href="uv-tool"><code>uv tool</code></a></dt><dd><p>Run and manage tools provided by Python packages (experimental)</p>
 </dd>
-<dt><a href="uv-python"><code>uv python</code></a></dt><dd><p>Manage Python installations</p>
+<dt><a href="uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations (experimental)</p>
 </dd>
-<dt><a href="uv-init"><code>uv init</code></a></dt><dd><p>Initialize a project</p>
+<dt><a href="uv-init"><code>uv init</code></a></dt><dd><p>Create a new project (experimental)</p>
 </dd>
-<dt><a href="uv-run"><code>uv run</code></a></dt><dd><p>Run a command in the project environment</p>
+<dt><a href="uv-run"><code>uv run</code></a></dt><dd><p>Run a command in an environment (experimental)</p>
 </dd>
-<dt><a href="uv-sync"><code>uv sync</code></a></dt><dd><p>Sync the project&#8217;s dependencies with the environment</p>
+<dt><a href="uv-sync"><code>uv sync</code></a></dt><dd><p>Update the project&#8217;s environment to match the project&#8217;s dependencies (experimental)</p>
 </dd>
-<dt><a href="uv-lock"><code>uv lock</code></a></dt><dd><p>Resolve the project requirements into a lockfile</p>
+<dt><a href="uv-lock"><code>uv lock</code></a></dt><dd><p>Create or update a lockfile for the project&#8217;s dependencies (experimental)</p>
 </dd>
-<dt><a href="uv-add"><code>uv add</code></a></dt><dd><p>Add one or more packages to the project requirements</p>
+<dt><a href="uv-add"><code>uv add</code></a></dt><dd><p>Add one or more packages to the project&#8217;s dependencies (experimental)</p>
 </dd>
-<dt><a href="uv-remove"><code>uv remove</code></a></dt><dd><p>Remove one or more packages from the project requirements</p>
+<dt><a href="uv-remove"><code>uv remove</code></a></dt><dd><p>Remove one or more packages from the project&#8217;s dependencies (experimental)</p>
 </dd>
-<dt><a href="uv-tree"><code>uv tree</code></a></dt><dd><p>Display the dependency tree for the project</p>
+<dt><a href="uv-tree"><code>uv tree</code></a></dt><dd><p>Display the dependency tree for the project (experimental)</p>
 </dd>
 <dt><a href="uv-venv"><code>uv venv</code></a></dt><dd><p>Create a virtual environment</p>
 </dd>
@@ -44,7 +44,7 @@ uv [OPTIONS] <COMMAND>
 
 ## uv pip
 
-Resolve and install Python packages
+Manage Python packages with a pip-compatible interface
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -778,7 +778,7 @@ uv pip check [OPTIONS]
 
 ## uv tool
 
-Run and manage executable Python packages
+Run and manage tools provided by Python packages (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1124,7 +1124,7 @@ uv tool dir [OPTIONS]
 
 ## uv python
 
-Manage Python installations
+Manage Python versions and installations (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1332,7 +1332,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 ## uv init
 
-Initialize a project
+Create a new project (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1380,7 +1380,7 @@ uv init [OPTIONS] [PATH]
 
 ## uv run
 
-Run a command in the project environment
+Run a command in an environment (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1488,7 +1488,7 @@ uv run [OPTIONS] <COMMAND>
 
 ## uv sync
 
-Sync the project's dependencies with the environment
+Update the project's environment to match the project's dependencies (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1590,7 +1590,7 @@ uv sync [OPTIONS]
 
 ## uv lock
 
-Resolve the project requirements into a lockfile
+Create or update a lockfile for the project's dependencies (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1686,7 +1686,7 @@ uv lock [OPTIONS]
 
 ## uv add
 
-Add one or more packages to the project requirements
+Add one or more packages to the project's dependencies (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1800,7 +1800,7 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 ## uv remove
 
-Remove one or more packages from the project requirements
+Remove one or more packages from the project's dependencies (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1906,7 +1906,7 @@ uv remove [OPTIONS] <REQUIREMENTS>...
 
 ## uv tree
 
-Display the dependency tree for the project
+Display the dependency tree for the project (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
