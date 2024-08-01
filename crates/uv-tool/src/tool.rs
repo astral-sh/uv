@@ -6,13 +6,13 @@ use toml_edit::Array;
 use toml_edit::Table;
 use toml_edit::Value;
 
-use pypi_types::Requirement;
+use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_fs::PortablePath;
 
 /// A tool entry.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
     requirements: Vec<Requirement>,
@@ -20,6 +20,56 @@ pub struct Tool {
     python: Option<String>,
     /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ToolWire {
+    pub requirements: Vec<RequirementWire>,
+    pub python: Option<String>,
+    pub entrypoints: Vec<ToolEntrypoint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum RequirementWire {
+    /// A [`Requirement`] following our uv-specific schema.
+    Requirement(Requirement),
+    /// A PEP 508-compatible requirement. We no longer write these, but there might be receipts out
+    /// there that still use them.
+    Deprecated(pep508_rs::Requirement<VerbatimParsedUrl>),
+}
+
+impl From<Tool> for ToolWire {
+    fn from(tool: Tool) -> Self {
+        Self {
+            requirements: tool
+                .requirements
+                .into_iter()
+                .map(RequirementWire::Requirement)
+                .collect(),
+            python: tool.python,
+            entrypoints: tool.entrypoints,
+        }
+    }
+}
+
+impl TryFrom<ToolWire> for Tool {
+    type Error = serde::de::value::Error;
+
+    fn try_from(tool: ToolWire) -> Result<Self, Self::Error> {
+        Ok(Self {
+            requirements: tool
+                .requirements
+                .into_iter()
+                .map(|req| match req {
+                    RequirementWire::Requirement(requirements) => requirements,
+                    RequirementWire::Deprecated(requirement) => Requirement::from(requirement),
+                })
+                .collect(),
+            python: tool.python,
+            entrypoints: tool.entrypoints,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
