@@ -52,6 +52,8 @@ pub enum Error {
     EnvironmentRead(PathBuf, String),
     #[error("Failed find tool package `{0}` at `{1}`")]
     MissingToolPackage(PackageName, PathBuf),
+    #[error(transparent)]
+    Serialization(#[from] toml_edit::ser::Error),
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -159,7 +161,7 @@ impl InstalledTools {
             path.user_display()
         );
 
-        let doc = tool_receipt.to_toml();
+        let doc = tool_receipt.to_toml()?;
 
         // Save the modified `uv-receipt.toml`.
         fs_err::write(&path, doc)?;

@@ -144,7 +144,6 @@ fn tool_install() {
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
             sys.exit(main())
         "###);
-
     });
 
     uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
@@ -161,7 +160,6 @@ fn tool_install() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a new tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = [{ name = "flask" }]
