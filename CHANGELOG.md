@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.33
+
+### Enhancements
+
+- Add support for `ksh` to relocatable virtual environments ([#5640](https://github.com/astral-sh/uv/pull/5640))
+
+### CLI
+
+- Add help sections for global options ([#5665](https://github.com/astral-sh/uv/pull/5665))
+- Move `--python` and `--python-version` into the "Python options" help ([#5691](https://github.com/astral-sh/uv/pull/5691))
+- Show help specific options (i.e. `--no-pager`) in `uv help` ([#5516](https://github.com/astral-sh/uv/pull/5516))
+- Update top-level command descriptions ([#5706](https://github.com/astral-sh/uv/pull/5706))
+
+### Bug fixes
+
+- Remove lingering executables after failed installs ([#5666](https://github.com/astral-sh/uv/pull/5666))
+- Switch from heuristic freshness lifetime to hard-coded value ([#5654](https://github.com/astral-sh/uv/pull/5654))
+
+### Documentation
+
+- Don't use equals signs for cli args with value ([#5704](https://github.com/astral-sh/uv/pull/5704))
+
 ## 0.2.32
 
 ### Enhancements
