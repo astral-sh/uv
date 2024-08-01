@@ -459,7 +459,7 @@ While constraints are purely _additive_, and thus cannot _expand_ the set of acc
 a package, overrides _can_ expand the set of acceptable versions for a package, providing an escape
 hatch for erroneous upper version bounds.
 
-### Multi-platform resolution
+### Platform-independent resolution
 
 By default, uv's `pip-compile` command produces a resolution that's known to be compatible with the
 current platform and Python version. Unlike Poetry and PDM, uv does not yet produce a

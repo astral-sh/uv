@@ -163,9 +163,9 @@ direct URL dependencies, local dependencies, constraints, source distributions, 
 indexes, and more.
 
 uv extends these interfaces with advanced features, such as dependency version overrides,
-multi-platform resolutions, reproducible resolutions, alternative resolution strategies, and more.
+platform-independent resolutions, reproducible resolutions, alternative resolution strategies, and more.
 
-Compile requirements into a multi-platform requirements file:
+Compile requirements into a platform-independent requirements file:
 
 ```console
 $ uv pip compile docs/requirements.in --universal --output-file docs/requirements.txt
