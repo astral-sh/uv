@@ -73,26 +73,25 @@ impl Tool {
     }
 
     /// Returns the TOML table for this tool.
-    pub(crate) fn to_toml(&self) -> Table {
+    pub(crate) fn to_toml(&self) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
 
         table.insert("requirements", {
-            let requirements = match self.requirements.as_slice() {
+            let requirements = self
+                .requirements
+                .iter()
+                .map(|requirement| {
+                    serde::Serialize::serialize(
+                        &requirement,
+                        toml_edit::ser::ValueSerializer::new(),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let requirements = match requirements.as_slice() {
                 [] => Array::new(),
-                [requirement] => Array::from_iter([serde::Serialize::serialize(
-                    &requirement,
-                    toml_edit::ser::ValueSerializer::new(),
-                )
-                .unwrap()]),
-                requirements => {
-                    each_element_on_its_line_array(requirements.iter().map(|requirement| {
-                        serde::Serialize::serialize(
-                            &requirement,
-                            toml_edit::ser::ValueSerializer::new(),
-                        )
-                        .unwrap()
-                    }))
-                }
+                [requirement] => Array::from_iter([requirement]),
+                requirements => each_element_on_its_line_array(requirements.iter()),
             };
             value(requirements)
         });
@@ -111,7 +110,7 @@ impl Tool {
             value(entrypoints)
         });
 
-        table
+        Ok(table)
     }
 
     pub fn entrypoints(&self) -> &[ToolEntrypoint] {
