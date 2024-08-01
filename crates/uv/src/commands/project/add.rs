@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-
-use pep508_rs::ExtraName;
+use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
+use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::collections::hash_map::Entry;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -15,7 +16,7 @@ use uv_resolver::FlatIndex;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
-use uv_workspace::pyproject_mut::PyProjectTomlMut;
+use uv_workspace::pyproject_mut::{ArrayEdit, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace};
 
 use crate::commands::pip::operations::Modifications;
@@ -157,21 +158,25 @@ pub(crate) async fn add(
     // Add the requirements to the `pyproject.toml`.
     let existing = project.current_project().pyproject_toml();
     let mut pyproject = PyProjectTomlMut::from_toml(existing)?;
-    for mut req in requirements {
+    let mut edits = Vec::with_capacity(requirements.len());
+    for mut requirement in requirements {
         // Add the specified extras.
-        req.extras.extend(extras.iter().cloned());
-        req.extras.sort_unstable();
-        req.extras.dedup();
+        requirement.extras.extend(extras.iter().cloned());
+        requirement.extras.sort_unstable();
+        requirement.extras.dedup();
 
-        let (req, source) = if raw_sources {
+        let (requirement, source) = if raw_sources {
             // Use the PEP 508 requirement directly.
-            (pep508_rs::Requirement::from(req), None)
+            (pep508_rs::Requirement::from(requirement), None)
         } else {
             // Otherwise, try to construct the source.
-            let workspace = project.workspace().packages().contains_key(&req.name);
+            let workspace = project
+                .workspace()
+                .packages()
+                .contains_key(&requirement.name);
             let result = Source::from_requirement(
-                &req.name,
-                req.source.clone(),
+                &requirement.name,
+                requirement.source.clone(),
                 workspace,
                 editable,
                 rev.clone(),
@@ -182,29 +187,36 @@ pub(crate) async fn add(
             let source = match result {
                 Ok(source) => source,
                 Err(SourceError::UnresolvedReference(rev)) => {
-                    anyhow::bail!("Cannot resolve Git reference `{rev}` for requirement `{}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.", req.name)
+                    anyhow::bail!("Cannot resolve Git reference `{rev}` for requirement `{name}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.", name = requirement.name)
                 }
                 Err(err) => return Err(err.into()),
             };
 
             // Ignore the PEP 508 source.
-            let mut req = pep508_rs::Requirement::from(req);
-            req.clear_url();
+            let mut requirement = pep508_rs::Requirement::from(requirement);
+            requirement.clear_url();
 
-            (req, source)
+            (requirement, source)
         };
 
-        match dependency_type {
+        // Update the `pyproject.toml`.
+        let edit = match dependency_type {
             DependencyType::Production => {
-                pyproject.add_dependency(req, source)?;
+                pyproject.add_dependency(&requirement, source.as_ref())?
             }
-            DependencyType::Dev => {
-                pyproject.add_dev_dependency(req, source)?;
-            }
+            DependencyType::Dev => pyproject.add_dev_dependency(&requirement, source.as_ref())?,
             DependencyType::Optional(ref group) => {
-                pyproject.add_optional_dependency(req, group, source)?;
+                pyproject.add_optional_dependency(group, &requirement, source.as_ref())?
             }
-        }
+        };
+
+        // Keep track of the exact location of the edit.
+        edits.push(DependencyEdit {
+            dependency_type: &dependency_type,
+            requirement,
+            source,
+            edit,
+        });
     }
 
     // Save the modified `pyproject.toml`.
@@ -264,6 +276,78 @@ pub(crate) async fn add(
         Err(err) => return Err(err.into()),
     };
 
+    // Avoid modifying the user request further if `--raw-sources` is set.
+    if !raw_sources {
+        // Extract the minimum-supported version for each dependency.
+        let mut minimum_version =
+            FxHashMap::with_capacity_and_hasher(lock.lock.distributions().len(), FxBuildHasher);
+        for dist in lock.lock.distributions() {
+            let name = dist.name();
+            let version = dist.version();
+            match minimum_version.entry(name) {
+                Entry::Vacant(entry) => {
+                    entry.insert(version);
+                }
+                Entry::Occupied(mut entry) => {
+                    if version < *entry.get() {
+                        entry.insert(version);
+                    }
+                }
+            }
+        }
+
+        // If any of the requirements were added without version specifiers, add a lower bound.
+        let mut modified = false;
+        for edit in &edits {
+            // Only set a minimum version for newly-added dependencies (as opposed to updates).
+            let ArrayEdit::Add(index) = &edit.edit else {
+                continue;
+            };
+
+            // Only set a minimum version for registry requirements.
+            if edit.source.is_some() {
+                continue;
+            }
+
+            // Only set a minimum version for registry requirements.
+            let is_empty = match edit.requirement.version_or_url.as_ref() {
+                Some(VersionOrUrl::VersionSpecifier(version)) => version.is_empty(),
+                Some(VersionOrUrl::Url(_)) => false,
+                None => true,
+            };
+            if !is_empty {
+                continue;
+            }
+
+            // Set the minimum version.
+            let Some(minimum) = minimum_version.get(&edit.requirement.name) else {
+                continue;
+            };
+
+            match edit.dependency_type {
+                DependencyType::Production => {
+                    pyproject.set_dependency_minimum_version(*index, minimum)?;
+                }
+                DependencyType::Dev => {
+                    pyproject.set_dev_dependency_minimum_version(*index, minimum)?;
+                }
+                DependencyType::Optional(ref group) => {
+                    pyproject.set_optional_dependency_minimum_version(group, *index, minimum)?;
+                }
+            }
+
+            modified = true;
+        }
+
+        // Save the modified `pyproject.toml`.
+        if modified {
+            fs_err::write(
+                project.current_project().root().join("pyproject.toml"),
+                pyproject.to_string(),
+            )?;
+        }
+    }
+
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let extras = ExtrasSpecification::All;
@@ -288,6 +372,14 @@ pub(crate) async fn add(
     .await?;
 
     Ok(ExitStatus::Success)
+}
+
+#[derive(Debug, Clone)]
+struct DependencyEdit<'a> {
+    dependency_type: &'a DependencyType,
+    requirement: Requirement,
+    source: Option<Source>,
+    edit: ArrayEdit,
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.

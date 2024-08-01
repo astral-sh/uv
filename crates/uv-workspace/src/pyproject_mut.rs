@@ -2,10 +2,10 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::{ExtraName, PackageName, Requirement, VersionOrUrl};
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
-
-use pep508_rs::{ExtraName, PackageName, Requirement, VersionOrUrl};
 use uv_fs::PortablePath;
 
 use crate::pyproject::{DependencyType, PyProjectToml, Source};
@@ -32,8 +32,19 @@ pub enum Error {
     MalformedSources,
     #[error("Workspace in `pyproject.toml` is malformed")]
     MalformedWorkspace,
+    #[error("Expected a dependency at index {0}")]
+    MissingDependency(usize),
     #[error("Cannot perform ambiguous update; found multiple entries with matching package names")]
     Ambiguous,
+}
+
+/// The result of editing an array in a TOML document.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ArrayEdit {
+    /// An existing entry (at the given index) was updated.
+    Update(usize),
+    /// A new entry was added at the given index (typically, the end of the array).
+    Add(usize),
 }
 
 impl PyProjectTomlMut {
@@ -78,11 +89,13 @@ impl PyProjectTomlMut {
     }
 
     /// Adds a dependency to `project.dependencies`.
+    ///
+    /// Returns `true` if the dependency was added, `false` if it was updated.
     pub fn add_dependency(
         &mut self,
-        req: Requirement,
-        source: Option<Source>,
-    ) -> Result<(), Error> {
+        req: &Requirement,
+        source: Option<&Source>,
+    ) -> Result<ArrayEdit, Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
             .doc
@@ -96,21 +109,23 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedDependencies)?;
 
         let name = req.name.clone();
-        add_dependency(req, dependencies, source.is_some())?;
+        let edit = add_dependency(req, dependencies, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, &source)?;
+            self.add_source(&name, source)?;
         }
 
-        Ok(())
+        Ok(edit)
     }
 
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
+    ///
+    /// Returns `true` if the dependency was added, `false` if it was updated.
     pub fn add_dev_dependency(
         &mut self,
-        req: Requirement,
-        source: Option<Source>,
-    ) -> Result<(), Error> {
+        req: &Requirement,
+        source: Option<&Source>,
+    ) -> Result<ArrayEdit, Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
             .doc
@@ -128,22 +143,24 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedDependencies)?;
 
         let name = req.name.clone();
-        add_dependency(req, dev_dependencies, source.is_some())?;
+        let edit = add_dependency(req, dev_dependencies, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, &source)?;
+            self.add_source(&name, source)?;
         }
 
-        Ok(())
+        Ok(edit)
     }
 
     /// Adds a dependency to `project.optional-dependencies`.
+    ///
+    /// Returns `true` if the dependency was added, `false` if it was updated.
     pub fn add_optional_dependency(
         &mut self,
-        req: Requirement,
         group: &ExtraName,
-        source: Option<Source>,
-    ) -> Result<(), Error> {
+        req: &Requirement,
+        source: Option<&Source>,
+    ) -> Result<ArrayEdit, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
             .doc
@@ -163,11 +180,124 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedDependencies)?;
 
         let name = req.name.clone();
-        add_dependency(req, group, source.is_some())?;
+        let added = add_dependency(req, group, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, &source)?;
+            self.add_source(&name, source)?;
         }
+
+        Ok(added)
+    }
+
+    /// Set the minimum version for an existing dependency in `project.dependencies`.
+    pub fn set_dependency_minimum_version(
+        &mut self,
+        index: usize,
+        version: &Version,
+    ) -> Result<(), Error> {
+        // Get or create `project.dependencies`.
+        let dependencies = self
+            .doc
+            .entry("project")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedDependencies)?
+            .entry("dependencies")
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let Some(req) = dependencies.get(index) else {
+            return Err(Error::MissingDependency(index));
+        };
+
+        let mut req = req
+            .as_str()
+            .and_then(try_parse_requirement)
+            .ok_or(Error::MalformedDependencies)?;
+        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+            VersionSpecifier::greater_than_equal_version(version.clone()),
+        )));
+        dependencies.replace(index, req.to_string());
+
+        Ok(())
+    }
+
+    /// Set the minimum version for an existing dependency in `tool.uv.dev-dependencies`.
+    pub fn set_dev_dependency_minimum_version(
+        &mut self,
+        index: usize,
+        version: &Version,
+    ) -> Result<(), Error> {
+        // Get or create `tool.uv.dev-dependencies`.
+        let dev_dependencies = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("dev-dependencies")
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let Some(req) = dev_dependencies.get(index) else {
+            return Err(Error::MissingDependency(index));
+        };
+
+        let mut req = req
+            .as_str()
+            .and_then(try_parse_requirement)
+            .ok_or(Error::MalformedDependencies)?;
+        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+            VersionSpecifier::greater_than_equal_version(version.clone()),
+        )));
+        dev_dependencies.replace(index, req.to_string());
+
+        Ok(())
+    }
+
+    /// Set the minimum version for an existing dependency in `project.optional-dependencies`.
+    pub fn set_optional_dependency_minimum_version(
+        &mut self,
+        group: &ExtraName,
+        index: usize,
+        version: &Version,
+    ) -> Result<(), Error> {
+        // Get or create `project.optional-dependencies`.
+        let optional_dependencies = self
+            .doc
+            .entry("project")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedDependencies)?
+            .entry("optional-dependencies")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let group = optional_dependencies
+            .entry(group.as_ref())
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let Some(req) = group.get(index) else {
+            return Err(Error::MissingDependency(index));
+        };
+
+        let mut req = req
+            .as_str()
+            .and_then(try_parse_requirement)
+            .ok_or(Error::MalformedDependencies)?;
+        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+            VersionSpecifier::greater_than_equal_version(version.clone()),
+        )));
+        group.replace(index, req.to_string());
 
         Ok(())
     }
@@ -267,7 +397,7 @@ impl PyProjectTomlMut {
         Ok(requirements)
     }
 
-    // Remove a matching source from `tool.uv.sources`, if it exists.
+    /// Remove a matching source from `tool.uv.sources`, if it exists.
     fn remove_source(&mut self, name: &PackageName) -> Result<(), Error> {
         if let Some(sources) = self
             .doc
@@ -350,27 +480,37 @@ fn implicit() -> Item {
 }
 
 /// Adds a dependency to the given `deps` array.
-pub fn add_dependency(req: Requirement, deps: &mut Array, has_source: bool) -> Result<(), Error> {
+///
+/// Returns `true` if the dependency was added, `false` if it was updated.
+pub fn add_dependency(
+    req: &Requirement,
+    deps: &mut Array,
+    has_source: bool,
+) -> Result<ArrayEdit, Error> {
     // Find matching dependencies.
     let mut to_replace = find_dependencies(&req.name, deps);
     match to_replace.as_slice() {
-        [] => deps.push(req.to_string()),
+        [] => {
+            deps.push(req.to_string());
+            reformat_array_multiline(deps);
+            Ok(ArrayEdit::Add(deps.len() - 1))
+        }
         [_] => {
             let (i, mut old_req) = to_replace.remove(0);
             update_requirement(&mut old_req, req, has_source);
             deps.replace(i, old_req.to_string());
+            reformat_array_multiline(deps);
+            Ok(ArrayEdit::Update(i))
         }
         // Cannot perform ambiguous updates.
-        _ => return Err(Error::Ambiguous),
+        _ => Err(Error::Ambiguous),
     }
-    reformat_array_multiline(deps);
-    Ok(())
 }
 
 /// Update an existing requirement.
-fn update_requirement(old: &mut Requirement, new: Requirement, has_source: bool) {
+fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool) {
     // Add any new extras.
-    old.extras.extend(new.extras);
+    old.extras.extend(new.extras.iter().cloned());
     old.extras.sort_unstable();
     old.extras.dedup();
 
@@ -380,14 +520,14 @@ fn update_requirement(old: &mut Requirement, new: Requirement, has_source: bool)
     }
 
     // Update the source if a new one was specified.
-    match new.version_or_url {
+    match &new.version_or_url {
         None => {}
         Some(VersionOrUrl::VersionSpecifier(specifier)) if specifier.is_empty() => {}
-        Some(version_or_url) => old.version_or_url = Some(version_or_url),
+        Some(version_or_url) => old.version_or_url = Some(version_or_url.clone()),
     }
 
     // Update the marker expression.
-    if let Some(marker) = new.marker {
+    if let Some(marker) = new.marker.clone() {
         old.marker = Some(marker);
     }
 }
@@ -412,8 +552,8 @@ fn remove_dependency(req: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     removed
 }
 
-// Returns a `Vec` containing the all dependencies with the given name, along with their positions
-// in the array.
+/// Returns a `Vec` containing the all dependencies with the given name, along with their positions
+/// in the array.
 fn find_dependencies(name: &PackageName, deps: &Array) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
