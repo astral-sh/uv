@@ -249,6 +249,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 self.cache,
                 tags,
                 &HashStrategy::None,
+                self.build_options,
                 DistributionDatabase::new(
                     self.client,
                     self,

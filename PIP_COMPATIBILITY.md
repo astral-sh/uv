@@ -337,6 +337,15 @@ package is "allowed" in such cases without building its metadata.
 Both pip and uv allow editables requirements to be built and installed even when `--only-binary` is
 provided. For example, `uv pip install -e . --only-binary :all:` is allowed.
 
+## `--no-binary` enforcement
+
+The `--no-binary` argument is used to restrict installation to source distributions. When
+`--no-binary` is provided, uv will refuse to install pre-built binary distributions, but _will_
+reuse any binary distributions that are already present in the local cache.
+
+Additionally, and in contrast to pip, uv's resolver will still read metadata from pre-built binary
+distributions when `--no-binary` is provided.
+
 ## Bytecode compilation
 
 Unlike pip, uv does not compile `.py` files to `.pyc` files during installation by default (i.e., uv

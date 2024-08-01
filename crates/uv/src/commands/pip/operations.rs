@@ -400,6 +400,7 @@ pub(crate) async fn install(
             cache,
             tags,
             hasher,
+            build_options,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads, preview),
         )
         .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
