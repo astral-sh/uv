@@ -24,6 +24,8 @@ pub enum Error {
     Parse(#[from] Box<TomlError>),
     #[error("Failed to serialize `pyproject.toml`")]
     Serialize(#[from] Box<toml::ser::Error>),
+    #[error("Failed to deserialize `pyproject.toml`")]
+    Deserialize(#[from] Box<toml::de::Error>),
     #[error("Dependencies in `pyproject.toml` are malformed")]
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
@@ -35,11 +37,16 @@ pub enum Error {
 }
 
 impl PyProjectTomlMut {
-    /// Initialize a `PyProjectTomlMut` from a `PyProjectToml`.
+    /// Initialize a [`PyProjectTomlMut`] from a [`PyProjectToml`].
     pub fn from_toml(pyproject: &PyProjectToml) -> Result<Self, Error> {
         Ok(Self {
             doc: pyproject.raw.parse().map_err(Box::new)?,
         })
+    }
+
+    /// Initialize a [`PyProjectToml`] from a [`PyProjectTomlMut`].
+    pub fn to_toml(&self) -> Result<PyProjectToml, Error> {
+        Ok(toml::from_str(&self.doc.to_string()).map_err(Box::new)?)
     }
 
     /// Adds a project to the workspace.
