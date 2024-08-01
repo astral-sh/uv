@@ -104,7 +104,6 @@ nav:
       - configuration/index.md
       - Configuration files: configuration/files.md
       - Environment variables: configuration/environment.md
-      - Settings: settings.md
       - Authentication: configuration/authentication.md
   - Integration guides:
       - guides/integration/index.md
@@ -122,6 +121,7 @@ nav:
       - Compatibility with pip: pip/compatibility.md
   - Reference:
       - Commands: reference/cli.md
+      - Settings: settings.md
   - Policies:
       - Versioning: versioning.md
       - Platform support: platforms.md

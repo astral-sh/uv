@@ -43,3 +43,7 @@ persistent configuration.
 uv also accepts a `--config-file` command-line argument, which accepts a path to a `uv.toml` to use
 as the configuration file. When provided, this file will be used in place of _any_ discovered
 configuration files (e.g., user-level configuration will be ignored).
+
+## Settings
+
+See the [settings reference](../reference/settings.md) for an enumeration of the available settings.
