@@ -121,7 +121,7 @@ nav:
       - Compatibility with pip: pip/compatibility.md
   - Reference:
       - Commands: reference/cli.md
-      - Settings: settings.md
+      - Settings: reference/settings.md
   - Policies:
       - Versioning: versioning.md
       - Platform support: platforms.md
