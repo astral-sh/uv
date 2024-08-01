@@ -1,3 +1,4 @@
+<!-- prettier-ignore-start -->
 ## Global
 #### [`cache-dir`](#cache-dir) {: #cache-dir }
 
@@ -2449,3 +2450,4 @@ For more information on the glob syntax, refer to the [`glob` documentation](htt
 
 ---
 
+<!-- prettier-ignore-end -->

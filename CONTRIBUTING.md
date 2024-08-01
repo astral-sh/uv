@@ -186,6 +186,12 @@ Documentation is deployed automatically on release by publishing to the [Astral
 documentation](https://github.com/astral-sh/docs) repository, which itself deploys via Cloudflare
 Pages.
 
+After making changes to the documentation, format the markdown files with:
+
+```shell
+npx prettier --prose-wrap always --write "**/*.md"
+```
+
 ## Releases
 
 Releases can only be performed by Astral team members.
