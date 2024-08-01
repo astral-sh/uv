@@ -29,7 +29,7 @@ uv-warnings = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
+clap = { workspace = true, features = ["derive", "string"] }
 clap_complete_command = { workspace = true }
 serde = { workspace = true }
 url = { workspace = true }

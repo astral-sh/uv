@@ -147,3 +147,20 @@ See https://github.com/astral-sh/uv/issues/5130 */
 .md-nav__link--active {
   font-weight: bold;
 }
+
+/* Styling for the generated CLI reference page */
+.cli-reference dd {
+  margin-top: 0.1em;
+  margin-bottom: 0.5em;
+}
+.cli-reference dd p {
+  margin-block-start: 0.2em;
+  margin-block-end: 0.3em;
+}
+.cli-reference ul {
+  margin-bottom: 0.1em;
+}
+h3.cli-reference {
+  font-size: 1.1em;
+  margin: 0 0 0 0;
+}
