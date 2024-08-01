@@ -643,7 +643,7 @@ pub struct PipCompileArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, verbatim_doc_comment)]
+    #[arg(long, verbatim_doc_comment, help_heading = "Python options")]
     pub python: Option<String>,
 
     /// Install packages into the system Python environment.
@@ -742,7 +742,7 @@ pub struct PipCompileArgs {
     ///
     /// If a patch version is omitted, the minimum patch version is assumed. For example, `3.8` is
     /// mapped to `3.8.0`.
-    #[arg(long, short)]
+    #[arg(long, short, help_heading = "Python options")]
     pub python_version: Option<PythonVersion>,
 
     /// The platform for which requirements should be resolved.
@@ -902,7 +902,13 @@ pub struct PipSyncArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Install packages into the system Python environment.
@@ -1192,7 +1198,13 @@ pub struct PipInstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Install packages into the system Python environment.
@@ -1376,7 +1388,13 @@ pub struct PipUninstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
@@ -1462,7 +1480,13 @@ pub struct PipFreezeArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// List packages for the system Python.
@@ -1527,7 +1551,13 @@ pub struct PipListArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// List packages for the system Python.
@@ -1568,7 +1598,13 @@ pub struct PipCheckArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// List packages for the system Python.
@@ -1617,7 +1653,13 @@ pub struct PipShowArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// List packages for the system Python.
@@ -1669,7 +1711,13 @@ pub struct PipTreeArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// List packages for the system Python.
@@ -1709,7 +1757,13 @@ pub struct VenvArgs {
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Use the system Python to uninstall packages.
@@ -1891,7 +1945,13 @@ pub struct InitArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -1977,7 +2037,13 @@ pub struct RunArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Whether to show resolver and installer output from any environment modifications.
@@ -2051,7 +2117,13 @@ pub struct SyncArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -2086,7 +2158,13 @@ pub struct LockArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -2175,7 +2253,13 @@ pub struct AddArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -2227,7 +2311,13 @@ pub struct RemoveArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -2263,7 +2353,13 @@ pub struct TreeArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -2352,7 +2448,13 @@ pub struct ToolRunArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Whether to show resolver and installer output from any environment modifications.
@@ -2411,7 +2513,13 @@ pub struct ToolInstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
