@@ -139,12 +139,12 @@ fn tool_run_at_version() {
 
     // When `--from` is used, `@` is not treated as a version request
     uv_snapshot!(filters, context.tool_run()
-    .arg("--from")
-    .arg("pytest")
-    .arg("pytest@8.0.0")
-    .arg("--version")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .arg("--from")
+        .arg("pytest")
+        .arg("pytest@8.0.0")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -247,7 +247,7 @@ fn tool_run_suggest_valid_commands() {
      + fastapi-cli==0.0.1
      + importlib-metadata==1.7.0
      + zipp==3.18.1
-    warning: An executable named `fastapi-cli` is not provided by package `fastapi-cli`.
+    warning: Package `fastapi-cli` does not provide any executables.
     "###);
 }
 
@@ -262,13 +262,13 @@ fn tool_run_warn_executable_not_in_from() {
     filters.push(("(?s)fastapi` instead.*", "fastapi` instead."));
 
     uv_snapshot!(filters, context.tool_run()
-    .arg("--from")
-    .arg("fastapi")
-    .arg("fastapi")
-    .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
-    // (FastAPI 0.111 is only available from this date onwards)
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .arg("--from")
+        .arg("fastapi")
+        .arg("fastapi")
+        .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
+        // (FastAPI 0.111 is only available from this date onwards)
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -809,5 +809,58 @@ fn tool_run_list_installed() {
 
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning
+    "###);
+}
+
+/// By default, omit resolver and installer output.
+#[test]
+fn tool_run_without_output() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .env_remove("UV_SHOW_RESOLUTION")
+        .arg("--")
+        .arg("pytest")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    "###);
+}
+
+#[test]
+fn warn_no_executables_found() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("requests")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    The executable `requests` was not found.
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    warning: Package `requests` does not provide any executables.
     "###);
 }

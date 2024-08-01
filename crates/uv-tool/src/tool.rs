@@ -1,24 +1,75 @@
 use std::path::PathBuf;
 
-use path_slash::PathBufExt;
-use pypi_types::VerbatimParsedUrl;
 use serde::Deserialize;
 use toml_edit::value;
 use toml_edit::Array;
 use toml_edit::Table;
 use toml_edit::Value;
 
+use pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_fs::PortablePath;
+
 /// A tool entry.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
-    requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+    requirements: Vec<Requirement>,
     /// The Python requested by the user during installation.
     python: Option<String>,
     /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ToolWire {
+    pub requirements: Vec<RequirementWire>,
+    pub python: Option<String>,
+    pub entrypoints: Vec<ToolEntrypoint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum RequirementWire {
+    /// A [`Requirement`] following our uv-specific schema.
+    Requirement(Requirement),
+    /// A PEP 508-compatible requirement. We no longer write these, but there might be receipts out
+    /// there that still use them.
+    Deprecated(pep508_rs::Requirement<VerbatimParsedUrl>),
+}
+
+impl From<Tool> for ToolWire {
+    fn from(tool: Tool) -> Self {
+        Self {
+            requirements: tool
+                .requirements
+                .into_iter()
+                .map(RequirementWire::Requirement)
+                .collect(),
+            python: tool.python,
+            entrypoints: tool.entrypoints,
+        }
+    }
+}
+
+impl TryFrom<ToolWire> for Tool {
+    type Error = serde::de::value::Error;
+
+    fn try_from(tool: ToolWire) -> Result<Self, Self::Error> {
+        Ok(Self {
+            requirements: tool
+                .requirements
+                .into_iter()
+                .map(|req| match req {
+                    RequirementWire::Requirement(requirements) => requirements,
+                    RequirementWire::Deprecated(requirement) => Requirement::from(requirement),
+                })
+                .collect(),
+            python: tool.python,
+            entrypoints: tool.entrypoints,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
@@ -58,7 +109,7 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 impl Tool {
     /// Create a new `Tool`.
     pub fn new(
-        requirements: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+        requirements: Vec<Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
     ) -> Self {
@@ -72,18 +123,25 @@ impl Tool {
     }
 
     /// Returns the TOML table for this tool.
-    pub(crate) fn to_toml(&self) -> Table {
+    pub(crate) fn to_toml(&self) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
 
         table.insert("requirements", {
-            let requirements = match self.requirements.as_slice() {
+            let requirements = self
+                .requirements
+                .iter()
+                .map(|requirement| {
+                    serde::Serialize::serialize(
+                        &requirement,
+                        toml_edit::ser::ValueSerializer::new(),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let requirements = match requirements.as_slice() {
                 [] => Array::new(),
-                [requirement] => Array::from_iter([Value::from(requirement.to_string())]),
-                requirements => each_element_on_its_line_array(
-                    requirements
-                        .iter()
-                        .map(|requirement| Value::from(requirement.to_string())),
-                ),
+                [requirement] => Array::from_iter([requirement]),
+                requirements => each_element_on_its_line_array(requirements.iter()),
             };
             value(requirements)
         });
@@ -97,19 +155,19 @@ impl Tool {
                 self.entrypoints
                     .iter()
                     .map(ToolEntrypoint::to_toml)
-                    .map(toml_edit::Table::into_inline_table),
+                    .map(Table::into_inline_table),
             );
             value(entrypoints)
         });
 
-        table
+        Ok(table)
     }
 
     pub fn entrypoints(&self) -> &[ToolEntrypoint] {
         &self.entrypoints
     }
 
-    pub fn requirements(&self) -> &[pep508_rs::Requirement<VerbatimParsedUrl>] {
+    pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
     }
 }
@@ -127,7 +185,7 @@ impl ToolEntrypoint {
         table.insert(
             "install-path",
             // Use cross-platform slashes so the toml string type does not change
-            value(self.install_path.to_slash_lossy().to_string()),
+            value(PortablePath::from(&self.install_path).to_string()),
         );
         table
     }

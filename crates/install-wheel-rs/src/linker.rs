@@ -597,7 +597,7 @@ fn symlink_wheel_files(
 
         // The `RECORD` file is modified during installation, so we copy it instead of symlinking.
         if path.ends_with("RECORD") {
-            fs::copy(path, &out_path)?;
+            synchronized_copy(path, &out_path, locks)?;
             count += 1;
             continue;
         }

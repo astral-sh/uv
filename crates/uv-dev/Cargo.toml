@@ -23,6 +23,7 @@ pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
 uv-build = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
+uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
@@ -43,6 +44,7 @@ anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
 itertools = { workspace = true }
+markdown = "0.3.0"
 owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.0" }

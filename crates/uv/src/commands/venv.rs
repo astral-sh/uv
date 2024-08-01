@@ -20,16 +20,18 @@ use uv_configuration::{
     NoBuild, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_python::{
     request_from_version_file, EnvironmentPreference, PythonFetch, PythonInstallation,
-    PythonPreference, PythonRequest,
+    PythonPreference, PythonRequest, VersionRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
+use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{pip, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -130,23 +132,45 @@ async fn venv_impl(
     printer: Printer,
     relocatable: bool,
 ) -> miette::Result<ExitStatus> {
+    if preview.is_disabled() && relocatable {
+        warn_user_once!("`--relocatable` is experimental and may change without warning");
+    }
+
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
         .native_tls(native_tls);
 
-    let client_builder_clone = client_builder.clone();
-
     let reporter = PythonDownloadReporter::single(printer);
 
+    // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
+
+    // (2) Request from `.python-version`
     if preview.is_enabled() && interpreter_request.is_none() {
         interpreter_request =
             request_from_version_file(&std::env::current_dir().into_diagnostic()?)
                 .await
                 .into_diagnostic()?;
     }
-    if preview.is_disabled() && relocatable {
-        warn_user_once!("`--relocatable` is experimental and may change without warning");
+
+    // (3) `Requires-Python` in `pyproject.toml`
+    if preview.is_enabled() && interpreter_request.is_none() {
+        let project = match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
+            Ok(project) => Some(project),
+            Err(WorkspaceError::MissingPyprojectToml) => None,
+            Err(WorkspaceError::NonWorkspace(_)) => None,
+            Err(err) => return Err(err).into_diagnostic(),
+        };
+
+        if let Some(project) = project {
+            interpreter_request = find_requires_python(project.workspace())
+                .into_diagnostic()?
+                .as_ref()
+                .map(RequiresPython::specifiers)
+                .map(|specifiers| {
+                    PythonRequest::Version(VersionRequest::Range(specifiers.clone()))
+                });
+        }
     }
 
     // Locate the Python interpreter to use in the environment
@@ -217,7 +241,7 @@ async fn venv_impl(
         }
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::from(client_builder_clone)
+        let client = RegistryClientBuilder::from(client_builder)
             .cache(cache.clone())
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
@@ -310,7 +334,7 @@ async fn venv_impl(
     // Determine the appropriate activation command.
     let activation = match Shell::from_env() {
         None => None,
-        Some(Shell::Bash | Shell::Zsh) => Some(format!(
+        Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
             "source {}",
             shlex_posix(venv.scripts().join("activate"))
         )),

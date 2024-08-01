@@ -31,7 +31,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 
 use crate::commands::project::resolve_names;
 use crate::commands::{
-    project, project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
+    project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
 };
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -59,6 +59,7 @@ pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
     with: &[RequirementsSource],
+    show_resolution: bool,
     python: Option<String>,
     settings: ResolverInstallerSettings,
     invocation_source: ToolRunCommand,
@@ -106,7 +107,7 @@ pub(crate) async fn run(
         concurrency,
         native_tls,
         cache,
-        printer,
+        printer.filter(show_resolution),
     )
     .await?;
 
@@ -157,7 +158,17 @@ pub(crate) async fn run(
                         "The executable `{}` was not found.",
                         executable.to_string_lossy().cyan(),
                     )?;
-                    if !entrypoints.is_empty() {
+                    if entrypoints.is_empty() {
+                        warn_user!(
+                            "Package `{}` does not provide any executables.",
+                            from.name.red()
+                        );
+                    } else {
+                        warn_user!(
+                            "An executable named `{}` is not provided by package `{}`.",
+                            executable.to_string_lossy().cyan(),
+                            from.name.red()
+                        );
                         writeln!(
                             printer.stdout(),
                             "The following executables are provided by `{}`:",
@@ -229,13 +240,7 @@ fn warn_executable_not_provided_by_package(
             .any(|package| package.name() == from_package)
         {
             match packages.as_slice() {
-                [] => {
-                    warn_user!(
-                        "An executable named `{}` is not provided by package `{}`.",
-                        executable.cyan(),
-                        from_package.red()
-                    );
-                }
+                [] => {}
                 [package] => {
                     let suggested_command = format!(
                         "{invocation_source} --from {} {}",
@@ -315,7 +320,7 @@ async fn get_or_create_environment(
 
     // Resolve the `from` requirement.
     let from = {
-        project::resolve_names(
+        resolve_names(
             vec![RequirementsSpecification::parse_package(from)?],
             &interpreter,
             settings,

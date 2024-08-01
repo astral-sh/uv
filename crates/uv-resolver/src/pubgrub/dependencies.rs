@@ -1,11 +1,10 @@
 use std::iter;
 
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 use tracing::warn;
 
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::MarkerTree;
 use pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
     RequirementSource, VerbatimParsedUrl,
@@ -15,7 +14,7 @@ use uv_normalize::{ExtraName, PackageName};
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::{PubGrubSpecifier, ResolveError};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Range<Version>,
@@ -30,10 +29,6 @@ pub(crate) struct PubGrubDependency {
 }
 
 impl PubGrubDependency {
-    pub(crate) fn and_markers(&mut self, marker: &MarkerTree) {
-        self.package.and_markers(marker);
-    }
-
     pub(crate) fn from_requirement<'a>(
         requirement: &'a Requirement,
         source_name: Option<&'a PackageName>,

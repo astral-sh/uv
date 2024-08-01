@@ -101,7 +101,7 @@ pub(crate) enum ProjectError {
 pub(crate) fn find_requires_python(
     workspace: &Workspace,
 ) -> Result<Option<RequiresPython>, uv_resolver::RequiresPythonError> {
-    RequiresPython::union(workspace.packages().values().filter_map(|member| {
+    RequiresPython::intersection(workspace.packages().values().filter_map(|member| {
         member
             .pyproject_toml()
             .project

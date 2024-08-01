@@ -2,13 +2,13 @@
 
 ## Resolution strategy
 
-By default, uv follows the standard Python dependency resolution strategy of preferring the
-latest compatible version of each package. For example, `uv pip install flask>=2.0.0` will
-install the latest version of Flask (at time of writing: `3.0.0`).
+By default, uv follows the standard Python dependency resolution strategy of preferring the latest
+compatible version of each package. For example, `uv pip install flask>=2.0.0` will install the
+latest version of Flask (at time of writing: `3.0.0`).
 
 However, uv's resolution strategy can be configured to support alternative workflows. With
-`--resolution=lowest`, uv will install the **lowest** compatible versions for all dependencies,
-both **direct** and **transitive**. Alternatively, `--resolution=lowest-direct` will opt for the
+`--resolution=lowest`, uv will install the **lowest** compatible versions for all dependencies, both
+**direct** and **transitive**. Alternatively, `--resolution=lowest-direct` will opt for the
 **lowest** compatible versions for all **direct** dependencies, while using the **latest**
 compatible versions for all **transitive** dependencies. This distinction can be particularly useful
 for library authors who wish to test against the lowest supported versions of direct dependencies
@@ -68,36 +68,37 @@ By default, uv will accept pre-release versions during dependency resolution in 
    (e.g., `flask>=2.0.0rc1`).
 1. If _all_ published versions of a package are pre-releases.
 
-If dependency resolution fails due to a transitive pre-release, uv will prompt the user to
-re-run with `--prerelease=allow`, to allow pre-releases for all dependencies.
+If dependency resolution fails due to a transitive pre-release, uv will prompt the user to re-run
+with `--prerelease=allow`, to allow pre-releases for all dependencies.
 
 Alternatively, you can add the transitive dependency to your `requirements.in` file with a
 pre-release specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific
 dependency.
 
-Pre-releases are [notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions)
-to model, and are a frequent source of bugs in other packaging tools. uv's pre-release handling
-is _intentionally_ limited and _intentionally_ requires user opt-in for pre-releases, to ensure
-correctness.
+Pre-releases are [notoriously
+difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to model, and are a
+frequent source of bugs in other packaging tools. uv's pre-release handling is _intentionally_
+limited and _intentionally_ requires user opt-in for pre-releases, to ensure correctness.
 
 For more, see ["Pre-release compatibility"](../pip/compatibility.md#pre-release-compatibility)
 
 ## Dependency overrides
 
-Historically, `pip` has supported "constraints" (`-c constraints.txt`), which allows users to
-narrow the set of acceptable versions for a given package.
+Historically, `pip` has supported "constraints" (`-c constraints.txt`), which allows users to narrow
+the set of acceptable versions for a given package.
 
 uv supports constraints, but also takes this concept further by allowing users to _override_ the
-acceptable versions of a package across the dependency tree via overrides (`--override overrides.txt`).
+acceptable versions of a package across the dependency tree via overrides (`--override
+overrides.txt`).
 
-In short, overrides allow the user to lie to the resolver by overriding the declared dependencies
-of a package. Overrides are a useful last resort for cases in which the user knows that a
-dependency is compatible with a newer version of a package than the package declares, but the
-package has not yet been updated to declare that compatibility.
+In short, overrides allow the user to lie to the resolver by overriding the declared dependencies of
+a package. Overrides are a useful last resort for cases in which the user knows that a dependency is
+compatible with a newer version of a package than the package declares, but the package has not yet
+been updated to declare that compatibility.
 
-For example, if a transitive dependency declares `pydantic>=1.0,<2.0`, but the user knows that
-the package is compatible with `pydantic>=2.0`, the user can override the declared dependency
-with `pydantic>=2.0,<3` to allow the resolver to continue.
+For example, if a transitive dependency declares `pydantic>=1.0,<2.0`, but the user knows that the
+package is compatible with `pydantic>=2.0`, the user can override the declared dependency with
+`pydantic>=2.0,<3` to allow the resolver to continue.
 
 While constraints are purely _additive_, and thus cannot _expand_ the set of acceptable versions for
 a package, overrides _can_ expand the set of acceptable versions for a package, providing an escape
@@ -105,34 +106,34 @@ hatch for erroneous upper version bounds.
 
 ## Multi-platform resolution
 
-By default, uv's `pip-compile` command produces a resolution that's known to be compatible with
-the current platform and Python version. 
+By default, uv's `pip-compile` command produces a resolution that's known to be compatible with the
+current platform and Python version. 
 
-uv also supports a machine agnostic resolution. uv supports writing multiplatform resolutions in both a `requirements.txt` format
-and uv-specific (`uv.lock`) format.
+uv also supports a machine agnostic resolution. uv supports writing multiplatform resolutions in
+both a `requirements.txt` format and uv-specific (`uv.lock`) format.
 
-If using uv's `pip compile`, the `--universal` flag will generate a resolution that is compatible with all operating systems, 
-architectures, and Python implementations. In universal mode, the current Python version (or provided `--python-version`)
-will be treated as a lower bound. For example, `--universal --python-version 3.7` would produce a universal resolution 
-for Python 3.7 and later.
+If using uv's `pip compile`, the `--universal` flag will generate a resolution that is compatible
+with all operating systems, architectures, and Python implementations. In universal mode, the
+current Python version (or provided `--python-version`) will be treated as a lower bound. For
+example, `--universal --python-version 3.7` would produce a universal resolution for Python 3.7 and
+later.
 
-If using uv's [project](../guides/projects.md) interface, the machine agnostic resolution will be used
-automatically and a `uv.lock` file will be created. The lock file can also be created with an explicit `uv lock`
-invocation.
+If using uv's [project](../guides/projects.md) interface, the machine agnostic resolution will be
+used automatically and a `uv.lock` file will be created. The lockfile can also be created with an
+explicit `uv lock` invocation.
 
 uv also supports resolving for specific alternate platforms and Python versions via the
 `--python-platform` and `--python-version` command line arguments.
 
-For example, if you're running uv on macOS, but want to resolve for Linux, you can run
-`uv pip compile --python-platform=linux requirements.in` to produce a `manylinux2014`-compatible
-resolution.
+For example, if you're running uv on macOS, but want to resolve for Linux, you can run `uv pip
+compile --python-platform=linux requirements.in` to produce a `manylinux2014`-compatible resolution.
 
-Similarly, if you're running uv on Python 3.9, but want to resolve for Python 3.8, you can run
-`uv pip compile --python-version=3.8 requirements.in` to produce a Python 3.8-compatible resolution.
+Similarly, if you're running uv on Python 3.9, but want to resolve for Python 3.8, you can run `uv
+pip compile --python-version=3.8 requirements.in` to produce a Python 3.8-compatible resolution.
 
 The `--python-platform` and `--python-version` arguments can be combined to produce a resolution for
-a specific platform and Python version, enabling users to generate multiple lockfiles for
-different environments from a single machine.
+a specific platform and Python version, enabling users to generate multiple lockfiles for different
+environments from a single machine.
 
 !!! note
 
@@ -146,13 +147,15 @@ different environments from a single machine.
 
 ## Time-restricted reproducible resolutions
 
-uv supports an `--exclude-newer` option to limit resolution to distributions published before a specific
-date, allowing reproduction of installations regardless of new package releases. The date may be specified
-as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g., `2006-12-02T02:07:43Z`) or
-UTC date in the same format (e.g., `2006-12-02`).
+uv supports an `--exclude-newer` option to limit resolution to distributions published before a
+specific date, allowing reproduction of installations regardless of new package releases. The date
+may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g.,
+`2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
 
-Note the package index must support the `upload-time` field as specified in [`PEP 700`](https://peps.python.org/pep-0700/).
-If the field is not present for a given distribution, the distribution will be treated as unavailable.
+Note the package index must support the `upload-time` field as specified in [`PEP
+700`](https://peps.python.org/pep-0700/). If the field is not present for a given distribution, the
+distribution will be treated as unavailable.
 
-To ensure reproducibility, messages for unsatisfiable resolutions will not mention that distributions were excluded
-due to the `--exclude-newer` flag — newer distributions will be treated as if they do not exist.
+To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
+distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
+as if they do not exist.

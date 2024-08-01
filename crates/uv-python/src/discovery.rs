@@ -61,12 +61,11 @@ pub enum PythonRequest {
 pub enum PythonPreference {
     /// Only use managed Python installations; never use system Python installations.
     OnlyManaged,
-    /// Prefer installed Python installations, only download managed Python installations if no system Python installation is found.
-    ///
-    /// Installed managed Python installations are still preferred over system Python installations.
     #[default]
-    Installed,
-    /// Prefer managed Python installations over system Python installations, even if fetching is required.
+    /// Prefer managed Python installations over system Python installations.
+    ///
+    /// System Python installations are still preferred over downloading managed Python versions.
+    /// Use `only-managed` to always fetch a managed Python version.
     Managed,
     /// Prefer system Python installations over managed Python installations.
     ///
@@ -305,7 +304,7 @@ fn python_executables_from_installed<'a>(
 
     match preference {
         PythonPreference::OnlyManaged => Box::new(from_managed_installations),
-        PythonPreference::Managed | PythonPreference::Installed => Box::new(
+        PythonPreference::Managed => Box::new(
             from_managed_installations
                 .chain(from_search_path)
                 .chain(from_py_launcher),
@@ -923,12 +922,13 @@ fn warn_on_unsupported_python(interpreter: &Interpreter) {
 pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     use std::os::windows::prelude::OsStrExt;
-    use winapi::um::fileapi::{CreateFileW, OPEN_EXISTING};
-    use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
-    use winapi::um::ioapiset::DeviceIoControl;
-    use winapi::um::winbase::{FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT};
-    use winapi::um::winioctl::FSCTL_GET_REPARSE_POINT;
-    use winapi::um::winnt::{FILE_ATTRIBUTE_REPARSE_POINT, MAXIMUM_REPARSE_DATA_BUFFER_SIZE};
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_FLAG_OPEN_REPARSE_POINT, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, OPEN_EXISTING,
+    };
+    use windows_sys::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
+    use windows_sys::Win32::System::IO::DeviceIoControl;
 
     // The path must be absolute.
     if !path.is_absolute() {
@@ -988,7 +988,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
             std::ptr::null_mut(),
             OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-            std::ptr::null_mut(),
+            0,
         )
     };
 
@@ -1271,7 +1271,7 @@ impl PythonPreference {
 
         match self {
             PythonPreference::OnlyManaged => matches!(source, PythonSource::Managed),
-            Self::Managed | Self::System | Self::Installed => matches!(
+            Self::Managed | Self::System => matches!(
                 source,
                 PythonSource::Managed | PythonSource::SearchPath | PythonSource::PyLauncher
             ),
@@ -1294,7 +1294,7 @@ impl PythonPreference {
     }
 
     pub(crate) fn allows_managed(self) -> bool {
-        matches!(self, Self::Managed | Self::OnlyManaged | Self::Installed)
+        matches!(self, Self::Managed | Self::OnlyManaged)
     }
 }
 
@@ -1602,7 +1602,7 @@ impl PythonPreference {
     fn sources(self) -> &'static [&'static str] {
         match self {
             Self::OnlyManaged => &["managed installations"],
-            Self::Managed | Self::Installed | Self::System => {
+            Self::Managed | Self::System => {
                 if cfg!(windows) {
                     &["managed installations", "system path", "`py` launcher"]
                 } else {

@@ -1,7 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter, Write};
 use std::ops::Bound;
@@ -13,8 +13,7 @@ use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use pubgrub::range::Range;
-use pubgrub::solver::{Incompatibility, State};
+use pubgrub::{Incompatibility, Range, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -60,6 +59,7 @@ pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
+use crate::resolver::groups::Groups;
 pub(crate) use crate::resolver::index::FxOnceMap;
 pub use crate::resolver::index::InMemoryIndex;
 pub use crate::resolver::provider::{
@@ -74,6 +74,7 @@ use crate::{DependencyMode, Exclusions, FlatIndex, Options};
 mod availability;
 mod batch_prefetch;
 mod fork_map;
+mod groups;
 mod index;
 mod locals;
 mod provider;
@@ -93,7 +94,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
-    dev: Vec<GroupName>,
+    groups: Groups,
     preferences: Preferences,
     git: GitResolver,
     exclusions: Exclusions,
@@ -224,11 +225,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
                 markers.marker_environment(),
                 options.dependency_mode,
             ),
+            groups: Groups::from_manifest(&manifest, markers.marker_environment()),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
-            dev: manifest.dev,
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -324,7 +325,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.requires_python.clone(),
         );
         let mut preferences = self.preferences.clone();
-        let mut forked_states = vec![state];
+        let mut forked_states = if let ResolverMarkers::Universal {
+            fork_preferences: Some(fork_preferences),
+        } = &self.markers
+        {
+            fork_preferences
+                .iter()
+                .map(|fork_preference| state.clone().with_markers(fork_preference.clone()))
+                .collect()
+        } else {
+            vec![state]
+        };
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
@@ -379,11 +390,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     let resolution = state.into_resolution();
 
-                    // Walk over the selected versions, and mark them as preferences.
+                    // Walk over the selected versions, and mark them as preferences. We have to
+                    // add forks back as to not override the preferences from the lockfile for
+                    // the next fork
                     for (package, version) in &resolution.nodes {
-                        if let Entry::Vacant(entry) = preferences.entry(package.name.clone()) {
-                            entry.insert(version.clone().into());
-                        }
+                        preferences.insert(
+                            package.name.clone(),
+                            resolution.markers.fork_markers().cloned(),
+                            version.clone(),
+                        );
                     }
 
                     // If another fork had the same resolution, merge into that fork instead.
@@ -403,7 +418,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .clone());
                         existing_resolution.markers = normalize(new_markers, None)
                             .map(ResolverMarkers::Fork)
-                            .unwrap_or(ResolverMarkers::Universal);
+                            .unwrap_or(ResolverMarkers::universal(None));
                         continue 'FORK;
                     }
 
@@ -575,6 +590,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state.markers,
                             start.elapsed().as_secs_f32()
                         );
+
                         for new_fork_state in self.forks_to_fork_states(
                             state,
                             &version,
@@ -1155,7 +1171,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Available(deps) => ForkedDependencies::Unforked(deps),
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             }),
-            ResolverMarkers::Universal | ResolverMarkers::Fork(_) => Ok(result?.fork()),
+            ResolverMarkers::Universal { .. } | ResolverMarkers::Fork(_) => Ok(result?.fork()),
         }
     }
 
@@ -1308,7 +1324,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // add a dependency from it to the same package with the group
                 // enabled.
                 if extra.is_none() && dev.is_none() {
-                    for group in &self.dev {
+                    for group in self.groups.get(name).into_iter().flatten() {
                         if !metadata.dev_dependencies.contains_key(group) {
                             continue;
                         }
@@ -1770,7 +1786,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     // We don't have access to the fork state when prefetching, so assume that
                     // pre-release versions are allowed.
-                    &ResolverMarkers::Universal,
+                    &ResolverMarkers::universal(None),
                 ) else {
                     return Ok(None);
                 };
@@ -1883,7 +1899,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     fn convert_no_solution_err(
         &self,
-        mut err: pubgrub::error::NoSolutionError<UvDependencyProvider>,
+        mut err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
         visited: &FxHashSet<PackageName>,
@@ -2243,7 +2259,7 @@ impl ForkState {
         let mut edges: FxHashSet<ResolutionDependencyEdge> = FxHashSet::default();
         for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
-                let pubgrub::solver::Kind::FromDependencyOf(
+                let pubgrub::Kind::FromDependencyOf(
                     ref self_package,
                     ref self_range,
                     ref dependency_package,
@@ -2301,7 +2317,36 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
-                            marker: None,
+                            // This propagates markers from the fork to
+                            // packages without any markers. These might wind
+                            // up be duplicative (and are even further merged
+                            // via disjunction when a ResolutionGraph is
+                            // constructed), but normalization should simplify
+                            // most such cases.
+                            //
+                            // In a previous implementation of marker
+                            // propagation, markers were propagated at the
+                            // time a fork was created. But this was crucially
+                            // missing a key detail: the specific version of
+                            // a package outside of a fork can be determined
+                            // by the forks of its dependencies, even when
+                            // that package is not part of a fork at the time
+                            // the forks were created. In that case, it was
+                            // possible for two versions of the same package
+                            // to be unconditionally included in a resolution,
+                            // which must never be.
+                            //
+                            // See https://github.com/astral-sh/uv/pull/5583
+                            // for an example of where this occurs with
+                            // `Sphinx`.
+                            //
+                            // Here, instead, we do the marker propagation
+                            // after resolution has completed. This relies
+                            // on the fact that the markers aren't otherwise
+                            // needed during resolution (which I believe is
+                            // true), but is a more robust approach that should
+                            // capture all cases.
+                            marker: self.markers.fork_markers().cloned(),
                         };
                         edges.insert(edge);
                     }
@@ -2476,6 +2521,12 @@ impl Resolution {
         // is still the same graph since the presence or absence of the bar -> foo edge cannot
         // change which packages and versions are installed.
         self.nodes == other.nodes && self.edges == other.edges
+    }
+}
+
+impl ResolutionPackage {
+    pub(crate) fn is_base(&self) -> bool {
+        self.extra.is_none() && self.dev.is_none()
     }
 }
 
@@ -2730,9 +2781,12 @@ impl Dependencies {
             forks = new_forks;
             diverging_packages.push(name.clone());
         }
-        for fork in &mut forks {
-            fork.propagate_markers();
-        }
+
+        // Prioritize the forks. Prefer solving forks with lower Python bounds, since they're more
+        // likely to produce solutions that work for forks with higher Python bounds (whereas the
+        // inverse is not true).
+        forks.sort();
+
         ForkedDependencies::Forked {
             forks,
             diverging_packages,
@@ -2775,7 +2829,7 @@ enum ForkedDependencies {
 /// have the same name and because the marker expressions are disjoint,
 /// a fork occurs. One fork will contain `a<2` but not `a>=2`, while
 /// the other fork will contain `a>=2` but not `a<2`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct Fork {
     /// The list of dependencies for this fork, guaranteed to be conflict
     /// free. (i.e., There are no two packages with the same name with
@@ -2794,6 +2848,50 @@ struct Fork {
     ///
     /// (This doesn't include any marker expressions from a parent fork.)
     markers: MarkerTree,
+}
+
+impl Ord for Fork {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // A higher `requires-python` requirement indicates a _lower-priority_ fork. We'd prefer
+        // to solve `<3.7` before solving `>=3.7`, since the resolution produced by the former might
+        // work for the latter, but the inverse is unlikely to be true.
+        let self_bound = requires_python_marker(&self.markers).unwrap_or_default();
+        let other_bound = requires_python_marker(&other.markers).unwrap_or_default();
+
+        other_bound.cmp(&self_bound).then_with(|| {
+            // If there's no difference, prioritize forks with upper bounds. We'd prefer to solve
+            // `numpy <= 2` before solving `numpy >= 1`, since the resolution produced by the former
+            // might work for the latter, but the inverse is unlikely to be true due to maximum
+            // version selection. (Selecting `numpy==2.0.0` would satisfy both forks, but selecting
+            // the latest `numpy` would not.)
+            let self_upper_bounds = self
+                .dependencies
+                .iter()
+                .filter(|dep| {
+                    dep.version
+                        .bounding_range()
+                        .is_some_and(|(_, upper)| !matches!(upper, Bound::Unbounded))
+                })
+                .count();
+            let other_upper_bounds = other
+                .dependencies
+                .iter()
+                .filter(|dep| {
+                    dep.version
+                        .bounding_range()
+                        .is_some_and(|(_, upper)| !matches!(upper, Bound::Unbounded))
+                })
+                .count();
+
+            self_upper_bounds.cmp(&other_upper_bounds)
+        })
+    }
+}
+
+impl PartialOrd for Fork {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Fork {
@@ -2826,21 +2924,6 @@ impl Fork {
                 .marker()
                 .map_or(true, |pkg_marker| !is_disjoint(pkg_marker, &self.markers))
         });
-    }
-
-    /// This attaches the marker in this fork to each of its dependencies.
-    ///
-    /// In effect, this "propagates" the markers to each individual dependency
-    /// that was spawned as the result of a fork. While in many cases the
-    /// markers will be combined when multiple forks choose the same version of
-    /// a dependency, in some cases, the version chosen can be specific to a
-    /// particular set of marker environments. In this case, the dependencies
-    /// will be platform specific and thus require marker expressions to appear
-    /// in the lock file.
-    fn propagate_markers(&mut self) {
-        for dependency in &mut self.dependencies {
-            dependency.and_markers(&self.markers);
-        }
     }
 }
 

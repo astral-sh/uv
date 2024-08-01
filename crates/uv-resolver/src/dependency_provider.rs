@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 
-use pubgrub::range::Range;
-use pubgrub::solver::{Dependencies, DependencyProvider};
+use pubgrub::{Dependencies, DependencyProvider, Range};
 
 use pep440_rs::Version;
 

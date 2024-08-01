@@ -1001,14 +1001,7 @@
           ]
         },
         {
-          "description": "Prefer installed Python installations, only download managed Python installations if no system Python installation is found.\n\nInstalled managed Python installations are still preferred over system Python installations.",
-          "type": "string",
-          "enum": [
-            "installed"
-          ]
-        },
-        {
-          "description": "Prefer managed Python installations over system Python installations, even if fetching is required.",
+          "description": "Prefer managed Python installations over system Python installations.\n\nSystem Python installations are still preferred over downloading managed Python versions. Use `only-managed` to always fetch a managed Python version.",
           "type": "string",
           "enum": [
             "managed"

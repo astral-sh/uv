@@ -88,13 +88,6 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let request = request.unwrap_or_default();
 
-        // Perform a fetch aggressively if managed Python is preferred
-        if matches!(preference, PythonPreference::Managed) && python_fetch.is_automatic() {
-            if let Some(request) = PythonDownloadRequest::from_request(&request) {
-                return Self::fetch(request.fill(), client_builder, cache, reporter).await;
-            }
-        }
-
         // Search for the installation
         match Self::find(&request, environments, preference, cache) {
             Ok(venv) => Ok(venv),

@@ -3,7 +3,7 @@ use std::collections::Bound;
 use std::ops::Deref;
 
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 
 use distribution_filename::WheelFilename;
 use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifiers};
@@ -64,19 +64,19 @@ impl RequiresPython {
         })
     }
 
-    /// Returns a [`RequiresPython`] to express the union of the given version specifiers.
+    /// Returns a [`RequiresPython`] to express the intersection of the given version specifiers.
     ///
-    /// For example, given `>=3.8` and `>=3.9`, this would return `>=3.8`.
-    pub fn union<'a>(
+    /// For example, given `>=3.8` and `>=3.9`, this would return `>=3.9`.
+    pub fn intersection<'a>(
         specifiers: impl Iterator<Item = &'a VersionSpecifiers>,
     ) -> Result<Option<Self>, RequiresPythonError> {
-        // Convert to PubGrub range and perform a union.
+        // Convert to PubGrub range and perform an intersection.
         let range = specifiers
             .into_iter()
             .map(crate::pubgrub::PubGrubSpecifier::from_release_specifiers)
             .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
                 if let Some(range) = range {
-                    Some(range.union(&requires_python.into()))
+                    Some(range.intersection(&requires_python.into()))
                 } else {
                     Some(requires_python.into())
                 }
@@ -107,11 +107,14 @@ impl RequiresPython {
     /// Narrow the [`RequiresPython`] to the given version, if it's stricter (i.e., greater) than
     /// the current target.
     pub fn narrow(&self, target: &RequiresPythonBound) -> Option<Self> {
-        let target = VersionSpecifiers::from(VersionSpecifier::from_lower_bound(target)?);
-        Self::union(std::iter::once(&target))
-            .ok()
-            .flatten()
-            .filter(|next| next.bound > self.bound)
+        if target > &self.bound {
+            Some(Self {
+                specifiers: VersionSpecifiers::from(VersionSpecifier::from_lower_bound(target)?),
+                bound: target.clone(),
+            })
+        } else {
+            None
+        }
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version.
@@ -350,6 +353,12 @@ impl<'de> serde::Deserialize<'de> for RequiresPython {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequiresPythonBound(Bound<Version>);
 
+impl Default for RequiresPythonBound {
+    fn default() -> Self {
+        Self(Bound::Unbounded)
+    }
+}
+
 impl RequiresPythonBound {
     pub fn new(bound: Bound<Version>) -> Self {
         Self(match bound {
@@ -388,9 +397,10 @@ impl Ord for RequiresPythonBound {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self.as_ref(), other.as_ref()) {
             (Bound::Included(a), Bound::Included(b)) => a.cmp(b),
-            (Bound::Included(_), Bound::Excluded(_)) => Ordering::Less,
-            (Bound::Excluded(_), Bound::Included(_)) => Ordering::Greater,
+            (Bound::Included(a), Bound::Excluded(b)) => a.cmp(b).then(Ordering::Less),
+            (Bound::Excluded(a), Bound::Included(b)) => a.cmp(b).then(Ordering::Greater),
             (Bound::Excluded(a), Bound::Excluded(b)) => a.cmp(b),
+            (Bound::Unbounded, Bound::Unbounded) => Ordering::Equal,
             (Bound::Unbounded, _) => Ordering::Less,
             (_, Bound::Unbounded) => Ordering::Greater,
         }
@@ -399,19 +409,19 @@ impl Ord for RequiresPythonBound {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+    use std::collections::Bound;
     use std::str::FromStr;
 
     use distribution_filename::WheelFilename;
-    use pep440_rs::VersionSpecifiers;
+    use pep440_rs::{Version, VersionSpecifiers};
 
-    use crate::RequiresPython;
+    use crate::{RequiresPython, RequiresPythonBound};
 
     #[test]
     fn requires_python_included() {
         let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
-            .unwrap()
-            .unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
         let wheel_names = &[
             "bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl",
             "black-24.4.2-cp310-cp310-win_amd64.whl",
@@ -428,9 +438,7 @@ mod tests {
         }
 
         let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
-        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
-            .unwrap()
-            .unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
         let wheel_names = &["dearpygui-1.11.1-cp312-cp312-win_amd64.whl"];
         for wheel_name in wheel_names {
             assert!(
@@ -443,9 +451,7 @@ mod tests {
     #[test]
     fn requires_python_dropped() {
         let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
-            .unwrap()
-            .unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
         let wheel_names = &[
             "PySocks-1.7.1-py27-none-any.whl",
             "black-24.4.2-cp39-cp39-win_amd64.whl",
@@ -462,15 +468,34 @@ mod tests {
         }
 
         let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
-        let requires_python = RequiresPython::union(std::iter::once(&version_specifiers))
-            .unwrap()
-            .unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
         let wheel_names = &["dearpygui-1.11.1-cp310-cp310-win_amd64.whl"];
         for wheel_name in wheel_names {
             assert!(
                 !requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
                 "{wheel_name}"
             );
+        }
+    }
+
+    #[test]
+    fn ordering() {
+        let versions = &[
+            // No bound
+            RequiresPythonBound::new(Bound::Unbounded),
+            // >=3.8
+            RequiresPythonBound::new(Bound::Included(Version::new([3, 8]))),
+            // >3.8
+            RequiresPythonBound::new(Bound::Excluded(Version::new([3, 8]))),
+            // >=3.8.1
+            RequiresPythonBound::new(Bound::Included(Version::new([3, 8, 1]))),
+            // >3.8.1
+            RequiresPythonBound::new(Bound::Excluded(Version::new([3, 8, 1]))),
+        ];
+        for (i, v1) in versions.iter().enumerate() {
+            for v2 in &versions[i + 1..] {
+                assert_eq!(v1.cmp(v2), Ordering::Less, "less: {v1:?}\ngreater: {v2:?}",);
+            }
         }
     }
 }

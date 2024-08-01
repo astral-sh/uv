@@ -53,8 +53,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # For a specific version.
-curl -LsSf https://astral.sh/uv/0.2.31/install.sh | sh
-powershell -c "irm https://astral.sh/uv/0.2.31/install.ps1 | iex"
+curl -LsSf https://astral.sh/uv/0.2.32/install.sh | sh
+powershell -c "irm https://astral.sh/uv/0.2.32/install.ps1 | iex"
 
 # With pip.
 pip install uv
@@ -255,7 +255,7 @@ project-level settings appearing earlier in the merged array.
 Settings provided via environment variables take precedence over persistent configuration, and
 settings provided via the command line take precedence over both.
 
-uv accepts a `--isolated` command-line argument which, when provided, disables the discovery of any
+uv accepts a `--no-config` command-line argument which, when provided, disables the discovery of any
 persistent configuration.
 
 uv also accepts a `--config-file` command-line argument, which accepts a path to a `uv.toml` to use

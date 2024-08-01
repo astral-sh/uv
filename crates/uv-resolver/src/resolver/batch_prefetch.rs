@@ -1,7 +1,7 @@
 use std::cmp::min;
 
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};

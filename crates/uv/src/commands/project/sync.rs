@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -10,11 +10,12 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DEV_DEPENDENCIES;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
+use uv_normalize::PackageName;
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::do_safe_lock;
@@ -28,6 +29,7 @@ use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 pub(crate) async fn sync(
     locked: bool,
     frozen: bool,
+    package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: bool,
     modifications: Modifications,
@@ -46,8 +48,17 @@ pub(crate) async fn sync(
         warn_user_once!("`uv sync` is experimental and may change without warning");
     }
 
-    // Identify the project
-    let project = VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?;
+    // Identify the project.
+    let project = if let Some(package) = package {
+        VirtualProject::Project(
+            Workspace::discover(&CWD, &DiscoveryOptions::default())
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+        )
+    } else {
+        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+    };
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(

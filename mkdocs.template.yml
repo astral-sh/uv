@@ -13,7 +13,6 @@ theme:
     - content.code.annotate
     - toc.follow
     - navigation.footer
-    - navigation.path
     - navigation.top
     - content.code.copy
     - content.tabs.link
@@ -66,9 +65,20 @@ plugins:
   - typeset
 extra_css:
   - stylesheets/extra.css
+extra_javascript:
+  - js/extra.js
 extra:
   analytics:
     provider: fathom
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/astral-sh/uv
+    - icon: fontawesome/brands/discord
+      link: https://discord.com/invite/astral-sh
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/uv/
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/astral_sh
 nav:
   - Introduction: index.md
   - Getting started:
@@ -94,7 +104,6 @@ nav:
       - configuration/index.md
       - Configuration files: configuration/files.md
       - Environment variables: configuration/environment.md
-      - Settings: settings.md
       - Authentication: configuration/authentication.md
   - Integration guides:
       - guides/integration/index.md
@@ -109,7 +118,10 @@ nav:
       - Inspecting packages: pip/inspection.md
       - Declaring dependencies: pip/dependencies.md
       - Locking environments: pip/compile.md
+      - Compatibility with pip: pip/compatibility.md
+  - Reference:
+      - Commands: reference/cli.md
+      - Settings: reference/settings.md
   - Policies:
       - Versioning: versioning.md
       - Platform support: platforms.md
-      - Compatibility with pip: pip/compatibility.md

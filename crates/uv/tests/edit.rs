@@ -834,10 +834,13 @@ fn add_remove_optional() -> Result<()> {
 
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -874,14 +877,51 @@ fn add_remove_optional() -> Result<()> {
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 },
+        ]
+
+        [[distribution]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[distribution]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [distribution.optional-dependencies]
+        io = [
+            { name = "anyio" },
+        ]
+
+        [[distribution]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
         "###
         );
     });
 
-    // Install from the lockfile.
+    // Install from the lockfile. At present, this will _uninstall_ the packages since `sync` does
+    // not include extras by default.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
@@ -889,7 +929,10 @@ fn add_remove_optional() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning
-    Audited 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
+     - sniffio==1.3.1
     "###);
 
     // This should fail without --optional.
@@ -2030,6 +2073,439 @@ fn add_frozen() -> Result<()> {
     });
 
     assert!(!context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn add_reject_multiple_git_ref_flags() {
+    let context = TestContext::new("3.12");
+
+    // --tag and --branch
+    uv_snapshot!(context
+        .add(&[])
+        .arg("foo")
+        .arg("--tag")
+        .arg("0.0.1")
+        .arg("--branch")
+        .arg("test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--tag <TAG>' cannot be used with '--branch <BRANCH>'
+
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+
+    For more information, try '--help'.
+    "###
+    );
+
+    // --tag and --rev
+    uv_snapshot!(context
+        .add(&[])
+        .arg("foo")
+        .arg("--tag")
+        .arg("0.0.1")
+        .arg("--rev")
+        .arg("326b943"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--tag <TAG>' cannot be used with '--rev <REV>'
+
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+
+    For more information, try '--help'.
+    "###
+    );
+
+    // --tag and --tag
+    uv_snapshot!(context
+        .add(&[])
+        .arg("foo")
+        .arg("--tag")
+        .arg("0.0.1")
+        .arg("--tag")
+        .arg("0.0.2"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--tag <TAG>' cannot be used multiple times
+
+    Usage: uv add [OPTIONS] <REQUIREMENTS>...
+
+    For more information, try '--help'.
+    "###
+    );
+}
+
+/// Avoiding persisting `add` calls when resolution fails.
+#[test]
+fn add_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["xyz"]), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of xyz and project==0.1.0 depends on xyz, we can conclude that project==0.1.0 cannot be used.
+          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+      help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
+    "###);
+
+    uv_snapshot!(context.filters(), context.add(&["xyz"]).arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    "###);
+
+    let lock = context.temp_dir.join("uv.lock");
+    assert!(!lock.exists());
+
+    Ok(())
+}
+
+/// Set a lower bound when adding unconstrained dependencies.
+#[test]
+fn add_lower_bound() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Adding `anyio` should include a lower-bound.
+    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Avoid setting a lower bound when updating existing dependencies.
+#[test]
+fn add_lower_bound_existing() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+    "#})?;
+
+    // Adding `anyio` should _not_ set a lower-bound, since it's already present (even if
+    // unconstrained).
+    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Avoid setting a lower bound with `--raw-sources`.
+#[test]
+fn add_lower_bound_raw() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+    "#})?;
+
+    // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
+    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--raw-sources"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Set a lower bound when adding unconstrained dev dependencies.
+#[test]
+fn add_lower_bound_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Adding `anyio` should include a lower-bound.
+    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = [
+            "anyio>=4.3.0",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Set a lower bound when adding unconstrained dev dependencies.
+#[test]
+fn add_lower_bound_optional() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Adding `anyio` should include a lower-bound.
+    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--optional=io"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        io = [
+            "anyio>=4.3.0",
+        ]
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[distribution]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[distribution]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [distribution.optional-dependencies]
+        io = [
+            { name = "anyio" },
+        ]
+
+        [[distribution]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
 
     Ok(())
 }

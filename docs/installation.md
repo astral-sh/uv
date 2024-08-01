@@ -46,7 +46,8 @@ When the standalone installer is used, uv can upgrade itself:
 uv self update
 ```
 
-When another installation method is used, self updates are disabled. Use the package manager's upgrade method instead.
+When another installation method is used, self updates are disabled. Use the package manager's
+upgrade method instead.
 
 ## PyPI
 
@@ -66,7 +67,10 @@ pip install uv
 
 !!! note
 
-    There are prebuilt distributions (wheels) for many platforms; if not available for a given platform, uv will be built from source which requires a Rust toolchain to be installed. See the [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup) for details on building uv from source.
+    There are prebuilt distributions (wheels) for many platforms; if not available for a given 
+    platform, uv will be built from source which requires a Rust toolchain to be installed. See the
+    [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup)
+    for details on building uv from source.
 
 ## Homebrew
 
@@ -78,12 +82,15 @@ brew install uv
 
 ## Docker
 
-uv provides a Docker image at [`ghcr.io/astral-sh/uv`](https://github.com/astral-sh/uv/pkgs/container/uv).
+uv provides a Docker image at
+[`ghcr.io/astral-sh/uv`](https://github.com/astral-sh/uv/pkgs/container/uv).
 
 See our guide on [using uv in Docker](./guides/integration/docker.md) for more details.
 
 ## GitHub Releases
 
-uv release artifacts can be downloaded directly from [GitHub Releases](https://github.com/astral-sh/uv/releases).
+uv release artifacts can be downloaded directly from [GitHub
+Releases](https://github.com/astral-sh/uv/releases).
 
-Each release page includes binaries for all supported platforms as well as instructions for using the standalone installer via `github.com` instead of `astral.sh`.
+Each release page includes binaries for all supported platforms as well as instructions for using
+the standalone installer via `github.com` instead of `astral.sh`.

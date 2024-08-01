@@ -3,9 +3,9 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
-use fs_err as fs;
-
 use common::{uv_snapshot, TestContext};
+use fs_err as fs;
+use insta::assert_snapshot;
 
 mod common;
 
@@ -167,6 +167,92 @@ fn tool_list_bad_environment() -> Result<()> {
     Python interpreter not found at `[TEMP_DIR]/tools/black/[BIN]/python`
     "###
     );
+
+    Ok(())
+}
+
+#[test]
+fn tool_list_deprecated() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Ensure that we have a modern tool receipt.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black", specifier = "==24.2.0" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+
+    // Replace with a legacy receipt.
+    fs::write(
+        tool_dir.join("black").join("uv-receipt.toml"),
+        r#"
+        [tool]
+        requirements = ["black==24.2.0"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "#,
+    )?;
+
+    // Ensure that we can still list the tool.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0
+    - black
+    - blackd
+
+    ----- stderr -----
+    warning: `uv tool list` is experimental and may change without warning
+    "###);
+
+    // Replace with an invalid receipt.
+    fs::write(
+        tool_dir.join("black").join("uv-receipt.toml"),
+        r#"
+        [tool]
+        requirements = ["black<>24.2.0"]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "#,
+    )?;
+
+    // Ensure that listing fails.
+    uv_snapshot!(context.filters(), context.tool_list()
+    .env("UV_TOOL_DIR", tool_dir.as_os_str())
+    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool list` is experimental and may change without warning
+    warning: Ignoring malformed tool `black` (run `uv tool uninstall black` to remove)
+    "###);
 
     Ok(())
 }

@@ -6,6 +6,5 @@ Read about the various ways to configure uv:
 - [Using environment variables](./environment.md)
 - [Configuring authentication](./authentication.md)
 
-<!-- TODO(zanieb): Move generated settings reference to correct section -->
-
-Or, jump to the [settings reference](../settings.md) which enumerates the available configuration options.
+Or, jump to the [settings reference](../reference/settings.md) which enumerates the available configuration
+options.

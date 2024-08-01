@@ -205,3 +205,158 @@ fn empty() -> Result<()> {
 
     Ok(())
 }
+
+/// Sync an individual package within a workspace.
+#[test]
+fn package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "anyio>3"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+        "#,
+    )?;
+
+    let src = child.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+/// Ensure that we use the maximum Python version when a workspace contains mixed requirements.
+#[test]
+fn mixed_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    // Create a workspace root with a minimum Python requirement of Python 3.12.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "albatross"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bird-feeder", "anyio>3"]
+
+        [tool.uv.sources]
+        bird-feeder = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // Create a child with a minimum Python requirement of Python 3.8.
+    let child = context.temp_dir.child("packages").child("bird-feeder");
+    child.create_dir_all()?;
+
+    let src = context.temp_dir.child("src").child("bird_feeder");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "bird-feeder"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        "#,
+    )?;
+
+    // Running `uv sync` should succeed, locking for Python 3.12.
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + albatross==0.1.0 (from file://[TEMP_DIR]/)
+     + anyio==4.3.0
+     + bird-feeder==0.1.0 (from file://[TEMP_DIR]/packages/bird-feeder)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // Running `uv sync` again should succeed.
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.8"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`
+    "###);
+
+    Ok(())
+}

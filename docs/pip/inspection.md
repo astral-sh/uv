@@ -32,7 +32,8 @@ Multiple packages can be inspected at once.
 
 ## Verifying an environment
 
-It is possible to install packages with conflicting requirements into an environment if installed in multiple steps.
+It is possible to install packages with conflicting requirements into an environment if installed in
+multiple steps.
 
 To check for conflicts or missing dependencies in the environment:
 

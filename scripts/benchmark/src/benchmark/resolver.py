@@ -218,7 +218,7 @@ class PipCompile(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(baseline), f"Lock file doesn't exist at: {baseline}"
+        assert os.path.exists(baseline), f"Lockfile doesn't exist at: {baseline}"
 
         input_file = os.path.join(cwd, "requirements.in")
         output_file = os.path.join(cwd, "requirements.txt")
@@ -261,7 +261,7 @@ class PipCompile(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(output_file), f"Lock file doesn't exist at: {output_file}"
+        assert os.path.exists(output_file), f"Lockfile doesn't exist at: {output_file}"
 
         return Command(
             name=f"{self.name} ({Benchmark.RESOLVE_NOOP.value})",
@@ -443,7 +443,7 @@ class Poetry(Suite):
         poetry_lock = os.path.join(cwd, "poetry.lock")
         assert not os.path.exists(
             poetry_lock
-        ), f"Lock file already exists at: {poetry_lock}"
+        ), f"Lockfile already exists at: {poetry_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -453,7 +453,7 @@ class Poetry(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(poetry_lock), f"Lock file doesn't exist at: {poetry_lock}"
+        assert os.path.exists(poetry_lock), f"Lockfile doesn't exist at: {poetry_lock}"
 
         # Add a dependency to the requirements file.
         with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
@@ -499,7 +499,7 @@ class Poetry(Suite):
         poetry_lock = os.path.join(cwd, "poetry.lock")
         assert not os.path.exists(
             poetry_lock
-        ), f"Lock file already exists at: {poetry_lock}"
+        ), f"Lockfile already exists at: {poetry_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -509,7 +509,7 @@ class Poetry(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(poetry_lock), f"Lock file doesn't exist at: {poetry_lock}"
+        assert os.path.exists(poetry_lock), f"Lockfile doesn't exist at: {poetry_lock}"
 
         config_dir = os.path.join(cwd, "config", "pypoetry")
         cache_dir = os.path.join(cwd, "cache", "pypoetry")
@@ -536,7 +536,7 @@ class Poetry(Suite):
         poetry_lock = os.path.join(cwd, "poetry.lock")
         assert not os.path.exists(
             poetry_lock
-        ), f"Lock file already exists at: {poetry_lock}"
+        ), f"Lockfile already exists at: {poetry_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -546,7 +546,7 @@ class Poetry(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(poetry_lock), f"Lock file doesn't exist at: {poetry_lock}"
+        assert os.path.exists(poetry_lock), f"Lockfile doesn't exist at: {poetry_lock}"
 
         config_dir = os.path.join(cwd, "config", "pypoetry")
         cache_dir = os.path.join(cwd, "cache", "pypoetry")
@@ -581,7 +581,7 @@ class Poetry(Suite):
         poetry_lock = os.path.join(cwd, "poetry.lock")
         assert not os.path.exists(
             poetry_lock
-        ), f"Lock file already exists at: {poetry_lock}"
+        ), f"Lockfile already exists at: {poetry_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         subprocess.check_call(
@@ -590,7 +590,7 @@ class Poetry(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(poetry_lock), f"Lock file doesn't exist at: {poetry_lock}"
+        assert os.path.exists(poetry_lock), f"Lockfile doesn't exist at: {poetry_lock}"
 
         config_dir = os.path.join(cwd, "config", "pypoetry")
         cache_dir = os.path.join(cwd, "cache", "pypoetry")
@@ -697,7 +697,7 @@ class Pdm(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         pdm_lock = os.path.join(cwd, "pdm.lock")
-        assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
+        assert not os.path.exists(pdm_lock), f"Lockfile already exists at: {pdm_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -707,7 +707,7 @@ class Pdm(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(pdm_lock), f"Lock file doesn't exist at: {pdm_lock}"
+        assert os.path.exists(pdm_lock), f"Lockfile doesn't exist at: {pdm_lock}"
 
         # Add a dependency to the requirements file.
         with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
@@ -742,7 +742,7 @@ class Pdm(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         pdm_lock = os.path.join(cwd, "pdm.lock")
-        assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
+        assert not os.path.exists(pdm_lock), f"Lockfile already exists at: {pdm_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -752,7 +752,7 @@ class Pdm(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(pdm_lock), f"Lock file doesn't exist at: {pdm_lock}"
+        assert os.path.exists(pdm_lock), f"Lockfile doesn't exist at: {pdm_lock}"
 
         cache_dir = os.path.join(cwd, "cache", "pdm")
 
@@ -772,7 +772,7 @@ class Pdm(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         pdm_lock = os.path.join(cwd, "pdm.lock")
-        assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
+        assert not os.path.exists(pdm_lock), f"Lockfile already exists at: {pdm_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -782,7 +782,7 @@ class Pdm(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(pdm_lock), f"Lock file doesn't exist at: {pdm_lock}"
+        assert os.path.exists(pdm_lock), f"Lockfile doesn't exist at: {pdm_lock}"
 
         venv_dir = os.path.join(cwd, ".venv")
         cache_dir = os.path.join(cwd, "cache", "pdm")
@@ -807,7 +807,7 @@ class Pdm(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         pdm_lock = os.path.join(cwd, "pdm.lock")
-        assert not os.path.exists(pdm_lock), f"Lock file already exists at: {pdm_lock}"
+        assert not os.path.exists(pdm_lock), f"Lockfile already exists at: {pdm_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -817,7 +817,7 @@ class Pdm(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(pdm_lock), f"Lock file doesn't exist at: {pdm_lock}"
+        assert os.path.exists(pdm_lock), f"Lockfile doesn't exist at: {pdm_lock}"
 
         venv_dir = os.path.join(cwd, ".venv")
         cache_dir = os.path.join(cwd, "cache", "pdm")
@@ -916,7 +916,7 @@ class UvPip(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(baseline), f"Lock file doesn't exist at: {baseline}"
+        assert os.path.exists(baseline), f"Lockfile doesn't exist at: {baseline}"
 
         input_file = os.path.join(cwd, "requirements.in")
         output_file = os.path.join(cwd, "requirements.txt")
@@ -1107,7 +1107,7 @@ class UvProject(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         uv_lock = os.path.join(cwd, "uv.lock")
-        assert not os.path.exists(uv_lock), f"Lock file already exists at: {uv_lock}"
+        assert not os.path.exists(uv_lock), f"Lockfile already exists at: {uv_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -1117,7 +1117,7 @@ class UvProject(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(uv_lock), f"Lock file doesn't exist at: {uv_lock}"
+        assert os.path.exists(uv_lock), f"Lockfile doesn't exist at: {uv_lock}"
 
         # Add a dependency to the requirements file.
         with open(os.path.join(cwd, "pyproject.toml"), "rb") as fp:
@@ -1155,7 +1155,7 @@ class UvProject(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         uv_lock = os.path.join(cwd, "uv.lock")
-        assert not os.path.exists(uv_lock), f"Lock file already exists at: {uv_lock}"
+        assert not os.path.exists(uv_lock), f"Lockfile already exists at: {uv_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -1165,7 +1165,7 @@ class UvProject(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(uv_lock), f"Lock file doesn't exist at: {uv_lock}"
+        assert os.path.exists(uv_lock), f"Lockfile doesn't exist at: {uv_lock}"
 
         cache_dir = os.path.join(cwd, ".cache")
 
@@ -1188,7 +1188,7 @@ class UvProject(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         uv_lock = os.path.join(cwd, "uv.lock")
-        assert not os.path.exists(uv_lock), f"Lock file already exists at: {uv_lock}"
+        assert not os.path.exists(uv_lock), f"Lockfile already exists at: {uv_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -1198,7 +1198,7 @@ class UvProject(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(uv_lock), f"Lock file doesn't exist at: {uv_lock}"
+        assert os.path.exists(uv_lock), f"Lockfile doesn't exist at: {uv_lock}"
 
         cache_dir = os.path.join(cwd, ".cache")
         venv_dir = os.path.join(cwd, ".venv")
@@ -1226,7 +1226,7 @@ class UvProject(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         uv_lock = os.path.join(cwd, "uv.lock")
-        assert not os.path.exists(uv_lock), f"Lock file already exists at: {uv_lock}"
+        assert not os.path.exists(uv_lock), f"Lockfile already exists at: {uv_lock}"
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -1236,7 +1236,7 @@ class UvProject(Suite):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        assert os.path.exists(uv_lock), f"Lock file doesn't exist at: {uv_lock}"
+        assert os.path.exists(uv_lock), f"Lockfile doesn't exist at: {uv_lock}"
 
         cache_dir = os.path.join(cwd, ".cache")
         venv_dir = os.path.join(cwd, ".venv")

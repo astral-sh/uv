@@ -43,7 +43,6 @@ pub(crate) struct GlobalSettings {
     pub(crate) color: ColorChoice,
     pub(crate) native_tls: bool,
     pub(crate) connectivity: Connectivity,
-    pub(crate) isolated: bool,
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
     pub(crate) python_preference: PythonPreference,
@@ -108,7 +107,6 @@ impl GlobalSettings {
             } else {
                 Connectivity::Online
             },
-            isolated: args.isolated,
             show_settings: args.show_settings,
             preview,
             python_preference: args
@@ -155,6 +153,7 @@ pub(crate) struct InitSettings {
     pub(crate) name: Option<PackageName>,
     pub(crate) r#virtual: bool,
     pub(crate) no_readme: bool,
+    pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
 }
 
@@ -167,6 +166,7 @@ impl InitSettings {
             name,
             r#virtual,
             no_readme,
+            no_workspace,
             python,
         } = args;
 
@@ -175,6 +175,7 @@ impl InitSettings {
             name,
             r#virtual,
             no_readme,
+            no_workspace,
             python,
         }
     }
@@ -191,7 +192,10 @@ pub(crate) struct RunSettings {
     pub(crate) command: ExternalCommand,
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
+    pub(crate) isolated: bool,
+    pub(crate) show_resolution: bool,
     pub(crate) package: Option<PackageName>,
+    pub(crate) no_project: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -202,8 +206,6 @@ impl RunSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: RunArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let RunArgs {
-            locked,
-            frozen,
             extra,
             all_extras,
             no_all_extras,
@@ -212,11 +214,16 @@ impl RunSettings {
             command,
             with,
             with_requirements,
+            isolated,
+            locked,
+            frozen,
             installer,
             build,
             refresh,
             package,
+            no_project,
             python,
+            show_resolution,
         } = args;
 
         Self {
@@ -233,7 +240,10 @@ impl RunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            isolated,
+            show_resolution,
             package,
+            no_project,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -252,6 +262,8 @@ pub(crate) struct ToolRunSettings {
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
+    pub(crate) isolated: bool,
+    pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -266,6 +278,8 @@ impl ToolRunSettings {
             from,
             with,
             with_requirements,
+            isolated,
+            show_resolution,
             installer,
             build,
             refresh,
@@ -280,6 +294,8 @@ impl ToolRunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            isolated,
+            show_resolution,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -497,6 +513,7 @@ impl PythonFindSettings {
 pub(crate) struct PythonPinSettings {
     pub(crate) request: Option<String>,
     pub(crate) resolved: bool,
+    pub(crate) no_workspace: bool,
 }
 
 impl PythonPinSettings {
@@ -507,11 +524,13 @@ impl PythonPinSettings {
             request,
             no_resolved,
             resolved,
+            no_workspace,
         } = args;
 
         Self {
             request,
             resolved: flag(resolved, no_resolved).unwrap_or(false),
+            no_workspace,
         }
     }
 }
@@ -524,6 +543,7 @@ pub(crate) struct SyncSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: bool,
     pub(crate) modifications: Modifications,
+    pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -545,6 +565,7 @@ impl SyncSettings {
             installer,
             build,
             refresh,
+            package,
             python,
         } = args;
 
@@ -563,6 +584,7 @@ impl SyncSettings {
             ),
             dev: flag(dev, no_dev).unwrap_or(true),
             modifications,
+            package,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(

@@ -3,7 +3,7 @@
 use std::ops::Bound::{self, *};
 use std::ops::RangeBounds;
 
-use pubgrub::range::{Range as PubGrubRange, Range};
+use pubgrub::Range as PubGrubRange;
 use rustc_hash::FxHashMap;
 
 use pep440_rs::{Version, VersionSpecifier};
@@ -125,7 +125,7 @@ fn string_is_disjoint(this: &MarkerExpression, other: &MarkerExpression) -> bool
     true
 }
 
-pub(crate) fn python_range(expr: &MarkerExpression) -> Option<Range<Version>> {
+pub(crate) fn python_range(expr: &MarkerExpression) -> Option<PubGrubRange<Version>> {
     match expr {
         MarkerExpression::Version {
             key: MarkerValueVersion::PythonFullVersion,
@@ -331,7 +331,7 @@ pub(crate) fn normalize_all(
         MarkerTree::Expression(expr)
             if bound.is_some_and(|bound| {
                 python_range(&expr).is_some_and(|supported_range| {
-                    Range::from(bound.clone()).subset_of(&supported_range)
+                    PubGrubRange::from(bound.clone()).subset_of(&supported_range)
                 })
             }) =>
         {

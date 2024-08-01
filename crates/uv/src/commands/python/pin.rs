@@ -25,7 +25,7 @@ pub(crate) async fn pin(
     resolved: bool,
     python_preference: PythonPreference,
     preview: PreviewMode,
-    isolated: bool,
+    no_workspace: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -33,7 +33,7 @@ pub(crate) async fn pin(
         warn_user_once!("`uv python pin` is experimental and may change without warning");
     }
 
-    let virtual_project = if isolated {
+    let virtual_project = if no_workspace {
         None
     } else {
         match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
