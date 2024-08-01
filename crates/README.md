@@ -41,7 +41,8 @@ Functionality for detecting the current platform (operating system, architecture
 
 ## [platform-tags](./platform-tags)
 
-Functionality for parsing and inferring Python platform tags as per [PEP 425](https://peps.python.org/pep-0425/).
+Functionality for parsing and inferring Python platform tags as per
+[PEP 425](https://peps.python.org/pep-0425/).
 
 ## [uv](./uv)
 
@@ -70,8 +71,8 @@ Implements the traits defined in `uv-types`.
 
 ## [uv-distribution](./uv-distribution)
 
-Client for interacting with built distributions (wheels) and source distributions (sdists).
-Capable of fetching metadata, distribution contents, etc.
+Client for interacting with built distributions (wheels) and source distributions (sdists). Capable
+of fetching metadata, distribution contents, etc.
 
 ## [uv-extract](./uv-extract)
 

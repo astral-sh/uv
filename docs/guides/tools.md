@@ -103,8 +103,8 @@ $ uv tool install ruff
 ```
 
 When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows
-the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and `uv tool
-update-shell` can be used to add it to the `PATH`.
+the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and
+`uv tool update-shell` can be used to add it to the `PATH`.
 
 After installing `ruff`, it should be available:
 

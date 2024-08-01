@@ -6,9 +6,9 @@ Informally, the intent is such that existing `pip` and `pip-tools` users can swi
 making meaningful changes to their packaging workflows; and, in most cases, swapping out
 `pip install` for `uv pip install` should "just work".
 
-However, uv is _not_ intended to be an _exact_ clone of `pip`, and the further you stray from
-common `pip` workflows, the more likely you are to encounter differences in behavior. In some cases,
-those differences may be known and intentional; in others, they may be the result of implementation
+However, uv is _not_ intended to be an _exact_ clone of `pip`, and the further you stray from common
+`pip` workflows, the more likely you are to encounter differences in behavior. In some cases, those
+differences may be known and intentional; in others, they may be the result of implementation
 details; and in others, they may be bugs.
 
 This document outlines the known differences between uv and `pip`, along with rationale,
@@ -34,9 +34,9 @@ drawbacks:
    behavior, and many users may _not_ expect uv to read configuration files intended for other
    tools.
 
-Instead, uv supports its own environment variables, like `UV_INDEX_URL`. In the future, uv will
-also support persistent configuration in its own configuration file format (e.g., `pyproject.toml`
-or `uv.toml` or similar). For more, see [#651](https://github.com/astral-sh/uv/issues/651).
+Instead, uv supports its own environment variables, like `UV_INDEX_URL`. In the future, uv will also
+support persistent configuration in its own configuration file format (e.g., `pyproject.toml` or
+`uv.toml` or similar). For more, see [#651](https://github.com/astral-sh/uv/issues/651).
 
 ## Pre-release compatibility
 
@@ -46,27 +46,30 @@ By default, uv will accept pre-release versions during dependency resolution in 
    (e.g., `flask>=2.0.0rc1`).
 1. If _all_ published versions of a package are pre-releases.
 
-If dependency resolution fails due to a transitive pre-release, uv will prompt the user to
-re-run with `--prerelease=allow`, to allow pre-releases for all dependencies.
+If dependency resolution fails due to a transitive pre-release, uv will prompt the user to re-run
+with `--prerelease=allow`, to allow pre-releases for all dependencies.
 
-Alternatively, you can add the transitive dependency to your `requirements.in` file with
-pre-release specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific
-dependency.
+Alternatively, you can add the transitive dependency to your `requirements.in` file with pre-release
+specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
 
 In sum, uv needs to know upfront whether the resolver should accept pre-releases for a given
 package. `pip`, meanwhile, _may_ respect pre-release identifiers in transitive dependencies
-depending on the order in which the resolver encounters the relevant specifiers ([#1641](https://github.com/astral-sh/uv/issues/1641#issuecomment-1981402429)).
+depending on the order in which the resolver encounters the relevant specifiers
+([#1641](https://github.com/astral-sh/uv/issues/1641#issuecomment-1981402429)).
 
-Pre-releases are [notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions)
-to model, and are a frequent source of bugs in packaging tools. Even `pip`, which is viewed as a
-reference implementation, has a number of open questions around pre-release handling ([#12469](https://github.com/pypa/pip/issues/12469),
-[#12470](https://github.com/pypa/pip/issues/12470), [#40505](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/20), etc.).
+Pre-releases are
+[notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
+model, and are a frequent source of bugs in packaging tools. Even `pip`, which is viewed as a
+reference implementation, has a number of open questions around pre-release handling
+([#12469](https://github.com/pypa/pip/issues/12469),
+[#12470](https://github.com/pypa/pip/issues/12470),
+[#40505](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/20), etc.).
 uv's pre-release handling is _intentionally_ limited and _intentionally_ requires user opt-in for
 pre-releases, to ensure correctness.
 
 In the future, uv _may_ support pre-release identifiers in transitive dependencies. However, it's
-likely contingent on evolution in the Python packaging specifications. The existing PEPs [do not
-cover "dependency resolution"](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/17)
+likely contingent on evolution in the Python packaging specifications. The existing PEPs
+[do not cover "dependency resolution"](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/17)
 and are instead focused on behavior for a _single_ version specifier. As such, there are unresolved
 questions around the correct and intended behavior for pre-releases in the packaging ecosystem more
 broadly.
@@ -79,8 +82,8 @@ packages (and, e.g., disallowed on PyPI), they're common in the PyTorch ecosyste
 to local versions _does_ support typical PyTorch workflows to succeed out-of-the-box.
 
 [PEP 440](https://peps.python.org/pep-0440/#version-specifiers) specifies that the local version
-segment should typically be ignored when evaluating version specifiers, with a few exceptions.
-For example, `foo==1.2.3` should accept `1.2.3+local`, but `foo==1.2.3+local` should _not_ accept
+segment should typically be ignored when evaluating version specifiers, with a few exceptions. For
+example, `foo==1.2.3` should accept `1.2.3+local`, but `foo==1.2.3+local` should _not_ accept
 `1.2.3`. These asymmetries are hard to model in a resolution algorithm. As such, uv treats `1.2.3`
 and `1.2.3+local` as entirely separate versions, but respects local versions provided as direct
 dependencies throughout the resolution, such that if you provide `foo==1.2.3+local` as a direct
@@ -102,9 +105,9 @@ As compared to pip, the main differences in observed behavior are as follows:
 
 ## Packages that exist on multiple indexes
 
-In both uv and `pip`, users can specify multiple package indexes from which to search for
-the available versions of a given package. However, uv and `pip` differ in how they handle
-packages that exist on multiple indexes.
+In both uv and `pip`, users can specify multiple package indexes from which to search for the
+available versions of a given package. However, uv and `pip` differ in how they handle packages that
+exist on multiple indexes.
 
 For example, imagine that a company publishes an internal version of `requests` on a private index
 (`--extra-index-url`), but also allows installing packages from PyPI by default. In this case, the
@@ -112,58 +115,64 @@ private `requests` would conflict with the public [`requests`](https://pypi.org/
 on PyPI.
 
 When uv searches for a package across multiple indexes, it will iterate over the indexes in order
-(preferring the `--extra-index-url` over the default index), and stop searching as soon as it
-finds a match. This means that if a package exists on multiple indexes, uv will limit its
-candidate versions to those present in the first index that contains the package.
+(preferring the `--extra-index-url` over the default index), and stop searching as soon as it finds
+a match. This means that if a package exists on multiple indexes, uv will limit its candidate
+versions to those present in the first index that contains the package.
 
-`pip`, meanwhile, will combine the candidate versions from all indexes, and select the best
-version from the combined set, though it makes [no guarantees around the order](https://github.com/pypa/pip/issues/5045#issuecomment-369521345)
-in which it searches indexes, and expects that packages are unique up to name and version, even
-across indexes.
+`pip`, meanwhile, will combine the candidate versions from all indexes, and select the best version
+from the combined set, though it makes
+[no guarantees around the order](https://github.com/pypa/pip/issues/5045#issuecomment-369521345) in
+which it searches indexes, and expects that packages are unique up to name and version, even across
+indexes.
 
 uv's behavior is such that if a package exists on an internal index, it should always be installed
 from the internal index, and never from PyPI. The intent is to prevent "dependency confusion"
 attacks, in which an attacker publishes a malicious package on PyPI with the same name as an
 internal package, thus causing the malicious package to be installed instead of the internal
-package. See, for example, [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/)
-from December 2022.
+package. See, for example,
+[the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/) from
+December 2022.
 
 As of v0.1.39, users can opt in to `pip`-style behavior for multiple indexes via the
-`--index-strategy` command-line option, or the `UV_INDEX_STRATEGY` environment
-variable, which supports the following values:
+`--index-strategy` command-line option, or the `UV_INDEX_STRATEGY` environment variable, which
+supports the following values:
 
 - `first-match` (default): Search for each package across all indexes, limiting the candidate
   versions to those present in the first index that contains the package, prioritizing the
   `--extra-index-url` indexes over the default index URL.
-- `unsafe-first-match`: Search for each package across all indexes, but prefer the first index
-  with a compatible version, even if newer versions are available on other indexes.
-- `unsafe-best-match`: Search for each package across all indexes, and select the best version
-  from the combined set of candidate versions.
+- `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
+  a compatible version, even if newer versions are available on other indexes.
+- `unsafe-best-match`: Search for each package across all indexes, and select the best version from
+  the combined set of candidate versions.
 
 While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users to the risk of
 "dependency confusion" attacks.
 
-In the future, uv will support pinning packages to dedicated indexes (see: [#171](https://github.com/astral-sh/uv/issues/171)).
-Additionally, [PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to
-address the "dependency confusion" issue across package registries and installers.
+In the future, uv will support pinning packages to dedicated indexes (see:
+[#171](https://github.com/astral-sh/uv/issues/171)). Additionally,
+[PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to address the
+"dependency confusion" issue across package registries and installers.
 
 ## PEP 517 build isolation
 
-uv uses [PEP 517](https://peps.python.org/pep-0517/) build isolation by default (akin to `pip install --use-pep517`),
-following `pypa/build` and in anticipation of `pip` defaulting to PEP 517 builds in the future ([pypa/pip#9175](https://github.com/pypa/pip/issues/9175)).
+uv uses [PEP 517](https://peps.python.org/pep-0517/) build isolation by default (akin to
+`pip install --use-pep517`), following `pypa/build` and in anticipation of `pip` defaulting to PEP
+517 builds in the future ([pypa/pip#9175](https://github.com/pypa/pip/issues/9175)).
 
-If a package fails to install due to a missing build-time dependency, try using a newer version of the package; if the
-problem persists, consider filing an issue with the package maintainer, requesting that they update the packaging setup
-to declare the correct PEP 517 build-time dependencies.
+If a package fails to install due to a missing build-time dependency, try using a newer version of
+the package; if the problem persists, consider filing an issue with the package maintainer,
+requesting that they update the packaging setup to declare the correct PEP 517 build-time
+dependencies.
 
-As an escape hatch, you can preinstall a package's build dependencies, then run `uv pip install` with
-`--no-build-isolation`, as in:
+As an escape hatch, you can preinstall a package's build dependencies, then run `uv pip install`
+with `--no-build-isolation`, as in:
 
 ```shell
 uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
 ```
 
-For a list of packages that are known to fail under PEP 517 build isolation, see [#2252](https://github.com/astral-sh/uv/issues/2252).
+For a list of packages that are known to fail under PEP 517 build isolation, see
+[#2252](https://github.com/astral-sh/uv/issues/2252).
 
 ## Transitive direct URL dependencies for constraints and overrides
 
@@ -193,26 +202,26 @@ search for a virtual environment named `.venv` in the current directory or any p
 This differs from `pip`, which will install packages into a global environment if no virtual
 environment is active, and will not search for inactive virtual environments.
 
-In uv, you can install into non-virtual environments by providing a path to a Python executable
-via the `--python /path/to/python` option, or via the `--system` flag, which installs into the
-first Python interpreter found on the `PATH`, like `pip`.
+In uv, you can install into non-virtual environments by providing a path to a Python executable via
+the `--python /path/to/python` option, or via the `--system` flag, which installs into the first
+Python interpreter found on the `PATH`, like `pip`.
 
 In other words, uv inverts the default, requiring explicit opt-in to installing into the system
 Python, which can lead to breakages and other complications, and should only be done in limited
 circumstances.
 
-For more, see ["Installing into arbitrary Python environments"](./README.md#installing-into-arbitrary-python-environments).
+For more, see
+["Installing into arbitrary Python environments"](./README.md#installing-into-arbitrary-python-environments).
 
 ## Resolution strategy
 
-For a given set of dependency specifiers, it's often the case that there is no single "correct"
-set of packages to install. Instead, there are many valid sets of packages that satisfy the
-specifiers.
+For a given set of dependency specifiers, it's often the case that there is no single "correct" set
+of packages to install. Instead, there are many valid sets of packages that satisfy the specifiers.
 
-Neither `pip` nor uv make any guarantees about the _exact_ set of packages that will be
-installed; only that the resolution will be consistent, deterministic, and compliant with the
-specifiers. As such, in some cases, `pip` and uv will yield different resolutions; however, both
-resolutions _should_ be equally valid.
+Neither `pip` nor uv make any guarantees about the _exact_ set of packages that will be installed;
+only that the resolution will be consistent, deterministic, and compliant with the specifiers. As
+such, in some cases, `pip` and uv will yield different resolutions; however, both resolutions
+_should_ be equally valid.
 
 For example, consider:
 
@@ -225,9 +234,9 @@ At time of writing, the most recent `starlette` version is `0.37.2`, and the mos
 version is `0.110.0`. However, `fastapi==0.110.0` also depends on `starlette`, and introduces an
 upper bound: `starlette>=0.36.3,<0.37.0`.
 
-If a resolver prioritizes including the most recent version of `starlette`, it would need to use
-an older version of `fastapi` that excludes the upper bound on `starlette`. In practice, this
-requires falling back to `fastapi==0.1.17`:
+If a resolver prioritizes including the most recent version of `starlette`, it would need to use an
+older version of `fastapi` that excludes the upper bound on `starlette`. In practice, this requires
+falling back to `fastapi==0.1.17`:
 
 ```text
 # This file was autogenerated by uv via the following command:
@@ -281,8 +290,8 @@ typing-extensions==4.10.0
     #   pydantic-core
 ```
 
-When uv resolutions differ from `pip` in undesirable ways, it's often a sign that the specifiers
-are too loose, and that the user should consider tightening them. For example, in the case of
+When uv resolutions differ from `pip` in undesirable ways, it's often a sign that the specifiers are
+too loose, and that the user should consider tightening them. For example, in the case of
 `starlette` and `fastapi`, the user could require `fastapi>=0.110.0`.
 
 ## `pip check`
@@ -290,7 +299,8 @@ are too loose, and that the user should consider tightening them. For example, i
 At present, `uv pip check` will surface the following diagnostics:
 
 - A package has no `METADATA` file, or the `METADATA` file can't be parsed.
-- A package has a `Requires-Python` that doesn't match the Python version of the running interpreter.
+- A package has a `Requires-Python` that doesn't match the Python version of the running
+  interpreter.
 - A package has a dependency on a package that isn't installed.
 - A package has a dependency on a package that's installed, but at an incompatible version.
 - Multiple versions of a package are installed in the virtual environment.
@@ -319,40 +329,40 @@ from PyPI and other registries.
 However, when a dependency is provided as a direct URL (e.g., `uv pip install https://...`), pip
 does _not_ enforce `--only-binary`, and will build source distributions for all such packages.
 
-uv, meanwhile, _does_ enforce `--only-binary` for direct URL dependencies, with one exception:
-given `uv pip install https://... --only-binary flask`, uv _will_ build the source distribution at
-the given URL if it cannot infer the package name ahead of time, since uv can't determine whether
-the package is "allowed" in such cases without building its metadata.
+uv, meanwhile, _does_ enforce `--only-binary` for direct URL dependencies, with one exception: given
+`uv pip install https://... --only-binary flask`, uv _will_ build the source distribution at the
+given URL if it cannot infer the package name ahead of time, since uv can't determine whether the
+package is "allowed" in such cases without building its metadata.
 
 Both pip and uv allow editables requirements to be built and installed even when `--only-binary` is
 provided. For example, `uv pip install -e . --only-binary :all:` is allowed.
 
 ## Bytecode compilation
 
-Unlike pip, uv does not compile `.py` files to `.pyc` files during installation by default (i.e.,
-uv does not create or populate `__pycache__` directories). To enable bytecode compilation
-during installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync`.
+Unlike pip, uv does not compile `.py` files to `.pyc` files during installation by default (i.e., uv
+does not create or populate `__pycache__` directories). To enable bytecode compilation during
+installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync`.
 
 ## Strictness and spec enforcement
 
-uv tends to be stricter than `pip`, and will often reject packages that `pip` would install.
-For example, uv omits packages with invalid version specifiers in its metadata, which `pip`
-similarly plans to exclude in a [future release](https://github.com/pypa/pip/issues/12063).
+uv tends to be stricter than `pip`, and will often reject packages that `pip` would install. For
+example, uv omits packages with invalid version specifiers in its metadata, which `pip` similarly
+plans to exclude in a [future release](https://github.com/pypa/pip/issues/12063).
 
-In some cases, uv implements lenient behavior for popular packages that are known to have
-specific spec compliance issues.
+In some cases, uv implements lenient behavior for popular packages that are known to have specific
+spec compliance issues.
 
-If uv rejects a package that `pip` would install due to a spec violation, the best course of
-action is to first attempt to install a newer version of the package; and, if that fails, to report
-the issue to the package maintainer.
+If uv rejects a package that `pip` would install due to a spec violation, the best course of action
+is to first attempt to install a newer version of the package; and, if that fails, to report the
+issue to the package maintainer.
 
 ## `pip` command-line options and subcommands
 
 uv does not support the complete set of `pip`'s command-line options and subcommands, although it
 does support a large subset.
 
-Missing options and subcommands are prioritized based on user demand and the complexity of
-the implementation, and tend to be tracked in individual issues. For example:
+Missing options and subcommands are prioritized based on user demand and the complexity of the
+implementation, and tend to be tracked in individual issues. For example:
 
 - [`--trusted-host`](https://github.com/astral-sh/uv/issues/1339)
 - [`--user`](https://github.com/astral-sh/uv/issues/2077)
@@ -373,8 +383,8 @@ authentication. uv attaches authentication to all requests for hosts with creden
 
 ## `egg` support
 
-uv does not support features that are considered legacy or deprecated in `pip`. For example,
-uv does not support `.egg`-style distributions.
+uv does not support features that are considered legacy or deprecated in `pip`. For example, uv does
+not support `.egg`-style distributions.
 
 However, uv does have partial support for (1) `.egg-info`-style distributions (which are
 occasionally found in Docker images and Conda environments) and (2) legacy editable
@@ -389,18 +399,18 @@ but will respect any such existing distributions during resolution, list them wi
 There are a few small but notable differences in the default behaviors of `pip compile` and
 `pip-tools`.
 
-By default, uv does not write the compiled requirements to an output file. Instead, uv requires
-that the user specify an output file explicitly with the `-o` or `--output-file` option.
+By default, uv does not write the compiled requirements to an output file. Instead, uv requires that
+the user specify an output file explicitly with the `-o` or `--output-file` option.
 
-By default, uv strips extras when outputting the compiled requirements. In other words, uv defaults to
-`--strip-extras`, while `pip-compile` defaults to `--no-strip-extras`. `pip-compile` is scheduled to
-change this default in the next major release (v8.0.0), at which point both tools will default to
+By default, uv strips extras when outputting the compiled requirements. In other words, uv defaults
+to `--strip-extras`, while `pip-compile` defaults to `--no-strip-extras`. `pip-compile` is scheduled
+to change this default in the next major release (v8.0.0), at which point both tools will default to
 `--strip-extras`. To retain extras with uv, pass the `--no-strip-extras` flag to `uv pip compile`.
 
 By default, uv does not write any index URLs to the output file, while `pip-compile` outputs any
 `--index-url` or `--extra-index-url` that does not match the default (PyPI). To include index URLs
-in the output file, pass the `--emit-index-url` flag to `uv pip compile`. Unlike `pip-compile`,
-uv will include all index URLs when `--emit-index-url` is passed, including the default index URL.
+in the output file, pass the `--emit-index-url` flag to `uv pip compile`. Unlike `pip-compile`, uv
+will include all index URLs when `--emit-index-url` is passed, including the default index URL.
 
 ## `requires-python` enforcement
 
@@ -412,5 +422,6 @@ For example, a project that declares `requires-python: >=3.13` will accept Pytho
 3.13.0b1 is not strictly greater than 3.13, it is greater than 3.13 when the pre-release identifier
 is omitted.
 
-While this is not strictly compliant with [PEP 440](https://peps.python.org/pep-0440/),
-it _is_ consistent with [pip](https://github.com/pypa/pip/blob/24.1.1/src/pip/_internal/resolution/resolvelib/candidates.py#L540).
+While this is not strictly compliant with [PEP 440](https://peps.python.org/pep-0440/), it _is_
+consistent with
+[pip](https://github.com/pypa/pip/blob/24.1.1/src/pip/_internal/resolution/resolvelib/candidates.py#L540).

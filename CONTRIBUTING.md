@@ -1,9 +1,9 @@
 # Contributing
 
-We have issues labeled as [Good First
-Issue](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
-and [Help
-Wanted](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
+We have issues labeled as
+[Good First Issue](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+and
+[Help Wanted](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
 which are good opportunities for new contributors.
 
 ## Setup
@@ -30,8 +30,8 @@ See the [Python](#python) section for instructions on installing the Python vers
 
 ### Windows
 
-You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install
-cmake`.
+You can install CMake from the [installers](https://cmake.org/download/) or with
+`pipx install cmake`.
 
 ## Testing
 
@@ -62,9 +62,9 @@ cargo run -- pip install requests
 
 When testing debug builds on Windows, the stack can overflow resulting in a `STATUS_STACK_OVERFLOW`
 error code. This is due to a small stack size limit on Windows that we encounter when running
-unoptimized builds — the release builds do not have this problem. We [added a `UV_STACK_SIZE`
-variable](https://github.com/astral-sh/uv/pull/941) to bypass this problem during testing. We
-recommend bumping the stack size from the default of 1MB to 2MB, for example:
+unoptimized builds — the release builds do not have this problem. We
+[added a `UV_STACK_SIZE` variable](https://github.com/astral-sh/uv/pull/941) to bypass this problem
+during testing. We recommend bumping the stack size from the default of 1MB to 2MB, for example:
 
 ```powershell
 $Env:UV_STACK_SIZE = '2000000'
@@ -73,8 +73,8 @@ $Env:UV_STACK_SIZE = '2000000'
 ## Running inside a Docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your
-system (["Someone's Been Messing With My Subnormals!" on
-Blogspot](https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html),
+system
+(["Someone's Been Messing With My Subnormals!" on Blogspot](https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html),
 ["nvidia-pyindex" on PyPI](https://pypi.org/project/nvidia-pyindex/)), which can even occur when
 just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 
@@ -90,9 +90,9 @@ trying to resolve or install.
 
 ## Profiling and Benchmarking
 
-Please refer to Ruff's [Profiling
-Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects), it applies
-to uv, too.
+Please refer to Ruff's
+[Profiling Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects),
+it applies to uv, too.
 
 We provide diverse sets of requirements for testing and benchmarking the resolver in
 `scripts/requirements` and for the installer in `scripts/requirements/compiled`.
@@ -141,35 +141,35 @@ To preview any changes to the documentation locally:
 
 1. Install MkDocs and Material for MkDocs with:
 
-    ```shell
-    uv venv
+   ```shell
+   uv venv
 
-    # For contributors.
-    uv pip install -r docs/requirements.txt
+   # For contributors.
+   uv pip install -r docs/requirements.txt
 
-    # Or, for members of the Astral org, which has access to MkDocs Insiders via sponsorship.
-    uv pip install -r docs/requirements-insiders.txt
-    ```
+   # Or, for members of the Astral org, which has access to MkDocs Insiders via sponsorship.
+   uv pip install -r docs/requirements-insiders.txt
+   ```
 
 1. Activate the virtual environment with:
 
-    ```shell
-    # On macOS and Linux.
-    source .venv/bin/activate
+   ```shell
+   # On macOS and Linux.
+   source .venv/bin/activate
 
-    # On Windows.
-    .venv\Scripts\activate
-    ```
+   # On Windows.
+   .venv\Scripts\activate
+   ```
 
 1. Run the development server with:
 
-    ```shell
-    # For contributors.
-    mkdocs serve -f mkdocs.public.yml
+   ```shell
+   # For contributors.
+   mkdocs serve -f mkdocs.public.yml
 
-    # For members of the Astral org, which has access to MkDocs Insiders via sponsorship.
-    mkdocs serve -f mkdocs.insiders.yml
-    ```
+   # For members of the Astral org, which has access to MkDocs Insiders via sponsorship.
+   mkdocs serve -f mkdocs.insiders.yml
+   ```
 
 The documentation should then be available locally at
 [http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
@@ -182,9 +182,9 @@ uv pip compile docs/requirements.in -o docs/requirements.txt --universal -p 3.12
 uv pip compile docs/requirements-insiders.in -o docs/requirements-insiders.txt --universal -p 3.12
 ```
 
-Documentation is deployed automatically on release by publishing to the [Astral
-documentation](https://github.com/astral-sh/docs) repository, which itself deploys via Cloudflare
-Pages.
+Documentation is deployed automatically on release by publishing to the
+[Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via
+Cloudflare Pages.
 
 After making changes to the documentation, format the markdown files with:
 
@@ -208,7 +208,7 @@ Then, open a pull request e.g. `Bump version to ...`.
 
 Binary builds will automatically be tested for the release.
 
-After merging the pull request, run the [release
-workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml) with the version tag. **Do
-not include a leading `v`**. The release will automatically be created on GitHub after everything
-else publishes.
+After merging the pull request, run the
+[release workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml) with the version
+tag. **Do not include a leading `v`**. The release will automatically be created on GitHub after
+everything else publishes.

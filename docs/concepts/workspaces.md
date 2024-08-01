@@ -4,9 +4,9 @@ Workspaces help organize large codebases by splitting them into multiple package
 dependencies.
 
 When using the `uv pip` interface, workspace dependencies behave like automatic editable path
-dependencies. Using the uv project interface, all of the workspace packages are locked together. `uv
-run` installs only the current package (unless overridden with `--package`) and its workspace and
-non-workspace dependencies.
+dependencies. Using the uv project interface, all of the workspace packages are locked together.
+`uv run` installs only the current package (unless overridden with `--package`) and its workspace
+and non-workspace dependencies.
 
 ## Configuration
 
@@ -25,7 +25,7 @@ in the `tool.uv.sources` of a specific project.
 
 ## Common structures
 
-There a two main workspace structures: A **root package with helpers** and a **flat workspace**. 
+There a two main workspace structures: A **root package with helpers** and a **flat workspace**.
 
 The root workspace layout defines one main package in the root of the repository, with helper
 packages in `packages`. In this example `albatross/pyproject.toml` has both a `project` section and

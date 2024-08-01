@@ -1,4 +1,3 @@
-
 # Features
 
 uv supports the full Python development experience — from installing Python and hacking on simple

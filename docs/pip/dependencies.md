@@ -29,12 +29,12 @@ cli = [
 ```
 
 Each of the keys defines an "extra", which can be installed using the `--extra` and `--all-extras`
-flags or `package[<extra>]` syntax. See the documentation on [installing
-packages](./packages.md#installing-packages-from-files) for more details.
+flags or `package[<extra>]` syntax. See the documentation on
+[installing packages](./packages.md#installing-packages-from-files) for more details.
 
-See the official [`pyproject.toml`
-guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on
-getting started with a `pyproject.toml`.
+See the official
+[`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for
+more details on getting started with a `pyproject.toml`.
 
 ## Using `requirements.in`
 

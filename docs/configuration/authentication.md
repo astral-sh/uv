@@ -10,8 +10,8 @@ Using SSH:
 - `git+ssh://git@<hostname>/...` (e.g. `git+ssh://git@github.com/astral-sh/uv`)
 - `git+ssh://git@<host>/...` (e.g. `git+ssh://git@github.com-key-2/astral-sh/uv`)
 
-See the [GitHub SSH
-documentation](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/about-ssh)
+See the
+[GitHub SSH documentation](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/about-ssh)
 for more details on how to configure SSH.
 
 Using a password or token:
@@ -25,8 +25,8 @@ When using a GitHub personal access token, the username is arbitrary. GitHub doe
 logging in with password directly, although other hosts may. If a username is provided without
 credentials, you will be prompted to enter them.
 
-If there are no credentials present in the URL and authentication is needed, the [Git credential
-helper](https://git-scm.com/doc/credential-helpers) will be queried.
+If there are no credentials present in the URL and authentication is needed, the
+[Git credential helper](https://git-scm.com/doc/credential-helpers) will be queried.
 
 ## HTTP authentication
 

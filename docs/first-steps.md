@@ -11,8 +11,8 @@ $ uv
 
 You should see a help menu listing the available commands.
 
-Read on for a brief overview of the help menu and version command, or jump to an [overview of
-features](./features.md) to start using uv.
+Read on for a brief overview of the help menu and version command, or jump to an
+[overview of features](./features.md) to start using uv.
 
 ## Help menus
 
@@ -44,7 +44,6 @@ $ uv help init
 When using the long help menu, uv will attempt to use `less` or `more` to "page" the output so it is
 not all displayed at once. To exit the pager, press `q`.
 
-
 ## Viewing the version
 
 To check the installed version:
@@ -63,5 +62,6 @@ $ uv pip --version  # Can be used with a subcommand
 
 ## Next steps
 
-Now that you've confirmed uv is installed and know how to get help, check out an [overview of
-features](./features.md) or jump straight into the [guides](./guides/index.md) to start using uv.
+Now that you've confirmed uv is installed and know how to get help, check out an
+[overview of features](./features.md) or jump straight into the [guides](./guides/index.md) to start
+using uv.

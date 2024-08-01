@@ -162,7 +162,6 @@ jobs:
             uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
             uv-${{ runner.os }}
 
-     
       # ... install packages, run tests, etc ...
 
       - name: Minimize uv cache
