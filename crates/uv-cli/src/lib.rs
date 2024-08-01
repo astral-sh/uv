@@ -103,7 +103,12 @@ pub struct Cli {
 pub struct GlobalArgs {
     /// Whether to prefer using Python installations that are already present on the system, or
     /// those that are downloaded and installed by uv.
-    #[arg(global = true, long, help_heading = "Python options", display_order=700)]
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        display_order = 700
+    )]
     pub python_preference: Option<PythonPreference>,
 
     /// Whether to automatically download Python when required.
