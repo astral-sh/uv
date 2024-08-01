@@ -156,7 +156,9 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run python install
+          cargo run \
+            --profile fast-build \
+            python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -172,7 +174,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          uv="./target/debug/uv"
+          uv="./target/fast-build/uv"
           $uv venv
           $uv pip install ruff
 
@@ -193,7 +195,9 @@ jobs:
 
       - name: "Install required Python versions"
         run: |
-          cargo run python install
+          cargo run \
+            --profile fast-build \
+            python install
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -209,7 +213,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          uv="./target/debug/uv"
+          uv="./target/fast-build/uv"
           $uv venv
           $uv pip install ruff
 
@@ -287,7 +291,7 @@ jobs:
           # Avoid debug build stack overflows.
           UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
         run: |
-          Set-Alias -Name uv -Value ./target/debug/uv
+          Set-Alias -Name uv -Value ./target/fast-build/uv
           uv venv
           uv pip install ruff
 
@@ -372,9 +376,9 @@ jobs:
       - name: "Build"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
         run: |
-          cargo build --target ${{ matrix.target-arch }}-pc-windows-msvc
-          cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
-          cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
+          cargo build --profile fast-build --target ${{ matrix.target-arch }}-pc-windows-msvc
+          cp target/${{ matrix.target-arch }}-pc-windows-msvc/fast-build/uv-trampoline-console.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
+          cp target/${{ matrix.target-arch }}-pc-windows-msvc/fast-build/uv-trampoline-gui.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
       - name: "Test"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
         run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc --test *
@@ -430,13 +434,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build --target x86_64-unknown-linux-musl
+        run: cargo build --profile fast-build  --target x86_64-unknown-linux-musl
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-linux-${{ github.sha }}
-          path: ./target/x86_64-unknown-linux-musl/debug/uv
+          path: ./target/x86_64-unknown-linux-musl/fast-build/uv
           retention-days: 1
 
   build-binary-macos-aarch64:
@@ -452,13 +456,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build  --profile fast-build
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-aarch64-${{ github.sha }}
-          path: ./target/debug/uv
+          path: ./target/fast-build/uv
           retention-days: 1
 
   build-binary-macos-x86_64:
@@ -474,13 +478,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --profile fast-build
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-x86_64-${{ github.sha }}
-          path: ./target/debug/uv
+          path: ./target/fast-build/uv
           retention-days: 1
 
   build-binary-windows:
@@ -521,13 +525,13 @@ jobs:
         env:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: cargo build
+        run: cargo build --profile fast-build
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-windows-${{ github.sha }}
-          path: ${{ env.DEV_DRIVE }}/uv/target/debug/uv.exe
+          path: ${{ env.DEV_DRIVE }}/uv/target/fast-build/uv.exe
           retention-days: 1
 
   ecosystem-test:
