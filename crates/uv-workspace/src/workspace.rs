@@ -197,6 +197,48 @@ impl Workspace {
         })
     }
 
+    /// Set the [`ProjectWorkspace`] for a given workspace member.
+    ///
+    /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
+    #[must_use]
+    pub fn with_pyproject_toml(
+        self,
+        package_name: &PackageName,
+        pyproject_toml: PyProjectToml,
+    ) -> Option<Self> {
+        let mut packages = self.packages;
+        let member = packages.get_mut(package_name)?;
+
+        if member.root == self.install_path {
+            // If the member is also the workspace root, update _both_ the member entry and the
+            // root `pyproject.toml`.
+            let workspace_pyproject_toml = pyproject_toml.clone();
+
+            // Refresh the workspace sources.
+            let workspace_sources = workspace_pyproject_toml
+                .tool
+                .clone()
+                .and_then(|tool| tool.uv)
+                .and_then(|uv| uv.sources)
+                .unwrap_or_default();
+
+            // Set the `pyproject.toml` for the member.
+            member.pyproject_toml = pyproject_toml;
+
+            Some(Self {
+                pyproject_toml: workspace_pyproject_toml,
+                sources: workspace_sources,
+                packages,
+                ..self
+            })
+        } else {
+            // Set the `pyproject.toml` for the member.
+            member.pyproject_toml = pyproject_toml;
+
+            Some(Self { packages, ..self })
+        }
+    }
+
     /// Returns the set of requirements that include all packages in the workspace.
     pub fn members_as_requirements(&self) -> Vec<Requirement> {
         self.packages
@@ -763,6 +805,19 @@ impl ProjectWorkspace {
     /// Returns the current project as a [`WorkspaceMember`].
     pub fn current_project(&self) -> &WorkspaceMember {
         &self.workspace().packages[&self.project_name]
+    }
+
+    /// Set the `pyproject.toml` for the current project.
+    ///
+    /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
+    #[must_use]
+    pub fn with_pyproject_toml(self, pyproject_toml: PyProjectToml) -> Option<Self> {
+        Some(Self {
+            workspace: self
+                .workspace
+                .with_pyproject_toml(&self.project_name, pyproject_toml)?,
+            ..self
+        })
     }
 
     /// Find the workspace for a project.

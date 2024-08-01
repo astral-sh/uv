@@ -219,6 +219,12 @@ pub(crate) async fn add(
         return Ok(ExitStatus::Success);
     }
 
+    // Update the `pypackage.toml` in-memory.
+    let project = project
+        .clone()
+        .with_pyproject_toml(pyproject.to_toml()?)
+        .context("Failed to update `pyproject.toml`")?;
+
     // Initialize any shared state.
     let state = SharedState::default();
 
