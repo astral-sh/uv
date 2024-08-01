@@ -19,6 +19,13 @@ fn help() {
       pip      Resolve and install Python packages
       tool     Run and manage executable Python packages
       python   Manage Python installations
+      init     Initialize a project
+      run      Run a command in the project environment
+      sync     Sync the project's dependencies with the environment
+      lock     Resolve the project requirements into a lockfile
+      add      Add one or more packages to the project requirements
+      remove   Remove one or more packages from the project requirements
+      tree     Display the dependency tree for the project
       venv     Create a virtual environment
       cache    Manage the cache
       version  Display uv's version
@@ -78,6 +85,13 @@ fn help_flag() {
       pip      Resolve and install Python packages
       tool     Run and manage executable Python packages
       python   Manage Python installations
+      init     Initialize a project
+      run      Run a command in the project environment
+      sync     Sync the project's dependencies with the environment
+      lock     Resolve the project requirements into a lockfile
+      add      Add one or more packages to the project requirements
+      remove   Remove one or more packages from the project requirements
+      tree     Display the dependency tree for the project
       venv     Create a virtual environment
       cache    Manage the cache
       version  Display uv's version
@@ -136,6 +150,13 @@ fn help_short_flag() {
       pip      Resolve and install Python packages
       tool     Run and manage executable Python packages
       python   Manage Python installations
+      init     Initialize a project
+      run      Run a command in the project environment
+      sync     Sync the project's dependencies with the environment
+      lock     Resolve the project requirements into a lockfile
+      add      Add one or more packages to the project requirements
+      remove   Remove one or more packages from the project requirements
+      tree     Display the dependency tree for the project
       venv     Create a virtual environment
       cache    Manage the cache
       version  Display uv's version
@@ -547,6 +568,13 @@ fn help_unknown_subcommand() {
         pip
         tool
         python
+        init
+        run
+        sync
+        lock
+        add
+        remove
+        tree
         venv
         cache
         version
@@ -562,6 +590,13 @@ fn help_unknown_subcommand() {
         pip
         tool
         python
+        init
+        run
+        sync
+        lock
+        add
+        remove
+        tree
         venv
         cache
         version
@@ -604,6 +639,13 @@ fn help_with_global_option() {
       pip      Resolve and install Python packages
       tool     Run and manage executable Python packages
       python   Manage Python installations
+      init     Initialize a project
+      run      Run a command in the project environment
+      sync     Sync the project's dependencies with the environment
+      lock     Resolve the project requirements into a lockfile
+      add      Add one or more packages to the project requirements
+      remove   Remove one or more packages from the project requirements
+      tree     Display the dependency tree for the project
       venv     Create a virtual environment
       cache    Manage the cache
       version  Display uv's version
@@ -699,6 +741,13 @@ fn help_with_no_pager() {
       pip      Resolve and install Python packages
       tool     Run and manage executable Python packages
       python   Manage Python installations
+      init     Initialize a project
+      run      Run a command in the project environment
+      sync     Sync the project's dependencies with the environment
+      lock     Resolve the project requirements into a lockfile
+      add      Add one or more packages to the project requirements
+      remove   Remove one or more packages from the project requirements
+      tree     Display the dependency tree for the project
       venv     Create a virtual environment
       cache    Manage the cache
       version  Display uv's version

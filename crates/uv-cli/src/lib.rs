@@ -416,45 +416,38 @@ pub enum PipCommand {
 #[derive(Subcommand)]
 pub enum ProjectCommand {
     /// Initialize a project.
-    #[clap(hide = true)]
     Init(InitArgs),
     /// Run a command in the project environment.
-    #[clap(hide = true)]
     #[command(
         after_help = "Use `uv help run` for more details.",
         after_long_help = ""
     )]
     Run(RunArgs),
     /// Sync the project's dependencies with the environment.
-    #[clap(hide = true)]
     #[command(
         after_help = "Use `uv help sync` for more details.",
         after_long_help = ""
     )]
     Sync(SyncArgs),
     /// Resolve the project requirements into a lockfile.
-    #[clap(hide = true)]
     #[command(
         after_help = "Use `uv help lock` for more details.",
         after_long_help = ""
     )]
     Lock(LockArgs),
     /// Add one or more packages to the project requirements.
-    #[clap(hide = true)]
     #[command(
         after_help = "Use `uv help add` for more details.",
         after_long_help = ""
     )]
     Add(AddArgs),
     /// Remove one or more packages from the project requirements.
-    #[clap(hide = true)]
     #[command(
         after_help = "Use `uv help remove` for more details.",
         after_long_help = ""
     )]
     Remove(RemoveArgs),
     /// Display the dependency tree for the project.
-    #[clap(hide = true)]
     Tree(TreeArgs),
 }
 
