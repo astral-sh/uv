@@ -20,7 +20,7 @@
 
 ### Documentation
 
-- Don't use equals signs for cli args with value ([#5704](https://github.com/astral-sh/uv/pull/5704))
+- Don't use equals signs for CLI options with values ([#5704](https://github.com/astral-sh/uv/pull/5704))
 
 ## 0.2.32
 
