@@ -66,11 +66,11 @@ it will be ignored.
 
 uv can also install into arbitrary, even non-virtual environments, with the `--python` argument
 provided to `uv pip sync` or `uv pip install`. For example, `uv pip install
---python=/path/to/python` will install into the environment linked to the `/path/to/python`
+--python /path/to/python` will install into the environment linked to the `/path/to/python`
 interpreter.
 
 For convenience, `uv pip install --system` will install into the system Python environment. Using
-`--system` is roughly equivalent to `uv pip install --python=$(which python)`, but note that
+`--system` is roughly equivalent to `uv pip install --python $(which python)`, but note that
 executables that are linked to virtual environments will be skipped. Although we generally recommend
 using virtual environments for dependency management, `--system` is appropriate in continuous
 integration and containerized environments.

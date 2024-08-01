@@ -47,7 +47,7 @@ By default, uv will accept pre-release versions during dependency resolution in 
 1. If _all_ published versions of a package are pre-releases.
 
 If dependency resolution fails due to a transitive pre-release, uv will prompt the user to re-run
-with `--prerelease=allow`, to allow pre-releases for all dependencies.
+with `--prerelease allow`, to allow pre-releases for all dependencies.
 
 Alternatively, you can add the transitive dependency to your `requirements.in` file with pre-release
 specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
