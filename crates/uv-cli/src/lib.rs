@@ -52,14 +52,15 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
 }
 
 #[derive(Parser)]
-#[command(name = "uv", author, version = uv_version::version(), long_version = crate::version::version())]
+#[command(name = "uv", author, long_version = crate::version::version())]
 #[command(about = "An extremely fast Python package manager.")]
 #[command(propagate_version = true)]
 #[command(
     after_help = "Use `uv help` for more details.",
     after_long_help = "",
     disable_help_flag = true,
-    disable_help_subcommand = true
+    disable_help_subcommand = true,
+    disable_version_flag = true
 )]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
@@ -67,28 +68,53 @@ pub struct Cli {
     pub command: Box<Commands>,
 
     #[command(flatten)]
-    pub global_args: Box<GlobalArgs>,
-
-    #[command(flatten)]
     pub cache_args: Box<CacheArgs>,
 
+    #[command(flatten)]
+    pub global_args: Box<GlobalArgs>,
+
     /// The path to a `uv.toml` file to use for configuration.
-    #[arg(global = true, long, env = "UV_CONFIG_FILE")]
+    #[arg(
+        global = true,
+        long,
+        env = "UV_CONFIG_FILE",
+        help_heading = "Global options"
+    )]
     pub config_file: Option<PathBuf>,
 
     /// Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current directory,
     /// parent directories, or user configuration directories.
-    #[arg(global = true, long, env = "UV_NO_CONFIG", value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(global = true, long, env = "UV_NO_CONFIG", value_parser = clap::builder::BoolishValueParser::new(), help_heading = "Global options")]
     pub no_config: bool,
 
     /// Print help.
-    #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]
+    #[arg(global = true, short, long, action = clap::ArgAction::HelpShort, help_heading = "Global options")]
     help: Option<bool>,
+
+    /// Print version.
+    // This enable it to show under Global options section.
+    #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version, help_heading = "Global options")]
+    version: Option<bool>,
 }
 
 #[derive(Parser, Debug, Clone)]
+#[command(next_help_heading = "Global options", next_display_order = 1000)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
+    /// Whether to prefer using Python installations that are already present on the system, or
+    /// those that are downloaded and installed by uv.
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        display_order = 700
+    )]
+    pub python_preference: Option<PythonPreference>,
+
+    /// Whether to automatically download Python when required.
+    #[arg(global = true, long, help_heading = "Python options")]
+    pub python_fetch: Option<PythonFetch>,
+
     /// Do not print any output.
     #[arg(global = true, long, short, conflicts_with = "verbose")]
     pub quiet: bool,
@@ -136,15 +162,6 @@ pub struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
-
-    /// Whether to prefer using Python installations that are already present on the system, or
-    /// those that are downloaded and installed by uv.
-    #[arg(global = true, long)]
-    pub python_preference: Option<PythonPreference>,
-
-    /// Whether to automatically download Python when required.
-    #[arg(global = true, long)]
-    pub python_fetch: Option<PythonFetch>,
 
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
