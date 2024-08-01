@@ -101,6 +101,15 @@ pub struct Cli {
 #[command(next_help_heading = "Global options", next_display_order = 1000)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
+    /// Whether to prefer using Python installations that are already present on the system, or
+    /// those that are downloaded and installed by uv.
+    #[arg(global = true, long, help_heading = "Python options", display_order=700)]
+    pub python_preference: Option<PythonPreference>,
+
+    /// Whether to automatically download Python when required.
+    #[arg(global = true, long, help_heading = "Python options")]
+    pub python_fetch: Option<PythonFetch>,
+
     /// Do not print any output.
     #[arg(global = true, long, short, conflicts_with = "verbose")]
     pub quiet: bool,
@@ -148,15 +157,6 @@ pub struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
-
-    /// Whether to prefer using Python installations that are already present on the system, or
-    /// those that are downloaded and installed by uv.
-    #[arg(global = true, long, help_heading = "Python options")]
-    pub python_preference: Option<PythonPreference>,
-
-    /// Whether to automatically download Python when required.
-    #[arg(global = true, long, help_heading = "Python options")]
-    pub python_fetch: Option<PythonFetch>,
 
     /// Whether to enable experimental, preview features.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
