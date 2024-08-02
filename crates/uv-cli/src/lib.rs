@@ -548,7 +548,8 @@ pub struct PipCompileArgs {
     #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub r#override: Vec<Maybe<PathBuf>>,
 
-    /// Constrain build requirement versions using the given requirements files.
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -853,7 +854,8 @@ pub struct PipSyncArgs {
     #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub constraint: Vec<Maybe<PathBuf>>,
 
-    /// Constrain build requirement versions using the given requirements files.
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -1134,7 +1136,8 @@ pub struct PipInstallArgs {
     #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub r#override: Vec<Maybe<PathBuf>>,
 
-    /// Constrain build requirement versions using the given requirements files.
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
