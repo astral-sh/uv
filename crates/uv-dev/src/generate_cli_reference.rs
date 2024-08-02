@@ -143,7 +143,7 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
             }
             let subcommand_name = format!("{name} {}", subcommand.get_name());
             output.push_str(&format!(
-                "<dt><a href=\"{}\"><code>{subcommand_name}</code></a></dt>",
+                "<dt><a href=\"#{}\"><code>{subcommand_name}</code></a></dt>",
                 subcommand_name.replace(' ', "-")
             ));
             if let Some(about) = subcommand.get_about() {

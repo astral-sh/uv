@@ -12,33 +12,33 @@ uv [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="uv-pip"><code>uv pip</code></a></dt><dd><p>Manage Python packages with a pip-compatible interface</p>
+<dl class="cli-reference"><dt><a href="#uv-pip"><code>uv pip</code></a></dt><dd><p>Manage Python packages with a pip-compatible interface</p>
 </dd>
-<dt><a href="uv-tool"><code>uv tool</code></a></dt><dd><p>Run and manage tools provided by Python packages (experimental)</p>
+<dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and manage tools provided by Python packages (experimental)</p>
 </dd>
-<dt><a href="uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations (experimental)</p>
+<dt><a href="#uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations (experimental)</p>
 </dd>
-<dt><a href="uv-init"><code>uv init</code></a></dt><dd><p>Create a new project (experimental)</p>
+<dt><a href="#uv-init"><code>uv init</code></a></dt><dd><p>Create a new project (experimental)</p>
 </dd>
-<dt><a href="uv-run"><code>uv run</code></a></dt><dd><p>Run a command in an environment (experimental)</p>
+<dt><a href="#uv-run"><code>uv run</code></a></dt><dd><p>Run a command in an environment (experimental)</p>
 </dd>
-<dt><a href="uv-sync"><code>uv sync</code></a></dt><dd><p>Update the project&#8217;s environment to match the project&#8217;s dependencies (experimental)</p>
+<dt><a href="#uv-sync"><code>uv sync</code></a></dt><dd><p>Update the project&#8217;s environment to match the project&#8217;s dependencies (experimental)</p>
 </dd>
-<dt><a href="uv-lock"><code>uv lock</code></a></dt><dd><p>Create or update a lockfile for the project&#8217;s dependencies (experimental)</p>
+<dt><a href="#uv-lock"><code>uv lock</code></a></dt><dd><p>Create or update a lockfile for the project&#8217;s dependencies (experimental)</p>
 </dd>
-<dt><a href="uv-add"><code>uv add</code></a></dt><dd><p>Add one or more packages to the project&#8217;s dependencies (experimental)</p>
+<dt><a href="#uv-add"><code>uv add</code></a></dt><dd><p>Add one or more packages to the project&#8217;s dependencies (experimental)</p>
 </dd>
-<dt><a href="uv-remove"><code>uv remove</code></a></dt><dd><p>Remove one or more packages from the project&#8217;s dependencies (experimental)</p>
+<dt><a href="#uv-remove"><code>uv remove</code></a></dt><dd><p>Remove one or more packages from the project&#8217;s dependencies (experimental)</p>
 </dd>
-<dt><a href="uv-tree"><code>uv tree</code></a></dt><dd><p>Display the dependency tree for the project (experimental)</p>
+<dt><a href="#uv-tree"><code>uv tree</code></a></dt><dd><p>Display the dependency tree for the project (experimental)</p>
 </dd>
-<dt><a href="uv-venv"><code>uv venv</code></a></dt><dd><p>Create a virtual environment</p>
+<dt><a href="#uv-venv"><code>uv venv</code></a></dt><dd><p>Create a virtual environment</p>
 </dd>
-<dt><a href="uv-cache"><code>uv cache</code></a></dt><dd><p>Manage the cache</p>
+<dt><a href="#uv-cache"><code>uv cache</code></a></dt><dd><p>Manage the cache</p>
 </dd>
-<dt><a href="uv-version"><code>uv version</code></a></dt><dd><p>Display uv&#8217;s version</p>
+<dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Display uv&#8217;s version</p>
 </dd>
-<dt><a href="uv-help"><code>uv help</code></a></dt><dd><p>Display documentation for a command</p>
+<dt><a href="#uv-help"><code>uv help</code></a></dt><dd><p>Display documentation for a command</p>
 </dd>
 </dl>
 
@@ -54,23 +54,23 @@ uv pip [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="uv-pip-compile"><code>uv pip compile</code></a></dt><dd><p>Compile a <code>requirements.in</code> file to a <code>requirements.txt</code> file</p>
+<dl class="cli-reference"><dt><a href="#uv-pip-compile"><code>uv pip compile</code></a></dt><dd><p>Compile a <code>requirements.in</code> file to a <code>requirements.txt</code> file</p>
 </dd>
-<dt><a href="uv-pip-sync"><code>uv pip sync</code></a></dt><dd><p>Sync an environment with a <code>requirements.txt</code> file</p>
+<dt><a href="#uv-pip-sync"><code>uv pip sync</code></a></dt><dd><p>Sync an environment with a <code>requirements.txt</code> file</p>
 </dd>
-<dt><a href="uv-pip-install"><code>uv pip install</code></a></dt><dd><p>Install packages into an environment</p>
+<dt><a href="#uv-pip-install"><code>uv pip install</code></a></dt><dd><p>Install packages into an environment</p>
 </dd>
-<dt><a href="uv-pip-uninstall"><code>uv pip uninstall</code></a></dt><dd><p>Uninstall packages from an environment</p>
+<dt><a href="#uv-pip-uninstall"><code>uv pip uninstall</code></a></dt><dd><p>Uninstall packages from an environment</p>
 </dd>
-<dt><a href="uv-pip-freeze"><code>uv pip freeze</code></a></dt><dd><p>List, in requirements format, packages installed in an environment</p>
+<dt><a href="#uv-pip-freeze"><code>uv pip freeze</code></a></dt><dd><p>List, in requirements format, packages installed in an environment</p>
 </dd>
-<dt><a href="uv-pip-list"><code>uv pip list</code></a></dt><dd><p>List, in tabular format, packages installed in an environment</p>
+<dt><a href="#uv-pip-list"><code>uv pip list</code></a></dt><dd><p>List, in tabular format, packages installed in an environment</p>
 </dd>
-<dt><a href="uv-pip-show"><code>uv pip show</code></a></dt><dd><p>Show information about one or more installed packages</p>
+<dt><a href="#uv-pip-show"><code>uv pip show</code></a></dt><dd><p>Show information about one or more installed packages</p>
 </dd>
-<dt><a href="uv-pip-tree"><code>uv pip tree</code></a></dt><dd><p>Display the dependency tree for an environment</p>
+<dt><a href="#uv-pip-tree"><code>uv pip tree</code></a></dt><dd><p>Display the dependency tree for an environment</p>
 </dd>
-<dt><a href="uv-pip-check"><code>uv pip check</code></a></dt><dd><p>Verify installed packages have compatible dependencies</p>
+<dt><a href="#uv-pip-check"><code>uv pip check</code></a></dt><dd><p>Verify installed packages have compatible dependencies</p>
 </dd>
 </dl>
 
@@ -800,17 +800,17 @@ uv tool [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="uv-tool-run"><code>uv tool run</code></a></dt><dd><p>Run a tool</p>
+<dl class="cli-reference"><dt><a href="#uv-tool-run"><code>uv tool run</code></a></dt><dd><p>Run a tool</p>
 </dd>
-<dt><a href="uv-tool-install"><code>uv tool install</code></a></dt><dd><p>Install a tool</p>
+<dt><a href="#uv-tool-install"><code>uv tool install</code></a></dt><dd><p>Install a tool</p>
 </dd>
-<dt><a href="uv-tool-list"><code>uv tool list</code></a></dt><dd><p>List installed tools</p>
+<dt><a href="#uv-tool-list"><code>uv tool list</code></a></dt><dd><p>List installed tools</p>
 </dd>
-<dt><a href="uv-tool-uninstall"><code>uv tool uninstall</code></a></dt><dd><p>Uninstall a tool</p>
+<dt><a href="#uv-tool-uninstall"><code>uv tool uninstall</code></a></dt><dd><p>Uninstall a tool</p>
 </dd>
-<dt><a href="uv-tool-update-shell"><code>uv tool update-shell</code></a></dt><dd><p>Ensure that the tool executable directory is on <code>PATH</code></p>
+<dt><a href="#uv-tool-update-shell"><code>uv tool update-shell</code></a></dt><dd><p>Ensure that the tool executable directory is on <code>PATH</code></p>
 </dd>
-<dt><a href="uv-tool-dir"><code>uv tool dir</code></a></dt><dd><p>Show the tools directory</p>
+<dt><a href="#uv-tool-dir"><code>uv tool dir</code></a></dt><dd><p>Show the tools directory</p>
 </dd>
 </dl>
 
@@ -1146,17 +1146,17 @@ uv python [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="uv-python-list"><code>uv python list</code></a></dt><dd><p>List the available Python installations</p>
+<dl class="cli-reference"><dt><a href="#uv-python-list"><code>uv python list</code></a></dt><dd><p>List the available Python installations</p>
 </dd>
-<dt><a href="uv-python-install"><code>uv python install</code></a></dt><dd><p>Download and install Python versions</p>
+<dt><a href="#uv-python-install"><code>uv python install</code></a></dt><dd><p>Download and install Python versions</p>
 </dd>
-<dt><a href="uv-python-find"><code>uv python find</code></a></dt><dd><p>Search for a Python installation</p>
+<dt><a href="#uv-python-find"><code>uv python find</code></a></dt><dd><p>Search for a Python installation</p>
 </dd>
-<dt><a href="uv-python-pin"><code>uv python pin</code></a></dt><dd><p>Pin to a specific Python version</p>
+<dt><a href="#uv-python-pin"><code>uv python pin</code></a></dt><dd><p>Pin to a specific Python version</p>
 </dd>
-<dt><a href="uv-python-dir"><code>uv python dir</code></a></dt><dd><p>Show the uv Python installation directory</p>
+<dt><a href="#uv-python-dir"><code>uv python dir</code></a></dt><dd><p>Show the uv Python installation directory</p>
 </dd>
-<dt><a href="uv-python-uninstall"><code>uv python uninstall</code></a></dt><dd><p>Uninstall Python versions</p>
+<dt><a href="#uv-python-uninstall"><code>uv python uninstall</code></a></dt><dd><p>Uninstall Python versions</p>
 </dd>
 </dl>
 
@@ -2130,11 +2130,11 @@ uv cache [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="uv-cache-clean"><code>uv cache clean</code></a></dt><dd><p>Clear the cache, removing all entries or those linked to specific packages</p>
+<dl class="cli-reference"><dt><a href="#uv-cache-clean"><code>uv cache clean</code></a></dt><dd><p>Clear the cache, removing all entries or those linked to specific packages</p>
 </dd>
-<dt><a href="uv-cache-prune"><code>uv cache prune</code></a></dt><dd><p>Prune all unreachable objects from the cache</p>
+<dt><a href="#uv-cache-prune"><code>uv cache prune</code></a></dt><dd><p>Prune all unreachable objects from the cache</p>
 </dd>
-<dt><a href="uv-cache-dir"><code>uv cache dir</code></a></dt><dd><p>Show the cache directory</p>
+<dt><a href="#uv-cache-dir"><code>uv cache dir</code></a></dt><dd><p>Show the cache directory</p>
 </dd>
 </dl>
 
