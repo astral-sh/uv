@@ -405,11 +405,41 @@ impl VersionSpecifier {
             version,
         }
     }
+    /// `!=<version>`
+    pub fn not_equals_version(version: Version) -> Self {
+        Self {
+            operator: Operator::NotEqual,
+            version,
+        }
+    }
 
     /// `>=<version>`
     pub fn greater_than_equal_version(version: Version) -> Self {
         Self {
             operator: Operator::GreaterThanEqual,
+            version,
+        }
+    }
+    /// `><version>`
+    pub fn greater_than_version(version: Version) -> Self {
+        Self {
+            operator: Operator::GreaterThan,
+            version,
+        }
+    }
+
+    /// `<=<version>`
+    pub fn less_than_equal_version(version: Version) -> Self {
+        Self {
+            operator: Operator::LessThanEqual,
+            version,
+        }
+    }
+
+    /// `<<version>`
+    pub fn less_than_version(version: Version) -> Self {
+        Self {
+            operator: Operator::LessThan,
             version,
         }
     }

@@ -29,6 +29,7 @@ uv-distribution = { workspace = true }
 uv-fs = { workspace = true, features = ["serde"] }
 uv-git = { workspace = true }
 uv-normalize = { workspace = true }
+uv-pubgrub = { workspace = true }
 uv-python = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }

@@ -2129,8 +2129,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             version = 1
             requires-python = ">=3.12"
             environment-markers = [
-                "sys_platform == 'win32'",
                 "sys_platform != 'win32'",
+                "sys_platform == 'win32'",
             ]
 
             [options]
@@ -3586,14 +3586,12 @@ fn lock_python_version_marker_complement() -> Result<()> {
             version = 1
             requires-python = ">=3.8"
             environment-markers = [
-                "python_full_version <= '3.10' and python_version == '3.10'",
-                "python_full_version <= '3.10' and python_version < '3.10'",
-                "python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10'",
-                "python_full_version <= '3.10' and python_version > '3.10'",
+                "python_full_version > '3.10' and python_version > '3.10'",
                 "python_full_version > '3.10' and python_version == '3.10'",
                 "python_full_version > '3.10' and python_version < '3.10'",
-                "python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10'",
-                "python_full_version > '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version == '3.10'",
+                "python_full_version <= '3.10' and python_version < '3.10'",
             ]
 
             [options]
@@ -3624,7 +3622,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
             dependencies = [
                 { name = "attrs" },
                 { name = "iniconfig" },
-                { name = "typing-extensions", marker = "python_full_version <= '3.10' or python_full_version > '3.10'" },
+                { name = "typing-extensions" },
             ]
 
             [[package]]
@@ -4791,8 +4789,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform != 'darwin'",
+            "sys_platform == 'darwin'",
         ]
 
         [options]

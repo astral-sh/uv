@@ -214,7 +214,7 @@ impl RequiresPython {
             // tree we would generate would always evaluate to
             // `true` because every possible Python version would
             // satisfy it.
-            Bound::Unbounded => return MarkerTree::And(vec![]),
+            Bound::Unbounded => return MarkerTree::TRUE,
             Bound::Excluded(version) => (Operator::GreaterThan, version.clone().without_local()),
             Bound::Included(version) => {
                 (Operator::GreaterThanEqual, version.clone().without_local())
@@ -248,10 +248,11 @@ impl RequiresPython {
             // impossible here).
             specifier: VersionSpecifier::from_version(op, version).unwrap(),
         };
-        MarkerTree::And(vec![
-            MarkerTree::Expression(expr_python_version),
-            MarkerTree::Expression(expr_python_full_version),
-        ])
+
+        let mut conjunction = MarkerTree::TRUE;
+        conjunction.and(MarkerTree::expression(expr_python_version));
+        conjunction.and(MarkerTree::expression(expr_python_full_version));
+        conjunction
     }
 
     /// Returns `false` if the wheel's tags state it can't be used in the given Python version

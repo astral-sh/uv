@@ -448,6 +448,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "boxcar"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "510a90332002c1af3317ef6b712f0dab697f30bbe809b86965eac2923c0bca8e"
+
+[[package]]
 name = "brotli"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2456,16 +2462,22 @@ dependencies = [
 name = "pep508_rs"
 version = "0.6.0"
 dependencies = [
+ "boxcar",
  "derivative",
+ "indexmap",
  "insta",
+ "itertools 0.13.0",
  "log",
  "pep440_rs",
+ "pubgrub",
  "pyo3",
  "pyo3-log",
  "regex",
+ "rustc-hash 2.0.0",
  "schemars",
  "serde",
  "serde_json",
+ "smallvec",
  "testing_logger",
  "thiserror",
  "tracing",
@@ -2473,6 +2485,7 @@ dependencies = [
  "url",
  "uv-fs",
  "uv-normalize",
+ "uv-pubgrub",
 ]
 
 [[package]]
@@ -4939,6 +4952,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-pubgrub"
+version = "0.0.1"
+dependencies = [
+ "itertools 0.13.0",
+ "pep440_rs",
+ "pubgrub",
+ "thiserror",
+]
+
+[[package]]
 name = "uv-python"
 version = "0.0.1"
 dependencies = [
@@ -5068,6 +5091,7 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-normalize",
+ "uv-pubgrub",
  "uv-python",
  "uv-types",
  "uv-warnings",

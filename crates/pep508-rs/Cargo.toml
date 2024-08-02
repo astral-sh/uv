@@ -21,6 +21,10 @@ workspace = true
 
 [dependencies]
 derivative = { workspace = true }
+itertools = { workspace = true }
+indexmap = { workspace = true }
+pubgrub = { workspace = true }
+rustc-hash = { workspace = true }
 pep440_rs = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }
@@ -34,6 +38,9 @@ unicode-width = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
+uv-pubgrub = { workspace = true }
+boxcar = "0.2.5"
+smallvec = "1.13.2"
 
 [dev-dependencies]
 insta = { version = "1.36.1" }

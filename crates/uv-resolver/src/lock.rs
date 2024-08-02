@@ -477,8 +477,12 @@ impl Lock {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
         if let Some(ref fork_markers) = self.fork_markers {
-            let fork_markers =
-                each_element_on_its_line_array(fork_markers.iter().map(ToString::to_string));
+            let fork_markers = each_element_on_its_line_array(
+                fork_markers
+                    .iter()
+                    .filter_map(MarkerTree::contents)
+                    .map(|marker| marker.to_string()),
+            );
             doc.insert("environment-markers", value(fork_markers));
         }
 
@@ -1018,10 +1022,11 @@ impl Package {
             for dep in deps {
                 if let Some(mut dep) = dep.to_requirement(workspace_root, &mut dependency_extras)? {
                     // Add back the extra marker expression.
-                    let marker = MarkerTree::Expression(MarkerExpression::Extra {
+                    let marker = MarkerTree::expression(MarkerExpression::Extra {
                         operator: ExtraOperator::Equal,
                         name: extra.clone(),
                     });
+
                     match dep.marker {
                         Some(ref mut tree) => tree.and(marker),
                         None => dep.marker = Some(marker),
@@ -1079,8 +1084,12 @@ impl Package {
         self.id.to_toml(None, &mut table);
 
         if let Some(ref fork_markers) = self.fork_markers {
-            let wheels =
-                each_element_on_its_line_array(fork_markers.iter().map(ToString::to_string));
+            let wheels = each_element_on_its_line_array(
+                fork_markers
+                    .iter()
+                    .filter_map(MarkerTree::contents)
+                    .map(|marker| marker.to_string()),
+            );
             table.insert("environment-markers", value(wheels));
         }
 
@@ -2288,7 +2297,7 @@ impl Dependency {
                 .collect::<Array>();
             table.insert("extra", value(extra_array));
         }
-        if let Some(ref marker) = self.marker {
+        if let Some(marker) = self.marker.as_ref().and_then(MarkerTree::contents) {
             table.insert("marker", value(marker.to_string()));
         }
 

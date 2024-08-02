@@ -1,0 +1,15 @@
+[package]
+name = "uv-pubgrub"
+version = "0.0.1"
+edition = "2021"
+description = "Common uv pubgrub types."
+
+[lints]
+workspace = true
+
+[dependencies]
+pep440_rs = { workspace = true }
+
+itertools = { workspace = true }
+thiserror = { workspace = true }
+pubgrub = { workspace = true }
