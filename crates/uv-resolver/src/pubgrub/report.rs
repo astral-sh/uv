@@ -14,6 +14,7 @@ use pep440_rs::Version;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::error::ErrorTree;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonTarget};
@@ -399,7 +400,7 @@ impl PubGrubReportFormatter<'_> {
     /// their requirements.
     pub(crate) fn hints(
         &self,
-        derivation_tree: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+        derivation_tree: &ErrorTree,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,

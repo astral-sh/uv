@@ -1905,7 +1905,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         visited: &FxHashSet<PackageName>,
         index_locations: &IndexLocations,
     ) -> ResolveError {
-        NoSolutionError::collapse_proxies(&mut err);
+        err = NoSolutionError::collapse_proxies(err);
 
         let mut unavailable_packages = FxHashMap::default();
         for package in err.packages() {
