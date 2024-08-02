@@ -276,10 +276,13 @@ async fn venv_impl(
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
 
+        let build_constraints = [];
+
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
+            &build_constraints,
             interpreter,
             index_locations,
             &flat_index,

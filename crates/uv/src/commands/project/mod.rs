@@ -405,10 +405,13 @@ pub(crate) async fn resolve_names(
     let setup_py = SetupPyStrategy::default();
     let flat_index = FlatIndex::default();
 
+    // TODO: read locked build constraints
+    let build_constraints = [];
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -525,10 +528,13 @@ pub(crate) async fn resolve_environment<'a>(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
+    // TODO: read locked build constraints
+    let build_constraints = [];
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -638,10 +644,13 @@ pub(crate) async fn sync_environment(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
+    // TODO: read locked build constraints
+    let build_constraints = [];
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -799,10 +808,14 @@ pub(crate) async fn update_environment(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
+    // TODO: read locked build constraints
+    let build_constraints = [];
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,

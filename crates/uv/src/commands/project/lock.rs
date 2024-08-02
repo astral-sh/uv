@@ -403,10 +403,13 @@ async fn do_lock(
             // Prefill the index with the lockfile metadata.
             let index = lock.to_index(workspace.install_path(), upgrade)?;
 
+            // TODO: read locked build constraints
+            let build_constraints = [];
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
+                &build_constraints,
                 interpreter,
                 index_locations,
                 &flat_index,
@@ -479,10 +482,13 @@ async fn do_lock(
         None => {
             debug!("Starting clean resolution");
 
+            // TODO: read locked build constraints
+            let build_constraints = [];
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
+                &build_constraints,
                 interpreter,
                 index_locations,
                 &flat_index,

@@ -574,6 +574,8 @@ uv accepts the following command-line arguments as environment variables:
   uv will require that all dependencies have a hash specified in the requirements file.
 - `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use this
   file as the constraints file. Uses space-separated list of files.
+- `UV_BUILD_CONSTRAINT`: Equivalent to the `--build-constraint` command-line argument. If set, uv
+  will use this file as constraints for any source distribution builds. Uses space-separated list of files.
 - `UV_OVERRIDE`: Equivalent to the `--override` command-line argument. If set, uv will use this
   file as the overrides file. Uses space-separated list of files.
 - `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this
