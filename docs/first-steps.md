@@ -2,11 +2,16 @@
 
 uv only provides a command-line interface and must be used from a terminal.
 
-After [installing uv](./installation.md), you can check that uv is installed by running the `uv`
+After [installing uv](./installation.md), you can check that uv is available by running the `uv`
 command:
 
 ```console
 $ uv
+An extremely fast Python package manager.
+
+Usage: uv [OPTIONS] <COMMAND>
+
+...
 ```
 
 You should see a help menu listing the available commands.
@@ -63,5 +68,4 @@ $ uv pip --version  # Can be used with a subcommand
 ## Next steps
 
 Now that you've confirmed uv is installed and know how to get help, check out an
-[overview of features](./features.md) or jump straight into the [guides](./guides/index.md) to start
-using uv.
+[overview of features](./features.md) or jump to the [guides](./guides/index.md) to start using uv.
