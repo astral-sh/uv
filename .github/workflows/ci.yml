@@ -57,7 +57,9 @@ jobs:
         run: cargo fmt --all --check
 
       - name: "Prettier"
-        run: npx prettier --prose-wrap always --check "**/*.{json5,yaml,yml}" docs/*.md docs/concepts/**/*.md docs/guides/**/*.md docs/pip/**/*.md
+        run: |
+          npx prettier --check "**/*.{json5,yaml,yml}"
+          npx prettier --prose-wrap always --check "**/*.md"
 
       - name: "README check"
         run: python scripts/transform_readme.py --target pypi
