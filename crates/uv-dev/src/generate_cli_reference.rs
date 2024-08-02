@@ -221,6 +221,7 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
                     output.push_str("<dd>");
                     output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
                     default_option(opt, output);
+                    possible_options(opt, output);
                     output.push_str("</dd>");
                 }
             }
@@ -254,6 +255,31 @@ fn default_option(opt: &clap::Arg, output: &mut String) {
                 .iter()
                 .map(|s| s.to_string_lossy())
                 .join(",")
+        );
+        output.push_str(&markdown::to_html(&value));
+    }
+}
+
+fn possible_options(opt: &clap::Arg, output: &mut String) {
+    if opt.is_hide_possible_values_set() {
+        return;
+    }
+
+    let values = opt.get_possible_values();
+    if !values.is_empty() {
+        let value = format!(
+            "\nPossible values:\n{}",
+            values
+                .into_iter()
+                .map(|value| {
+                    let name = value.get_name();
+                    value.get_help().map_or_else(
+                        || format!(" - `{name}`"),
+                        |help| format!(" - `{name}`:  {help}"),
+                    )
+                })
+                .collect_vec()
+                .join("\n"),
         );
         output.push_str(&markdown::to_html(&value));
     }
