@@ -65,7 +65,7 @@ dependencies = []
 dev-dependencies = []
 ```
 
-This is where you specify dependencies, as well as details about the project such as it's
+This is where you specify dependencies, as well as details about the project such as its
 description or license. You can edit this file manually, or use commands like `uv add` and
 `uv remove` to manage your project through the CLI.
 
