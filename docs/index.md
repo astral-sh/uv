@@ -163,7 +163,8 @@ direct URL dependencies, local dependencies, constraints, source distributions, 
 indexes, and more.
 
 uv extends these interfaces with advanced features, such as dependency version overrides,
-platform-independent resolutions, reproducible resolutions, alternative resolution strategies, and more.
+platform-independent resolutions, reproducible resolutions, alternative resolution strategies, and
+more.
 
 Compile requirements into a platform-independent requirements file:
 

@@ -70,14 +70,13 @@ applies to version already installed to the active virtual environments. You can
 
 By default, uv tries to use the latest version of each package. For example,
 `uv pip install flask>=2.0.0` will install the latest version of Flask (at time of writing:
-`3.0.0`). If you have `flask>=2.0.0` as a dependency of your library, you will only test
-`flask` 3.0.0 this way, but not if you are actually still compatible with `flask` 2.0.0.
+`3.0.0`). If you have `flask>=2.0.0` as a dependency of your library, you will only test `flask`
+3.0.0 this way, but not if you are actually still compatible with `flask` 2.0.0.
 
 With `--resolution lowest`, uv will install the lowest possible version for all dependencies, both
 direct and indirect (transitive). Alternatively, `--resolution lowest-direct` will opt for the
 lowest compatible versions for all direct dependencies, while using the latest compatible versions
-for all other dependencies. uv will always use the latest versions for
-build dependencies.
+for all other dependencies. uv will always use the latest versions for build dependencies.
 
 For libraries, we recommend separately running tests with `--resolution lowest` or
 `--resolution lowest-direct` in continuous integration to ensure compatibility with the declared
@@ -183,9 +182,10 @@ specific date, allowing reproduction of installations regardless of new package 
 may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g.,
 `2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
 
-Note the package index must support the `upload-time` field as specified in [`PEP
-700`](https://peps.python.org/pep-0700/). If the field is not present for a given distribution, the
-distribution will be treated as unavailable. PyPI provides `upload-time` for all packages.
+Note the package index must support the `upload-time` field as specified in
+[`PEP 700`](https://peps.python.org/pep-0700/). If the field is not present for a given
+distribution, the distribution will be treated as unavailable. PyPI provides `upload-time` for all
+packages.
 
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
