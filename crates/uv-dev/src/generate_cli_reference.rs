@@ -220,6 +220,7 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
                 if let Some(help) = opt.get_long_help().or_else(|| opt.get_help()) {
                     output.push_str("<dd>");
                     output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
+                    default_option(opt, output);
                     output.push_str("</dd>");
                 }
             }
@@ -238,6 +239,24 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
     }
 
     parents.pop();
+}
+
+fn default_option(opt: &clap::Arg, output: &mut String) {
+    if opt.is_hide_default_value_set() || !opt.get_num_args().expect("built").takes_values() {
+        return;
+    }
+
+    let values = opt.get_default_values();
+    if !values.is_empty() {
+        let value = format!(
+            "\n[default: {}]",
+            opt.get_default_values()
+                .iter()
+                .map(|s| s.to_string_lossy())
+                .join(",")
+        );
+        output.push_str(&markdown::to_html(&value));
+    }
 }
 
 #[cfg(test)]
