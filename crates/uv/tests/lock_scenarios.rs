@@ -1135,7 +1135,7 @@ fn fork_marker_disjoint() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (sys_platform == 'linux'):
       ╰─▶ Because project==0.1.0 depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that project==0.1.0 cannot be used.
           And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
     "###
