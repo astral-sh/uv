@@ -497,7 +497,7 @@ fn optional_dependencies() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     project v0.1.0
-    ├── flask[dotenv] v3.0.2
+    ├── flask v3.0.2
     │   ├── blinker v1.7.0
     │   ├── click v8.1.7
     │   │   └── colorama v0.4.6
@@ -507,10 +507,12 @@ fn optional_dependencies() -> Result<()> {
     │   ├── werkzeug v3.0.1
     │   │   └── markupsafe v2.1.5
     │   └── python-dotenv v1.0.1 (extra: dotenv)
+    ├── flask[dotenv] v3.0.2 (*)
     ├── iniconfig v2.0.0
     └── anyio v4.3.0 (extra: async)
         ├── idna v3.6
         └── sniffio v1.3.1
+    (*) Package tree already displayed
 
     ----- stderr -----
     warning: `uv tree` is experimental and may change without warning
@@ -550,6 +552,7 @@ fn optional_dependencies_inverted() -> Result<()> {
     ----- stdout -----
     blinker v1.7.0
     └── flask v3.0.2
+        ├── project v0.1.0
         └── project[dotenv] v0.1.0
     colorama v0.4.6
     └── click v8.1.7

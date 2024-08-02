@@ -1308,6 +1308,10 @@ fn lock_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "platform_system != 'Windows'",
+                "platform_system == 'Windows'",
+            ]
 
             [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -1407,6 +1411,7 @@ fn lock_dependency_extra() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
+                { name = "flask" },
                 { name = "flask", extra = ["dotenv"] },
             ]
 
@@ -1787,6 +1792,10 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "platform_system != 'Windows'",
+                "platform_system == 'Windows'",
+            ]
 
             [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -2683,6 +2692,11 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+            environment-markers = [
+                "python_version >= '3.11'",
+                "python_version < '3.8'",
+                "python_version >= '3.8' and python_version < '3.11'",
+            ]
 
             [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -2728,7 +2742,7 @@ fn lock_requires_python() -> Result<()> {
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
                 { name = "typing-extensions", marker = "python_version < '3.8'" },
-                { name = "zipp" },
+                { name = "zipp", marker = "python_version < '3.8'" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
             wheels = [
@@ -2834,6 +2848,11 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7.9"
+            environment-markers = [
+                "python_version < '3.8'",
+                "python_version >= '3.11'",
+                "python_version >= '3.8' and python_version < '3.11'",
+            ]
 
             [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -2879,7 +2898,7 @@ fn lock_requires_python() -> Result<()> {
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
                 { name = "typing-extensions", marker = "python_version < '3.8'" },
-                { name = "zipp" },
+                { name = "zipp", marker = "python_version < '3.8'" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
             wheels = [
@@ -3590,12 +3609,12 @@ fn lock_python_version_marker_complement() -> Result<()> {
             version = 1
             requires-python = ">=3.8"
             environment-markers = [
-                "python_full_version > '3.10' and python_version > '3.10'",
-                "python_full_version > '3.10' and python_version == '3.10'",
                 "python_full_version > '3.10' and python_version < '3.10'",
-                "python_full_version <= '3.10' and python_version > '3.10'",
-                "python_full_version <= '3.10' and python_version == '3.10'",
                 "python_full_version <= '3.10' and python_version < '3.10'",
+                "python_full_version > '3.10' and python_version == '3.10'",
+                "python_full_version > '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version == '3.10'",
+                "python_full_version <= '3.10' and python_version > '3.10'",
             ]
 
             [options]
@@ -3851,6 +3870,10 @@ fn lock_multiple_markers() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "implementation_name != 'cpython'",
+                "implementation_name == 'cpython'",
+            ]
 
             [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
