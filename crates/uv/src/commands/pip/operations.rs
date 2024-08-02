@@ -71,6 +71,18 @@ pub(crate) async fn read_requirements(
     .await?)
 }
 
+/// Resolve a set of constraints.
+pub(crate) async fn read_constraints(
+    constraints: &[RequirementsSource],
+    client_builder: &BaseClientBuilder<'_>,
+) -> Result<Vec<Requirement>, Error> {
+    Ok(
+        RequirementsSpecification::from_sources(&[], constraints, &[], client_builder)
+            .await?
+            .constraints,
+    )
+}
+
 /// Resolve a set of requirements, similar to running `pip compile`.
 pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,

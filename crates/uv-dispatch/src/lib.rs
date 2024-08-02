@@ -17,8 +17,7 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Overrides, Reinstall,
-    SetupPyStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SetupPyStrategy,
 };
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
@@ -26,8 +25,8 @@ use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Preferences,
-    PythonRequirement, Resolver, ResolverMarkers,
+    ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
+    ResolverMarkers,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -144,19 +143,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
-        let manifest = Manifest::new(
-            requirements.to_vec(),
-            self.constraints.clone(),
-            Overrides::default(),
-            Vec::new(),
-            Preferences::default(),
-            None,
-            Exclusions::default(),
-            Vec::new(),
-        );
 
         let resolver = Resolver::new(
-            manifest,
+            Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer)
                 .index_strategy(self.index_strategy)

@@ -74,8 +74,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &cache,
     )?;
     let build_options = BuildOptions::default();
-
-    // TODO: support build constraints
     let build_constraints = [];
 
     let build_dispatch = BuildDispatch::new(

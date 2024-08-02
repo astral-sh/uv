@@ -144,19 +144,9 @@ pub(crate) async fn pip_compile(
         )
         .collect();
 
-    // Read build constraints and overrides
-    let RequirementsSpecification {
-        constraints: build_constraints,
-        overrides: _build_overrides,
-        ..
-    } = operations::read_requirements(
-        &[],
-        build_constraints,
-        &[],
-        &ExtrasSpecification::None,
-        &client_builder,
-    )
-    .await?;
+    // Read build constraints.
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.

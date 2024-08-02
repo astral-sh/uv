@@ -86,6 +86,12 @@ impl Manifest {
         }
     }
 
+    #[must_use]
+    pub fn with_constraints(mut self, constraints: Constraints) -> Self {
+        self.constraints = constraints;
+        self
+    }
+
     /// Return an iterator over all requirements, constraints, and overrides, in priority order,
     /// such that requirements come first, followed by constraints, followed by overrides.
     ///

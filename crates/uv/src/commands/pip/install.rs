@@ -106,19 +106,9 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
-    // Read build constraints and overrides
-    let RequirementsSpecification {
-        constraints: build_constraints,
-        overrides: _build_overrides,
-        ..
-    } = operations::read_requirements(
-        &[],
-        build_constraints,
-        &[],
-        &ExtrasSpecification::None,
-        &client_builder,
-    )
-    .await?;
+    // Read build constraints.
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     let constraints: Vec<Requirement> = constraints
         .iter()
