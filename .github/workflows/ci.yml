@@ -144,6 +144,14 @@ jobs:
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: "ubuntu-latest-large"
+    services:
+      pypyi-cache:
+        image: ghcr.io/astral-sh/nginx_pypi_cache:master
+        ports:
+          - 80:80
+        volumes:
+          - /var/lib/nginx/pypi:/tmp/pypi-cache
+
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@v4
@@ -153,6 +161,12 @@ jobs:
       - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Restore PyPI cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/pypi-cache
+          key: pypi-cache-${{ runner.os }}
 
       - name: "Install required Python versions"
         run: |
@@ -166,6 +180,7 @@ jobs:
 
       - name: "Cargo test"
         run: |
+          export UV_INDEX_URL="http://localhost:80/simple"
           cargo nextest run \
             --features python-patch \
             --workspace \
