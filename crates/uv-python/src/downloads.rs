@@ -36,10 +36,10 @@ pub enum Error {
     InvalidPythonVersion(String),
     #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
-    #[error("Download failed")]
+    #[error(transparent)]
     NetworkError(#[from] WrappedReqwestError),
-    #[error("Download failed")]
-    NetworkMiddlewareError(#[source] anyhow::Error),
+    #[error(transparent)]
+    NetworkMiddlewareError(#[from] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
     ExtractError(String, #[source] uv_extract::Error),
     #[error("Failed to hash installation")]
@@ -70,6 +70,8 @@ pub enum Error {
     InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
+    #[error("A mirror was provided via `UV_PYTHON_INSTALL_MIRROR`, but the URL does not match the expected format: {0}")]
+    Mirror(&'static str),
 }
 
 #[derive(Debug, PartialEq)]
@@ -410,7 +412,18 @@ impl ManagedPythonDownload {
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let url = Url::parse(self.url)?;
+        // Parse the provided URL. If a mirror is set, use it instead.
+        let url = if let Ok(mirror) = std::env::var("UV_PYTHON_INSTALL_MIRROR") {
+            let Some(suffix) = self.url.strip_prefix(
+                "https://github.com/indygreg/python-build-standalone/releases/download/",
+            ) else {
+                return Err(Error::Mirror(self.url));
+            };
+            Url::parse(format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str())?
+        } else {
+            Url::parse(self.url)?
+        };
+
         let path = parent_path.join(self.key().to_string());
 
         // If it already exists, return it
@@ -433,8 +446,8 @@ impl ManagedPythonDownload {
         let temp_dir = tempfile::tempdir_in(cache.root()).map_err(Error::DownloadDirError)?;
 
         debug!(
-            "Downloading {url} to temporary location {}",
-            temp_dir.path().display()
+            "Downloading {url} to temporary location: {}",
+            temp_dir.path().simplified().display()
         );
 
         let stream = response

@@ -235,9 +235,9 @@ pub(crate) async fn install(
         for (key, err) in errors {
             writeln!(
                 printer.stderr(),
-                "Failed to install {}: {}",
+                "{}: Failed to install {}: {err}",
+                "error".red().bold(),
                 key.green(),
-                err
             )?;
         }
         return Ok(ExitStatus::Failure);
