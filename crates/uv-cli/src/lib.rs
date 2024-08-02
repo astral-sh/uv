@@ -16,7 +16,7 @@ use uv_configuration::{
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonFetch, PythonPreference, PythonVersion};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 pub mod compat;
 pub mod options;
@@ -213,19 +213,19 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
-    /// Resolve and install Python packages.
+    /// Manage Python packages with a pip-compatible interface.
     #[command(
         after_help = "Use `uv help pip`` for more details.",
         after_long_help = ""
     )]
     Pip(PipNamespace),
-    /// Run and manage executable Python packages.
+    /// Run and manage tools provided by Python packages (experimental).
     #[command(
         after_help = "Use `uv help tool` for more details.",
         after_long_help = ""
     )]
     Tool(ToolNamespace),
-    /// Manage Python installations.
+    /// Manage Python versions and installations (experimental).
     #[command(
         after_help = "Use `uv help python` for more details.",
         after_long_help = ""
@@ -415,39 +415,39 @@ pub enum PipCommand {
 
 #[derive(Subcommand)]
 pub enum ProjectCommand {
-    /// Initialize a project.
+    /// Create a new project (experimental).
     Init(InitArgs),
-    /// Run a command in the project environment.
+    /// Run a command in an environment (experimental).
     #[command(
         after_help = "Use `uv help run` for more details.",
         after_long_help = ""
     )]
     Run(RunArgs),
-    /// Sync the project's dependencies with the environment.
+    /// Update the project's environment to match the project's dependencies (experimental).
     #[command(
         after_help = "Use `uv help sync` for more details.",
         after_long_help = ""
     )]
     Sync(SyncArgs),
-    /// Resolve the project requirements into a lockfile.
+    /// Create or update a lockfile for the project's dependencies (experimental).
     #[command(
         after_help = "Use `uv help lock` for more details.",
         after_long_help = ""
     )]
     Lock(LockArgs),
-    /// Add one or more packages to the project requirements.
+    /// Add one or more packages to the project's dependencies (experimental).
     #[command(
         after_help = "Use `uv help add` for more details.",
         after_long_help = ""
     )]
     Add(AddArgs),
-    /// Remove one or more packages from the project requirements.
+    /// Remove one or more packages from the project's dependencies (experimental).
     #[command(
         after_help = "Use `uv help remove` for more details.",
         after_long_help = ""
     )]
     Remove(RemoveArgs),
-    /// Display the dependency tree for the project.
+    /// Display the dependency tree for the project (experimental).
     Tree(TreeArgs),
 }
 
@@ -540,6 +540,15 @@ pub struct PipCompileArgs {
     /// requirements of the constituent packages.
     #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub r#override: Vec<Maybe<PathBuf>>,
+
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the extra group name; may be provided more than once.
     ///
@@ -838,6 +847,15 @@ pub struct PipSyncArgs {
     #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub constraint: Vec<Maybe<PathBuf>>,
 
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
+
     #[command(flatten)]
     pub installer: InstallerArgs,
 
@@ -1110,6 +1128,15 @@ pub struct PipInstallArgs {
     /// requirements of the constituent packages.
     #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub r#override: Vec<Maybe<PathBuf>>,
+
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
 
     /// Include optional dependencies from the extra group name; may be provided more than once.
     ///
@@ -2868,7 +2895,7 @@ pub struct ResolverArgs {
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
     #[arg(long, value_enum, env = "UV_PRERELEASE")]
-    pub prerelease: Option<PreReleaseMode>,
+    pub prerelease: Option<PrereleaseMode>,
 
     #[arg(long, hide = true)]
     pub pre: bool,
@@ -2957,7 +2984,7 @@ pub struct ResolverInstallerArgs {
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
     #[arg(long, value_enum, env = "UV_PRERELEASE")]
-    pub prerelease: Option<PreReleaseMode>,
+    pub prerelease: Option<PrereleaseMode>,
 
     #[arg(long, hide = true)]
     pub pre: bool,

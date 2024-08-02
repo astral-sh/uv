@@ -24,7 +24,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PreReleaseMode, PythonRequirement,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
     ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, HashStrategy};
@@ -40,11 +40,12 @@ pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     resolution_mode: ResolutionMode,
-    prerelease_mode: PreReleaseMode,
+    prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
@@ -104,6 +105,10 @@ pub(crate) async fn pip_install(
         &client_builder,
     )
     .await?;
+
+    // Read build constraints.
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     let constraints: Vec<Requirement> = constraints
         .iter()
@@ -294,6 +299,7 @@ pub(crate) async fn pip_install(
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
+        &build_constraints,
         interpreter,
         &index_locations,
         &flat_index,

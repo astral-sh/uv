@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 use pep508_rs::{RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource};
 use uv_fs::{absolutize_path, normalize_path, relative_to, Simplified};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_warnings::warn_user;
 
 use crate::pyproject::{Project, PyProjectToml, Source, ToolUvWorkspace};
@@ -239,53 +239,94 @@ impl Workspace {
         }
     }
 
-    /// Returns the set of requirements that include all packages in the workspace.
-    pub fn members_as_requirements(&self) -> Vec<Requirement> {
-        self.packages
+    pub fn is_virtual(&self) -> bool {
+        !self
+            .packages
             .values()
-            .filter_map(|member| {
-                let project = member.pyproject_toml.project.as_ref()?;
-                // Extract the extras available in the project.
-                let extras = project
-                    .optional_dependencies
-                    .as_ref()
-                    .map(|optional_dependencies| {
-                        // It's a `BTreeMap` so the keys are sorted.
-                        optional_dependencies
-                            .iter()
-                            .filter_map(|(name, dependencies)| {
-                                if dependencies.is_empty() {
-                                    None
-                                } else {
-                                    Some(name)
-                                }
-                            })
-                            .cloned()
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
+            .any(|member| *member.root() == self.install_path)
+    }
 
-                let url = VerbatimUrl::from_path(&member.root)
-                    .expect("path is valid URL")
-                    .with_given(member.root.to_string_lossy());
-                Some(Requirement {
-                    name: project.name.clone(),
-                    extras,
-                    marker: None,
-                    source: RequirementSource::Directory {
-                        install_path: member.root.clone(),
-                        lock_path: member
-                            .root
-                            .strip_prefix(&self.install_path)
-                            .expect("Project must be below workspace root")
-                            .to_path_buf(),
-                        editable: true,
-                        url,
-                    },
-                    origin: None,
+    /// Returns the set of requirements that include all packages in the workspace.
+    pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        self.packages.values().filter_map(|member| {
+            let project = member.pyproject_toml.project.as_ref()?;
+            // Extract the extras available in the project.
+            let extras = project
+                .optional_dependencies
+                .as_ref()
+                .map(|optional_dependencies| {
+                    // It's a `BTreeMap` so the keys are sorted.
+                    optional_dependencies
+                        .iter()
+                        .filter_map(|(name, dependencies)| {
+                            if dependencies.is_empty() {
+                                None
+                            } else {
+                                Some(name)
+                            }
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>()
                 })
+                .unwrap_or_default();
+
+            let url = VerbatimUrl::from_path(&member.root)
+                .expect("path is valid URL")
+                .with_given(member.root.to_string_lossy());
+            Some(Requirement {
+                name: project.name.clone(),
+                extras,
+                marker: None,
+                source: RequirementSource::Directory {
+                    install_path: member.root.clone(),
+                    lock_path: member
+                        .root
+                        .strip_prefix(&self.install_path)
+                        .expect("Project must be below workspace root")
+                        .to_path_buf(),
+                    editable: true,
+                    url,
+                },
+                origin: None,
             })
-            .collect()
+        })
+    }
+
+    /// Returns any requirements that are exclusive to the workspace root, i.e., not included in
+    /// any of the workspace members.
+    ///
+    /// For virtual workspaces, returns the dev dependencies in the workspace root, which are
+    /// the only dependencies that are not part of the workspace members.
+    ///
+    /// For non-virtual workspaces, returns an empty list.
+    pub fn root_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        if self
+            .packages
+            .values()
+            .any(|member| *member.root() == self.install_path)
+        {
+            // If the workspace is non-virtual, the root is a member, so we don't need to include
+            // any root-only requirements.
+            Either::Left(std::iter::empty())
+        } else {
+            // Otherwise, return the dev dependencies in the workspace root.
+            Either::Right(
+                self.pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.dev_dependencies.as_ref())
+                    .into_iter()
+                    .flatten()
+                    .map(|requirement| {
+                        Requirement::from(
+                            requirement
+                                .clone()
+                                .with_origin(RequirementOrigin::Workspace),
+                        )
+                    }),
+            )
+        }
     }
 
     /// Returns the set of overrides for the workspace.
@@ -1255,6 +1296,39 @@ impl VirtualProject {
         }
     }
 
+    /// Return the [`VirtualProject`] dependencies for the given group name.
+    ///
+    /// Returns dependencies that apply to the workspace root, but not any of its members. As such,
+    /// only returns a non-empty iterator for virtual workspaces, which can include dev dependencies
+    /// on the virtual root.
+    pub fn group(&self, name: &GroupName) -> impl Iterator<Item = &PackageName> {
+        match self {
+            VirtualProject::Project(_) => {
+                // For non-virtual projects, dev dependencies are attached to the members.
+                Either::Left(std::iter::empty())
+            }
+            VirtualProject::Virtual(workspace) => {
+                // For virtual projects, we might have dev dependencies that are attached to the
+                // workspace root (which isn't a member).
+                if name == &*DEV_DEPENDENCIES {
+                    Either::Right(
+                        workspace
+                            .pyproject_toml
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.uv.as_ref())
+                            .and_then(|uv| uv.dev_dependencies.as_ref())
+                            .map(|dev| dev.iter().map(|req| &req.name))
+                            .into_iter()
+                            .flatten(),
+                    )
+                } else {
+                    Either::Left(std::iter::empty())
+                }
+            }
+        }
+    }
+
     /// Return the [`PackageName`] of the project, if it's not a virtual workspace.
     pub fn project_name(&self) -> Option<&PackageName> {
         match self {
@@ -1409,7 +1483,7 @@ mod tests {
                     "root": "[ROOT]/albatross-root-workspace/packages/bird-feeder",
                     "project": {
                       "name": "bird-feeder",
-                      "requires-python": ">=3.12",
+                      "requires-python": ">=3.8",
                       "optional-dependencies": null
                     },
                     "pyproject_toml": "[PYPROJECT_TOML]"

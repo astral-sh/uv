@@ -216,7 +216,7 @@
       "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (`if-necessary-or-explicit`).",
       "anyOf": [
         {
-          "$ref": "#/definitions/PreReleaseMode"
+          "$ref": "#/definitions/PrereleaseMode"
         },
         {
           "type": "null"
@@ -808,7 +808,7 @@
           "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (`if-necessary-or-explicit`).",
           "anyOf": [
             {
-              "$ref": "#/definitions/PreReleaseMode"
+              "$ref": "#/definitions/PrereleaseMode"
             },
             {
               "type": "null"
@@ -934,7 +934,7 @@
       },
       "additionalProperties": false
     },
-    "PreReleaseMode": {
+    "PrereleaseMode": {
       "oneOf": [
         {
           "description": "Disallow all pre-release versions.",

@@ -537,7 +537,7 @@ impl VersionSpecifier {
                     return false;
                 }
 
-                // According to PEP 440, this ignores the prerelease special rules
+                // According to PEP 440, this ignores the pre-release special rules
                 // pypa/packaging disagrees: https://github.com/pypa/packaging/issues/617
                 other >= this
             }

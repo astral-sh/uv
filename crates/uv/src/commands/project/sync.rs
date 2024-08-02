@@ -7,10 +7,9 @@ use uv_configuration::{
     Concurrency, ExtrasSpecification, HashCheckingMode, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DEV_DEPENDENCIES;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
@@ -210,10 +209,13 @@ pub(super) async fn do_sync(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
+    // TODO: read locked build constraints
+    let build_constraints = [];
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         venv.interpreter(),
         index_locations,
         &flat_index,

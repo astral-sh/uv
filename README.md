@@ -54,8 +54,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # For a specific version.
-curl -LsSf https://astral.sh/uv/0.2.32/install.sh | sh
-powershell -c "irm https://astral.sh/uv/0.2.32/install.ps1 | iex"
+curl -LsSf https://astral.sh/uv/0.2.33/install.sh | sh
+powershell -c "irm https://astral.sh/uv/0.2.33/install.ps1 | iex"
 
 # With pip.
 pip install uv
@@ -591,10 +591,12 @@ uv accepts the following command-line arguments as environment variables:
   uv will require that all dependencies have a hash specified in the requirements file.
 - `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use this
   file as the constraints file. Uses space-separated list of files.
-- `UV_OVERRIDE`: Equivalent to the `--override` command-line argument. If set, uv will use this file
-  as the overrides file. Uses space-separated list of files.
-- `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
-  a link mode.
+- `UV_BUILD_CONSTRAINT`: Equivalent to the `--build-constraint` command-line argument. If set, uv
+  will use this file as constraints for any source distribution builds. Uses space-separated list of files.
+- `UV_OVERRIDE`: Equivalent to the `--override` command-line argument. If set, uv will use this
+  file as the overrides file. Uses space-separated list of files.
+- `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this
+  as a link mode.
 - `UV_NO_BUILD_ISOLATION`: Equivalent to the `--no-build-isolation` command-line argument. If set,
   uv will skip isolation when building source distributions.
 - `UV_CUSTOM_COMPILE_COMMAND`: Used to override `uv` in the output header of the `requirements.txt`

@@ -355,7 +355,83 @@ fn mixed_requires_python() -> Result<()> {
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`
+    error: The requested Python interpreter (3.8.[X]) is incompatible with the project Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
+    "###);
+
+    Ok(())
+}
+
+/// Sync development dependencies in a virtual workspace root.
+#[test]
+fn virtual_workspace_dev_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv]
+        dev-dependencies = ["anyio>3"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+        "#,
+    )?;
+
+    let src = child.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // Syncing with `--no-dev` should omit `anyio`.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + iniconfig==2.0.0
+    "###);
+
+    // Syncing without `--no-dev` should include `anyio`.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###);
 
     Ok(())

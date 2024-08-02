@@ -236,11 +236,17 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
+            let build_constraints = args
+                .build_constraint
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
 
             commands::pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
+                &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 args.settings.extras,
@@ -316,10 +322,16 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
+            let build_constraints = args
+                .build_constraint
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
 
             commands::pip_sync(
                 &requirements,
                 &constraints,
+                &build_constraints,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -392,10 +404,17 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
 
+            let build_constraints = args
+                .build_constraint
+                .into_iter()
+                .map(RequirementsSource::from_overrides_txt)
+                .collect::<Vec<_>>();
+
             commands::pip_install(
                 &requirements,
                 &constraints,
                 &overrides,
+                &build_constraints,
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 &args.settings.extras,

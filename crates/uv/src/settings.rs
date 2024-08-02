@@ -26,7 +26,7 @@ use uv_configuration::{
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonFetch, PythonPreference, PythonVersion, Target};
 use uv_requirements::RequirementsSource;
-use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
@@ -814,6 +814,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) r#override: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -828,6 +829,7 @@ impl PipCompileSettings {
             extra,
             all_extras,
             no_all_extras,
+            build_constraint,
             refresh,
             no_deps,
             deps,
@@ -908,6 +910,10 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraint: build_constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             r#override: r#override
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -961,6 +967,7 @@ impl PipCompileSettings {
 pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) dry_run: bool,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -972,6 +979,7 @@ impl PipSyncSettings {
         let PipSyncArgs {
             src_file,
             constraint,
+            build_constraint,
             installer,
             refresh,
             require_hashes,
@@ -1006,6 +1014,10 @@ impl PipSyncSettings {
         Self {
             src_file,
             constraint: constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraint: build_constraint
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -1052,6 +1064,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) editable: Vec<String>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
+    pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) dry_run: bool,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
@@ -1071,6 +1084,7 @@ impl PipInstallSettings {
             extra,
             all_extras,
             no_all_extras,
+            build_constraint,
             refresh,
             no_deps,
             deps,
@@ -1139,6 +1153,10 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             r#override: r#override
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraint: build_constraint
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -1499,7 +1517,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
@@ -1513,7 +1531,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
@@ -1629,7 +1647,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
@@ -1645,7 +1663,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
@@ -1788,7 +1806,7 @@ pub(crate) struct PipSettings {
     pub(crate) strict: bool,
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PreReleaseMode,
+    pub(crate) prerelease: PrereleaseMode,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) no_strip_extras: bool,
     pub(crate) no_strip_markers: bool,

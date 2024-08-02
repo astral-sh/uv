@@ -12,7 +12,7 @@ use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::Preferences;
-use crate::prerelease_mode::{AllowPreRelease, PreReleaseStrategy};
+use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverMarkers};
@@ -21,7 +21,7 @@ use crate::{Exclusions, Manifest, Options, ResolverMarkers};
 #[allow(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
-    prerelease_strategy: PreReleaseStrategy,
+    prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
 }
 
@@ -39,7 +39,7 @@ impl CandidateSelector {
                 markers,
                 options.dependency_mode,
             ),
-            prerelease_strategy: PreReleaseStrategy::from_mode(
+            prerelease_strategy: PrereleaseStrategy::from_mode(
                 options.prerelease_mode,
                 manifest,
                 markers,
@@ -57,7 +57,7 @@ impl CandidateSelector {
 
     #[inline]
     #[allow(dead_code)]
-    pub(crate) fn prerelease_strategy(&self) -> &PreReleaseStrategy {
+    pub(crate) fn prerelease_strategy(&self) -> &PrereleaseStrategy {
         &self.prerelease_strategy
     }
 
@@ -244,7 +244,7 @@ impl CandidateSelector {
                 && self
                     .prerelease_strategy
                     .allows(package_name, resolver_markers)
-                    != AllowPreRelease::Yes
+                    != AllowPrerelease::Yes
             {
                 continue;
             }
@@ -404,10 +404,10 @@ impl CandidateSelector {
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
-        allow_prerelease: AllowPreRelease,
+        allow_prerelease: AllowPrerelease,
     ) -> Option<Candidate<'a>> {
         #[derive(Debug)]
-        enum PreReleaseCandidate<'a> {
+        enum PrereleaseCandidate<'a> {
             NotNecessary,
             IfNecessary(&'a Version, &'a PrioritizedDist),
         }
@@ -419,7 +419,7 @@ impl CandidateSelector {
             let candidate = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
-                        AllowPreRelease::Yes => {
+                        AllowPrerelease::Yes => {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
@@ -440,18 +440,18 @@ impl CandidateSelector {
                                 VersionChoiceKind::Compatible,
                             )
                         }
-                        AllowPreRelease::IfNecessary => {
+                        AllowPrerelease::IfNecessary => {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
                             // If pre-releases are allowed as a fallback, store the
                             // first-matching prerelease.
                             if prerelease.is_none() {
-                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, dist));
+                                prerelease = Some(PrereleaseCandidate::IfNecessary(version, dist));
                             }
                             continue;
                         }
-                        AllowPreRelease::No => {
+                        AllowPrerelease::No => {
                             continue;
                         }
                     }
@@ -462,7 +462,7 @@ impl CandidateSelector {
                 // If we have at least one stable release, we shouldn't allow the "if-necessary"
                 // pre-release strategy, regardless of whether that stable release satisfies the
                 // current range.
-                prerelease = Some(PreReleaseCandidate::NotNecessary);
+                prerelease = Some(PrereleaseCandidate::NotNecessary);
 
                 // Return the first-matching stable distribution.
                 if range.contains(version) {
@@ -507,8 +507,8 @@ impl CandidateSelector {
         );
         match prerelease {
             None => None,
-            Some(PreReleaseCandidate::NotNecessary) => None,
-            Some(PreReleaseCandidate::IfNecessary(version, dist)) => Some(Candidate::new(
+            Some(PrereleaseCandidate::NotNecessary) => None,
+            Some(PrereleaseCandidate::IfNecessary(version, dist)) => Some(Candidate::new(
                 package_name,
                 version,
                 dist,

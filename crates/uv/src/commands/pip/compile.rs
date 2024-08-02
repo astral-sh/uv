@@ -32,7 +32,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
-    InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, RequiresPython,
+    InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
@@ -48,12 +48,13 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
-    prerelease_mode: PreReleaseMode,
+    prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
@@ -142,6 +143,10 @@ pub(crate) async fn pip_compile(
                 .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
+
+    // Read build constraints.
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -304,6 +309,7 @@ pub(crate) async fn pip_compile(
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
+        &build_constraints,
         &interpreter,
         &index_locations,
         &flat_index,

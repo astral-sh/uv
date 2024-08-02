@@ -123,10 +123,14 @@ pub(crate) async fn add(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
     };
 
+    // TODO: read locked build constraints
+    let build_constraints = [];
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         venv.interpreter(),
         &settings.index_locations,
         &flat_index,
@@ -348,10 +352,24 @@ pub(crate) async fn add(
         }
     }
 
-    // Perform a full sync, because we don't know what exactly is affected by the removal.
-    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::All;
-    let dev = true;
+    // Sync the environment.
+    let (extras, dev) = match dependency_type {
+        DependencyType::Production => {
+            let extras = ExtrasSpecification::None;
+            let dev = false;
+            (extras, dev)
+        }
+        DependencyType::Dev => {
+            let extras = ExtrasSpecification::None;
+            let dev = true;
+            (extras, dev)
+        }
+        DependencyType::Optional(ref group_name) => {
+            let extras = ExtrasSpecification::Some(vec![group_name.clone()]);
+            let dev = false;
+            (extras, dev)
+        }
+    };
 
     project::sync::do_sync(
         &VirtualProject::Project(project),
