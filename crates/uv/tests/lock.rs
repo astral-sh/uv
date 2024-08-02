@@ -735,6 +735,10 @@ fn lock_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "platform_system == 'Windows'",
+                "platform_system != 'Windows'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -922,6 +926,10 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+            environment-markers = [
+                "python_version < '3.10'",
+                "python_version >= '3.10'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -1074,7 +1082,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
             [distribution.optional-dependencies]
             socks = [
-                { name = "pysocks" },
+                { name = "pysocks", marker = "python_version < '3.10'" },
             ]
 
             [[distribution]]
@@ -1173,6 +1181,10 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "platform_system == 'Windows'",
+                "platform_system != 'Windows'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2011,6 +2023,11 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+            environment-markers = [
+                "python_version < '3.8'",
+                "python_version >= '3.11'",
+                "python_version < '3.11' and python_version >= '3.8'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2030,7 +2047,7 @@ fn lock_requires_python() -> Result<()> {
             version = "23.1.2"
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
-                { name = "attrs" },
+                { name = "attrs", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
                 { name = "exceptiongroup", marker = "python_version < '3.11'" },
                 { name = "typing-extensions", marker = "python_version < '3.11'" },
             ]
@@ -2054,7 +2071,7 @@ fn lock_requires_python() -> Result<()> {
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
                 { name = "typing-extensions", marker = "python_version < '3.8'" },
-                { name = "zipp" },
+                { name = "zipp", marker = "python_version < '3.8'" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
             wheels = [
@@ -2066,8 +2083,8 @@ fn lock_requires_python() -> Result<()> {
             version = "2023.0.1"
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
-                { name = "attrs" },
-                { name = "cattrs" },
+                { name = "attrs", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
+                { name = "cattrs", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/9d/f6/6e80484ec078d0b50699ceb1833597b792a6c695f90c645fbaf54b947e6f/lsprotocol-2023.0.1.tar.gz", hash = "sha256:cc5c15130d2403c18b734304339e51242d3018a05c4f7d0f198ad6e0cd21861d", size = 69434 }
             wheels = [
@@ -2079,7 +2096,7 @@ fn lock_requires_python() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "pygls" },
+                { name = "pygls", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
             ]
 
             [[distribution]]
@@ -2087,8 +2104,8 @@ fn lock_requires_python() -> Result<()> {
             version = "1.0.1"
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
-                { name = "lsprotocol" },
-                { name = "typeguard" },
+                { name = "lsprotocol", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
+                { name = "typeguard", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/8e/27/58ff0f76b379fc11a1d03e8d4b4e96fd0abb463d27709a7fb4193bcdbbc4/pygls-1.0.1.tar.gz", hash = "sha256:f3ee98ddbb4690eb5c755bc32ba7e129607f14cbd313575f33d0cea443b78cb2", size = 674546 }
             wheels = [
@@ -2160,6 +2177,11 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7.9"
+            environment-markers = [
+                "python_version < '3.8'",
+                "python_version >= '3.11'",
+                "python_version < '3.11' and python_version >= '3.8'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2179,7 +2201,7 @@ fn lock_requires_python() -> Result<()> {
             version = "23.1.2"
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
-                { name = "attrs" },
+                { name = "attrs", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
                 { name = "exceptiongroup", marker = "python_version < '3.11'" },
                 { name = "typing-extensions", marker = "python_version < '3.11'" },
             ]
@@ -2203,7 +2225,7 @@ fn lock_requires_python() -> Result<()> {
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
                 { name = "typing-extensions", marker = "python_version < '3.8'" },
-                { name = "zipp" },
+                { name = "zipp", marker = "python_version < '3.8'" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
             wheels = [
@@ -2215,8 +2237,8 @@ fn lock_requires_python() -> Result<()> {
             version = "2023.0.0"
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
-                { name = "attrs" },
-                { name = "cattrs" },
+                { name = "attrs", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
+                { name = "cattrs", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/3e/fe/f7671a4fb28606ff1663bba60aff6af21b1e43a977c74c33db13cb83680f/lsprotocol-2023.0.0.tar.gz", hash = "sha256:c9d92e12a3f4ed9317d3068226592860aab5357d93cf5b2451dc244eee8f35f2", size = 69399 }
             wheels = [
@@ -2228,7 +2250,7 @@ fn lock_requires_python() -> Result<()> {
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "pygls" },
+                { name = "pygls", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
             ]
 
             [[distribution]]
@@ -2236,7 +2258,7 @@ fn lock_requires_python() -> Result<()> {
             version = "1.2.1"
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
-                { name = "lsprotocol" },
+                { name = "lsprotocol", marker = "python_version < '3.8' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.8')" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/e6/94/534c11ba5475df09542e48d751a66e0448d52bbbb92cbef5541deef7760d/pygls-1.2.1.tar.gz", hash = "sha256:04f9b9c115b622dcc346fb390289066565343d60245a424eca77cb429b911ed8", size = 45274 }
             wheels = [
@@ -2893,12 +2915,12 @@ fn lock_python_version_marker_complement() -> Result<()> {
             environment-markers = [
                 "python_full_version <= '3.10' and python_version == '3.10'",
                 "python_full_version <= '3.10' and python_version < '3.10'",
-                "python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10'",
                 "python_full_version <= '3.10' and python_version > '3.10'",
                 "python_full_version > '3.10' and python_version == '3.10'",
                 "python_full_version > '3.10' and python_version < '3.10'",
-                "python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10'",
                 "python_full_version > '3.10' and python_version > '3.10'",
+                "python_version == '3.10' and (python_full_version <= '3.10' or python_version < '3.10') and (python_full_version > '3.10' or (python_full_version <= '3.10' and python_version < '3.10'))",
+                "python_version > '3.10' and (python_full_version <= '3.10' or python_version <= '3.10') and (python_full_version > '3.10' or (python_full_version <= '3.10' and python_version < '3.10') or (python_version <= '3.10' and (python_full_version <= '3.10' or python_version < '3.10')))",
             ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
@@ -3148,6 +3170,10 @@ fn lock_multiple_markers() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "implementation_name == 'cpython'",
+                "implementation_name != 'cpython'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
