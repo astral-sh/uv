@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
 use std::sync::Arc;
 
-use pubgrub::{DefaultStringReporter, DerivationTree, External, Range, Reporter};
+use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
 use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
@@ -13,9 +13,7 @@ use uv_normalize::PackageName;
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::{
-    PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
-};
+use crate::pubgrub::{PubGrubPackage, PubGrubReportFormatter, PubGrubSpecifierError};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
 
@@ -113,6 +111,8 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
     }
 }
 
+pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
+
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 #[derive(Debug)]
 pub struct NoSolutionError {
@@ -165,49 +165,46 @@ impl NoSolutionError {
 
     /// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
     /// wrap an [`PubGrubPackageInner::Extra`] package.
-    pub(crate) fn collapse_proxies(
-        derivation_tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
-    ) {
-        match derivation_tree {
-            DerivationTree::External(_) => {}
-            DerivationTree::Derived(derived) => {
-                match (
-                    Arc::make_mut(&mut derived.cause1),
-                    Arc::make_mut(&mut derived.cause2),
-                ) {
-                    (
-                        DerivationTree::External(External::FromDependencyOf(package, ..)),
-                        ref mut cause,
-                    ) if matches!(
-                        &**package,
-                        PubGrubPackageInner::Extra { .. }
-                            | PubGrubPackageInner::Marker { .. }
-                            | PubGrubPackageInner::Dev { .. }
-                    ) =>
-                    {
-                        Self::collapse_proxies(cause);
-                        *derivation_tree = cause.clone();
-                    }
-                    (
-                        ref mut cause,
-                        DerivationTree::External(External::FromDependencyOf(package, ..)),
-                    ) if matches!(
-                        &**package,
-                        PubGrubPackageInner::Extra { .. }
-                            | PubGrubPackageInner::Marker { .. }
-                            | PubGrubPackageInner::Dev { .. }
-                    ) =>
-                    {
-                        Self::collapse_proxies(cause);
-                        *derivation_tree = cause.clone();
-                    }
-                    _ => {
-                        Self::collapse_proxies(Arc::make_mut(&mut derived.cause1));
-                        Self::collapse_proxies(Arc::make_mut(&mut derived.cause2));
+    pub(crate) fn collapse_proxies(derivation_tree: ErrorTree) -> ErrorTree {
+        fn collapse(derivation_tree: ErrorTree) -> Option<ErrorTree> {
+            match derivation_tree {
+                DerivationTree::Derived(derived) => {
+                    match (&*derived.cause1, &*derived.cause2) {
+                        (
+                            DerivationTree::External(External::FromDependencyOf(package1, ..)),
+                            DerivationTree::External(External::FromDependencyOf(package2, ..)),
+                        ) if package1.is_proxy() && package2.is_proxy() => None,
+                        (
+                            DerivationTree::External(External::FromDependencyOf(package, ..)),
+                            cause,
+                        ) if package.is_proxy() => collapse(cause.clone()),
+                        (
+                            cause,
+                            DerivationTree::External(External::FromDependencyOf(package, ..)),
+                        ) if package.is_proxy() => collapse(cause.clone()),
+                        (cause1, cause2) => {
+                            let cause1 = collapse(cause1.clone());
+                            let cause2 = collapse(cause2.clone());
+                            match (cause1, cause2) {
+                                (Some(cause1), Some(cause2)) => {
+                                    Some(DerivationTree::Derived(Derived {
+                                        cause1: Arc::new(cause1),
+                                        cause2: Arc::new(cause2),
+                                        ..derived
+                                    }))
+                                }
+                                (Some(cause), None) | (None, Some(cause)) => Some(cause),
+                                _ => None,
+                            }
+                        }
                     }
                 }
+                DerivationTree::External(_) => Some(derivation_tree),
             }
         }
+
+        collapse(derivation_tree)
+            .expect("derivation tree should contain at least one external term")
     }
 }
 

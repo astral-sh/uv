@@ -6803,8 +6803,7 @@ fn universal_multi_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig{python_version > '3.12'}==2.0.0 depends on iniconfig==2.0.0 and you require iniconfig{python_version > '3.12'}==2.0.0, we can conclude that your requirements and iniconfig{python_version == '3.12'}==1.0.0 are incompatible.
-          And because you require iniconfig{python_version == '3.12'}==1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require iniconfig{python_version > '3.12'}==2.0.0 and iniconfig{python_version == '3.12'}==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
