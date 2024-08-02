@@ -1755,3 +1755,4 @@ pass the `--native-tls` command-line flag to enable this behavior.
 
 - Fix diagram alignment ([#1354](https://github.com/astral-sh/uv/pull/1354))
 - Grammar nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
+<!-- prettier-ignore-end -->

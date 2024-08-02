@@ -1,20 +1,20 @@
 # Python versions
 
 A Python version is composed of a Python interpreter (i.e. the `python` executable), the standard
-library, and other supporting files. 
+library, and other supporting files.
 
 ## Managed and system Python installations
 
 Since it is common for a system to have an existing Python installation, uv supports
-[discovering](#discovery-of-python-versions) Python versions. However, uv also supports [installing
-Python versions](#installing-a-python-version) itself. To distinguish between these two types of
-Python installations, uv refers to Python versions it installs as _managed_ Python installations and
-all other Python installations as _system_ Python installations.
+[discovering](#discovery-of-python-versions) Python versions. However, uv also supports
+[installing Python versions](#installing-a-python-version) itself. To distinguish between these two
+types of Python installations, uv refers to Python versions it installs as _managed_ Python
+installations and all other Python installations as _system_ Python installations.
 
 !!! note
 
     uv does not distinguish between Python versions installed by the operating system vs those
-    installed and managed by other tools. For example, if a Python installation is managed with 
+    installed and managed by other tools. For example, if a Python installation is managed with
     `pyenv`, it would still be considered a _system_ Python version in uv.
 
 ## Requesting a version
@@ -46,8 +46,8 @@ Additionally, a specific system Python interpreter can be requested with:
 - `<install-dir>` e.g. `/some/environment/`
 
 By default, uv will automatically download Python versions if they cannot be found on the system.
-This behavior can be [disabled with the `python-fetch`
-option](#disabling-automatic-python-downloads).
+This behavior can be
+[disabled with the `python-fetch` option](#disabling-automatic-python-downloads).
 
 ## Installing a Python version
 
@@ -130,8 +130,8 @@ uv python list --only-installed
 When searching for a Python version, the following locations are checked:
 
 - Managed Python installations in the `UV_PYTHON_INSTALL_DIR`.
-- A Python interpreter on the `PATH` as `python`, `python3`, or `python3.x` on macOS and Linux, or `python.exe`
-  on Windows.
+- A Python interpreter on the `PATH` as `python`, `python3`, or `python3.x` on macOS and Linux, or
+  `python.exe` on Windows.
 - On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
   version.
 
@@ -152,7 +152,7 @@ The `python-fetch` option can be used to disable this behavior. By default, it i
 ## Adjusting Python version preferences
 
 By default, uv will attempt to use Python versions found on the system and only download managed
-interpreters when necessary. 
+interpreters when necessary.
 
 The `python-preference` option can be used to adjust this behavior. By default, it is set to
 `managed` which prefers managed Python installations over system Python installations. However,
@@ -161,8 +161,8 @@ system Python installations are still preferred over downloading a managed Pytho
 The following alternative options are available:
 
 - `only-managed`: Only use managed Python installations; never use system Python installations
-- `system`:       Prefer system Python installations over managed Python installations
-- `only-system`:  Only use system Python installations; never use managed Python installations
+- `system`: Prefer system Python installations over managed Python installations
+- `only-system`: Only use system Python installations; never use managed Python installations
 
 These options allow disabling uv's managed Python versions entirely or always using them and
 ignoring any existing system installations.
@@ -199,14 +199,13 @@ distributions from the
 [`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The
 project is partially maintained by the uv maintainers and is used by many other Python projects.
 
-The uv Python distributions are self-contained, highly-portable, and performant. While
-Python can be built from source, as in tools like `pyenv`, it requires preinstalled system
-dependencies and creating optimized, performant builds is very slow.
+The uv Python distributions are self-contained, highly-portable, and performant. While Python can be
+built from source, as in tools like `pyenv`, it requires preinstalled system dependencies and
+creating optimized, performant builds is very slow.
 
 These distributions have some behavior quirks, generally as a consequence of portability. See the
-[`python-build-standalone`
-quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html) documentation for
-details. 
+[`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
+documentation for details.
 
 ### PyPy distributions
 

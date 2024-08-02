@@ -108,8 +108,8 @@ the project's dependencies. To opt-out of this behavior, use the `--no-project` 
 
 ## Declaring script dependencies
 
-Python recently added a standard format for [inline script
-metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
+Python recently added a standard format for
+[inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
 This allows the dependencies for a script to be declared in the script itself.
 
 To use inline script metadata, include a `script` section at the top of the script and declare the
@@ -162,9 +162,9 @@ type Point = tuple[float, float]
 print(Point)
 ```
 
-uv will fetch the required Python version if it is not installed — see the documentation on [Python
-versions](../concepts/python-versions.md) for more details. Note that the `dependencies` field must
-be provided even if empty.
+uv will fetch the required Python version if it is not installed — see the documentation on
+[Python versions](../concepts/python-versions.md) for more details. Note that the `dependencies`
+field must be provided even if empty.
 
 Note that when using inline script metadata, even if `uv run` is used in a _project_, the project's
 dependencies will be ignored. The `--no-project` flag is not required.

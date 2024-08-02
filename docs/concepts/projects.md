@@ -8,7 +8,7 @@ Python projects help manage Python applications spanning multiple files.
 
 ## Project metadata
 
-Python project metadata is defined in a `pyproject.toml` file. 
+Python project metadata is defined in a `pyproject.toml` file.
 
 `uv init` can be used to create a new project, with a basic `pyproject.toml` and package definition.
 
@@ -32,8 +32,8 @@ This Python version requirement determines what syntax is valid in the project a
 versions of dependencies which can be used (they must support the same Python range).
 
 The `pyproject.toml` also lists dependencies of the project. uv supports modifying the standard
-dependency list from the command line with `uv add` and `uv remove`. uv also supports [extended
-package sources](./dependencies.md) for advanced users.
+dependency list from the command line with `uv add` and `uv remove`. uv also supports
+[extended package sources](./dependencies.md) for advanced users.
 
 !!! tip
 
@@ -51,13 +51,13 @@ To run a command in the project environment, use `uv run`. Alternatively the pro
 be activated as normal for a virtual environment.
 
 When `uv run` is invoked, it will create the project environment if it does not exist yet or ensure
-it is up to date if it exists. The project environment can also be explicitly created with `uv
-sync`.
+it is up to date if it exists. The project environment can also be explicitly created with
+`uv sync`.
 
 It is _not_ recommended to modify the project environment manually, e.g., with `uv pip install`. For
 project dependencies, use `uv add` to add a package to the environment. For one-off requirements,
-use [`uvx`](../guides/tools.md) or [`uv run
---with`](#running-commands-with-additional-dependencies).
+use [`uvx`](../guides/tools.md) or
+[`uv run --with`](#running-commands-with-additional-dependencies).
 
 ## Lockfile
 
@@ -80,7 +80,7 @@ The lockfile is created and updated during uv invocations that use the project e
 
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually.
 There is no Python standard for lockfiles at this time, so the format of this file is specific to uv
-and not generally not usable by other tools. 
+and not generally not usable by other tools.
 
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
@@ -97,11 +97,11 @@ To add a dependency:
 $ uv add httpx
 ```
 
-uv supports adding [editable dependencies](./dependencies.md#editable-dependencies), [development
-dependencies](./dependencies.md#development-dependencies), [optional
-dependencies](./dependencies.md#optional-dependencies), and alternative [dependency
-sources](./dependencies.md#dependency-sources). See the [dependency
-specification](./dependencies.md) documentation for more details.
+uv supports adding [editable dependencies](./dependencies.md#editable-dependencies),
+[development dependencies](./dependencies.md#development-dependencies),
+[optional dependencies](./dependencies.md#optional-dependencies), and alternative
+[dependency sources](./dependencies.md#dependency-sources). See the
+[dependency specification](./dependencies.md) documentation for more details.
 
 uv will raise an error if the dependency cannot be resolved, e.g.:
 
@@ -138,8 +138,9 @@ $ uv add git+https://github.com/encode/httpx
 ## Running commands
 
 When working on a project, it is installed into virtual environment at `.venv`. This environment is
-isolated from the current shell by default, so invocations that require the project, e.g., `python
--c "import example"`, will fail. Instead, use `uv run` to run commands in the project environment:
+isolated from the current shell by default, so invocations that require the project, e.g.,
+`python -c "import example"`, will fail. Instead, use `uv run` to run commands in the project
+environment:
 
 ```console
 $ uv run python -c "import example"
@@ -173,7 +174,7 @@ $ uv run --with httpx==0.25.0 python -c "import httpx; print(httpx.__version__)"
 ```
 
 The requested version will be respected regardless of the project's requirements. For example, even
-if the project requires `httpx==0.24.0`, the output above would be the same. 
+if the project requires `httpx==0.24.0`, the output above would be the same.
 
 ### Running scripts
 

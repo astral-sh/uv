@@ -89,9 +89,9 @@ $ uv add git+https://github.com/encode/httpx --branch main
 $ uv add git+https://github.com/encode/httpx --rev 326b943
 ```
 
-Git dependencies can also be manually added or edited in the `pyproject.toml` with the `{ git =
-<url> }` syntax. A target revision may be specified with one of: `rev`, `tag`, or `branch`. A
-`subdirectory` may be specified if the package isn't in the repository root.
+Git dependencies can also be manually added or edited in the `pyproject.toml` with the
+`{ git = <url> }` syntax. A target revision may be specified with one of: `rev`, `tag`, or `branch`.
+A `subdirectory` may be specified if the package isn't in the repository root.
 
 ### URL
 
@@ -116,9 +116,9 @@ dependencies = [
 httpx = { url = "https://files.pythonhosted.org/packages/5c/2d/3da5bdf4408b8b2800061c339f240c1802f2e82d55e50bd39c5a881f47f0/httpx-0.27.0.tar.gz" }
 ```
 
-URL dependencies can also be manually added or edited in the `pyproject.toml` with the `{ url =
-<url> }` syntax.  A `subdirectory` may be specified if the if the source distribution isn't in the
-archive root.
+URL dependencies can also be manually added or edited in the `pyproject.toml` with the
+`{ url = <url> }` syntax. A `subdirectory` may be specified if the if the source distribution isn't
+in the archive root.
 
 ### Path
 
@@ -157,15 +157,15 @@ $ uv add ~/projects/bar/
 
 !!! important
 
-    An [editable installation](#editables-dependencies) is not used for path dependencies by 
+    An [editable installation](#editables-dependencies) is not used for path dependencies by
     default. An editable installation may be requested for project directories:
 
     ```console
     $ uv add --editable ~/projects/bar/
     ```
 
-    However, it is recommended to use [_workspaces_](#workspaces) instead of manual path 
-    dependencies. 
+    However, it is recommended to use [_workspaces_](#workspaces) instead of manual path
+    dependencies.
 
 ### Workspace member
 
@@ -193,9 +193,9 @@ include = [
 ## Optional dependencies
 
 It is common for projects that are published as libraries to make some features optional to reduce
-the default dependency tree. For example, Pandas has an [`excel`
-extra](https://pandas.pydata.org/docs/getting_started/install.html#excel-files) and a [`plot`
-extra](https://pandas.pydata.org/docs/getting_started/install.html#visualization) to avoid
+the default dependency tree. For example, Pandas has an
+[`excel` extra](https://pandas.pydata.org/docs/getting_started/install.html#excel-files) and a
+[`plot` extra](https://pandas.pydata.org/docs/getting_started/install.html#visualization) to avoid
 installation of Excel parsers and `matplotlib` unless someone explicitly requires them. Extras are
 requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
 
@@ -233,7 +233,7 @@ $ uv add httpx --optional network
 
 Unlike optional dependencies, development dependencies are local-only and will _not_ be included in
 the project requirements when published to PyPI or other indexes. As such, development dependencies
-are included under `[tool.uv]` instead of `[project]`. 
+are included under `[tool.uv]` instead of `[project]`.
 
 Development dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
@@ -269,18 +269,19 @@ A star can be used for the last digit with equals, e.g. `foo ==2.1.*` will accep
 the 2.1 series. Similarly, `~=` matches where the last digit is equal or higher, e.g., `foo ~=1.2`
 is equal to `foo >=1.2,<2`, and `foo ~=1.2.3` is equal to `foo >=1.2.3,<1.3`.
 
-Extras are comma-separated in square bracket between name and version, e.g., `pandas[excel,plot]
-==2.2`. Whitespace between extra names is ignored.
+Extras are comma-separated in square bracket between name and version, e.g.,
+`pandas[excel,plot] ==2.2`. Whitespace between extra names is ignored.
 
 Some dependencies are only required in specific environments, e.g., a specific Python version or
 operating system. For example to install the `importlib-metadata` backport for the
 `importlib.metadata` module, use `importlib-metadata >=7.1.0,<8; python_version < '3.10'`. To
-install `colorama` on Windows (but omit it on other platforms), use `colorama >=0.4.6,<5;
-platform_system == "Windows"`.
+install `colorama` on Windows (but omit it on other platforms), use
+`colorama >=0.4.6,<5; platform_system == "Windows"`.
 
-Markers are combined with `and`, `or`, and parentheses, e.g., `aiohttp >=3.7.4,<4; (sys_platform !=
-'win32' or implementation_name != 'pypy') and python_version >= '3.10'`. Note that versions within
-markers must be quoted, while versions _outside_ of markers must _not_ be quoted.
+Markers are combined with `and`, `or`, and parentheses, e.g.,
+`aiohttp >=3.7.4,<4; (sys_platform != 'win32' or implementation_name != 'pypy') and python_version >= '3.10'`.
+Note that versions within markers must be quoted, while versions _outside_ of markers must _not_ be
+quoted.
 
 ## Editable dependencies
 

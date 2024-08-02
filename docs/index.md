@@ -18,10 +18,10 @@ An extremely fast Python package and project manager, written in Rust.
 
 - 🐍 [Installs and manages](./guides/install-python.md) Python versions.
 - 🛠️ [Runs and installs](./guides/tools.md) Python applications.
-- ❇️ [Runs scripts](./guides/scripts.md), with support for [inline dependency
-  metadata](./guides/scripts.md#declaring-script-dependencies).
-- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a [universal
-  lockfile](./concepts/projects.md#lockfile).
+- ❇️ [Runs scripts](./guides/scripts.md), with support for
+  [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
+- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a
+  [universal lockfile](./concepts/projects.md#lockfile).
 - 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
 - 🚀 A replacement for `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip` and
@@ -47,8 +47,8 @@ Or, on Windows:
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Then, check out the [first steps](./first-steps.md), see more [installation
-methods](./installation.md), or read on for a brief overview.
+Then, check out the [first steps](./first-steps.md), see more
+[installation methods](./installation.md), or read on for a brief overview.
 
 ## Project management
 
@@ -77,7 +77,7 @@ See the [project guide](./guides/projects.md) to get started.
 
 ## Tool management
 
-uv executes and installs command-line tools provided by Python packages, similar to `pipx`. 
+uv executes and installs command-line tools provided by Python packages, similar to `pipx`.
 
 Run a tool in an ephemeral environment with `uvx`:
 
@@ -143,7 +143,7 @@ $ uv run --python pypy@3.8 -- python --version
 Python 3.8.16 (a9dbdca6fc3286b0addd2240f11d97d8e8de187a, Dec 29 2022, 11:45:30)
 [PyPy 7.3.11 with GCC Apple LLVM 13.1.6 (clang-1316.0.21.2.5)] on darwin
 Type "help", "copyright", "credits" or "license" for more information.
->>>> 
+>>>>
 ```
 
 Use a specific Python version in the current directory:

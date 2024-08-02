@@ -2,13 +2,13 @@
 
 Tools are Python packages that provide command-line interfaces. Tools can be invoked without
 installation using `uvx`, in which case their dependencies are installed in a temporary virtual
-environment isolated from the current project. Alternatively, tools can be installed with `uv tool
-install`, in which case their executables are placed in the `PATH` — an isolated virtual environment
-is still used but it is not treated as disposable.
+environment isolated from the current project. Alternatively, tools can be installed with
+`uv tool install`, in which case their executables are placed in the `PATH` — an isolated virtual
+environment is still used but it is not treated as disposable.
 
 !!! note
 
-    See the [tools guide](../guides/tools.md) for an introduction to working with the tools 
+    See the [tools guide](../guides/tools.md) for an introduction to working with the tools
     interface — this document discusses details of tool management.
 
 ## Tool environments

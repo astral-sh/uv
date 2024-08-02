@@ -75,10 +75,11 @@ Alternatively, you can add the transitive dependency to your `requirements.in` f
 pre-release specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific
 dependency.
 
-Pre-releases are [notoriously
-difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to model, and are a
-frequent source of bugs in other packaging tools. uv's pre-release handling is _intentionally_
-limited and _intentionally_ requires user opt-in for pre-releases, to ensure correctness.
+Pre-releases are
+[notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
+model, and are a frequent source of bugs in other packaging tools. uv's pre-release handling is
+_intentionally_ limited and _intentionally_ requires user opt-in for pre-releases, to ensure
+correctness.
 
 For more, see ["Pre-release compatibility"](../pip/compatibility.md#pre-release-compatibility)
 
@@ -88,8 +89,8 @@ Historically, `pip` has supported "constraints" (`-c constraints.txt`), which al
 the set of acceptable versions for a given package.
 
 uv supports constraints, but also takes this concept further by allowing users to _override_ the
-acceptable versions of a package across the dependency tree via overrides (`--override
-overrides.txt`).
+acceptable versions of a package across the dependency tree via overrides
+(`--override overrides.txt`).
 
 In short, overrides allow the user to lie to the resolver by overriding the declared dependencies of
 a package. Overrides are a useful last resort for cases in which the user knows that a dependency is
@@ -125,11 +126,12 @@ explicit `uv lock` invocation.
 uv also supports resolving for specific alternate platforms and Python versions via the
 `--python-platform` and `--python-version` command line arguments.
 
-For example, if you're running uv on macOS, but want to resolve for Linux, you can run `uv pip
-compile --python-platform linux requirements.in` to produce a `manylinux2014`-compatible resolution.
+For example, if you're running uv on macOS, but want to resolve for Linux, you can run
+`uv pip compile --python-platform linux requirements.in` to produce a `manylinux2014`-compatible
+resolution.
 
-Similarly, if you're running uv on Python 3.9, but want to resolve for Python 3.8, you can run `uv
-pip compile --python-version 3.8 requirements.in` to produce a Python 3.8-compatible resolution.
+Similarly, if you're running uv on Python 3.9, but want to resolve for Python 3.8, you can run
+`uv pip compile --python-version 3.8 requirements.in` to produce a Python 3.8-compatible resolution.
 
 The `--python-platform` and `--python-version` arguments can be combined to produce a resolution for
 a specific platform and Python version, enabling users to generate multiple lockfiles for different
@@ -144,7 +146,6 @@ environments from a single machine.
     compatible with any machine running on the target `--python-platform`, which should be sufficient for
     most use cases, but may lose fidelity for complex package and platform combinations.
 
-
 ## Time-restricted reproducible resolutions
 
 uv supports an `--exclude-newer` option to limit resolution to distributions published before a
@@ -152,9 +153,9 @@ specific date, allowing reproduction of installations regardless of new package 
 may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g.,
 `2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
 
-Note the package index must support the `upload-time` field as specified in [`PEP
-700`](https://peps.python.org/pep-0700/). If the field is not present for a given distribution, the
-distribution will be treated as unavailable.
+Note the package index must support the `upload-time` field as specified in
+[`PEP 700`](https://peps.python.org/pep-0700/). If the field is not present for a given
+distribution, the distribution will be treated as unavailable.
 
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated

@@ -3,8 +3,8 @@
 uv is designed as a drop-in replacement for common `pip` and `pip-tools` workflows.
 
 Informally, the intent is such that existing `pip` and `pip-tools` users can switch to uv without
-making meaningful changes to their packaging workflows; and, in most cases, swapping out `pip
-install` for `uv pip install` should "just work".
+making meaningful changes to their packaging workflows; and, in most cases, swapping out
+`pip install` for `uv pip install` should "just work".
 
 However, uv is _not_ intended to be an _exact_ clone of `pip`, and the further you stray from common
 `pip` workflows, the more likely you are to encounter differences in behavior. In some cases, those
@@ -57,10 +57,10 @@ package. `pip`, meanwhile, _may_ respect pre-release identifiers in transitive d
 depending on the order in which the resolver encounters the relevant specifiers
 ([#1641](https://github.com/astral-sh/uv/issues/1641#issuecomment-1981402429)).
 
-Pre-releases are [notoriously
-difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to model, and are a
-frequent source of bugs in packaging tools. Even `pip`, which is viewed as a reference
-implementation, has a number of open questions around pre-release handling
+Pre-releases are
+[notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
+model, and are a frequent source of bugs in packaging tools. Even `pip`, which is viewed as a
+reference implementation, has a number of open questions around pre-release handling
 ([#12469](https://github.com/pypa/pip/issues/12469),
 [#12470](https://github.com/pypa/pip/issues/12470),
 [#40505](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/20), etc.).
@@ -68,10 +68,9 @@ uv's pre-release handling is _intentionally_ limited and _intentionally_ require
 pre-releases, to ensure correctness.
 
 In the future, uv _may_ support pre-release identifiers in transitive dependencies. However, it's
-likely contingent on evolution in the Python packaging specifications. The existing PEPs [do not
-cover "dependency
-resolution"](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/17) and
-are instead focused on behavior for a _single_ version specifier. As such, there are unresolved
+likely contingent on evolution in the Python packaging specifications. The existing PEPs
+[do not cover "dependency resolution"](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/17)
+and are instead focused on behavior for a _single_ version specifier. As such, there are unresolved
 questions around the correct and intended behavior for pre-releases in the packaging ecosystem more
 broadly.
 
@@ -121,16 +120,18 @@ a match. This means that if a package exists on multiple indexes, uv will limit 
 versions to those present in the first index that contains the package.
 
 `pip`, meanwhile, will combine the candidate versions from all indexes, and select the best version
-from the combined set, though it makes [no guarantees around the
-order](https://github.com/pypa/pip/issues/5045#issuecomment-369521345) in which it searches indexes,
-and expects that packages are unique up to name and version, even across indexes.
+from the combined set, though it makes
+[no guarantees around the order](https://github.com/pypa/pip/issues/5045#issuecomment-369521345) in
+which it searches indexes, and expects that packages are unique up to name and version, even across
+indexes.
 
 uv's behavior is such that if a package exists on an internal index, it should always be installed
 from the internal index, and never from PyPI. The intent is to prevent "dependency confusion"
 attacks, in which an attacker publishes a malicious package on PyPI with the same name as an
 internal package, thus causing the malicious package to be installed instead of the internal
-package. See, for example, [the `torchtriton`
-attack](https://pytorch.org/blog/compromised-nightly-dependency/) from December 2022.
+package. See, for example,
+[the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/) from
+December 2022.
 
 As of v0.1.39, users can opt in to `pip`-style behavior for multiple indexes via the
 `--index-strategy` command-line option, or the `UV_INDEX_STRATEGY` environment variable, which
@@ -148,8 +149,8 @@ While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users t
 "dependency confusion" attacks.
 
 In the future, uv will support pinning packages to dedicated indexes (see:
-[#171](https://github.com/astral-sh/uv/issues/171)). Additionally, [PEP
-708](https://peps.python.org/pep-0708/) is a provisional standard that aims to address the
+[#171](https://github.com/astral-sh/uv/issues/171)). Additionally,
+[PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to address the
 "dependency confusion" issue across package registries and installers.
 
 ## Transitive direct URL dependencies for constraints and overrides
@@ -188,8 +189,8 @@ In other words, uv inverts the default, requiring explicit opt-in to installing 
 Python, which can lead to breakages and other complications, and should only be done in limited
 circumstances.
 
-For more, see ["Using arbitrary Python
-environments"](./environments.md#using-arbitrary-python-environments).
+For more, see
+["Using arbitrary Python environments"](./environments.md#using-arbitrary-python-environments).
 
 ## Resolution strategy
 

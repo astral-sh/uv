@@ -1,11 +1,11 @@
 # Guides overview
 
-Check out one of the core guides to get started: 
+Check out one of the core guides to get started:
 
 - [Installing Python versions](./install-python.md)
-- [Running scripts and declaring dependencies](./scripts.md) 
-- [Running and installing applications as tools](./tools.md) 
-- [Creating and working on projects](./projects.md) 
+- [Running scripts and declaring dependencies](./scripts.md)
+- [Running and installing applications as tools](./tools.md)
+- [Creating and working on projects](./projects.md)
 
 Learn how to integrate uv with other software:
 

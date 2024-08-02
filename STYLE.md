@@ -13,11 +13,11 @@ documentation_.
 1. Use less than and greater than symbols to wrap bare URLs, e.g., `<https://astral.sh>` (unless it
    is an example; then, use backticks).
 1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.
-1. If a message ends with a single relevant value, precede it with a colon, e.g., `This is the
-   value: value`. If the value is a literal, wrap it in backticks.
+1. If a message ends with a single relevant value, precede it with a colon, e.g.,
+   `This is the value: value`. If the value is a literal, wrap it in backticks.
 1. Markdown files should be wrapped at 100 characters.
 1. Use a space, not an equals sign, for command line arguments with a value, e.g.
-  `--resolution lowest`, not `--resolution=lowest`.
+   `--resolution lowest`, not `--resolution=lowest`.
 
 ## Styling uv
 
@@ -30,7 +30,8 @@ Just uv, please.
 ## Terminology
 
 1. Use "lockfile" not "lock file".
-2. Use "pre-release", not "prerelease" (except in code, in which case: use `Prerelease`, not `PreRelease`; and `prerelease`, not `pre_release`).
+2. Use "pre-release", not "prerelease" (except in code, in which case: use `Prerelease`, not
+   `PreRelease`; and `prerelease`, not `pre_release`).
 
 ## Documentation
 
@@ -100,18 +101,18 @@ The documentation is divided into:
 1. `NO_COLOR` must be respected when using any colors or styling.
 1. `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
 1. In general, use:
-    - Green for success.
-    - Red for error.
-    - Yellow for warning.
-    - Cyan for hints.
-    - Cyan for file paths.
-    - Cyan for important user-facing literals (e.g., a package name in a message).
-    - Green for commands.
+   - Green for success.
+   - Red for error.
+   - Yellow for warning.
+   - Cyan for hints.
+   - Cyan for file paths.
+   - Cyan for important user-facing literals (e.g., a package name in a message).
+   - Green for commands.
 
 ### Logging
 
 1. `warn`, `info`, `debug`, and `trace` logs are all shown with the `--verbose` flag.
-    - Note that the displayed level is controlled with `RUST_LOG`.
+   - Note that the displayed level is controlled with `RUST_LOG`.
 1. All logging should be to stderr.
 
 ### Output
@@ -121,8 +122,8 @@ The documentation is divided into:
 ### Warnings
 
 1. `warn_user` and `warn_user_once` are shown without the `--verbose `flag.
-    - These methods should be preferred over tracing warnings when the warning is actionable.
-    - Deprecation warnings should use these methods.
+   - These methods should be preferred over tracing warnings when the warning is actionable.
+   - Deprecation warnings should use these methods.
 1. Deprecation warnings must be actionable.
 
 ### Hints

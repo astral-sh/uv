@@ -84,8 +84,8 @@ To upgrade all dependencies, there is an `--upgrade` flag.
 ## Syncing an environment
 
 Dependencies can be installed directly from their definition files or from compiled
-`requirements.txt` files with `uv pip install`. See the documentation on [installing packages from
-files](packages.md#installing-packages-from-files) for more details.
+`requirements.txt` files with `uv pip install`. See the documentation on
+[installing packages from files](packages.md#installing-packages-from-files) for more details.
 
 When installing with `uv pip install`, packages that are already installed will not be removed
 unless they conflict with the lockfile. This means that the environment can have dependencies that

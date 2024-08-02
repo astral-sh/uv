@@ -65,9 +65,9 @@ regardless of where uv is installed. Note that if `VIRTUAL_ENV` is set to a dire
 it will be ignored.
 
 uv can also install into arbitrary, even non-virtual environments, with the `--python` argument
-provided to `uv pip sync` or `uv pip install`. For example, `uv pip install
---python /path/to/python` will install into the environment linked to the `/path/to/python`
-interpreter.
+provided to `uv pip sync` or `uv pip install`. For example,
+`uv pip install --python /path/to/python` will install into the environment linked to the
+`/path/to/python` interpreter.
 
 For convenience, `uv pip install --system` will install into the system Python environment. Using
 `--system` is roughly equivalent to `uv pip install --python $(which python)`, but note that
@@ -85,10 +85,9 @@ any interpreters that _are_ in virtual environments.
 
 Installing into system Python across platforms and distributions is notoriously difficult. uv
 supports the common cases, but will not work in all cases. For example, installing into system
-Python on Debian prior to Python 3.10 is unsupported due to the [distribution's patching of
-`distutils` (but not
-`sysconfig`)](https://ffy00.github.io/blog/02-python-debian-and-the-install-locations/). While we
-always recommend the use of virtual environments, uv considers them to be required in these
+Python on Debian prior to Python 3.10 is unsupported due to the
+[distribution's patching of `distutils` (but not `sysconfig`)](https://ffy00.github.io/blog/02-python-debian-and-the-install-locations/).
+While we always recommend the use of virtual environments, uv considers them to be required in these
 non-standard environments.
 
 If uv is installed in a Python environment, e.g., with `pip`, it can still be used to modify other
@@ -124,5 +123,5 @@ included:
 
 When running a command that does not mutate the environment such as `uv pip compile`, uv does not
 _require_ a virtual environment. Instead, it needs a Python toolchain to create ephemeral
-environments. See the documentation on [toolchain
-discovery](../concepts/python-versions.md#discovery-order) for details on discovery.
+environments. See the documentation on
+[toolchain discovery](../concepts/python-versions.md#discovery-order) for details on discovery.

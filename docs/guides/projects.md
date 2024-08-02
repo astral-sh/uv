@@ -66,12 +66,12 @@ dev-dependencies = []
 ```
 
 This is where you specify dependencies, as well as details about the project such as it's
-description or license. You can edit this file manually, or use commands like `uv add` and `uv
-remove` to manage your project through the CLI.
+description or license. You can edit this file manually, or use commands like `uv add` and
+`uv remove` to manage your project through the CLI.
 
 !!! tip
 
-    See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) 
+    See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
     for more details on getting started with the `pyproject.toml` format.
 
 ### `.venv`
@@ -122,7 +122,6 @@ $ uv remove requests
 See the documentation on [managing dependencies](../concepts/projects.md#managing-dependencies) for
 more details.
 
-
 ## Running commands
 
 `uv run` can be used to run arbitrary scripts or commands in your project environment. This ensures
@@ -162,8 +161,8 @@ $ python example.py
 
     The virtual environment must be active to run scripts and commands in the project without `uv run`. Virtual environment activation differs per shell and platform.
 
-See the documentation on [running commands](../concepts/projects.md#running-commands) and [running
-scripts](../concepts/projects.md#running-scripts) in projects for more details.
+See the documentation on [running commands](../concepts/projects.md#running-commands) and
+[running scripts](../concepts/projects.md#running-scripts) in projects for more details.
 
 ## Next steps
 
