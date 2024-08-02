@@ -592,7 +592,7 @@ fn help_unknown_subsubcommand() {
 fn help_with_global_option() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--cache-dir").arg("/dev/null"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -384,6 +384,19 @@ Specifically, uv does not support installing new `.egg-info`- or `.egg-link`-sty
 but will respect any such existing distributions during resolution, list them with `uv pip list` and
 `uv pip freeze`, and uninstall them with `uv pip uninstall`.
 
+## Build constraints
+
+When constraints are provided via `--constraint` (or `UV_CONSTRAINT`), uv will _not_ apply the
+constraints when resolving build dependencies (i.e., to build a source distribution). Instead,
+build constraints should be provided via the dedicated `--build-constraint` (or `UV_BUILD_CONSTRAINT`)
+setting.
+
+pip, meanwhile, applies constraints to build dependencies when specified via `PIP_CONSTRAINT`, but
+not when provided via `--constraint` on the command line.
+
+For example, to ensure that `setuptools 60.0.0` is used to build any packages with a build
+dependency on `setuptools`, use `--build-constraint`, rather than `--constraint`.
+
 ## `pip compile` defaults
 
 There are a few small but notable differences in the default behaviors of `pip compile` and
