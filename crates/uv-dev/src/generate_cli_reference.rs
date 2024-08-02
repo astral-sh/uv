@@ -220,6 +220,8 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
                 if let Some(help) = opt.get_long_help().or_else(|| opt.get_help()) {
                     output.push_str("<dd>");
                     output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
+                    emit_default_option(opt, output);
+                    emit_possible_options(opt, output);
                     output.push_str("</dd>");
                 }
             }
@@ -238,6 +240,49 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
     }
 
     parents.pop();
+}
+
+fn emit_default_option(opt: &clap::Arg, output: &mut String) {
+    if opt.is_hide_default_value_set() || !opt.get_num_args().expect("built").takes_values() {
+        return;
+    }
+
+    let values = opt.get_default_values();
+    if !values.is_empty() {
+        let value = format!(
+            "\n[default: {}]",
+            opt.get_default_values()
+                .iter()
+                .map(|s| s.to_string_lossy())
+                .join(",")
+        );
+        output.push_str(&markdown::to_html(&value));
+    }
+}
+
+fn emit_possible_options(opt: &clap::Arg, output: &mut String) {
+    if opt.is_hide_possible_values_set() {
+        return;
+    }
+
+    let values = opt.get_possible_values();
+    if !values.is_empty() {
+        let value = format!(
+            "\nPossible values:\n{}",
+            values
+                .into_iter()
+                .map(|value| {
+                    let name = value.get_name();
+                    value.get_help().map_or_else(
+                        || format!(" - `{name}`"),
+                        |help| format!(" - `{name}`:  {help}"),
+                    )
+                })
+                .collect_vec()
+                .join("\n"),
+        );
+        output.push_str(&markdown::to_html(&value));
+    }
 }
 
 #[cfg(test)]

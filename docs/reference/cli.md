@@ -140,20 +140,58 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -166,6 +204,17 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
 </dd><dt><code>--output-file</code>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the compiled requirements to the given <code>requirements.txt</code> file.</p>
@@ -176,6 +225,13 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Defaults to <code>split</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>line</code>:  Render the annotations on a single, comma-separated line</li>
+
+<li><code>split</code>:  Render each annotation on its own line</li>
+</ul>
 </dd><dt><code>--custom-compile-command</code> <i>custom-compile-command</i></dt><dd><p>The header comment to include at the top of the output file generated by <code>uv pip compile</code>.</p>
 
 <p>Used to reflect custom build scripts and commands that wrap <code>uv pip compile</code>.</p>
@@ -214,6 +270,41 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+
+<li><code>x86_64-pc-windows-msvc</code>:  An x86 Windows target</li>
+
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+</ul>
 </dd><dt><code>--no-emit-package</code> <i>no-emit-package</i></dt><dd><p>Specify a package to omit from the output resolution. Its dependencies will still be included in the resolution. Equivalent to pip-compile&#8217;s <code>--unsafe-package</code> option</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
@@ -222,10 +313,38 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -286,12 +405,28 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -302,6 +437,17 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
@@ -346,16 +492,79 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+
+<li><code>x86_64-pc-windows-msvc</code>:  An x86 Windows target</li>
+
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+</ul>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>{FOLDERID_LocalAppData}\uv\cache</code> on Windows.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -432,20 +641,58 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -456,6 +703,17 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
@@ -500,16 +758,79 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+
+<li><code>x86_64-pc-windows-msvc</code>:  An x86 Windows target</li>
+
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+</ul>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>{FOLDERID_LocalAppData}\uv\cache</code> on Windows.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -554,6 +875,13 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Uninstall packages from the specified <code>--target</code> directory</p>
 
 </dd><dt><code>--prefix</code> <i>prefix</i></dt><dd><p>Uninstall packages from the specified <code>--prefix</code> directory</p>
@@ -564,10 +892,38 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -604,10 +960,38 @@ uv pip freeze [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -628,6 +1012,16 @@ uv pip list [OPTIONS]
 
 </dd><dt><code>--format</code> <i>format</i></dt><dd><p>Select the output format between: <code>columns</code> (default), <code>freeze</code>, or <code>json</code></p>
 
+<p>[default: columns]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>columns</code>:  Display the list of packages in a human-readable table</li>
+
+<li><code>freeze</code>:  Display the list of packages in a <code>pip freeze</code>-like format, with one package per line alongside its version</li>
+
+<li><code>json</code>:  Display the list of packages in a machine-readable JSON format</li>
+</ul>
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
 <p>By default, uv lists packages in the currently activated virtual environment, or a virtual environment (<code>.venv</code>) located in the current working directory or any parent directory, falling back to the system Python if no virtual environment is found.</p>
@@ -648,10 +1042,38 @@ uv pip list [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -694,10 +1116,38 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -716,6 +1166,7 @@ uv pip tree [OPTIONS]
 
 <dl class="cli-reference"><dt><code>--depth</code>, <code>-d</code> <i>depth</i></dt><dd><p>Maximum display depth of the dependency tree</p>
 
+<p>[default: 255]</p>
 </dd><dt><code>--prune</code> <i>prune</i></dt><dd><p>Prune the given package from the display of the dependency tree</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Display only the specified packages</p>
@@ -740,10 +1191,38 @@ uv pip tree [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -780,10 +1259,38 @@ uv pip check [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -860,20 +1367,58 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -884,6 +1429,17 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
@@ -910,10 +1466,38 @@ uv tool run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -966,20 +1550,58 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -990,6 +1612,17 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
@@ -1016,10 +1649,38 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1042,10 +1703,38 @@ uv tool list [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1074,10 +1763,38 @@ uv tool uninstall [OPTIONS] <NAME>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1100,10 +1817,38 @@ uv tool update-shell [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1126,10 +1871,38 @@ uv tool dir [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1178,10 +1951,38 @@ uv python list [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1212,10 +2013,38 @@ uv python install [OPTIONS] [TARGETS]...
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1244,10 +2073,38 @@ uv python find [OPTIONS] [REQUEST]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1276,10 +2133,38 @@ uv python pin [OPTIONS] [REQUEST]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1302,10 +2187,38 @@ uv python dir [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1334,10 +2247,38 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1382,10 +2323,38 @@ uv init [OPTIONS] [PATH]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1438,20 +2407,58 @@ uv run [OPTIONS] <COMMAND>
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -1462,6 +2469,17 @@ uv run [OPTIONS] <COMMAND>
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
@@ -1490,10 +2508,38 @@ uv run [OPTIONS] <COMMAND>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1540,20 +2586,58 @@ uv sync [OPTIONS]
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -1564,6 +2648,17 @@ uv sync [OPTIONS]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
@@ -1592,10 +2687,38 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1636,20 +2759,58 @@ uv lock [OPTIONS]
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -1662,6 +2823,17 @@ uv lock [OPTIONS]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
@@ -1688,10 +2860,38 @@ uv lock [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1750,20 +2950,58 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -1774,6 +3012,17 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
@@ -1802,10 +3051,38 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1856,20 +3133,58 @@ uv remove [OPTIONS] <REQUIREMENTS>...
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -1880,6 +3195,17 @@ uv remove [OPTIONS] <REQUIREMENTS>...
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
@@ -1908,10 +3234,38 @@ uv remove [OPTIONS] <REQUIREMENTS>...
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -1930,6 +3284,7 @@ uv tree [OPTIONS]
 
 <dl class="cli-reference"><dt><code>--depth</code>, <code>-d</code> <i>depth</i></dt><dd><p>Maximum display depth of the dependency tree</p>
 
+<p>[default: 255]</p>
 </dd><dt><code>--prune</code> <i>prune</i></dt><dd><p>Prune the given package from the display of the dependency tree</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Display only the specified packages</p>
@@ -1962,20 +3317,58 @@ uv tree [OPTIONS]
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -1988,6 +3381,17 @@ uv tree [OPTIONS]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
 <p>By default, uv installs into the virtual environment in the current working directory or any parent directory. The <code>--python</code> option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.</p>
@@ -2008,10 +3412,38 @@ uv tree [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -2088,12 +3520,28 @@ uv venv [OPTIONS] [NAME]
 
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
 
 <p>Defaults to <code>disabled</code>.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and UTC dates in the same format (e.g., <code>2006-12-02</code>).</p>
@@ -2104,16 +3552,55 @@ uv venv [OPTIONS] [NAME]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>{FOLDERID_LocalAppData}\uv\cache</code> on Windows.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -2162,10 +3649,38 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -2188,10 +3703,38 @@ uv cache prune [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -2214,10 +3757,38 @@ uv cache dir [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -2240,10 +3811,38 @@ uv version [OPTIONS]
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
@@ -2270,10 +3869,38 @@ uv help [OPTIONS] [COMMAND]...
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
+
+<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
+
+<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
+
+<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
+</ul>
 </dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
+<p>Possible values:</p>
+
+<ul>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+</ul>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
 </dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration</p>
 
 </dd></dl>
