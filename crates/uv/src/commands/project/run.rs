@@ -27,7 +27,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::ProjectError;
+use crate::commands::project::{ProjectError, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -206,9 +206,16 @@ pub(crate) async fn run(
                         .connectivity(connectivity)
                         .native_tls(native_tls);
 
-                    // Note we force preview on during `uv run` for now since the entire interface is in preview
-                    PythonInstallation::find_or_fetch(
+                    // Resolve the Python request and requirement for the workspace.
+                    let WorkspacePython { python_request, .. } = WorkspacePython::from_request(
                         python.as_deref().map(PythonRequest::parse),
+                        project.workspace(),
+                    )
+                    .await?;
+
+                    // Note we force preview on during `uv run` for now since the entire interface is in preview.
+                    PythonInstallation::find_or_fetch(
+                        python_request,
                         EnvironmentPreference::Any,
                         python_preference,
                         python_fetch,
