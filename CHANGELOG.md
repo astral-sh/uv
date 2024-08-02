@@ -1,4 +1,3 @@
-<!-- prettier-ignore-start -->
 # Changelog
 
 ## 0.2.33

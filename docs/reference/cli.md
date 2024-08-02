@@ -1,4 +1,3 @@
-<!-- prettier-ignore-start -->
 # CLI Reference
 
 ## uv
@@ -3906,4 +3905,3 @@ uv help [OPTIONS] [COMMAND]...
 
 </dd></dl>
 
-<!-- prettier-ignore-end -->
