@@ -592,11 +592,12 @@ uv accepts the following command-line arguments as environment variables:
 - `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use this
   file as the constraints file. Uses space-separated list of files.
 - `UV_BUILD_CONSTRAINT`: Equivalent to the `--build-constraint` command-line argument. If set, uv
-  will use this file as constraints for any source distribution builds. Uses space-separated list of files.
-- `UV_OVERRIDE`: Equivalent to the `--override` command-line argument. If set, uv will use this
-  file as the overrides file. Uses space-separated list of files.
-- `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this
-  as a link mode.
+  will use this file as constraints for any source distribution builds. Uses space-separated list of
+  files.
+- `UV_OVERRIDE`: Equivalent to the `--override` command-line argument. If set, uv will use this file
+  as the overrides file. Uses space-separated list of files.
+- `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
+  a link mode.
 - `UV_NO_BUILD_ISOLATION`: Equivalent to the `--no-build-isolation` command-line argument. If set,
   uv will skip isolation when building source distributions.
 - `UV_CUSTOM_COMPILE_COMMAND`: Used to override `uv` in the output header of the `requirements.txt`

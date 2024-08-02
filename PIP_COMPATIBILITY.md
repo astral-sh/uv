@@ -397,8 +397,8 @@ but will respect any such existing distributions during resolution, list them wi
 ## Build constraints
 
 When constraints are provided via `--constraint` (or `UV_CONSTRAINT`), uv will _not_ apply the
-constraints when resolving build dependencies (i.e., to build a source distribution). Instead,
-build constraints should be provided via the dedicated `--build-constraint` (or `UV_BUILD_CONSTRAINT`)
+constraints when resolving build dependencies (i.e., to build a source distribution). Instead, build
+constraints should be provided via the dedicated `--build-constraint` (or `UV_BUILD_CONSTRAINT`)
 setting.
 
 pip, meanwhile, applies constraints to build dependencies when specified via `PIP_CONSTRAINT`, but

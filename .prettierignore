@@ -1,0 +1,4 @@
+.venv
+CHANGELOG.md
+PREVIEW-CHANGELOG.md
+docs/reference/*.md

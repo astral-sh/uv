@@ -1,4 +1,3 @@
-<!-- prettier-ignore-start -->
 # Changelog
 
 ## 0.2.33
@@ -571,4 +570,3 @@
 - Use top-level `--isolated` for `uv run` ([#3431](https://github.com/astral-sh/uv/pull/3431))
 - add basic "install from lock file" operation ([#3340](https://github.com/astral-sh/uv/pull/3340))
 - uv-resolver: add initial version of universal lock file format ([#3314](https://github.com/astral-sh/uv/pull/3314))
-<!-- prettier-ignore-end -->
