@@ -1,18 +1,39 @@
 # Workspaces
 
 Workspaces help organize large codebases by splitting them into multiple packages with independent
-dependencies.
+dependencies. Each package in a workspace has its own `pyproject.toml`, but they are all locked
+together in a shared lockfile and installed to shared virtual environment.
 
-When using the `uv pip` interface, workspace dependencies behave like automatic editable path
-dependencies. Using the uv project interface, all of the workspace packages are locked together.
-`uv run` installs only the current package (unless overridden with `--package`) and its workspace
-and non-workspace dependencies.
+Using the project interface, `uv run` and `uv sync` will install all packages of the workspace,
+unless you select a single workspace member with `--package`. When using the `uv pip` interface,
+workspace dependencies behave like editable path dependencies.
 
-## Configuration
+## When (not) to use workspaces
 
-A workspace can be created by adding a `tool.uv.workspace` to a `pyproject.toml` that is the
-workspace root. This table contains `members` (mandatory) and `exclude` (optional), with lists of
-globs of directories:
+One common use case for a workspace is that the codebase grows large, and eventually you want some
+modules to become independent packages with their own dependency specification. Other use cases are
+separating parts of the codebase with different responsibilities, e.g. in a repository with a
+library package and CLI package, where the CLI package makes features of the library available but
+has additional dependencies, a webserver with a backend and an ingestion package, or a library that
+has a performance-critical subroutine implemented in a native language.
+
+Workspaces are not suited when you don't want to install all members together, members have
+conflicting requirements, or you simply want individual virtual environments per project. In this
+case, use regular (editable) relative path dependencies.
+
+Currently, workspace don't properly support different members having different `requires-python`
+values, we apply the highest of all `requires-python` lower bounds to the entire workspace. You need
+to use a `uv pip` to install individual member in an older virtual environment.
+
+!!! note
+
+    As Python does not provide dependency isolation, uv can't ensure that a package uses only the dependencies it has declared, and not also imports a package that was installed for another dependency. For workspaces specifically, uv can't ensure that packages don't import dependencies declared by another workspace member.
+
+## Usage
+
+A workspace can be created by adding a `tool.uv.workspace` table to a `pyproject.toml` that will
+become the workspace root. This table contains `members` (mandatory) and `exclude` (optional), with
+lists of globs of directories:
 
 ```toml title="pyproject.toml"
 [tool.uv.workspace]
@@ -20,8 +41,13 @@ members = ["packages/*", "examples/*"]
 exclude = ["example/excluded_example"]
 ```
 
-If `tool.uv.sources` is defined in the workspace root, it applies to all packages, unless overridden
-in the `tool.uv.sources` of a specific project.
+`uv.lock` and `.venv` for the entire workspace are created next to this `pyproject.toml`. All
+members need to be in directories below it.
+
+If `tool.uv.sources` is defined in the workspace root, it applies to all members, unless overridden
+in the `tool.uv.sources` of a specific member.
+
+Using `uv init` inside a workspace will add the newly created package to `members`.
 
 ## Common structures
 
@@ -82,4 +108,17 @@ albatross
 ├── pyproject.toml
 ├── README.md
 └── uv.lock
+```
+
+In the flat layout, you may still define development dependencies in the workspace root
+`pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv]
+dev-dependencies = [
+  "pytest >=8.3.2,<9"
+]
 ```
