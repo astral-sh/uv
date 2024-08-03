@@ -6,48 +6,50 @@ Install uv with our standalone installers, from PyPI, or from your package manag
 
 uv provides a standalone installer that downloads and installs uv:
 
-```bash
-# On macOS and Linux.
-curl -LsSf https://astral.sh/uv/install.sh | sh
+```console title="macOS and Linux"
+$ curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-# On Windows.
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```console title="Windows"
+$ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 uv is installed to `~/.cargo/bin`.
 
 !!! tip
 
-    The installation script may be inspected with:
+    The installation script may be inspected before use:
 
-    ```bash
-    # On macOS and Linux.
-    curl -LsSf https://astral.sh/uv/install.sh | less
+    ```console title="macOS and Linux"
+    $ curl -LsSf https://astral.sh/uv/install.sh | less
+    ```
 
-    # On Windows.
-    powershell -c "irm https://astral.sh/uv/install.ps1 | more"
+    ```console title="Windows"
+    $ powershell -c "irm https://astral.sh/uv/install.ps1 | more"
     ```
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-A specific release can be requested by including the version in the URL:
+Request a specific version by including it in the URL:
 
-```bash
-# On macOS and Linux.
-curl -LsSf https://astral.sh/uv/0.2.11/install.sh | sh
-
-# On Windows.
-powershell -c "irm https://astral.sh/uv/0.2.11/install.ps1 | iex"
+```console title="macOS and Linux"
+$ curl -LsSf https://astral.sh/uv/0.2.11/install.sh | sh
 ```
 
-When the standalone installer is used, uv can upgrade itself:
-
-```bash
-uv self update
+```console title="Windows"
+$ powershell -c "irm https://astral.sh/uv/0.2.11/install.ps1 | iex"
 ```
 
-When another installation method is used, self updates are disabled. Use the package manager's
-upgrade method instead.
+!!! tip
+
+    When the standalone installer is used, uv can perform self-updates:
+
+    ```console
+    $ uv self update
+    ```
+
+    When another installation method is used, self-updates are disabled. Use the package manager's
+    upgrade method instead.
 
 ## PyPI
 
@@ -55,14 +57,14 @@ For convenience, uv is published to [PyPI](https://pypi.org/project/uv/).
 
 If installing from PyPI, we recommend installing uv into an isolated environment, e.g., with `pipx`:
 
-```bash
-pipx install uv
+```console
+$ pipx install uv
 ```
 
 However, `pip` can also be used:
 
-```bash
-pip install uv
+```console
+$ pip install uv
 ```
 
 !!! note
@@ -76,8 +78,8 @@ pip install uv
 
 uv is available in the core Homebrew packages.
 
-```bash
-brew install uv
+```console
+$ brew install uv
 ```
 
 ## Docker

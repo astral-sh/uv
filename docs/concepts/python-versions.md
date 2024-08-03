@@ -22,8 +22,8 @@ installations and all other Python installations as _system_ Python installation
 A specific Python version can be requested with the `--python` flag in most uv commands. For
 example, when creating a virtual environment:
 
-```bash
-uv venv --python 3.11.6
+```console
+$ uv venv --python 3.11.6
 ```
 
 uv will ensure that Python 3.11.6 is available — downloading and installing it if necessary — then
@@ -60,27 +60,36 @@ uv bundles a list of downloadable CPython and PyPy distributions for macOS, Linu
 
 To install a Python version at a specific version:
 
-```bash
-uv python install 3.12.3
+```console
+$ uv python install 3.12.3
 ```
 
 To install the latest patch version:
 
-```bash
-uv python install 3.12
+```console
+$ uv python install 3.12
 ```
 
 To install a version that satisfies constraints:
 
-```bash
-uv python install '>=3.8,<3.10'
+```console
+$ uv python install '>=3.8,<3.10'
 ```
 
 To install multiple versions:
 
-```bash
-uv python install 3.9 3.10 3.11
+```console
+$ uv python install 3.9 3.10 3.11
 ```
+
+To install a specific implementation:
+
+```console
+$ uv python install pypy
+```
+
+All of the [Python version request](#requesting-a-version) formats are supported except those that
+are used for requesting local interpreters such as a file path.
 
 ## Project Python versions
 
@@ -101,28 +110,28 @@ invocations.
 
 To list installed and available Python versions:
 
-```bash
-uv python list
+```console
+$ uv python list
 ```
 
 By default, downloads for other platforms and old patch versions are hidden.
 
 To view all versions:
 
-```bash
-uv python list --all-versions
+```console
+$ uv python list --all-versions
 ```
 
 To view Python versions for other platforms:
 
-```bash
-uv python list --all-platforms
+```console
+$ uv python list --all-platforms
 ```
 
 To exclude downloads and only show installed Python versions:
 
-```bash
-uv python list --only-installed
+```console
+$ uv python list --only-installed
 ```
 
 ## Discovery of Python versions

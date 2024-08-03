@@ -9,25 +9,22 @@ installation's environment. Unlike `pip`, uv requires using a virtual environmen
 
 ## Creating a virtual environment
 
-uv supports creating virtual environments:
+uv supports creating virtual environments, e.g., to create a virtual environment at `.venv`:
 
-```bash
-# Create a virtual environment at `.venv`
-uv venv
+```console]
+$ uv venv
 ```
 
-A specific name or path can be specified:
+A specific name or path can be specified, e.g., to create a virtual environment at `my-name`:
 
-```bash
-# Create a virtual environment at `my-name`
-uv venv my-name
+```console
+$ uv venv my-name
 ```
 
-A Python version can be requested:
+A Python version can be requested, e.g., to create a virtual environment with Python 3.11:
 
-```bash
-# Create a virtual environment with Python 3.11
-uv venv --python 3.11
+```console
+$ uv venv --python 3.11
 ```
 
 Note this requires the requested Python version to be available on the system. However, if
@@ -39,8 +36,8 @@ documentation for more details.
 When using the default virtual environment name, uv will automatically find and use the virtual
 environment during subsequent invocations.
 
-```bash
-uv venv
+```console
+$ uv venv
 
 # Install a package in the new virtual environment
 uv pip install ruff
@@ -48,12 +45,12 @@ uv pip install ruff
 
 The virtual environment can be "activated" to make its packages available:
 
-```bash
-# On macOS and Linux.
-source .venv/bin/activate
+```console title="macOS and Linux"
+$ source .venv/bin/activate
+```
 
-# On Windows.
-.venv\Scripts\activate
+```console title="Windows"
+$ .venv\Scripts\activate
 ```
 
 ## Using arbitrary Python environments

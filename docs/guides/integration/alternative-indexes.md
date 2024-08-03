@@ -19,9 +19,10 @@ If there is a PAT available (eg
 credentials can be provided via the "Basic" HTTP authentication scheme. Include the PAT in the
 password field of the URL. A username must be included as well, but can be any string.
 
-```bash
-# With the token stored in the `ADO_PAT` environment variable
-export UV_EXTRA_INDEX_URL=https://dummy:$ADO_PAT@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
+For example, with the token stored in the `$ADO_PAT` environment variable, set the index URL with:
+
+```console
+$ export UV_EXTRA_INDEX_URL=https://dummy:$ADO_PAT@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
 ### Using `keyring`
@@ -44,15 +45,15 @@ The `keyring` executable must be in the `PATH`, i.e., installed globally or in t
 environment. The `keyring` CLI requires a username in the URL, so the index URL must include the
 default username `VssSessionToken`.
 
-```bash
-# Pre-install keyring and the Artifacts plugin from the public PyPI
-uv tool install keyring --with artifacts-keyring
+```console
+$ # Pre-install keyring and the Artifacts plugin from the public PyPI
+$ uv tool install keyring --with artifacts-keyring
 
-# Enable keyring authentication
-export UV_KEYRING_PROVIDER=subprocess
+$ # Enable keyring authentication
+$ export UV_KEYRING_PROVIDER=subprocess
 
-# Configure the index URL with the username
-export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
+$ # Configure the index URL with the username
+$ export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
 ## Other indexes
