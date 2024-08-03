@@ -193,7 +193,7 @@ impl PyProjectTomlMut {
     pub fn set_dependency_minimum_version(
         &mut self,
         index: usize,
-        version: &Version,
+        version: Version,
     ) -> Result<(), Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
@@ -216,7 +216,7 @@ impl PyProjectTomlMut {
             .and_then(try_parse_requirement)
             .ok_or(Error::MalformedDependencies)?;
         req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version.clone()),
+            VersionSpecifier::greater_than_equal_version(version),
         )));
         dependencies.replace(index, req.to_string());
 
@@ -227,7 +227,7 @@ impl PyProjectTomlMut {
     pub fn set_dev_dependency_minimum_version(
         &mut self,
         index: usize,
-        version: &Version,
+        version: Version,
     ) -> Result<(), Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
@@ -254,7 +254,7 @@ impl PyProjectTomlMut {
             .and_then(try_parse_requirement)
             .ok_or(Error::MalformedDependencies)?;
         req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version.clone()),
+            VersionSpecifier::greater_than_equal_version(version),
         )));
         dev_dependencies.replace(index, req.to_string());
 
@@ -266,7 +266,7 @@ impl PyProjectTomlMut {
         &mut self,
         group: &ExtraName,
         index: usize,
-        version: &Version,
+        version: Version,
     ) -> Result<(), Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
@@ -295,7 +295,7 @@ impl PyProjectTomlMut {
             .and_then(try_parse_requirement)
             .ok_or(Error::MalformedDependencies)?;
         req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version.clone()),
+            VersionSpecifier::greater_than_equal_version(version),
         )));
         group.replace(index, req.to_string());
 

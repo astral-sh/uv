@@ -5,6 +5,7 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 
+use crate::common::packse_index_url;
 use common::{uv_snapshot, TestContext};
 
 mod common;
@@ -2400,7 +2401,7 @@ fn add_lower_bound_dev() -> Result<()> {
     Ok(())
 }
 
-/// Set a lower bound when adding unconstrained dev dependencies.
+/// Set a lower bound when adding unconstrained optional dependencies.
 #[test]
 fn add_lower_bound_optional() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2502,6 +2503,86 @@ fn add_lower_bound_optional() -> Result<()> {
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Omit the local segment when adding dependencies (since `>=1.2.3+local` is invalid).
+#[test]
+fn add_lower_bound_local() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Adding `torch` should include a lower-bound, but no local segment.
+    uv_snapshot!(context.filters(), context.add(&["local-simple-a"]).arg("--extra-index-url").arg(packse_index_url()).env_remove("UV_EXCLUDE_NEWER"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + local-simple-a==1.2.3+foo
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "local-simple-a>=1.2.3",
+        ]
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[distribution]]
+        name = "local-simple-a"
+        version = "1.2.3+foo"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo.tar.gz#sha256=ebd55c4a79d0a5759126657cb289ff97558902abcfb142e036b993781497edac", hash = "sha256:ebd55c4a79d0a5759126657cb289ff97558902abcfb142e036b993781497edac" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo-py3-none-any.whl#sha256=6f30e2e709b3e171cd734bb58705229a582587c29e0a7041227435583c7224cc", hash = "sha256:6f30e2e709b3e171cd734bb58705229a582587c29e0a7041227435583c7224cc" },
+        ]
+
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "local-simple-a" },
         ]
         "###
         );
