@@ -643,7 +643,7 @@ Whether to automatically download Python when required.
 Whether to prefer using Python installations that are already present on the system, or
 those that are downloaded and installed by uv.
 
-**Default value**: `"installed"`
+**Default value**: `"only-system" (stable) or "managed" (preview)`
 
 **Possible values**:
 
