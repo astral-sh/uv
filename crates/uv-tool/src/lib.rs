@@ -50,8 +50,8 @@ pub enum Error {
     MissingToolReceipt(String, PathBuf),
     #[error("Failed to read tool environment packages at `{0}`: {1}")]
     EnvironmentRead(PathBuf, String),
-    #[error("Failed find tool package `{0}` at `{1}`")]
-    MissingToolPackage(PackageName, PathBuf),
+    #[error("Failed find package `{0}` in tool environment")]
+    MissingToolPackage(PackageName),
     #[error(transparent)]
     Serialization(#[from] toml_edit::ser::Error),
 }
@@ -273,6 +273,7 @@ impl InstalledTools {
         ))
     }
 
+    /// Return the [`Version`] of an installed tool.
     pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
         let environment_path = self.tool_dir(name);
         let environment = PythonEnvironment::from_root(&environment_path, cache)?;
@@ -281,7 +282,7 @@ impl InstalledTools {
         let packages = site_packages.get_packages(name);
         let package = packages
             .first()
-            .ok_or_else(|| Error::MissingToolPackage(name.clone(), environment_path))?;
+            .ok_or_else(|| Error::MissingToolPackage(name.clone()))?;
         Ok(package.version().clone())
     }
 
@@ -375,22 +376,17 @@ pub fn find_executable_directory() -> Result<PathBuf, Error> {
 }
 
 /// Find the `.dist-info` directory for a package in an environment.
-fn find_dist_info(
-    environment: &PythonEnvironment,
+fn find_dist_info<'a>(
+    site_packages: &'a SitePackages,
     package_name: &PackageName,
     package_version: &Version,
-) -> Result<PathBuf, Error> {
-    let dist_info_prefix = format!(
-        "{}-{}.dist-info",
-        package_name.as_dist_info_name(),
-        package_version
-    );
-    environment
-        .interpreter()
-        .site_packages()
-        .map(|path| path.join(&dist_info_prefix))
-        .find(|path| path.is_dir())
-        .ok_or_else(|| Error::DistInfoMissing(dist_info_prefix, environment.root().to_path_buf()))
+) -> Result<&'a Path, Error> {
+    site_packages
+        .get_packages(package_name)
+        .iter()
+        .find(|package| package.version() == package_version)
+        .map(|dist| dist.path())
+        .ok_or_else(|| Error::MissingToolPackage(package_name.clone()))
 }
 
 /// Find the paths to the entry points provided by a package in an environment.
@@ -400,12 +396,12 @@ fn find_dist_info(
 ///
 /// Returns a list of `(name, path)` tuples.
 pub fn entrypoint_paths(
-    environment: &PythonEnvironment,
+    site_packages: &SitePackages,
     package_name: &PackageName,
     package_version: &Version,
 ) -> Result<Vec<(String, PathBuf)>, Error> {
     // Find the `.dist-info` directory in the installed environment.
-    let dist_info_path = find_dist_info(environment, package_name, package_version)?;
+    let dist_info_path = find_dist_info(site_packages, package_name, package_version)?;
     debug!(
         "Looking at `.dist-info` at: {}",
         dist_info_path.user_display()
@@ -415,7 +411,7 @@ pub fn entrypoint_paths(
     let record = read_record_file(&mut File::open(dist_info_path.join("RECORD"))?)?;
 
     // The RECORD file uses relative paths, so we're looking for the relative path to be a prefix.
-    let layout = environment.interpreter().layout();
+    let layout = site_packages.interpreter().layout();
     let script_relative = pathdiff::diff_paths(&layout.scheme.scripts, &layout.scheme.purelib)
         .ok_or_else(|| {
             io::Error::new(

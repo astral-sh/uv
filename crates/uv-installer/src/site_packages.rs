@@ -132,6 +132,11 @@ impl SitePackages {
         })
     }
 
+    /// Returns the [`Interpreter`] used to install the packages.
+    pub fn interpreter(&self) -> &Interpreter {
+        &self.interpreter
+    }
+
     /// Returns an iterator over the installed distributions.
     pub fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         self.distributions.iter().flatten()

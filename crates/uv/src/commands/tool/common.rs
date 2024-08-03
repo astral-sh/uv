@@ -1,18 +1,13 @@
 use distribution_types::{InstalledDist, Name};
 use uv_installer::SitePackages;
-use uv_python::PythonEnvironment;
 use uv_tool::entrypoint_paths;
 
 /// Return all packages which contain an executable with the given name.
-pub(super) fn matching_packages(
-    name: &str,
-    environment: &PythonEnvironment,
-) -> anyhow::Result<Vec<InstalledDist>> {
-    let site_packages = SitePackages::from_environment(environment)?;
-    let packages = site_packages
+pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
+    site_packages
         .iter()
         .filter_map(|package| {
-            entrypoint_paths(environment, package.name(), package.version())
+            entrypoint_paths(site_packages, package.name(), package.version())
                 .ok()
                 .and_then(|entrypoints| {
                     entrypoints
@@ -26,7 +21,5 @@ pub(super) fn matching_packages(
                         .then(|| package.clone())
                 })
         })
-        .collect();
-
-    Ok(packages)
+        .collect()
 }

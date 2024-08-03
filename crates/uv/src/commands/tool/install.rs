@@ -19,8 +19,7 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
-    PythonRequest,
+    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_shell::Shell;
@@ -350,7 +349,7 @@ pub(crate) async fn install(
     );
 
     let entry_points = entrypoint_paths(
-        &environment,
+        &site_packages,
         installed_dist.name(),
         installed_dist.version(),
     )?;
@@ -377,7 +376,7 @@ pub(crate) async fn install(
             from = from.name.cyan()
         )?;
 
-        hint_executable_from_dependency(&from, &environment, printer)?;
+        hint_executable_from_dependency(&from, &site_packages, printer)?;
 
         // Clean up the environment we just created.
         installed_tools.remove_environment(&from.name)?;
@@ -508,40 +507,36 @@ fn remove_entrypoints(tool: &Tool) {
 /// Displays a hint if an executable matching the package name can be found in a dependency of the package.
 fn hint_executable_from_dependency(
     from: &Requirement,
-    environment: &PythonEnvironment,
+    site_packages: &SitePackages,
     printer: Printer,
 ) -> Result<()> {
-    match matching_packages(from.name.as_ref(), environment) {
-        Ok(packages) => match packages.as_slice() {
-            [] => {}
-            [package] => {
-                let command = format!("uv tool install {}", package.name());
-                writeln!(
-                        printer.stdout(),
-                        "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
-                        from.name.cyan(),
-                        package.name().cyan(),
-                        command.bold(),
-                    )?;
-            }
-            packages => {
-                writeln!(
+    let packages = matching_packages(from.name.as_ref(), site_packages);
+    match packages.as_slice() {
+        [] => {}
+        [package] => {
+            let command = format!("uv tool install {}", package.name());
+            writeln!(
+                    printer.stdout(),
+                    "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
+                    from.name.cyan(),
+                    package.name().cyan(),
+                    command.bold(),
+                )?;
+        }
+        packages => {
+            writeln!(
                     printer.stdout(),
                     "However, an executable with the name `{}` is available via the following dependencies::",
                     from.name.cyan(),
                 )?;
 
-                for package in packages {
-                    writeln!(printer.stdout(), "- {}", package.name().cyan())?;
-                }
-                writeln!(
-                    printer.stdout(),
-                    "Did you mean to install one of them instead?"
-                )?;
+            for package in packages {
+                writeln!(printer.stdout(), "- {}", package.name().cyan())?;
             }
-        },
-        Err(err) => {
-            warn!("Failed to determine executables for packages: {err}");
+            writeln!(
+                printer.stdout(),
+                "Did you mean to install one of them instead?"
+            )?;
         }
     }
 
