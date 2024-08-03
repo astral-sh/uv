@@ -139,19 +139,22 @@ pub(crate) async fn run(
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
+    let site_packages = SitePackages::from_environment(&environment)?;
+
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
+
     warn_executable_not_provided_by_package(
         &executable.to_string_lossy(),
         &from.name,
-        &environment,
+        &site_packages,
         &invocation_source,
     );
 
     let mut handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            match get_entrypoints(&from.name, &environment) {
+            match get_entrypoints(&from.name, &site_packages) {
                 Ok(entrypoints) => {
                     writeln!(
                         printer.stdout(),
@@ -209,17 +212,15 @@ pub(crate) async fn run(
 /// Return the entry points for the specified package.
 fn get_entrypoints(
     from: &PackageName,
-    environment: &PythonEnvironment,
+    site_packages: &SitePackages,
 ) -> Result<Vec<(String, PathBuf)>> {
-    let site_packages = SitePackages::from_environment(environment)?;
-
     let installed = site_packages.get_packages(from);
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
     };
 
     Ok(entrypoint_paths(
-        environment,
+        site_packages,
         installed_dist.name(),
         installed_dist.version(),
     )?)
@@ -231,45 +232,44 @@ fn get_entrypoints(
 fn warn_executable_not_provided_by_package(
     executable: &str,
     from_package: &PackageName,
-    environment: &PythonEnvironment,
+    site_packages: &SitePackages,
     invocation_source: &ToolRunCommand,
 ) {
-    if let Ok(packages) = matching_packages(executable, environment) {
-        if !packages
-            .iter()
-            .any(|package| package.name() == from_package)
-        {
-            match packages.as_slice() {
-                [] => {}
-                [package] => {
-                    let suggested_command = format!(
-                        "{invocation_source} --from {} {}",
-                        package.name(),
-                        executable
-                    );
-                    warn_user!(
-                        "An executable named `{}` is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
-                        executable.cyan(),
-                        from_package.cyan(),
-                        package.name().cyan(),
-                        suggested_command.green()
-                    );
-                }
-                packages => {
-                    let suggested_command = format!("{invocation_source} --from PKG {executable}");
-                    let provided_by = packages
-                        .iter()
-                        .map(distribution_types::Name::name)
-                        .map(|name| format!("- {}", name.cyan()))
-                        .join("\n");
-                    warn_user!(
-                        "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
-                        executable.cyan(),
-                        from_package.cyan(),
-                        provided_by,
-                        suggested_command.green(),
-                    );
-                }
+    let packages = matching_packages(executable, site_packages);
+    if !packages
+        .iter()
+        .any(|package| package.name() == from_package)
+    {
+        match packages.as_slice() {
+            [] => {}
+            [package] => {
+                let suggested_command = format!(
+                    "{invocation_source} --from {} {}",
+                    package.name(),
+                    executable
+                );
+                warn_user!(
+                    "An executable named `{}` is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
+                    executable.cyan(),
+                    from_package.cyan(),
+                    package.name().cyan(),
+                    suggested_command.green()
+                );
+            }
+            packages => {
+                let suggested_command = format!("{invocation_source} --from PKG {executable}");
+                let provided_by = packages
+                    .iter()
+                    .map(distribution_types::Name::name)
+                    .map(|name| format!("- {}", name.cyan()))
+                    .join("\n");
+                warn_user!(
+                    "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
+                    executable.cyan(),
+                    from_package.cyan(),
+                    provided_by,
+                    suggested_command.green(),
+                );
             }
         }
     }

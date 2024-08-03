@@ -2277,3 +2277,74 @@ fn tool_install_bad_receipt() -> Result<()> {
 
     Ok(())
 }
+
+/// Test installing a tool with a malformed `.dist-info` directory (i.e., a `.dist-info` directory
+/// that isn't properly normalized).
+#[test]
+fn tool_install_malformed() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.14.0
+    Installed 1 executable: pybabel
+    "###);
+
+    tool_dir.child("babel").assert(predicate::path::is_dir());
+    tool_dir
+        .child("babel")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run black in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/babel/bin/python
+        # -*- coding: utf-8 -*-
+        import re
+        import sys
+        from babel.messages.frontend import main
+        if __name__ == "__main__":
+            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "babel" }]
+        entrypoints = [
+            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+        ]
+        "###);
+    });
+}
