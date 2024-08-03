@@ -117,7 +117,7 @@ pub struct GlobalOptions {
     /// Whether to prefer using Python installations that are already present on the system, or
     /// those that are downloaded and installed by uv.
     #[option(
-        default = "\"installed\"",
+        default = "\"only-system\" (stable) or \"managed\" (preview)",
         value_type = "str",
         example = r#"
             python-preference = "managed"
