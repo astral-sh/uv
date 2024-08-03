@@ -104,9 +104,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 /// Unpack the given tar archive into the destination directory.
 ///
 /// This is equivalent to `archive.unpack_in(dst)`, but it also preserves the executable bit.
-async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
-    archive: &mut tokio_tar::Archive<R>,
-    dst: P,
+async fn untar_in<'a>(
+    mut archive: tokio_tar::Archive<&'a mut (dyn tokio::io::AsyncRead + Unpin)>,
+    dst: &Path,
 ) -> std::io::Result<()> {
     let mut entries = archive.entries()?;
     let mut pinned = Pin::new(&mut entries);
@@ -124,7 +124,7 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
             continue;
         }
 
-        file.unpack_in(dst.as_ref()).await?;
+        file.unpack_in(dst).await?;
 
         // Preserve the executable bit.
         #[cfg(unix)]
@@ -137,7 +137,7 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
                 let mode = file.header().mode()?;
                 let has_any_executable_bit = mode & 0o111;
                 if has_any_executable_bit != 0 {
-                    if let Some(path) = crate::tar::unpacked_at(dst.as_ref(), &file.path()?) {
+                    if let Some(path) = crate::tar::unpacked_at(dst, &file.path()?) {
                         let permissions = fs_err::tokio::metadata(&path).await?.permissions();
                         if permissions.mode() & 0o111 != 0o111 {
                             fs_err::tokio::set_permissions(
@@ -162,13 +162,14 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
+    let mut decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
 
-    let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
-        .set_preserve_mtime(false)
-        .build();
-    untar_in(&mut archive, target.as_ref()).await?;
-    Ok(())
+    let archive = tokio_tar::ArchiveBuilder::new(
+        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
+    )
+    .set_preserve_mtime(false)
+    .build();
+    Ok(untar_in(archive, target.as_ref()).await?)
 }
 
 /// Unzip a `.tar.bz2` archive into the target directory, without requiring `Seek`.
@@ -179,13 +180,14 @@ pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
+    let mut decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
 
-    let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
-        .set_preserve_mtime(false)
-        .build();
-    untar_in(&mut archive, target.as_ref()).await?;
-    Ok(())
+    let archive = tokio_tar::ArchiveBuilder::new(
+        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
+    )
+    .set_preserve_mtime(false)
+    .build();
+    Ok(untar_in(archive, target.as_ref()).await?)
 }
 
 /// Unzip a `.tar.zst` archive into the target directory, without requiring `Seek`.
@@ -196,12 +198,14 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
+    let mut decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
 
-    let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
-        .set_preserve_mtime(false)
-        .build();
-    Ok(untar_in(&mut archive, target.as_ref()).await?)
+    let archive = tokio_tar::ArchiveBuilder::new(
+        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
+    )
+    .set_preserve_mtime(false)
+    .build();
+    Ok(untar_in(archive, target.as_ref()).await?)
 }
 
 /// Unzip a `.tar.xz` archive into the target directory, without requiring `Seek`.
@@ -212,12 +216,14 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
+    let mut decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
 
-    let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
-        .set_preserve_mtime(false)
-        .build();
-    untar_in(&mut archive, target.as_ref()).await?;
+    let archive = tokio_tar::ArchiveBuilder::new(
+        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
+    )
+    .set_preserve_mtime(false)
+    .build();
+    untar_in(archive, target.as_ref()).await?;
     Ok(())
 }
 
