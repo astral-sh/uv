@@ -494,7 +494,7 @@ mod tests {
         ];
         for (i, v1) in versions.iter().enumerate() {
             for v2 in &versions[i + 1..] {
-                assert_eq!(v1.cmp(v2), Ordering::Less, "less: {v1:?}\ngreater: {v2:?}",);
+                assert_eq!(v1.cmp(v2), Ordering::Less, "less: {v1:?}\ngreater: {v2:?}");
             }
         }
     }
