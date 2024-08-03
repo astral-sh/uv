@@ -65,9 +65,9 @@ dependencies = []
 dev-dependencies = []
 ```
 
-This is where you specify dependencies, as well as details about the project such as it's
-description or license. You can edit this file manually, or use commands like `uv add` and
-`uv remove` to manage your project through the CLI.
+This is where you specify dependencies, as well as details about the project such as its description
+or license. You can edit this file manually, or use commands like `uv add` and `uv remove` to manage
+your project through the CLI.
 
 !!! tip
 
@@ -106,10 +106,10 @@ $ uv add requests
 You can also specify version constraints or alternative sources:
 
 ```console
-# Specify a version constraint
+$ # Specify a version constraint
 $ uv add 'requests==2.31.0'
 
-# Add a git dependency
+$ # Add a git dependency
 $ uv add requests --git https://github.com/psf/requests
 ```
 
@@ -166,5 +166,7 @@ See the documentation on [running commands](../concepts/projects.md#running-comm
 
 ## Next steps
 
-See the [projects concept](../concepts/projects.md) documentation for more details about working
-with projects.
+To learn more about working on projects with uv, see the [Projects concept](../concepts/projects.md)
+page and the [command reference](../reference/cli.md#uv).
+
+Or, read on to learn how to [run and install tools](./tools.md) with uv.

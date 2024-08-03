@@ -84,7 +84,8 @@ The documentation is divided into:
 
 1. All code blocks should have a language marker.
 1. When using `console` syntax, use `$` to indicate commands — everything else is output.
-1. Do not use the `bash` syntax when displaying command output.
+1. Never use the `bash` syntax when displaying command output.
+1. Prefer `console` with `$` prefixed commands over `bash`.
 1. Command output should rarely be included — it's hard to keep up to date.
 1. Use `title` for example files, e.g., `pyproject.toml`, `Dockerfile`, or `example.py`.
 

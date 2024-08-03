@@ -565,6 +565,14 @@ impl Workspace {
                             member_glob.to_string(),
                         ));
                     }
+                    // If the entry is _not_ a directory, skip it.
+                    Err(_) if !member_root.is_dir() => {
+                        warn!(
+                            "Ignoring non-directory workspace member: `{}`",
+                            member_root.simplified_display()
+                        );
+                        continue;
+                    }
                     Err(err) => return Err(err.into()),
                 };
 

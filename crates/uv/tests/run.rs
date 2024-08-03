@@ -915,3 +915,102 @@ fn run_without_output() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that we can import from the root project when layering `--with` requirements.
+#[test]
+fn run_isolated_python_version() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    let src = context.temp_dir.child("src").child("foo");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let main = context.temp_dir.child("main.py");
+    main.write_str(indoc! { r"
+        import sys
+
+        print((sys.version_info.major, sys.version_info.minor))
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    (3, 8)
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
+    Creating virtualenv at: .venv
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==4.3.0
+     + exceptiongroup==1.2.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    (3, 8)
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==4.3.0
+     + exceptiongroup==1.2.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    // Set the `.python-version` to `3.12`.
+    context
+        .temp_dir
+        .child(PYTHON_VERSION_FILENAME)
+        .write_str("3.12")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    (3, 12)
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}

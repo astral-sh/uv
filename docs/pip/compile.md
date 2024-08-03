@@ -14,8 +14,8 @@ define dependencies.
 
 To lock dependencies declared in a `pyproject.toml`:
 
-```bash
-uv pip compile pyproject.toml -o requirements.txt
+```console
+$ uv pip compile pyproject.toml -o requirements.txt
 ```
 
 Note by default the `uv pip compile` output is just displayed and `--output-file` / `-o` argument is
@@ -23,39 +23,39 @@ needed to write to a file.
 
 To lock dependencies declared in a `requirements.in`:
 
-```bash
-uv pip compile requirements.in -o requirements.txt
+```console
+$ uv pip compile requirements.in -o requirements.txt
 ```
 
 To lock dependencies declared in multiple files:
 
-```bash
-uv pip compile pyproject.toml requirements-dev.in -o requirements-dev.txt`
+```console
+$ uv pip compile pyproject.toml requirements-dev.in -o requirements-dev.txt`
 ```
 
 uv also supports legacy `setup.py` and `setup.cfg` formats. To lock dependencies declared in a
 `setup.py`:
 
-```bash
-uv pip compile setup.py -o requirements.txt
+```console
+$ uv pip compile setup.py -o requirements.txt
 ```
 
 To lock dependencies from stdin, use `-`:
 
-```bash
-echo "ruff" | uv pip compile -
+```console
+$ echo "ruff" | uv pip compile -
 ```
 
 To lock with optional dependencies enabled, e.g., the "foo" extra:
 
-```bash
-uv pip install -r pyproject.toml --extra foo
+```console
+$ uv pip install -r pyproject.toml --extra foo
 ```
 
 To lock with all optional dependencies enabled:
 
-```bash
-uv pip install -r pyproject.toml --all-extras
+```console
+$ uv pip install -r pyproject.toml --all-extras
 ```
 
 Note extras are not supported with the `requirements.in` format.
@@ -75,8 +75,8 @@ ruff==0.3.0
 
 To upgrade a dependency, use the `--upgrade-package` flag:
 
-```bash
-uv pip compile - -o requirements.txt --upgrade-package ruff
+```console
+$ uv pip compile - -o requirements.txt --upgrade-package ruff
 ```
 
 To upgrade all dependencies, there is an `--upgrade` flag.
@@ -94,14 +94,14 @@ exactly matches the lockfile, use `uv pip sync` instead.
 
 To sync an environment with a `requirements.txt` file:
 
-```bash
-uv pip sync requirements.txt
+```console
+$ uv pip sync requirements.txt
 ```
 
 To sync an environment with a `pyproject.toml` file:
 
-```bash
-uv pip sync pyproject.toml
+```console
+$ uv pip sync pyproject.toml
 ```
 
 ## Adding constraints
@@ -119,8 +119,8 @@ pydantic<2.0
 
 To use a constraints file:
 
-```bash
-uv pip compile requirements.in --constraint constraints.txt
+```console
+$ uv pip compile requirements.in --constraint constraints.txt
 ```
 
 Note that multiple constraints can be defined in each file and multiple files can be used.
@@ -147,8 +147,8 @@ c>=2.0
 
 To use an overrides file:
 
-```bash
-uv pip compile requirements.in --override overrides.txt
+```console
+$ uv pip compile requirements.in --override overrides.txt
 ```
 
 Now, resolution can succeed. However, note that if `a` is _correct_ that it does not support

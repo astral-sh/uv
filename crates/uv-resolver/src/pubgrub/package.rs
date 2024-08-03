@@ -159,6 +159,16 @@ impl PubGrubPackage {
             PubGrubPackageInner::Marker { marker, .. } => Some(marker),
         }
     }
+
+    /// Returns `true` if this PubGrub package is a proxy package.
+    pub fn is_proxy(&self) -> bool {
+        matches!(
+            &**self,
+            PubGrubPackageInner::Extra { .. }
+                | PubGrubPackageInner::Dev { .. }
+                | PubGrubPackageInner::Marker { .. }
+        )
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]

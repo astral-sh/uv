@@ -206,7 +206,7 @@ impl CandidateSelector {
         exclusions: &Exclusions,
         resolver_markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
-        for (_marker, version) in preferences {
+        for (marker, version) in preferences {
             // Respect the version range for this requirement.
             if !range.contains(version) {
                 continue;
@@ -240,13 +240,20 @@ impl CandidateSelector {
             }
 
             // Respect the pre-release strategy for this fork.
-            if version.any_prerelease()
-                && self
+            if version.any_prerelease() {
+                let allow = match self
                     .prerelease_strategy
                     .allows(package_name, resolver_markers)
-                    != AllowPrerelease::Yes
-            {
-                continue;
+                {
+                    AllowPrerelease::Yes => true,
+                    AllowPrerelease::No => false,
+                    // If the pre-release is "global" (i.e., provided via a lockfile, rather than
+                    // a fork), accept it unless pre-releases are completely banned.
+                    AllowPrerelease::IfNecessary => marker.is_none(),
+                };
+                if !allow {
+                    continue;
+                }
             }
 
             // Check for a remote distribution that matches the preferred version

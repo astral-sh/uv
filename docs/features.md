@@ -1,10 +1,9 @@
 # Features
 
-uv supports the full Python development experience — from installing Python and hacking on simple
+uv provides essential features for Python development — from installing Python and hacking on simple
 scripts to working on large projects that support multiple Python versions and platforms.
 
-uv's commands can be broken down into sections of discrete features, which can be used
-independently.
+uv's interface can be broken down into sections, which can be used independently or together.
 
 ## Python versions
 
@@ -87,7 +86,7 @@ See the documentation on [locking environments](./pip/compile.md) for details.
 
     These commands do not exactly implement the interfaces and behavior of the tools they are based on. The further you stray from common workflows, the more likely you are to encounter differences. Consult the [pip-compatibility guide](./pip/compatibility.md) for details.
 
-## Internal
+## Utility
 
 Managing and inspecting uv's state, such as the cache, storage directories, or performing a
 self-update:

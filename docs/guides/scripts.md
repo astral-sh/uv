@@ -1,8 +1,15 @@
 # Running scripts
 
 A Python script is a file intended for standalone execution, e.g., with `python <script>.py`. Using
-uv to execute scripts will ensure that script dependencies are properly managed inside and outside
-of projects.
+uv to execute scripts ensures that script dependencies are managed without manually managing
+environments.
+
+!!! note
+
+    If you are not familiar with Python environments: every Python installation has an environment
+    that packages can be installed in. Typically, creating [_virtual_ environments](https://docs.python.org/3/library/venv.html) is recommended to
+    isolate packages required by each script. uv automatically manages virtual environments for you
+    and prefers a [declarative](#declaring-script-dependencies) approach to dependencies.
 
 ## Running a script without dependencies
 
@@ -53,7 +60,7 @@ install the current project before running the script. If your script does not d
 project, use the `--no-project` flag to skip this:
 
 ```console
-# Note, it is important that the flag comes _before_ the script
+$ # Note, it is important that the flag comes _before_ the script
 $ uv run --no-project example.py
 ```
 
@@ -149,7 +156,11 @@ $ uv run example.py
 ]
 ```
 
-uv also supports Python version requirements:
+!!! important
+
+    When using inline script metadata, even if `uv run` is [used in a _project_](../concepts/projects.md#running-scripts), the project's dependencies will be ignored. The `--no-project` flag is not required.
+
+uv also respects Python version requirements:
 
 ```python title="example.py"
 # /// script
@@ -162,12 +173,13 @@ type Point = tuple[float, float]
 print(Point)
 ```
 
-uv will fetch the required Python version if it is not installed — see the documentation on
-[Python versions](../concepts/python-versions.md) for more details. Note that the `dependencies`
-field must be provided even if empty.
+!!! note
 
-Note that when using inline script metadata, even if `uv run` is used in a _project_, the project's
-dependencies will be ignored. The `--no-project` flag is not required.
+    The `dependencies` field must be provided even if empty.
+
+`uv run` will search for and use the required Python version. The Python version will download if it
+is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
+more details.
 
 ## Using different Python versions
 
@@ -180,16 +192,22 @@ print(".".join(map(str, sys.version_info[:3])))
 ```
 
 ```console
-# Use the default Python version, may differ on your machine
+$ # Use the default Python version, may differ on your machine
 $ uv run example.py
 3.12.1
 ```
 
 ```console
-# Use a specific Python version
+$ # Use a specific Python version
 $ uv run --python 3.10 example.py
 3.10.13
 ```
 
 See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation
 for more details on requesting Python versions.
+
+## Next steps
+
+To learn more about `uv run`, see the [command reference](../reference/cli.md#uv-run).
+
+Or, read on to learn how to to [work on projects](./projects.md).

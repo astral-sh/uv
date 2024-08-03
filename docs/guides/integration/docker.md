@@ -5,8 +5,8 @@
 A Docker image is published with a built version of uv available. To run a uv command in a
 container:
 
-```bash
-docker run ghcr.io/astral-sh/uv --help
+```console
+$ docker run ghcr.io/astral-sh/uv --help
 ```
 
 ## Installing uv

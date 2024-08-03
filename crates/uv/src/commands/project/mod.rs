@@ -154,17 +154,23 @@ pub(crate) enum FoundInterpreter {
     Environment(PythonEnvironment),
 }
 
-impl FoundInterpreter {
-    /// Discover the interpreter to use in the current [`Workspace`].
-    pub(crate) async fn discover(
-        workspace: &Workspace,
+/// The resolved Python request and requirement for a [`Workspace`].
+#[derive(Debug, Clone)]
+pub(crate) struct WorkspacePython {
+    /// The resolved Python request, computed by considering (1) any explicit request from the user
+    /// via `--python`, (2) any implicit request from the user via `.python-version`, and (3) any
+    /// `Requires-Python` specifier in the `pyproject.toml`.
+    python_request: Option<PythonRequest>,
+    /// The resolved Python requirement for the project, computed by taking the intersection of all
+    /// `Requires-Python` specifiers in the workspace.
+    requires_python: Option<RequiresPython>,
+}
+
+impl WorkspacePython {
+    /// Determine the [`WorkspacePython`] for the current [`Workspace`].
+    pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
-        python_preference: PythonPreference,
-        python_fetch: PythonFetch,
-        connectivity: Connectivity,
-        native_tls: bool,
-        cache: &Cache,
-        printer: Printer,
+        workspace: &Workspace,
     ) -> Result<Self, ProjectError> {
         let requires_python = find_requires_python(workspace)?;
 
@@ -181,6 +187,31 @@ impl FoundInterpreter {
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| PythonRequest::Version(VersionRequest::Range(specifiers.clone())))
         };
+
+        Ok(Self {
+            python_request,
+            requires_python,
+        })
+    }
+}
+
+impl FoundInterpreter {
+    /// Discover the interpreter to use in the current [`Workspace`].
+    pub(crate) async fn discover(
+        workspace: &Workspace,
+        python_request: Option<PythonRequest>,
+        python_preference: PythonPreference,
+        python_fetch: PythonFetch,
+        connectivity: Connectivity,
+        native_tls: bool,
+        cache: &Cache,
+        printer: Printer,
+    ) -> Result<Self, ProjectError> {
+        // Resolve the Python request and requirement for the workspace.
+        let WorkspacePython {
+            python_request,
+            requires_python,
+        } = WorkspacePython::from_request(python_request, workspace).await?;
 
         // Read from the virtual environment first.
         match find_environment(workspace, cache) {

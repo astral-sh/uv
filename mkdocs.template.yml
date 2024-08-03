@@ -89,8 +89,8 @@ nav:
       - guides/index.md
       - Installing Python: guides/install-python.md
       - Running scripts: guides/scripts.md
-      - Using tools: guides/tools.md
       - Working on projects: guides/projects.md
+      - Using tools: guides/tools.md
   - Concepts:
       - concepts/index.md
       - Projects: concepts/projects.md
