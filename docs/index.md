@@ -160,9 +160,10 @@ See the [installing Python guide](./guides/install-python.md) to get started.
 
 uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands. uv
 extends their interfaces with advanced features, such as dependency version overrides,
-multi-platform resolutions, reproducible resolutions, alternative resolution strategies, and more.
+platform-independent resolutions, reproducible resolutions, alternative resolution strategies, and
+more.
 
-Compile requirements into a multi-platform requirements file:
+Compile requirements into a platform-independent requirements file:
 
 ```console
 $ uv pip compile docs/requirements.in \

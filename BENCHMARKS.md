@@ -9,11 +9,11 @@ important caveats:
 - Benchmark performance may vary dramatically depending on the set of packages being installed. For
   example, a resolution that requires building a single intensive source distribution may appear
   very similar across tools, since the bottleneck is tool-agnostic.
-- Unlike Poetry, both uv and pip-tools do _not_ generate multi-platform lockfiles. As such, Poetry
-  is (by design) doing significantly more work than other tools in the resolution benchmarks. Poetry
-  is included for completeness, as many projects may not _need_ a multi-platform lockfile. However,
-  it's critical to understand that benchmarking uv's resolution time against Poetry is an unfair
-  comparison. (Benchmarking installation, however, _is_ a fair comparison.)
+- Unlike Poetry, both uv and pip-tools do _not_ generate platform-independent lockfiles. As such,
+  Poetry is (by design) doing significantly more work than other tools in the resolution benchmarks.
+  Poetry is included for completeness, as many projects may not _need_ a platform-independent
+  lockfile. However, it's critical to understand that benchmarking uv's resolution time against
+  Poetry is an unfair comparison. (Benchmarking installation, however, _is_ a fair comparison.)
 
 This document benchmarks against Trio's `docs-requirements.in`, as a representative example of a
 real-world project.
