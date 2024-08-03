@@ -328,6 +328,10 @@ pub(crate) async fn add(
                 continue;
             };
 
+            // Drop the local version identifier, which isn't permitted in `>=` constraints.
+            // For example, convert `1.2.3+local` to `1.2.3`.
+            let minimum = (*minimum).clone().without_local();
+
             match edit.dependency_type {
                 DependencyType::Production => {
                     pyproject.set_dependency_minimum_version(*index, minimum)?;
