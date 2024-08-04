@@ -11,7 +11,7 @@ use std::sync::Arc;
 use either::Either;
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -2635,7 +2635,11 @@ pub struct TreeDisplay<'env> {
     ///
     /// While the dependencies exist on the [`Lock`] directly, if `--invert` is enabled, the
     /// direction must be inverted when constructing the tree.
-    edges: FxHashMap<&'env DistributionId, Vec<&'env DistributionId>>,
+    dependencies: FxHashMap<&'env DistributionId, Vec<Cow<'env, Dependency>>>,
+    optional_dependencies:
+        FxHashMap<&'env DistributionId, FxHashMap<ExtraName, Vec<Cow<'env, Dependency>>>>,
+    dev_dependencies:
+        FxHashMap<&'env DistributionId, FxHashMap<GroupName, Vec<Cow<'env, Dependency>>>>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Prune the given packages from the display of the dependency tree.
@@ -2658,8 +2662,12 @@ impl<'env> TreeDisplay<'env> {
         invert: bool,
     ) -> Self {
         let mut non_roots = FxHashSet::default();
-        let mut edges: FxHashMap<_, Vec<_>> =
-            FxHashMap::with_capacity_and_hasher(lock.by_id.len(), FxBuildHasher);
+
+        // Index all the dependencies. We could read these from the `Lock` directly, but we have to
+        // support `--invert`, so we might as well build them up in either case.
+        let mut dependencies: FxHashMap<_, Vec<_>> = FxHashMap::default();
+        let mut optional_dependencies: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
+        let mut dev_dependencies: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
 
         for distribution in &lock.distributions {
             for dependency in &distribution.dependencies {
@@ -2669,13 +2677,16 @@ impl<'env> TreeDisplay<'env> {
                     &distribution.id
                 };
                 let child = if invert {
-                    &distribution.id
+                    Cow::Owned(Dependency {
+                        distribution_id: distribution.id.clone(),
+                        extra: dependency.extra.clone(),
+                        marker: dependency.marker.clone(),
+                    })
                 } else {
-                    &dependency.distribution_id
+                    Cow::Borrowed(dependency)
                 };
 
-                // Mark the dependency as a non-root node.
-                non_roots.insert(child);
+                non_roots.insert(child.distribution_id.clone());
 
                 // Skip dependencies that don't apply to the current environment.
                 if let Some(environment_markers) = markers {
@@ -2686,29 +2697,81 @@ impl<'env> TreeDisplay<'env> {
                     }
                 }
 
-                edges.entry(parent).or_default().push(child);
+                dependencies.entry(parent).or_default().push(child);
             }
 
-            for dependency in distribution.dev_dependencies.values().flatten() {
-                let child = if invert {
-                    &distribution.id
-                } else {
-                    &dependency.distribution_id
-                };
+            for (extra, dependencies) in &distribution.optional_dependencies {
+                for dependency in dependencies {
+                    let parent = if invert {
+                        &dependency.distribution_id
+                    } else {
+                        &distribution.id
+                    };
+                    let child = if invert {
+                        Cow::Owned(Dependency {
+                            distribution_id: distribution.id.clone(),
+                            extra: dependency.extra.clone(),
+                            marker: dependency.marker.clone(),
+                        })
+                    } else {
+                        Cow::Borrowed(dependency)
+                    };
 
-                // Mark the dependency as a non-root node.
-                non_roots.insert(child);
+                    non_roots.insert(child.distribution_id.clone());
+
+                    // Skip dependencies that don't apply to the current environment.
+                    if let Some(environment_markers) = markers {
+                        if let Some(dependency_markers) = dependency.marker.as_ref() {
+                            if !dependency_markers.evaluate(environment_markers, &[]) {
+                                continue;
+                            }
+                        }
+                    }
+
+                    optional_dependencies
+                        .entry(parent)
+                        .or_default()
+                        .entry(extra.clone())
+                        .or_default()
+                        .push(child);
+                }
             }
 
-            for dependency in distribution.optional_dependencies.values().flatten() {
-                let child = if invert {
-                    &distribution.id
-                } else {
-                    &dependency.distribution_id
-                };
+            for (group, dependencies) in &distribution.dev_dependencies {
+                for dependency in dependencies {
+                    let parent = if invert {
+                        &dependency.distribution_id
+                    } else {
+                        &distribution.id
+                    };
+                    let child = if invert {
+                        Cow::Owned(Dependency {
+                            distribution_id: distribution.id.clone(),
+                            extra: dependency.extra.clone(),
+                            marker: dependency.marker.clone(),
+                        })
+                    } else {
+                        Cow::Borrowed(dependency)
+                    };
 
-                // Mark the dependency as a non-root node.
-                non_roots.insert(child);
+                    non_roots.insert(child.distribution_id.clone());
+
+                    // Skip dependencies that don't apply to the current environment.
+                    if let Some(environment_markers) = markers {
+                        if let Some(dependency_markers) = dependency.marker.as_ref() {
+                            if !dependency_markers.evaluate(environment_markers, &[]) {
+                                continue;
+                            }
+                        }
+                    }
+
+                    dev_dependencies
+                        .entry(parent)
+                        .or_default()
+                        .entry(group.clone())
+                        .or_default()
+                        .push(child);
+                }
             }
         }
 
@@ -2717,12 +2780,14 @@ impl<'env> TreeDisplay<'env> {
             .distributions
             .iter()
             .map(|dist| &dist.id)
-            .filter(|id| !non_roots.contains(id))
+            .filter(|id| !non_roots.contains(*id))
             .collect::<Vec<_>>();
 
         Self {
             roots,
-            edges,
+            dependencies,
+            optional_dependencies,
+            dev_dependencies,
             depth,
             prune,
             package,
@@ -2732,8 +2797,8 @@ impl<'env> TreeDisplay<'env> {
 
     /// Perform a depth-first traversal of the given distribution and its dependencies.
     fn visit(
-        &self,
-        id: &'env DistributionId,
+        &'env self,
+        node: Node<'env>,
         visited: &mut FxHashMap<&'env DistributionId, Vec<&'env DistributionId>>,
         path: &mut Vec<&'env DistributionId>,
     ) -> Vec<String> {
@@ -2742,14 +2807,28 @@ impl<'env> TreeDisplay<'env> {
             return Vec::new();
         }
 
-        let package_name = &id.name;
-        let line = format!("{} v{}", package_name, id.version);
+        let line = {
+            let mut line = format!("{}", node.distribution_id().name);
+
+            if let Some(extras) = node.extras().filter(|extras| !extras.is_empty()) {
+                line.push_str(&format!("[{}]", extras.iter().join(",")));
+            }
+
+            line.push_str(&format!(" v{}", node.distribution_id().version));
+
+            match node {
+                Node::Root(_) => line,
+                Node::Dependency(_) => line,
+                Node::OptionalDependency(extra, _) => format!("{line} (extra: {extra})"),
+                Node::DevDependency(group, _) => format!("{line} (group: {group})"),
+            }
+        };
 
         // Skip the traversal if:
         // 1. The package is in the current traversal path (i.e., a dependency cycle).
         // 2. The package has been visited and de-duplication is enabled (default).
-        if let Some(requirements) = visited.get(id) {
-            if !self.no_dedupe || path.contains(&id) {
+        if let Some(requirements) = visited.get(node.distribution_id()) {
+            if !self.no_dedupe || path.contains(&node.distribution_id()) {
                 return if requirements.is_empty() {
                     vec![line]
                 } else {
@@ -2758,22 +2837,44 @@ impl<'env> TreeDisplay<'env> {
             }
         }
 
-        let edges = self
-            .edges
-            .get(id)
+        let dependencies: Vec<Node<'env>> = self
+            .dependencies
+            .get(node.distribution_id())
             .into_iter()
             .flatten()
-            .filter(|&id| !self.prune.contains(&id.name))
-            .copied()
+            .map(|dep| Node::Dependency(dep.as_ref()))
+            .chain(
+                self.optional_dependencies
+                    .get(node.distribution_id())
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|(extra, deps)| {
+                        deps.iter()
+                            .map(move |dep| Node::OptionalDependency(extra, dep))
+                    }),
+            )
+            .chain(
+                self.dev_dependencies
+                    .get(node.distribution_id())
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|(group, deps)| {
+                        deps.iter().map(move |dep| Node::DevDependency(group, dep))
+                    }),
+            )
+            .filter(|dep| !self.prune.contains(&dep.distribution_id().name))
             .collect::<Vec<_>>();
 
         let mut lines = vec![line];
 
         // Keep track of the dependency path to avoid cycles.
-        visited.insert(id, edges.clone());
-        path.push(id);
+        visited.insert(
+            node.distribution_id(),
+            dependencies.iter().map(Node::distribution_id).collect(),
+        );
+        path.push(node.distribution_id());
 
-        for (index, req) in edges.iter().enumerate() {
+        for (index, dep) in dependencies.iter().enumerate() {
             // For sub-visited packages, add the prefix to make the tree display user-friendly.
             // The key observation here is you can group the tree as follows when you're at the
             // root of the tree:
@@ -2793,22 +2894,22 @@ impl<'env> TreeDisplay<'env> {
             // those in Group 3 have `└── ` at the top and `    ` at the rest.
             // This observation is true recursively even when looking at the subtree rooted
             // at `level_1_0`.
-            let (prefix_top, prefix_rest) = if edges.len() - 1 == index {
+            let (prefix_top, prefix_rest) = if dependencies.len() - 1 == index {
                 ("└── ", "    ")
             } else {
                 ("├── ", "│   ")
             };
-
-            for (visited_index, visited_line) in self.visit(req, visited, path).iter().enumerate() {
+            for (visited_index, visited_line) in self.visit(*dep, visited, path).iter().enumerate()
+            {
                 let prefix = if visited_index == 0 {
                     prefix_top
                 } else {
                     prefix_rest
                 };
-
                 lines.push(format!("{prefix}{visited_line}"));
             }
         }
+
         path.pop();
 
         lines
@@ -2823,7 +2924,7 @@ impl<'env> TreeDisplay<'env> {
         if self.package.is_empty() {
             for id in &self.roots {
                 path.clear();
-                lines.extend(self.visit(id, &mut visited, &mut path));
+                lines.extend(self.visit(Node::Root(id), &mut visited, &mut path));
             }
         } else {
             let by_package: FxHashMap<_, _> = self.roots.iter().map(|id| (&id.name, id)).collect();
@@ -2834,12 +2935,40 @@ impl<'env> TreeDisplay<'env> {
                 }
                 if let Some(id) = by_package.get(package) {
                     path.clear();
-                    lines.extend(self.visit(id, &mut visited, &mut path));
+                    lines.extend(self.visit(Node::Root(id), &mut visited, &mut path));
                 }
             }
         }
 
         lines
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+enum Node<'env> {
+    Root(&'env DistributionId),
+    Dependency(&'env Dependency),
+    OptionalDependency(&'env ExtraName, &'env Dependency),
+    DevDependency(&'env GroupName, &'env Dependency),
+}
+
+impl<'env> Node<'env> {
+    fn distribution_id(&self) -> &'env DistributionId {
+        match self {
+            Self::Root(id) => id,
+            Self::Dependency(dep) => &dep.distribution_id,
+            Self::OptionalDependency(_, dep) => &dep.distribution_id,
+            Self::DevDependency(_, dep) => &dep.distribution_id,
+        }
+    }
+
+    fn extras(&self) -> Option<&BTreeSet<ExtraName>> {
+        match self {
+            Self::Root(_) => None,
+            Self::Dependency(dep) => Some(&dep.extra),
+            Self::OptionalDependency(_, dep) => Some(&dep.extra),
+            Self::DevDependency(_, dep) => Some(&dep.extra),
+        }
     }
 }
 
