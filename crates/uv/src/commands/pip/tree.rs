@@ -24,12 +24,12 @@ use crate::printer::Printer;
 /// Display the installed packages in the current environment as a dependency tree.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_tree(
+    show_version_specifiers: bool,
     depth: u8,
     prune: Vec<PackageName>,
     package: Vec<PackageName>,
     no_dedupe: bool,
     invert: bool,
-    show_version_specifiers: bool,
     strict: bool,
     python: Option<&str>,
     system: bool,

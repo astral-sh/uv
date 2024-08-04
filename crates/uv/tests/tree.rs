@@ -220,6 +220,25 @@ fn platform_dependencies() -> Result<()> {
     "###
     );
 
+    // When `--filter` is provided, `colorama` should _not_ be included.
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.tree().arg("--filter"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── black v24.3.0
+        ├── click v8.1.7
+        ├── mypy-extensions v1.0.0
+        ├── packaging v24.0
+        ├── pathspec v0.12.1
+        └── platformdirs v4.2.0
+
+    ----- stderr -----
+    warning: `uv tree` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    "###);
+
     // `uv tree` should update the lockfile
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     assert!(!lock.is_empty());
@@ -361,6 +380,7 @@ fn dev_dependencies() -> Result<()> {
         # ...
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
         [tool.uv]
         dev-dependencies = ["anyio"]
     "#,

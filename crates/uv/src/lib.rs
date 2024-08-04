@@ -562,12 +562,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::pip_tree(
+                args.show_version_specifiers,
                 args.depth,
                 args.prune,
                 args.package,
                 args.no_dedupe,
                 args.invert,
-                args.show_version_specifiers,
                 args.shared.strict,
                 args.shared.python.as_deref(),
                 args.shared.system,
@@ -1121,6 +1121,7 @@ async fn run_project(
             commands::tree(
                 args.locked,
                 args.frozen,
+                args.filter,
                 args.depth,
                 args.prune,
                 args.package,

@@ -2650,6 +2650,7 @@ impl<'env> TreeDisplay<'env> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
     pub fn new(
         lock: &'env Lock,
+        markers: Option<&'env MarkerEnvironment>,
         depth: usize,
         prune: Vec<PackageName>,
         package: Vec<PackageName>,
@@ -2675,6 +2676,15 @@ impl<'env> TreeDisplay<'env> {
 
                 // Mark the dependency as a non-root node.
                 non_roots.insert(child);
+
+                // Skip dependencies that don't apply to the current environment.
+                if let Some(environment_markers) = markers {
+                    if let Some(dependency_markers) = dependency.marker.as_ref() {
+                        if !dependency_markers.evaluate(environment_markers, &[]) {
+                            continue;
+                        }
+                    }
+                }
 
                 edges.entry(parent).or_default().push(child);
             }
