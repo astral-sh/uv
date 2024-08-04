@@ -267,6 +267,30 @@ Its effect on performance is dependent on the packages being installed.
 
     If using `uv pip`, use `requirements.txt` instead of `uv.lock` in the cache key.
 
+!!! warning
+
+    [post-job-hook]: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job
+
+    When using non-ephemeral self-hosted runners the default cache location can grow over time,
+    becoming problematic. In such cases its possible to set the caching location relative to the
+    GitHub Workspace and clean it once the job finishes using a [Post Job Hook][post-job-hook].
+
+    ```yaml
+    install_job:
+      env:
+        # Configure a relative location for the uv cache
+        UV_CACHE_DIR: ${{ github.workspace }}/.cache/uv
+      # ... restore uv cache ...
+    ```
+
+    Using a post job hook requires setting the `ACTIONS_RUNNER_HOOK_JOB_STARTED` environment
+    variable on the self-hosted runner to the path of a cleanup script such as the one shown below.
+
+    ```sh
+    #!/usr/bin/env sh
+    rm -rf $GITHUB_WORKSPACE/*
+    ```
+
 ## Using `uv pip`
 
 If using the `uv pip` interface instead of the uv project interface, uv requires a virtual
