@@ -347,3 +347,42 @@ fn repeated_version() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn dev_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+    "#,
+    )?;
+
+    // Dev dependencies should be omitted.
+    uv_snapshot!(context.filters(), context.tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0
+
+    ----- stderr -----
+    warning: `uv tree` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert!(!lock.is_empty());
+
+    Ok(())
+}

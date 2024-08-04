@@ -2631,6 +2631,8 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 pub struct TreeDisplay<'env> {
     /// The underlying [`Lock`] to display.
     lock: &'env Lock,
+    /// The root nodes in the [`Lock`].
+    roots: Vec<&'env DistributionId>,
     /// The edges in the [`Lock`].
     ///
     /// While the dependencies exist on the [`Lock`] directly, if `--invert` is enabled, the
@@ -2656,8 +2658,10 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
+        let mut non_roots = FxHashSet::default();
         let mut edges: FxHashMap<_, Vec<_>> =
             FxHashMap::with_capacity_and_hasher(lock.by_id.len(), FxBuildHasher);
+
         for distribution in &lock.distributions {
             for dependency in &distribution.dependencies {
                 let parent = if invert {
@@ -2670,11 +2674,47 @@ impl<'env> TreeDisplay<'env> {
                 } else {
                     &dependency.distribution_id
                 };
+
+                // Mark the dependency as a non-root node.
+                non_roots.insert(child);
+
                 edges.entry(parent).or_default().push(child);
             }
+
+            for dependency in distribution.dev_dependencies.values().flatten() {
+                let child = if invert {
+                    &distribution.id
+                } else {
+                    &dependency.distribution_id
+                };
+
+                // Mark the dependency as a non-root node.
+                non_roots.insert(child);
+            }
+
+            for dependency in distribution.optional_dependencies.values().flatten() {
+                let child = if invert {
+                    &distribution.id
+                } else {
+                    &dependency.distribution_id
+                };
+
+                // Mark the dependency as a non-root node.
+                non_roots.insert(child);
+            }
         }
+
+        // Compute the root nodes.
+        let roots = lock
+            .distributions
+            .iter()
+            .map(|dist| &dist.id)
+            .filter(|id| !non_roots.contains(id))
+            .collect::<Vec<_>>();
+
         Self {
             lock,
+            roots,
             edges,
             depth,
             prune,
@@ -2774,14 +2814,9 @@ impl<'env> TreeDisplay<'env> {
         let mut lines: Vec<String> = Vec::new();
 
         if self.package.is_empty() {
-            // Identify all the root nodes by identifying all the distribution IDs that appear as
-            // dependencies.
-            let children: FxHashSet<_> = self.edges.values().flatten().collect();
-            for id in self.lock.by_id.keys() {
-                if !children.contains(&id) {
-                    path.clear();
-                    lines.extend(self.visit(id, &mut visited, &mut path));
-                }
+            for id in &self.roots {
+                path.clear();
+                lines.extend(self.visit(id, &mut visited, &mut path));
             }
         } else {
             // Index all the IDs by package.
