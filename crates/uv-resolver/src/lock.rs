@@ -11,7 +11,7 @@ use std::sync::Arc;
 use either::Either;
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -2625,6 +2625,204 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
     // The line break between the last element's comma and the closing square bracket.
     array.set_trailing("\n");
     array
+}
+
+#[derive(Debug)]
+pub struct TreeDisplay<'env> {
+    /// The underlying [`Lock`] to display.
+    lock: &'env Lock,
+    /// The edges in the [`Lock`].
+    ///
+    /// While the dependencies exist on the [`Lock`] directly, if `--invert` is enabled, the
+    /// direction must be inverted when constructing the tree.
+    edges: FxHashMap<&'env DistributionId, Vec<&'env DistributionId>>,
+    /// Maximum display depth of the dependency tree
+    depth: usize,
+    /// Prune the given packages from the display of the dependency tree.
+    prune: Vec<PackageName>,
+    /// Display only the specified packages.
+    package: Vec<PackageName>,
+    /// Whether to de-duplicate the displayed dependencies.
+    no_dedupe: bool,
+}
+
+impl<'env> TreeDisplay<'env> {
+    /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
+    pub fn new(
+        lock: &'env Lock,
+        depth: usize,
+        prune: Vec<PackageName>,
+        package: Vec<PackageName>,
+        no_dedupe: bool,
+        invert: bool,
+    ) -> Self {
+        let mut edges: FxHashMap<_, Vec<_>> =
+            FxHashMap::with_capacity_and_hasher(lock.by_id.len(), FxBuildHasher);
+        for distribution in &lock.distributions {
+            for dependency in &distribution.dependencies {
+                let parent = if invert {
+                    &dependency.distribution_id
+                } else {
+                    &distribution.id
+                };
+                let child = if invert {
+                    &distribution.id
+                } else {
+                    &dependency.distribution_id
+                };
+                edges.entry(parent).or_default().push(child);
+            }
+        }
+        Self {
+            lock,
+            edges,
+            depth,
+            prune,
+            package,
+            no_dedupe,
+        }
+    }
+
+    /// Perform a depth-first traversal of the given distribution and its dependencies.
+    fn visit(
+        &self,
+        id: &'env DistributionId,
+        visited: &mut FxHashMap<&'env DistributionId, Vec<&'env DistributionId>>,
+        path: &mut Vec<&'env DistributionId>,
+    ) -> Vec<String> {
+        // Short-circuit if the current path is longer than the provided depth.
+        if path.len() > self.depth {
+            return Vec::new();
+        }
+
+        let package_name = &id.name;
+        let line = format!("{} v{}", package_name, id.version);
+
+        // Skip the traversal if:
+        // 1. The package is in the current traversal path (i.e., a dependency cycle).
+        // 2. The package has been visited and de-duplication is enabled (default).
+        if let Some(requirements) = visited.get(id) {
+            if !self.no_dedupe || path.contains(&id) {
+                return if requirements.is_empty() {
+                    vec![line]
+                } else {
+                    vec![format!("{} (*)", line)]
+                };
+            }
+        }
+
+        let edges = self
+            .edges
+            .get(id)
+            .into_iter()
+            .flatten()
+            .filter(|&id| !self.prune.contains(&id.name))
+            .copied()
+            .collect::<Vec<_>>();
+
+        let mut lines = vec![line];
+
+        // Keep track of the dependency path to avoid cycles.
+        visited.insert(id, edges.clone());
+        path.push(id);
+
+        for (index, req) in edges.iter().enumerate() {
+            // For sub-visited packages, add the prefix to make the tree display user-friendly.
+            // The key observation here is you can group the tree as follows when you're at the
+            // root of the tree:
+            // root_package
+            // ├── level_1_0          // Group 1
+            // │   ├── level_2_0      ...
+            // │   │   ├── level_3_0  ...
+            // │   │   └── level_3_1  ...
+            // │   └── level_2_1      ...
+            // ├── level_1_1          // Group 2
+            // │   ├── level_2_2      ...
+            // │   └── level_2_3      ...
+            // └── level_1_2          // Group 3
+            //     └── level_2_4      ...
+            //
+            // The lines in Group 1 and 2 have `├── ` at the top and `|   ` at the rest while
+            // those in Group 3 have `└── ` at the top and `    ` at the rest.
+            // This observation is true recursively even when looking at the subtree rooted
+            // at `level_1_0`.
+            let (prefix_top, prefix_rest) = if edges.len() - 1 == index {
+                ("└── ", "    ")
+            } else {
+                ("├── ", "│   ")
+            };
+
+            for (visited_index, visited_line) in self.visit(req, visited, path).iter().enumerate() {
+                let prefix = if visited_index == 0 {
+                    prefix_top
+                } else {
+                    prefix_rest
+                };
+
+                lines.push(format!("{prefix}{visited_line}"));
+            }
+        }
+        path.pop();
+
+        lines
+    }
+
+    /// Depth-first traverse the nodes to render the tree.
+    fn render(&self) -> Vec<String> {
+        let mut visited: FxHashMap<&DistributionId, Vec<&DistributionId>> = FxHashMap::default();
+        let mut path: Vec<&DistributionId> = Vec::new();
+        let mut lines: Vec<String> = Vec::new();
+
+        if self.package.is_empty() {
+            // Identify all the root nodes by identifying all the distribution IDs that appear as
+            // dependencies.
+            let children: FxHashSet<_> = self.edges.values().flatten().collect();
+            for id in self.lock.by_id.keys() {
+                if !children.contains(&id) {
+                    path.clear();
+                    lines.extend(self.visit(id, &mut visited, &mut path));
+                }
+            }
+        } else {
+            // Index all the IDs by package.
+            let by_package: FxHashMap<_, _> =
+                self.lock.by_id.keys().map(|id| (&id.name, id)).collect();
+            for (index, package) in self.package.iter().enumerate() {
+                if index != 0 {
+                    lines.push(String::new());
+                }
+                if let Some(id) = by_package.get(package) {
+                    path.clear();
+                    lines.extend(self.visit(id, &mut visited, &mut path));
+                }
+            }
+        }
+
+        lines
+    }
+}
+
+impl std::fmt::Display for TreeDisplay<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use owo_colors::OwoColorize;
+
+        let mut deduped = false;
+        for line in self.render() {
+            deduped |= line.contains('*');
+            writeln!(f, "{line}")?;
+        }
+
+        if deduped {
+            let message = if self.no_dedupe {
+                "(*) Package tree is a cycle and cannot be shown".italic()
+            } else {
+                "(*) Package tree already displayed".italic()
+            };
+            writeln!(f, "{message}")?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

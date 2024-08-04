@@ -774,7 +774,6 @@ pub(crate) struct TreeSettings {
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
-    pub(crate) show_version_specifiers: bool,
     pub(crate) python: Option<String>,
     pub(crate) resolver: ResolverSettings,
 }
@@ -799,7 +798,6 @@ impl TreeSettings {
             package: tree.package,
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
-            show_version_specifiers: tree.show_version_specifiers,
             python,
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
