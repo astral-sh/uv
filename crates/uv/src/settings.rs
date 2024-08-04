@@ -775,6 +775,8 @@ pub(crate) struct TreeSettings {
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
+    pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) python: Option<String>,
     pub(crate) resolver: ResolverSettings,
 }
@@ -789,6 +791,8 @@ impl TreeSettings {
             frozen,
             build,
             resolver,
+            python_version,
+            python_platform,
             python,
         } = args;
 
@@ -801,6 +805,8 @@ impl TreeSettings {
             package: tree.package,
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
+            python_version,
+            python_platform,
             python,
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }

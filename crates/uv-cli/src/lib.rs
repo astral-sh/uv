@@ -2370,6 +2370,21 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
+    /// The Python version to use when filtering the tree (via `--filter`). For example, pass
+    /// `--python-version 3.10` to display the dependencies that would be included when installing
+    /// on Python 3.10.
+    #[arg(long, conflicts_with = "universal")]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform to use when filtering the tree (via `--filter`). For example, pass `--platform
+    /// windows` to display the dependencies that would be included when installing on Windows.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aaarch64-apple-darwin`.
+    #[arg(long, conflicts_with = "universal")]
+    pub python_platform: Option<TargetTriple>,
+
     /// The Python interpreter for which packages should be listed.
     ///
     /// By default, uv installs into the virtual environment in the current working directory or

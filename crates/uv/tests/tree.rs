@@ -219,7 +219,27 @@ fn platform_dependencies() -> Result<()> {
     Resolved 8 packages in [TIME]
     "###);
 
-    // Should include `colorama`, even though it's only included on Windows.
+    // Unless `--python-platform` is set to `windows`, in which case it should be included.
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── black v24.3.0
+        ├── click v8.1.7
+        │   └── colorama v0.4.6
+        ├── mypy-extensions v1.0.0
+        ├── packaging v24.0
+        ├── pathspec v0.12.1
+        └── platformdirs v4.2.0
+
+    ----- stderr -----
+    warning: `uv tree` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    "###);
+
+    // When `--universal` is _not_ provided, should include `colorama`, even though it's only
+    // included on Windows.
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
     success: true
     exit_code: 0

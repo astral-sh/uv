@@ -16,7 +16,7 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod uninstall;
 
-// Determine the tags, markers, and interpreter to use for resolution.
+/// Determine the tags, markers, and interpreter to use for resolution.
 pub(crate) fn resolution_environment(
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
