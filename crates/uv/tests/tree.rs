@@ -2,8 +2,9 @@
 
 use anyhow::Result;
 use assert_fs::prelude::*;
-
 use common::{uv_snapshot, TestContext};
+use indoc::formatdoc;
+use url::Url;
 
 mod common;
 
@@ -177,6 +178,172 @@ fn frozen() -> Result<()> {
     warning: `uv tree` is experimental and may change without warning
     "###
     );
+
+    Ok(())
+}
+
+#[test]
+fn platform_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "black"
+        ]
+    "#,
+    )?;
+
+    // Should include `colorama`, even though it's only included on Windows.
+    uv_snapshot!(context.filters(), context.tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── black v24.3.0
+        ├── click v8.1.7
+        │   └── colorama v0.4.6
+        ├── mypy-extensions v1.0.0
+        ├── packaging v24.0
+        ├── pathspec v0.12.1
+        └── platformdirs v4.2.0
+
+    ----- stderr -----
+    warning: `uv tree` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn repeated_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio < 2 ; sys_platform == 'win32'",
+            "anyio > 2 ; sys_platform == 'linux'",
+        ]
+    "#,
+    )?;
+
+    // Should include both versions of `anyio`, which have different dependencies.
+    uv_snapshot!(context.filters(), context.tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── anyio v1.4.0
+    │   ├── async-generator v1.10
+    │   ├── idna v3.6
+    │   └── sniffio v1.3.1
+    └── anyio v4.3.0
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    warning: `uv tree` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+/// In this case, a package is included twice at the same version, but pointing to different direct
+/// URLs.
+#[test]
+fn repeated_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let v1 = context.temp_dir.child("v1");
+    fs_err::create_dir_all(&v1)?;
+    let pyproject_toml = v1.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    let v2 = context.temp_dir.child("v2");
+    fs_err::create_dir_all(&v2)?;
+    let pyproject_toml = v2.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.0.0"]
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+          "dependency @ {} ; sys_platform == 'darwin'",
+          "dependency @ {} ; sys_platform != 'darwin'",
+        ]
+        "#,
+        Url::from_file_path(context.temp_dir.join("v1")).unwrap(),
+        Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── dependency v0.0.1
+    │   └── anyio v3.7.0
+    │       ├── idna v3.6
+    │       └── sniffio v1.3.1
+    └── dependency v0.0.1
+        └── anyio v3.0.0
+            ├── idna v3.6
+            └── sniffio v1.3.1
+
+    ----- stderr -----
+    warning: `uv tree` is experimental and may change without warning
+    Resolved 7 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert!(!lock.is_empty());
 
     Ok(())
 }
