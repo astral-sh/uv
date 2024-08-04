@@ -157,7 +157,7 @@ $ uv add ~/projects/bar/
 
 !!! important
 
-    An [editable installation](#editables-dependencies) is not used for path dependencies by
+    An [editable installation](#editable-dependencies) is not used for path dependencies by
     default. An editable installation may be requested for project directories:
 
     ```console
@@ -171,7 +171,7 @@ $ uv add ~/projects/bar/
 
 To declare a dependency on a workspace member, add the member name with `{ workspace = true }`. All
 workspace members must be explicitly stated. Workspace members are
-[editable](#editables-dependencies) by default; `editable = false` may be included to install them
+[editable](#editable-dependencies) by default; `editable = false` may be included to install them
 as regular dependencies. See the [workspace](./workspaces.md) documentation for more details on
 workspaces.
 
