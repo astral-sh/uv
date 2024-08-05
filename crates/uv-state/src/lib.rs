@@ -83,6 +83,7 @@ impl StateStore {
     pub fn from_settings(state_dir: Option<PathBuf>) -> Result<Self, io::Error> {
         if let Some(state_dir) = state_dir {
             StateStore::from_path(state_dir)
+            // STOPSHIP: This should use XDG instead...
         } else if let Some(project_dirs) = ProjectDirs::from("", "", "uv") {
             StateStore::from_path(project_dirs.data_dir())
         } else {
