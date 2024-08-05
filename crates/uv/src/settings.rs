@@ -769,7 +769,7 @@ impl RemoveSettings {
 pub(crate) struct TreeSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
-    pub(crate) filter: bool,
+    pub(crate) universal: bool,
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) package: Vec<PackageName>,
@@ -784,7 +784,7 @@ impl TreeSettings {
     pub(crate) fn resolve(args: TreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let TreeArgs {
             tree,
-            filter,
+            universal,
             locked,
             frozen,
             build,
@@ -795,7 +795,7 @@ impl TreeSettings {
         Self {
             locked,
             frozen,
-            filter,
+            universal,
             depth: tree.depth,
             prune: tree.prune,
             package: tree.package,

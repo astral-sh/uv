@@ -24,7 +24,7 @@ use super::SharedState;
 pub(crate) async fn tree(
     locked: bool,
     frozen: bool,
-    filter: bool,
+    universal: bool,
     depth: u8,
     prune: Vec<PackageName>,
     package: Vec<PackageName>,
@@ -82,7 +82,7 @@ pub(crate) async fn tree(
     // Render the tree.
     let tree = TreeDisplay::new(
         &lock.lock,
-        filter.then(|| interpreter.markers()),
+        (!universal).then(|| interpreter.markers()),
         depth.into(),
         prune,
         package,

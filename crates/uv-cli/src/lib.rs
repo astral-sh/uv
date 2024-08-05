@@ -2348,10 +2348,10 @@ pub struct RemoveArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct TreeArgs {
-    /// Filter the tree to the current Python version and platform, excluding any packages that are
-    /// only relevant for other environments.
+    /// Show the resolved package versions for all Python versions and platforms, rather than
+    /// filtering to those that are relevant for the current environment.
     #[arg(long)]
-    pub filter: bool,
+    pub universal: bool,
 
     #[command(flatten)]
     pub tree: DisplayTreeArgs,

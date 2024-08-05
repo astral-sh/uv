@@ -1121,7 +1121,7 @@ async fn run_project(
             commands::tree(
                 args.locked,
                 args.frozen,
-                args.filter,
+                args.universal,
                 args.depth,
                 args.prune,
                 args.package,
