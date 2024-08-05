@@ -4,7 +4,7 @@
 
 uv installation differs depending on the platform.
 
-### on Unix
+### Unix
 
 ```yaml title="example.yml"
 name: Example on Unix
@@ -22,7 +22,7 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### on Windows
+### Windows
 
 ```yaml title="example.yml"
 name: Example on Windows

@@ -1,10 +1,11 @@
 # Installing uv
 
-Install uv with our standalone installers, from PyPI, or from your package manager of choice.
+Install uv with our standalone installers or your package manager of choice (e.g.,
+`pip install uv`).
 
 ## Standalone installer
 
-uv provides a standalone installer that downloads and installs uv:
+uv provides a standalone installer to downloads and install uv:
 
 ```console title="macOS and Linux"
 $ curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -14,7 +15,7 @@ $ curl -LsSf https://astral.sh/uv/install.sh | sh
 $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-uv is installed to `~/.cargo/bin`.
+By default, uv is installed to `~/.cargo/bin`.
 
 !!! tip
 
@@ -42,7 +43,7 @@ $ powershell -c "irm https://astral.sh/uv/0.2.11/install.ps1 | iex"
 
 !!! tip
 
-    When the standalone installer is used, uv can perform self-updates:
+    When uv is installed via the standalone installer, self-updates are enabled:
 
     ```console
     $ uv self update
@@ -69,8 +70,8 @@ $ pip install uv
 
 !!! note
 
-    There are prebuilt distributions (wheels) for many platforms; if not available for a given
-    platform, uv will be built from source which requires a Rust toolchain to be installed. See the
+    uv ships with prebuilt distributions (wheels) for many platforms; if a wheel is not available for a given
+    platform, uv will be built from source, which requires a Rust toolchain. See the
     [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup)
     for details on building uv from source.
 
