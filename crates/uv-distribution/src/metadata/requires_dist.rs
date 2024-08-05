@@ -39,25 +39,26 @@ impl RequiresDist {
         metadata: pypi_types::RequiresDist,
         install_path: &Path,
         lock_path: &Path,
-        no_sources: bool,
+        sources: SourceStrategy,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
-        if no_sources {
-            Ok(Self::from_metadata23(metadata))
-        } else {
-            // TODO(konsti): Limit discovery for Git checkouts to Git root.
-            // TODO(konsti): Cache workspace discovery.
-            let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
-                install_path,
-                lock_path,
-                &DiscoveryOptions::default(),
-            )
-            .await?
-            else {
-                return Ok(Self::from_metadata23(metadata));
-            };
+        match sources {
+            SourceStrategy::Enabled => {
+                // TODO(konsti): Limit discovery for Git checkouts to Git root.
+                // TODO(konsti): Cache workspace discovery.
+                let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+                    install_path,
+                    lock_path,
+                    &DiscoveryOptions::default(),
+                )
+                .await?
+                else {
+                    return Ok(Self::from_metadata23(metadata));
+                };
 
-            Self::from_project_workspace(metadata, &project_workspace, preview_mode)
+                Self::from_project_workspace(metadata, &project_workspace, preview_mode)
+            }
+            SourceStrategy::Disabled => Ok(Self::from_metadata23(metadata)),
         }
     }
 

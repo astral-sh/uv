@@ -20,7 +20,7 @@ use uv_cli::{
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace};
-use uv_configuration::{Concurrency, SourceStrategy};
+use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
@@ -279,7 +279,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.python_platform,
                 args.settings.universal,
                 args.settings.exclude_newer,
-                args.settings.no_sources,
+                args.settings.sources,
                 args.settings.annotation_style,
                 args.settings.link_mode,
                 args.settings.python,
@@ -355,7 +355,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.break_system_packages,
                 args.settings.target,
                 args.settings.prefix,
-                args.settings.no_sources,
+                args.settings.sources,
                 args.settings.concurrency,
                 globals.native_tls,
                 globals.preview,
@@ -440,7 +440,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.python_platform,
                 args.settings.strict,
                 args.settings.exclude_newer,
-                args.settings.no_sources,
+                args.settings.sources,
                 args.settings.python,
                 args.settings.system,
                 args.settings.break_system_packages,

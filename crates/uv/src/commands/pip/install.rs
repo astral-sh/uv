@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -64,7 +64,7 @@ pub(crate) async fn pip_install(
     python_platform: Option<TargetTriple>,
     strict: bool,
     exclude_newer: Option<ExcludeNewer>,
-    no_sources: bool,
+    sources: SourceStrategy,
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
@@ -314,7 +314,7 @@ pub(crate) async fn pip_install(
         link_mode,
         &build_options,
         exclude_newer,
-        no_sources,
+        sources,
         concurrency,
         preview,
     );

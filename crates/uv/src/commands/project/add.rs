@@ -5,7 +5,9 @@ use std::collections::hash_map::Entry;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy, SourceStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -124,7 +126,7 @@ pub(crate) async fn add(
     };
 
     let build_constraints = [];
-    let no_sources = false;
+    let sources = SourceStrategy::Enabled;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -144,7 +146,7 @@ pub(crate) async fn add(
         settings.link_mode,
         &settings.build_options,
         settings.exclude_newer,
-        no_sources,
+        sources,
         concurrency,
         preview,
     );

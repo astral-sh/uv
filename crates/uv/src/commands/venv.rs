@@ -274,7 +274,7 @@ async fn venv_impl(
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let setup_py = SetupPyStrategy::default();
-        let no_sources = true;
+        let sources = SourceStrategy::Disabled;
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
@@ -297,7 +297,7 @@ async fn venv_impl(
             link_mode,
             &build_options,
             exclude_newer,
-            no_sources,
+            sources,
             concurrency,
             preview,
         );

@@ -4530,6 +4530,7 @@ fn lock_no_sources() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
     warning: `uv.sources` is experimental and may change without warning
@@ -4546,6 +4547,7 @@ fn lock_no_sources() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         exclude-newer = "2024-03-25 00:00:00 UTC"
+
         [[distribution]]
         name = "anyio"
         version = "0.1.0"
@@ -4553,6 +4555,7 @@ fn lock_no_sources() -> Result<()> {
         dependencies = [
             { name = "iniconfig" },
         ]
+
         [[distribution]]
         name = "iniconfig"
         version = "2.0.0"
@@ -4561,6 +4564,7 @@ fn lock_no_sources() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
         ]
+
         [[distribution]]
         name = "project"
         version = "0.1.0"
@@ -4577,6 +4581,7 @@ fn lock_no_sources() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
@@ -4596,6 +4601,7 @@ fn lock_no_sources() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         exclude-newer = "2024-03-25 00:00:00 UTC"
+
         [[distribution]]
         name = "anyio"
         version = "4.3.0"
@@ -4608,6 +4614,7 @@ fn lock_no_sources() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
         ]
+
         [[distribution]]
         name = "idna"
         version = "3.6"
@@ -4616,6 +4623,7 @@ fn lock_no_sources() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
         ]
+
         [[distribution]]
         name = "project"
         version = "0.1.0"
@@ -4623,6 +4631,7 @@ fn lock_no_sources() -> Result<()> {
         dependencies = [
             { name = "anyio" },
         ]
+
         [[distribution]]
         name = "sniffio"
         version = "1.3.1"

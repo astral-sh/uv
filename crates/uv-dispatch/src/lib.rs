@@ -52,7 +52,7 @@ pub struct BuildDispatch<'a> {
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
-    no_sources: bool,
+    sources: SourceStrategy,
     concurrency: Concurrency,
     preview_mode: PreviewMode,
 }
@@ -75,7 +75,7 @@ impl<'a> BuildDispatch<'a> {
         link_mode: install_wheel_rs::linker::LinkMode,
         build_options: &'a BuildOptions,
         exclude_newer: Option<ExcludeNewer>,
-        no_sources: bool,
+        sources: SourceStrategy,
         concurrency: Concurrency,
         preview_mode: PreviewMode,
     ) -> Self {
@@ -98,7 +98,7 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
-            no_sources,
+            sources,
             concurrency,
             preview_mode,
         }
@@ -135,8 +135,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.build_options
     }
 
-    fn no_sources(&self) -> bool {
-        self.no_sources
+    fn sources(&self) -> SourceStrategy {
+        self.sources
     }
 
     fn index_locations(&self) -> &IndexLocations {

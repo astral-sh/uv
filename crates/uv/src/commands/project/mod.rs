@@ -12,8 +12,7 @@ use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy,
-    Upgrade,
+    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -409,7 +408,7 @@ pub(crate) async fn resolve_names(
         exclude_newer,
         link_mode,
         compile_bytecode: _,
-        no_sources,
+        sources,
         upgrade: _,
         reinstall: _,
         build_options,
@@ -458,7 +457,7 @@ pub(crate) async fn resolve_names(
         *link_mode,
         build_options,
         *exclude_newer,
-        *no_sources,
+        *sources,
         concurrency,
         preview,
     );
@@ -501,7 +500,7 @@ pub(crate) async fn resolve_environment<'a>(
         link_mode,
         upgrade: _,
         build_options,
-        no_sources,
+        sources,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -583,7 +582,7 @@ pub(crate) async fn resolve_environment<'a>(
         link_mode,
         build_options,
         exclude_newer,
-        no_sources,
+        sources,
         concurrency,
         preview,
     );
@@ -641,7 +640,7 @@ pub(crate) async fn sync_environment(
         compile_bytecode,
         reinstall,
         build_options,
-        no_sources,
+        sources,
     } = settings;
 
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -701,7 +700,7 @@ pub(crate) async fn sync_environment(
         link_mode,
         build_options,
         exclude_newer,
-        no_sources,
+        sources,
         concurrency,
         preview,
     );
@@ -761,7 +760,7 @@ pub(crate) async fn update_environment(
         exclude_newer,
         link_mode,
         compile_bytecode,
-        no_sources,
+        sources,
         upgrade,
         reinstall,
         build_options,
@@ -868,7 +867,7 @@ pub(crate) async fn update_environment(
         *link_mode,
         build_options,
         *exclude_newer,
-        *no_sources,
+        *sources,
         concurrency,
         preview,
     );

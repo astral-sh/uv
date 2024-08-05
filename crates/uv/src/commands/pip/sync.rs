@@ -61,7 +61,7 @@ pub(crate) async fn pip_sync(
     break_system_packages: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
-    no_sources: bool,
+    sources: SourceStrategy,
     concurrency: Concurrency,
     native_tls: bool,
     preview: PreviewMode,
@@ -260,7 +260,7 @@ pub(crate) async fn pip_sync(
         link_mode,
         &build_options,
         exclude_newer,
-        no_sources,
+        sources,
         concurrency,
         preview,
     );

@@ -67,8 +67,8 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let index = InMemoryIndex::default();
     let index_urls = IndexLocations::default();
     let index_strategy = IndexStrategy::default();
-    let no_sources = false;
     let setup_py = SetupPyStrategy::default();
+    let sources = SourceStrategy::default();
     let python = PythonEnvironment::find(
         &PythonRequest::default(),
         EnvironmentPreference::OnlyVirtual,
@@ -94,7 +94,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         install_wheel_rs::linker::LinkMode::default(),
         &build_options,
         exclude_newer,
-        no_sources,
+        sources,
         concurrency,
         PreviewMode::Enabled,
     );

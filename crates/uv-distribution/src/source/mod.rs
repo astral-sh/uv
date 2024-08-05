@@ -426,7 +426,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             requires_dist,
             project_root,
             project_root,
-            self.build_context.no_sources(),
+            self.build_context.sources(),
             self.preview_mode,
         )
         .await?;
@@ -991,7 +991,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
-                    self.build_context.no_sources(),
+                    self.build_context.sources(),
                     self.preview_mode,
                 )
                 .await?,
@@ -1017,7 +1017,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
-                    self.build_context.no_sources(),
+                    self.build_context.sources(),
                     self.preview_mode,
                 )
                 .await?,
@@ -1050,7 +1050,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 metadata,
                 resource.install_path.as_ref(),
                 resource.lock_path.as_ref(),
-                self.build_context.no_sources(),
+                self.build_context.sources(),
                 self.preview_mode,
             )
             .await?,
@@ -1261,7 +1261,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         metadata,
                         fetch.path(),
                         fetch.path(),
-                        self.build_context.no_sources(),
+                        self.build_context.sources(),
                         self.preview_mode,
                     )
                     .await?,
@@ -1288,7 +1288,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     fetch.path(),
                     fetch.path(),
-                    self.build_context.no_sources(),
+                    self.build_context.sources(),
                     self.preview_mode,
                 )
                 .await?,
@@ -1321,7 +1321,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 metadata,
                 fetch.path(),
                 fetch.path(),
-                self.build_context.no_sources(),
+                self.build_context.sources(),
                 self.preview_mode,
             )
             .await?,

@@ -81,7 +81,7 @@ pub(crate) async fn pip_compile(
     python_platform: Option<TargetTriple>,
     universal: bool,
     exclude_newer: Option<ExcludeNewer>,
-    no_sources: bool,
+    sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
     python: Option<String>,
@@ -324,7 +324,7 @@ pub(crate) async fn pip_compile(
         link_mode,
         &build_options,
         exclude_newer,
-        no_sources,
+        sources,
         concurrency,
         preview,
     );

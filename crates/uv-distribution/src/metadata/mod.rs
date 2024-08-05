@@ -58,7 +58,7 @@ impl Metadata {
         metadata: Metadata23,
         install_path: &Path,
         lock_path: &Path,
-        no_sources: bool,
+        sources: SourceStrategy,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -75,7 +75,7 @@ impl Metadata {
             },
             install_path,
             lock_path,
-            no_sources,
+            sources,
             preview_mode,
         )
         .await?;

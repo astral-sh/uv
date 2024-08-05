@@ -64,7 +64,7 @@ pub trait BuildContext {
     fn build_options(&self) -> &BuildOptions;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
-    fn no_sources(&self) -> bool;
+    fn sources(&self) -> SourceStrategy;
 
     /// The index locations being searched.
     fn index_locations(&self) -> &IndexLocations;
