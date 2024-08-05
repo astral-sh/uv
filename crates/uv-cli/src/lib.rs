@@ -2707,7 +2707,7 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other
     /// indexes specified via the `--extra-index-url` flag.
-    #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url, help_heading = "Index options")]
     pub index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -2718,7 +2718,7 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by
     /// `--index-url` (which defaults to PyPI). When multiple `--extra-index-url` flags are
     /// provided, earlier values take priority.
-    #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url, help_heading = "Index options")]
     pub extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Locations to search for candidate distributions, in addition to those found in the registry
@@ -2729,12 +2729,12 @@ pub struct IndexArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
-    #[arg(long, short)]
+    #[arg(long, short, help_heading = "Index options")]
     pub find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// provided via `--find-links`.
-    #[arg(long)]
+    #[arg(long, help_heading = "Index options")]
     pub no_index: bool,
 }
 
@@ -2742,19 +2742,25 @@ pub struct IndexArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
-    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("no_refresh"),
+        help_heading = "Cache options"
+    )]
     pub refresh: bool,
 
     #[arg(
         long,
         conflicts_with("offline"),
         overrides_with("refresh"),
-        hide = true
+        hide = true,
+        help_heading = "Cache options"
     )]
     pub no_refresh: bool,
 
     /// Refresh cached data for a specific package.
-    #[arg(long)]
+    #[arg(long, help_heading = "Cache options")]
     pub refresh_package: Vec<PackageName>,
 }
 
@@ -2766,28 +2772,38 @@ pub struct BuildArgs {
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
     /// already-built source distributions will be reused, but operations that require building
     /// distributions will exit with an error.
-    #[arg(long, overrides_with("build"))]
+    #[arg(long, overrides_with("build"), help_heading = "Build options")]
     pub no_build: bool,
 
-    #[arg(long, overrides_with("no_build"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("no_build"),
+        hide = true,
+        help_heading = "Build options"
+    )]
     pub build: bool,
 
     /// Don't build source distributions for a specific package.
-    #[arg(long)]
+    #[arg(long, help_heading = "Build options")]
     pub no_build_package: Vec<PackageName>,
 
     /// Don't install pre-built wheels.
     ///
     /// The given packages will be built and installed from source. The resolver will still use
     /// pre-built wheels to extract package metadata, if available.
-    #[arg(long, overrides_with("binary"))]
+    #[arg(long, overrides_with("binary"), help_heading = "Build options")]
     pub no_binary: bool,
 
-    #[arg(long, overrides_with("no_binary"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("no_binary"),
+        hide = true,
+        help_heading = "Build options"
+    )]
     pub binary: bool,
 
     /// Don't install pre-built wheels for a specific package.
-    #[arg(long)]
+    #[arg(long, help_heading = "Build options")]
     pub no_binary_package: Vec<PackageName>,
 }
 
@@ -2800,15 +2816,25 @@ pub struct InstallerArgs {
 
     /// Reinstall all packages, regardless of whether they're already installed. Implies
     /// `--refresh`.
-    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
+    #[arg(
+        long,
+        alias = "force-reinstall",
+        overrides_with("no_reinstall"),
+        help_heading = "Installer options"
+    )]
     pub reinstall: bool,
 
-    #[arg(long, overrides_with("reinstall"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("reinstall"),
+        hide = true,
+        help_heading = "Installer options"
+    )]
     pub no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed. Implies
     /// `--refresh-package`.
-    #[arg(long)]
+    #[arg(long, help_heading = "Installer options")]
     pub reinstall_package: Vec<PackageName>,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -2817,7 +2843,12 @@ pub struct InstallerArgs {
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
     /// same name to a secondary.
-    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_INDEX_STRATEGY",
+        help_heading = "Index options"
+    )]
     pub index_strategy: Option<IndexStrategy>,
 
     /// Attempt to use `keyring` for authentication for index URLs.
@@ -2826,25 +2857,40 @@ pub struct InstallerArgs {
     /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_KEYRING_PROVIDER",
+        help_heading = "Index options"
+    )]
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(long, short = 'C', alias = "config-settings")]
+    #[arg(
+        long,
+        short = 'C',
+        alias = "config-settings",
+        help_heading = "Build options"
+    )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, env = "UV_LINK_MODE")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_LINK_MODE",
+        help_heading = "Installer options"
+    )]
     pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
@@ -2857,14 +2903,20 @@ pub struct InstallerArgs {
     /// When enabled, uv will process the entire site-packages directory (including packages that
     /// are not being modified by the current operation) for consistency. Like pip, it will also
     /// ignore errors.
-    #[arg(long, alias = "compile", overrides_with("no_compile_bytecode"))]
+    #[arg(
+        long,
+        alias = "compile",
+        overrides_with("no_compile_bytecode"),
+        help_heading = "Installer options"
+    )]
     pub compile_bytecode: bool,
 
     #[arg(
         long,
         alias = "no-compile",
         overrides_with("compile_bytecode"),
-        hide = true
+        hide = true,
+        help_heading = "Installer options"
     )]
     pub no_compile_bytecode: bool,
 }
@@ -2877,15 +2929,25 @@ pub struct ResolverArgs {
     pub index_args: IndexArgs,
 
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
-    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    #[arg(
+        long,
+        short = 'U',
+        overrides_with("no_upgrade"),
+        help_heading = "Resolver options"
+    )]
     pub upgrade: bool,
 
-    #[arg(long, overrides_with("upgrade"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("upgrade"),
+        hide = true,
+        help_heading = "Resolver options"
+    )]
     pub no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file.
-    #[arg(long, short = 'P')]
+    #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -2894,7 +2956,12 @@ pub struct ResolverArgs {
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
     /// same name to a secondary.
-    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_INDEX_STRATEGY",
+        help_heading = "Index options"
+    )]
     pub index_strategy: Option<IndexStrategy>,
 
     /// Attempt to use `keyring` for authentication for index URLs.
@@ -2903,14 +2970,24 @@ pub struct ResolverArgs {
     /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_KEYRING_PROVIDER",
+        help_heading = "Index options"
+    )]
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
     /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(long, value_enum, env = "UV_RESOLUTION")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_RESOLUTION",
+        help_heading = "Resolver options"
+    )]
     pub resolution: Option<ResolutionMode>,
 
     /// The strategy to use when considering pre-release versions.
@@ -2918,21 +2995,31 @@ pub struct ResolverArgs {
     /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
-    #[arg(long, value_enum, env = "UV_PRERELEASE")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_PRERELEASE",
+        help_heading = "Resolver options"
+    )]
     pub prerelease: Option<PrereleaseMode>,
 
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, help_heading = "Resolver options")]
     pub pre: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(long, short = 'C', alias = "config-settings")]
+    #[arg(
+        long,
+        short = 'C',
+        alias = "config-settings",
+        help_heading = "Build options"
+    )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
@@ -2941,7 +3028,12 @@ pub struct ResolverArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, env = "UV_LINK_MODE")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_LINK_MODE",
+        help_heading = "Installer options"
+    )]
     pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
 }
 
@@ -2953,28 +3045,48 @@ pub struct ResolverInstallerArgs {
     pub index_args: IndexArgs,
 
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
-    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    #[arg(
+        long,
+        short = 'U',
+        overrides_with("no_upgrade"),
+        help_heading = "Resolver options"
+    )]
     pub upgrade: bool,
 
-    #[arg(long, overrides_with("upgrade"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("upgrade"),
+        hide = true,
+        help_heading = "Resolver options"
+    )]
     pub no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file.
-    #[arg(long, short = 'P')]
+    #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// Reinstall all packages, regardless of whether they're already installed. Implies
     /// `--refresh`.
-    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
+    #[arg(
+        long,
+        alias = "force-reinstall",
+        overrides_with("no_reinstall"),
+        help_heading = "Installer options"
+    )]
     pub reinstall: bool,
 
-    #[arg(long, overrides_with("reinstall"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("reinstall"),
+        hide = true,
+        help_heading = "Installer options"
+    )]
     pub no_reinstall: bool,
 
     /// Reinstall a specific package, regardless of whether it's already installed. Implies
     /// `--refresh-package`.
-    #[arg(long)]
+    #[arg(long, help_heading = "Installer options")]
     pub reinstall_package: Vec<PackageName>,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -2983,7 +3095,12 @@ pub struct ResolverInstallerArgs {
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
     /// same name to a secondary.
-    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_INDEX_STRATEGY",
+        help_heading = "Index options"
+    )]
     pub index_strategy: Option<IndexStrategy>,
 
     /// Attempt to use `keyring` for authentication for index URLs.
@@ -2992,14 +3109,24 @@ pub struct ResolverInstallerArgs {
     /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_KEYRING_PROVIDER",
+        help_heading = "Index options"
+    )]
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
     /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(long, value_enum, env = "UV_RESOLUTION")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_RESOLUTION",
+        help_heading = "Resolver options"
+    )]
     pub resolution: Option<ResolutionMode>,
 
     /// The strategy to use when considering pre-release versions.
@@ -3007,28 +3134,43 @@ pub struct ResolverInstallerArgs {
     /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
-    #[arg(long, value_enum, env = "UV_PRERELEASE")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_PRERELEASE",
+        help_heading = "Resolver options"
+    )]
     pub prerelease: Option<PrereleaseMode>,
 
     #[arg(long, hide = true)]
     pub pre: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(long, short = 'C', alias = "config-settings")]
+    #[arg(
+        long,
+        short = 'C',
+        alias = "config-settings",
+        help_heading = "Build options"
+    )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, env = "UV_LINK_MODE")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_LINK_MODE",
+        help_heading = "Installer options"
+    )]
     pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
@@ -3041,14 +3183,20 @@ pub struct ResolverInstallerArgs {
     /// When enabled, uv will process the entire site-packages directory (including packages that
     /// are not being modified by the current operation) for consistency. Like pip, it will also
     /// ignore errors.
-    #[arg(long, alias = "compile", overrides_with("no_compile_bytecode"))]
+    #[arg(
+        long,
+        alias = "compile",
+        overrides_with("no_compile_bytecode"),
+        help_heading = "Installer options"
+    )]
     pub compile_bytecode: bool,
 
     #[arg(
         long,
         alias = "no-compile",
         overrides_with("compile_bytecode"),
-        hide = true
+        hide = true,
+        help_heading = "Installer options"
     )]
     pub no_compile_bytecode: bool,
 }
