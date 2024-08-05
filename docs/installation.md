@@ -5,7 +5,7 @@ Install uv with our standalone installers or your package manager of choice (e.g
 
 ## Standalone installer
 
-uv provides a standalone installer to downloads and install uv:
+uv provides a standalone installer to download and install uv:
 
 ```console title="macOS and Linux"
 $ curl -LsSf https://astral.sh/uv/install.sh | sh
