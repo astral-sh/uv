@@ -129,7 +129,9 @@ impl PythonInstallation {
         let client = client_builder.build();
 
         info!("Fetching requested Python...");
-        let result = download.fetch(&client, installations_dir, reporter).await?;
+        let result = download
+            .fetch(&client, installations_dir, cache, reporter)
+            .await?;
 
         let path = match result {
             DownloadResult::AlreadyAvailable(path) => path,

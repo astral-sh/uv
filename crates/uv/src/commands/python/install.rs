@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::PathBuf;
 use tracing::debug;
+use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_fs::CWD;
@@ -31,6 +32,7 @@ pub(crate) async fn install(
     connectivity: Connectivity,
     preview: PreviewMode,
     no_config: bool,
+    cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
@@ -149,7 +151,7 @@ pub(crate) async fn install(
             (
                 download.key(),
                 download
-                    .fetch(&client, installations_dir, Some(&reporter))
+                    .fetch(&client, installations_dir, cache, Some(&reporter))
                     .await,
             )
         });
