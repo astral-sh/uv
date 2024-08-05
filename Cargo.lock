@@ -4981,7 +4981,7 @@ dependencies = [
  "uv-warnings",
  "which",
  "windows-sys 0.52.0",
- "winsafe",
+ "winsafe 0.0.22",
 ]
 
 [[package]]
@@ -5409,7 +5409,7 @@ dependencies = [
  "home",
  "regex",
  "rustix",
- "winsafe",
+ "winsafe 0.0.19",
 ]
 
 [[package]]
@@ -5719,6 +5719,12 @@ name = "winsafe"
 version = "0.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
+
+[[package]]
+name = "winsafe"
+version = "0.0.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d6ad6cbd9c6e5144971e326303f0e453b61d82e4f72067fccf23106bccd8437"
 
 [[package]]
 name = "wiremock"
