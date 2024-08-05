@@ -30,7 +30,7 @@ $ uv pip compile requirements.in -o requirements.txt
 To lock dependencies declared in multiple files:
 
 ```console
-$ uv pip compile pyproject.toml requirements-dev.in -o requirements-dev.txt`
+$ uv pip compile pyproject.toml requirements-dev.in -o requirements-dev.txt
 ```
 
 uv also supports legacy `setup.py` and `setup.cfg` formats. To lock dependencies declared in a

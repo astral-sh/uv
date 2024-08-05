@@ -247,7 +247,7 @@ dev-dependencies = [
 To add a development dependency, include the `--dev` flag:
 
 ```console
-$ uv add ruff --dev`
+$ uv add ruff --dev
 ```
 
 ## PEP 508
