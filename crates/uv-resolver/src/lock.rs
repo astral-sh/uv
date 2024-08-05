@@ -1470,14 +1470,25 @@ impl Source {
     }
 
     fn from_index_url(index_url: &IndexUrl) -> Source {
+        /// Redact a URL by removing any username and password.
+        fn redact(mut url: Url) -> Result<Url, ()> {
+            url.set_username("")?;
+            url.set_password(None)?;
+            Ok(url)
+        }
+
         match *index_url {
-            IndexUrl::Pypi(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
-            IndexUrl::Url(ref verbatim_url) => Source::Registry(verbatim_url.to_url()),
+            IndexUrl::Pypi(ref verbatim_url) => {
+                Source::Registry(redact(verbatim_url.to_url()).expect("Could not redact URL"))
+            }
+            IndexUrl::Url(ref verbatim_url) => {
+                Source::Registry(redact(verbatim_url.to_url()).expect("Could not redact URL"))
+            }
             // TODO(konsti): Retain path on index url without converting to URL.
             IndexUrl::Path(ref verbatim_url) => Source::Path(
                 verbatim_url
                     .to_file_path()
-                    .expect("Could not convert index url to path"),
+                    .expect("Could not convert index URL to path"),
             ),
         }
     }
