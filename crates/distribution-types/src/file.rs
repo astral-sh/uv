@@ -169,6 +169,14 @@ impl UrlString {
         // This conversion can never fail as the only way to construct a `UrlString` is from a `Url`.
         Url::from_str(&self.0).unwrap()
     }
+
+    /// Return the [`UrlString`] with any query parameters and fragments removed.
+    pub fn base(&self) -> &str {
+        self.as_ref()
+            .split_once(['#', '?'])
+            .map(|(path, _)| path)
+            .unwrap_or(self.as_ref())
+    }
 }
 
 impl AsRef<str> for UrlString {

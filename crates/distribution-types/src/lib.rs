@@ -773,10 +773,7 @@ impl RemoteSource for UrlString {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Take the last segment, stripping any query or fragment.
         let last = self
-            .as_ref()
-            .split_once(['#', '?'])
-            .map(|(path, _)| path)
-            .unwrap_or(self.as_ref())
+            .base()
             .split('/')
             .last()
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;

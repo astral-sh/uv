@@ -1872,7 +1872,7 @@ impl SourceDist {
         let mut table = InlineTable::new();
         match &self {
             SourceDist::Url { url, .. } => {
-                table.insert("url", Value::from(url.as_ref()));
+                table.insert("url", Value::from(url.base()));
             }
             SourceDist::Path { path, .. } => {
                 table.insert("path", Value::from(PortablePath::from(path).to_string()));
@@ -2127,7 +2127,7 @@ impl Wheel {
     /// Returns the TOML representation of this wheel.
     fn to_toml(&self) -> anyhow::Result<InlineTable> {
         let mut table = InlineTable::new();
-        table.insert("url", Value::from(self.url.to_string()));
+        table.insert("url", Value::from(self.url.base()));
         if let Some(ref hash) = self.hash {
             table.insert("hash", Value::from(hash.to_string()));
         }
