@@ -413,10 +413,17 @@ impl TestContext {
     }
 
     /// Create a `uv help` command with options shared across scenarios.
+    #[allow(clippy::unused_self)]
     pub fn help(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("help");
-        self.add_shared_args(&mut command);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+        }
+
         command
     }
 
