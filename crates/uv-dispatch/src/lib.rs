@@ -127,10 +127,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.git
     }
 
-    fn interpreter(&self) -> &Interpreter {
-        self.interpreter
-    }
-
     fn build_options(&self) -> &BuildOptions {
         self.build_options
     }

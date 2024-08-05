@@ -9,7 +9,7 @@ use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions};
 use uv_git::GitResolver;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python::PythonEnvironment;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -56,10 +56,6 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
-
-    /// All (potentially nested) source distribution builds use the same base python and can reuse
-    /// it's metadata (e.g. wheel compatibility tags).
-    fn interpreter(&self) -> &Interpreter;
 
     /// Whether source distribution building or pre-built wheels is disabled.
     ///
