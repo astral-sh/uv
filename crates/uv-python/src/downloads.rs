@@ -14,6 +14,7 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use pypi_types::{HashAlgorithm, HashDigest};
+use uv_cache::Cache;
 use uv_client::WrappedReqwestError;
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
@@ -401,11 +402,12 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract
-    #[instrument(skip(client, parent_path, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, parent_path, cache, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
         parent_path: &Path,
+        cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
@@ -428,7 +430,7 @@ impl ManagedPythonDownload {
             .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
 
         // Download and extract into a temporary directory.
-        let temp_dir = tempfile::tempdir_in(parent_path).map_err(Error::DownloadDirError)?;
+        let temp_dir = tempfile::tempdir_in(cache.root()).map_err(Error::DownloadDirError)?;
 
         debug!(
             "Downloading {url} to temporary location {}",
