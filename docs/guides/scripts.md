@@ -210,4 +210,4 @@ for more details on requesting Python versions.
 
 To learn more about `uv run`, see the [command reference](../reference/cli.md#uv-run).
 
-Or, read on to learn how to to [work on projects](./projects.md).
+Or, read on to learn how to [run and install tools](./tools.md) with uv.

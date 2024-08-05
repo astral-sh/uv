@@ -173,4 +173,4 @@ See the documentation on [running commands](../concepts/projects.md#running-comm
 To learn more about working on projects with uv, see the [Projects concept](../concepts/projects.md)
 page and the [command reference](../reference/cli.md#uv).
 
-Or, read on to learn how to [run and install tools](./tools.md) with uv.
+Or, read on to learn how to [publish your project as a package](./publish.md).
