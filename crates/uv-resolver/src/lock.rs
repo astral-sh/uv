@@ -762,7 +762,7 @@ impl Distribution {
                     let wheels = self
                         .wheels
                         .iter()
-                        .map(|wheel| wheel.to_registry_dist(url))
+                        .map(|wheel| wheel.to_registry_dist(url.to_url()))
                         .collect();
                     let reg_built_dist = RegistryBuiltDist {
                         wheels,
@@ -784,7 +784,7 @@ impl Distribution {
                 Source::Direct(url, direct) => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let url = Url::from(ParsedArchiveUrl {
-                        url: url.clone(),
+                        url: url.to_url(),
                         subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                     });
                     let direct_dist = DirectUrlBuiltDist {
@@ -864,7 +864,7 @@ impl Distribution {
             Source::Git(url, git) => {
                 // Reconstruct the `GitUrl` from the `GitSource`.
                 let git_url =
-                    uv_git::GitUrl::new(url.clone(), GitReference::from(git.kind.clone()))
+                    uv_git::GitUrl::new(url.to_url(), GitReference::from(git.kind.clone()))
                         .with_precise(git.precise);
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
@@ -883,7 +883,7 @@ impl Distribution {
             }
             Source::Direct(url, direct) => {
                 let url = Url::from(ParsedArchiveUrl {
-                    url: url.clone(),
+                    url: url.to_url(),
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                 });
                 let direct_dist = DirectUrlSourceDist {
@@ -920,7 +920,7 @@ impl Distribution {
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
-                let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
+                let index = IndexUrl::Url(VerbatimUrl::from_url(url.to_url()));
 
                 let reg_dist = RegistrySourceDist {
                     name: self.id.name.clone(),
@@ -962,7 +962,7 @@ impl Distribution {
                 // Add any wheels.
                 for wheel in &self.wheels {
                     let hash = wheel.hash.as_ref().map(|h| h.0.clone());
-                    let wheel = wheel.to_registry_dist(url);
+                    let wheel = wheel.to_registry_dist(url.to_url());
                     let compat =
                         WheelCompatibility::Compatible(HashComparison::Matched, None, None);
                     prioritized_dist.insert_built(wheel, hash, compat);
@@ -1178,7 +1178,7 @@ impl Distribution {
         match &self.id.source {
             Source::Git(url, git) => Some(ResolvedRepositoryReference {
                 reference: RepositoryReference {
-                    url: RepositoryUrl::new(url),
+                    url: RepositoryUrl::new(&url.to_url()),
                     reference: GitReference::from(git.kind.clone()),
                 },
                 sha: git.precise,
@@ -1374,9 +1374,9 @@ impl From<DistributionId> for DistributionIdForDependency {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(try_from = "SourceWire")]
 enum Source {
-    Registry(Url),
-    Git(Url, GitSource),
-    Direct(Url, DirectSource),
+    Registry(UrlString),
+    Git(UrlString, GitSource),
+    Direct(UrlString, DirectSource),
     Path(PathBuf),
     Directory(PathBuf),
     Editable(PathBuf),
@@ -1435,14 +1435,14 @@ impl Source {
 
     fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Source {
         Source::Direct(
-            direct_dist.url.to_url(),
+            UrlString::from(&direct_dist.url),
             DirectSource { subdirectory: None },
         )
     }
 
     fn from_direct_source_dist(direct_dist: &DirectUrlSourceDist) -> Source {
         Source::Direct(
-            direct_dist.url.to_url(),
+            UrlString::from(&direct_dist.url),
             DirectSource {
                 subdirectory: direct_dist
                     .subdirectory
@@ -1470,23 +1470,14 @@ impl Source {
     }
 
     fn from_index_url(index_url: &IndexUrl) -> Source {
-        /// Redact a URL by removing any username and password.
-        fn redact(mut url: Url) -> Result<Url, ()> {
-            url.set_username("")?;
-            url.set_password(None)?;
-            Ok(url)
-        }
-
+        // Remove any sensitive credentials from the index URL.
+        let redacted = index_url.redacted();
         match *index_url {
-            IndexUrl::Pypi(ref verbatim_url) => {
-                Source::Registry(redact(verbatim_url.to_url()).expect("Could not redact URL"))
-            }
-            IndexUrl::Url(ref verbatim_url) => {
-                Source::Registry(redact(verbatim_url.to_url()).expect("Could not redact URL"))
-            }
+            IndexUrl::Pypi(_) => Source::Registry(UrlString::from(redacted.as_ref())),
+            IndexUrl::Url(_) => Source::Registry(UrlString::from(redacted.as_ref())),
             // TODO(konsti): Retain path on index url without converting to URL.
-            IndexUrl::Path(ref verbatim_url) => Source::Path(
-                verbatim_url
+            IndexUrl::Path(_) => Source::Path(
+                redacted
                     .to_file_path()
                     .expect("Could not convert index URL to path"),
             ),
@@ -1495,7 +1486,7 @@ impl Source {
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
         Source::Git(
-            locked_git_url(git_dist),
+            UrlString::from(locked_git_url(git_dist)),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
                 precise: git_dist.git.precise().expect("precise commit"),
@@ -1512,13 +1503,13 @@ impl Source {
         let mut source_table = InlineTable::new();
         match *self {
             Source::Registry(ref url) => {
-                source_table.insert("registry", Value::from(url.as_str()));
+                source_table.insert("registry", Value::from(url.as_ref()));
             }
             Source::Git(ref url, _) => {
-                source_table.insert("git", Value::from(url.as_str()));
+                source_table.insert("git", Value::from(url.as_ref()));
             }
             Source::Direct(ref url, DirectSource { ref subdirectory }) => {
-                source_table.insert("url", Value::from(url.as_str()));
+                source_table.insert("url", Value::from(url.as_ref()));
                 if let Some(ref subdirectory) = *subdirectory {
                     source_table.insert("subdirectory", Value::from(subdirectory));
                 }
@@ -1588,13 +1579,13 @@ impl Source {
 #[serde(untagged)]
 enum SourceWire {
     Registry {
-        registry: Url,
+        registry: UrlString,
     },
     Git {
         git: String,
     },
     Direct {
-        url: Url,
+        url: UrlString,
         #[serde(default)]
         subdirectory: Option<String>,
     },
@@ -1635,7 +1626,7 @@ impl TryFrom<SourceWire> for Source {
                         },
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
-                Ok(Source::Git(url, git_source))
+                Ok(Source::Git(UrlString::from(url), git_source))
             }
             Direct { url, subdirectory } => Ok(Source::Direct(url, DirectSource { subdirectory })),
             Path { path } => Ok(Source::Path(path.into())),
@@ -2092,7 +2083,7 @@ impl Wheel {
         }
     }
 
-    fn to_registry_dist(&self, url: &Url) -> RegistryBuiltWheel {
+    fn to_registry_dist(&self, url: Url) -> RegistryBuiltWheel {
         let filename: WheelFilename = self.filename.clone();
         let file = Box::new(distribution_types::File {
             dist_info_metadata: false,
@@ -2104,7 +2095,7 @@ impl Wheel {
             url: FileLocation::AbsoluteUrl(self.url.clone()),
             yanked: None,
         });
-        let index = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
+        let index = IndexUrl::Url(VerbatimUrl::from_url(url));
         RegistryBuiltWheel {
             filename,
             file,
@@ -2218,7 +2209,7 @@ impl Dependency {
             },
             Source::Git(repository, git) => {
                 let git_url =
-                    uv_git::GitUrl::new(repository.clone(), GitReference::from(git.kind.clone()))
+                    uv_git::GitUrl::new(repository.to_url(), GitReference::from(git.kind.clone()))
                         .with_precise(git.precise);
 
                 let parsed_url = ParsedUrl::Git(ParsedGitUrl {
@@ -2229,7 +2220,7 @@ impl Dependency {
             }
             Source::Direct(url, direct) => {
                 let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl {
-                    url: url.clone(),
+                    url: url.to_url(),
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
                 });
                 RequirementSource::from_verbatim_parsed_url(parsed_url)

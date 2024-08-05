@@ -18,21 +18,9 @@ Ok(
                     ),
                     version: "4.3.0",
                     source: Registry(
-                        Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "pypi.org",
-                                ),
-                            ),
-                            port: None,
-                            path: "/simple",
-                            query: None,
-                            fragment: None,
-                        },
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
                     ),
                 },
                 sdist: None,
@@ -74,21 +62,9 @@ Ok(
                 ),
                 version: "4.3.0",
                 source: Registry(
-                    Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "pypi.org",
-                            ),
-                        ),
-                        port: None,
-                        path: "/simple",
-                        query: None,
-                        fragment: None,
-                    },
+                    UrlString(
+                        "https://pypi.org/simple",
+                    ),
                 ),
             }: 0,
         },

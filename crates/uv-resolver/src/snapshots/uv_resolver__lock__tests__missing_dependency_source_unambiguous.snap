@@ -18,21 +18,9 @@ Ok(
                     ),
                     version: "0.1.0",
                     source: Registry(
-                        Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "pypi.org",
-                                ),
-                            ),
-                            port: None,
-                            path: "/simple",
-                            query: None,
-                            fragment: None,
-                        },
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
                     ),
                 },
                 sdist: Some(
@@ -68,21 +56,9 @@ Ok(
                     ),
                     version: "0.1.0",
                     source: Registry(
-                        Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "pypi.org",
-                                ),
-                            ),
-                            port: None,
-                            path: "/simple",
-                            query: None,
-                            fragment: None,
-                        },
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
                     ),
                 },
                 sdist: Some(
@@ -115,21 +91,9 @@ Ok(
                             ),
                             version: "0.1.0",
                             source: Registry(
-                                Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                UrlString(
+                                    "https://pypi.org/simple",
+                                ),
                             ),
                         },
                         extra: {},
@@ -147,21 +111,9 @@ Ok(
                 ),
                 version: "0.1.0",
                 source: Registry(
-                    Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "pypi.org",
-                            ),
-                        ),
-                        port: None,
-                        path: "/simple",
-                        query: None,
-                        fragment: None,
-                    },
+                    UrlString(
+                        "https://pypi.org/simple",
+                    ),
                 ),
             }: 0,
             DistributionId {
@@ -170,21 +122,9 @@ Ok(
                 ),
                 version: "0.1.0",
                 source: Registry(
-                    Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "pypi.org",
-                            ),
-                        ),
-                        port: None,
-                        path: "/simple",
-                        query: None,
-                        fragment: None,
-                    },
+                    UrlString(
+                        "https://pypi.org/simple",
+                    ),
                 ),
             }: 1,
         },

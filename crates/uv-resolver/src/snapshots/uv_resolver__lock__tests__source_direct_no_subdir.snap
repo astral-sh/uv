@@ -18,21 +18,9 @@ Ok(
                     ),
                     version: "4.3.0",
                     source: Direct(
-                        Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "burntsushi.net",
-                                ),
-                            ),
-                            port: None,
-                            path: "/",
-                            query: None,
-                            fragment: None,
-                        },
+                        UrlString(
+                            "https://burntsushi.net",
+                        ),
                         DirectSource {
                             subdirectory: None,
                         },
@@ -53,21 +41,9 @@ Ok(
                 ),
                 version: "4.3.0",
                 source: Direct(
-                    Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "burntsushi.net",
-                            ),
-                        ),
-                        port: None,
-                        path: "/",
-                        query: None,
-                        fragment: None,
-                    },
+                    UrlString(
+                        "https://burntsushi.net",
+                    ),
                     DirectSource {
                         subdirectory: None,
                     },
