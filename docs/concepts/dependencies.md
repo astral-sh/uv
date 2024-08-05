@@ -1,13 +1,29 @@
 # Specifying dependencies
 
-In uv, project dependency specification is divided between two `pyproject.toml` tables:
-`project.dependencies` and `tool.uv.sources`.
+In uv, project dependencies are declared across two `pyproject.toml` tables: `project.dependencies`
+and `tool.uv.sources`.
 
-`project.dependencies` is used to define the standards-compliant dependency metadata, propagated
-when uploading to PyPI or building a wheel. `tool.uv.sources` is used to specify the _sources_
-required to install the dependencies, which can come from a Git repository, a URL, a local path, a
-different index, etc. This metadata must be expressed separately because the `project.dependencies`
-standard does not allow these common patterns.
+`project.dependencies` defines the standards-compliant dependency metadata, propagated when
+uploading to PyPI or building a wheel.
+
+`tool.uv.sources` enriches the dependency metadata with additional sources, incorporated during
+development. A dependency source can be a Git repository, a URL, a local path, or an alternative
+registry.
+
+`tool.uv.sources` enables uv to support common patterns like editable installations and relative
+paths that are not supported by the `project.dependencies` standard. For example:
+
+```toml title="pyproject.toml"
+[project]
+name = "albatross"
+version = "0.1.0"
+dependencies = [
+  "bird-feeder",
+]
+
+[tool.uv.sources]
+bird-feeder = { path = "/path/to/bird-feeder" }
+```
 
 ## Project dependencies
 
@@ -40,12 +56,13 @@ dependencies = [
 ```
 
 If the project only requires packages from standard package indexes, then `project.dependencies` is
-sufficient. If, the project depends on packages from Git, remote URLs, or local sources,
-`tool.uv.sources` is needed.
+sufficient. If the project depends on packages from Git, remote URLs, or local sources,
+`tool.uv.sources` can be used to enrich the dependency metadata without ejecting from the
+stands-compliant `project.dependencies` table.
 
 ## Dependency sources
 
-During development, the project may rely on a package that isn't available on PyPI. The following
+During development, a project may rely on a package that isn't available on PyPI. The following
 additional sources are supported by uv:
 
 - Git: A Git repository.

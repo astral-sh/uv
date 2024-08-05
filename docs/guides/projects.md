@@ -27,7 +27,7 @@ This will create the following directory structure:
 ├── pyproject.toml
 ├── README.md
 └── src
-    └── hello-world
+    └── hello_world
         └── __init__.py
 ```
 
@@ -124,8 +124,12 @@ more details.
 
 ## Running commands
 
-`uv run` can be used to run arbitrary scripts or commands in your project environment. This ensures
-that the lockfile and project environment are up-to-date before executing a given command.
+`uv run` can be used to run arbitrary scripts or commands in your project environment.
+
+Prior to every `uv run` invocation, uv will verify that the lockfile is up-to-date with the
+`pyproject.toml`, and that the environment is up-to-date with the lockfile, keeping your project
+in-sync without the need for manual intervention. `uv run` guarantees that your command is run in a
+consistent, locked environment.
 
 For example, to use `flask`:
 

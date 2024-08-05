@@ -1,7 +1,5 @@
 # First steps with uv
 
-uv only provides a command-line interface and must be used from a terminal.
-
 After [installing uv](./installation.md), you can check that uv is available by running the `uv`
 command:
 

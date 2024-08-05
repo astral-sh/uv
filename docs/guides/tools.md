@@ -21,7 +21,7 @@ $ uvx ruff
     $ uv tool run ruff
     ```
 
-    `uvx` is provided as a short alias since the operation is very common.
+    `uvx` is provided as an alias for convenience.
 
 Arguments can be provided after the tool name:
 
