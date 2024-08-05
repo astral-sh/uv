@@ -2,11 +2,11 @@
 
 uv does not yet have dedicated commands for building and publishing a package. Instead, you can use
 the PyPA tools [`build`](https://github.com/pypa/build) and
-[`twine`](https://github.com/pypa/twine).
+[`twine`](https://github.com/pypa/twine), both of which can be invoked via `uvx`.
 
 ## Building your package
 
-Build your package with official `build` frontend:
+Build your package with the official `build` frontend:
 
 ```console
 $ uvx --from build pyproject-build
