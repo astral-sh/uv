@@ -13,7 +13,9 @@ use pep440_rs::Version;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
@@ -223,6 +225,7 @@ async fn do_lock(
         link_mode,
         upgrade,
         build_options,
+        no_sources,
     } = settings;
 
     // When locking, include the project itself (as editable).
@@ -423,6 +426,7 @@ async fn do_lock(
                 link_mode,
                 build_options,
                 exclude_newer,
+                no_sources,
                 concurrency,
                 preview,
             );
@@ -502,6 +506,7 @@ async fn do_lock(
                 link_mode,
                 build_options,
                 exclude_newer,
+                no_sources,
                 concurrency,
                 preview,
             );

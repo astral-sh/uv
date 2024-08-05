@@ -21,7 +21,7 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
     IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
-    TargetTriple, Upgrade,
+    SourceStrategy, TargetTriple, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonFetch, PythonPreference, PythonVersion, Target};
@@ -1512,6 +1512,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
+    pub(crate) no_sources: bool,
 }
 
 /// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
@@ -1531,6 +1532,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: Upgrade,
     pub(crate) build_options: BuildOptions,
+    pub(crate) no_sources: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1545,6 +1547,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: &'a Upgrade,
     pub(crate) build_options: &'a BuildOptions,
+    pub(crate) no_sources: bool,
 }
 
 impl ResolverSettings {
@@ -1563,6 +1566,7 @@ impl ResolverSettings {
             exclude_newer,
             link_mode,
             compile_bytecode: _,
+            no_sources,
             upgrade,
             upgrade_package,
             reinstall: _,
@@ -1624,6 +1628,7 @@ impl ResolverSettings {
                         .unwrap_or_default(),
                 ),
             ),
+            no_sources: args.no_sources.combine(no_sources).unwrap_or_default(),
         }
     }
 
@@ -1639,6 +1644,7 @@ impl ResolverSettings {
             link_mode: self.link_mode,
             upgrade: &self.upgrade,
             build_options: &self.build_options,
+            no_sources: self.no_sources,
         }
     }
 }
@@ -1660,6 +1666,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) no_sources: bool,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
     pub(crate) build_options: BuildOptions,
@@ -1676,6 +1683,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) no_sources: bool,
     pub(crate) upgrade: &'a Upgrade,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
@@ -1700,6 +1708,7 @@ impl ResolverInstallerSettings {
             exclude_newer,
             link_mode,
             compile_bytecode,
+            no_sources,
             upgrade,
             upgrade_package,
             reinstall,
@@ -1738,6 +1747,7 @@ impl ResolverInstallerSettings {
                 .unwrap_or_default(),
             exclude_newer: args.exclude_newer.combine(exclude_newer),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            no_sources: args.no_sources.combine(no_sources).unwrap_or_default(),
             compile_bytecode: args
                 .compile_bytecode
                 .combine(compile_bytecode)
@@ -1785,6 +1795,7 @@ impl ResolverInstallerSettings {
             exclude_newer: self.exclude_newer,
             link_mode: self.link_mode,
             compile_bytecode: self.compile_bytecode,
+            no_sources: self.no_sources,
             upgrade: &self.upgrade,
             reinstall: &self.reinstall,
             build_options: &self.build_options,
@@ -1837,6 +1848,7 @@ pub(crate) struct PipSettings {
     pub(crate) annotation_style: AnnotationStyle,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
+    pub(crate) no_sources: bool,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
@@ -1897,6 +1909,7 @@ impl PipSettings {
             compile_bytecode,
             require_hashes,
             verify_hashes,
+            no_sources,
             upgrade,
             upgrade_package,
             reinstall,
@@ -1919,6 +1932,7 @@ impl PipSettings {
             exclude_newer: top_level_exclude_newer,
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
+            no_sources: top_level_no_sources,
             upgrade: top_level_upgrade,
             upgrade_package: top_level_upgrade_package,
             reinstall: top_level_reinstall,
@@ -1945,6 +1959,7 @@ impl PipSettings {
         let exclude_newer = exclude_newer.combine(top_level_exclude_newer);
         let link_mode = link_mode.combine(top_level_link_mode);
         let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
+        let no_sources = no_sources.combine(top_level_no_sources);
         let upgrade = upgrade.combine(top_level_upgrade);
         let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
         let reinstall = reinstall.combine(top_level_reinstall);
@@ -2068,6 +2083,7 @@ impl PipSettings {
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
+            no_sources: args.no_sources.combine(no_sources).unwrap_or_default(),
             strict: args.strict.combine(strict).unwrap_or_default(),
             upgrade: Upgrade::from_args(
                 args.upgrade.combine(upgrade),
@@ -2133,6 +2149,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             link_mode: settings.link_mode,
             upgrade: settings.upgrade,
             build_options: settings.build_options,
+            no_sources: settings.no_sources,
         }
     }
 }
@@ -2149,6 +2166,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             compile_bytecode: settings.compile_bytecode,
             reinstall: settings.reinstall,
             build_options: settings.build_options,
+            no_sources: settings.no_sources,
         }
     }
 }

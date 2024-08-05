@@ -64,6 +64,7 @@ pub(crate) async fn pip_install(
     python_platform: Option<TargetTriple>,
     strict: bool,
     exclude_newer: Option<ExcludeNewer>,
+    no_sources: bool,
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
@@ -313,6 +314,7 @@ pub(crate) async fn pip_install(
         link_mode,
         &build_options,
         exclude_newer,
+        no_sources,
         concurrency,
         preview,
     );

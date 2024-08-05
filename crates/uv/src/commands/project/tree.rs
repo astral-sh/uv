@@ -6,7 +6,7 @@ use anyhow::Result;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode, TargetTriple};
+use uv_configuration::{Concurrency, PreviewMode, SourceStrategy, TargetTriple};
 use uv_fs::CWD;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;

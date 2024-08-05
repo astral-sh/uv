@@ -2919,6 +2919,12 @@ pub struct InstallerArgs {
         help_heading = "Installer options"
     )]
     pub no_compile_bytecode: bool,
+
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[arg(long)]
+    pub no_sources: bool,
 }
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
@@ -3035,6 +3041,12 @@ pub struct ResolverArgs {
         help_heading = "Installer options"
     )]
     pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[arg(long)]
+    pub no_sources: bool,
 }
 
 /// Arguments that are used by commands that need to resolve and install packages.
@@ -3199,6 +3211,12 @@ pub struct ResolverInstallerArgs {
         help_heading = "Installer options"
     )]
     pub no_compile_bytecode: bool,
+
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[arg(long)]
+    pub no_sources: bool,
 }
 
 #[derive(Args)]

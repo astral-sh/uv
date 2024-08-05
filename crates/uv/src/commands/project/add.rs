@@ -123,8 +123,8 @@ pub(crate) async fn add(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
     };
 
-    // TODO: read locked build constraints
     let build_constraints = [];
+    let no_sources = false;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -144,6 +144,7 @@ pub(crate) async fn add(
         settings.link_mode,
         &settings.build_options,
         settings.exclude_newer,
+        no_sources,
         concurrency,
         preview,
     );

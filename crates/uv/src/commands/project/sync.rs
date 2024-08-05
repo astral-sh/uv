@@ -5,6 +5,7 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, ExtrasSpecification, HashCheckingMode, PreviewMode, SetupPyStrategy,
+    SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
@@ -152,6 +153,7 @@ pub(super) async fn do_sync(
         compile_bytecode,
         reinstall,
         build_options,
+        no_sources,
     } = settings;
 
     // Validate that the Python version is supported by the lockfile.
@@ -229,6 +231,7 @@ pub(super) async fn do_sync(
         link_mode,
         build_options,
         exclude_newer,
+        no_sources,
         concurrency,
         preview,
     );

@@ -17,7 +17,8 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SetupPyStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall,
+    SetupPyStrategy, SourceStrategy,
 };
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
@@ -51,6 +52,7 @@ pub struct BuildDispatch<'a> {
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
+    no_sources: bool,
     concurrency: Concurrency,
     preview_mode: PreviewMode,
 }
@@ -73,6 +75,7 @@ impl<'a> BuildDispatch<'a> {
         link_mode: install_wheel_rs::linker::LinkMode,
         build_options: &'a BuildOptions,
         exclude_newer: Option<ExcludeNewer>,
+        no_sources: bool,
         concurrency: Concurrency,
         preview_mode: PreviewMode,
     ) -> Self {
@@ -93,9 +96,10 @@ impl<'a> BuildDispatch<'a> {
             link_mode,
             build_options,
             exclude_newer,
-            concurrency,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
+            no_sources,
+            concurrency,
             preview_mode,
         }
     }
@@ -129,6 +133,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn build_options(&self) -> &BuildOptions {
         self.build_options
+    }
+
+    fn no_sources(&self) -> bool {
+        self.no_sources
     }
 
     fn index_locations(&self) -> &IndexLocations {
