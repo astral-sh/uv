@@ -18,7 +18,7 @@ use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 use uv_resolver::{FlatIndex, InMemoryIndex};
-use uv_types::{BuildContext, BuildIsolation, InFlight};
+use uv_types::{BuildIsolation, InFlight};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -100,7 +100,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let builder = SourceBuild::setup(
         &args.sdist,
         args.subdirectory.as_deref(),
-        build_dispatch.interpreter(),
+        python.interpreter(),
         &build_dispatch,
         SourceBuildContext::default(),
         args.sdist.display().to_string(),
