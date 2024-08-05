@@ -73,7 +73,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         match &*cli.command {
             // Supports `--isolated` as its own argument, so we can't warn either way.
             Commands::Tool(ToolNamespace {
-                command: ToolCommand::Run(_),
+                command: ToolCommand::Uvx(_) | ToolCommand::Run(_),
             }) => false,
 
             // Supports `--isolated` as its own argument, so we can't warn either way.
