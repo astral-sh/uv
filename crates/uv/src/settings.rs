@@ -769,6 +769,7 @@ impl RemoveSettings {
 pub(crate) struct TreeSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) universal: bool,
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) package: Vec<PackageName>,
@@ -783,6 +784,7 @@ impl TreeSettings {
     pub(crate) fn resolve(args: TreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let TreeArgs {
             tree,
+            universal,
             locked,
             frozen,
             build,
@@ -793,6 +795,7 @@ impl TreeSettings {
         Self {
             locked,
             frozen,
+            universal,
             depth: tree.depth,
             prune: tree.prune,
             package: tree.package,
@@ -1357,12 +1360,12 @@ impl PipShowSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipTreeSettings {
+    pub(crate) show_version_specifiers: bool,
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) package: Vec<PackageName>,
     pub(crate) no_dedupe: bool,
     pub(crate) invert: bool,
-    pub(crate) show_version_specifiers: bool,
     // CLI-only settings.
     pub(crate) shared: PipSettings,
 }
@@ -1371,6 +1374,7 @@ impl PipTreeSettings {
     /// Resolve the [`PipTreeSettings`] from the CLI and workspace configuration.
     pub(crate) fn resolve(args: PipTreeArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipTreeArgs {
+            show_version_specifiers,
             tree,
             strict,
             no_strict,
@@ -1381,11 +1385,11 @@ impl PipTreeSettings {
         } = args;
 
         Self {
+            show_version_specifiers,
             depth: tree.depth,
             prune: tree.prune,
             no_dedupe: tree.no_dedupe,
             invert: tree.invert,
-            show_version_specifiers: tree.show_version_specifiers,
             package: tree.package,
             // Shared settings.
             shared: PipSettings::combine(

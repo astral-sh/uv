@@ -26,7 +26,7 @@ fn nested_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -132,7 +132,7 @@ fn frozen() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -200,8 +200,27 @@ fn platform_dependencies() -> Result<()> {
     "#,
     )?;
 
-    // Should include `colorama`, even though it's only included on Windows.
+    // When `--universal` is _not_ provided, `colorama` should _not_ be included.
+    #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── black v24.3.0
+        ├── click v8.1.7
+        ├── mypy-extensions v1.0.0
+        ├── packaging v24.0
+        ├── pathspec v0.12.1
+        └── platformdirs v4.2.0
+
+    ----- stderr -----
+    warning: `uv tree` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    "###);
+
+    // Should include `colorama`, even though it's only included on Windows.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -247,7 +266,7 @@ fn repeated_dependencies() -> Result<()> {
     )?;
 
     // Should include both versions of `anyio`, which have different dependencies.
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -321,7 +340,7 @@ fn repeated_version() -> Result<()> {
         Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
     })?;
 
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -361,13 +380,14 @@ fn dev_dependencies() -> Result<()> {
         # ...
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
+
         [tool.uv]
         dev-dependencies = ["anyio"]
     "#,
     )?;
 
     // Dev dependencies should be omitted.
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

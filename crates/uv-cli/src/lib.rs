@@ -1709,6 +1709,10 @@ pub struct PipShowArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipTreeArgs {
+    /// Show the version constraint(s) imposed on each package.
+    #[arg(long)]
+    pub show_version_specifiers: bool,
+
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
@@ -2344,6 +2348,11 @@ pub struct RemoveArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct TreeArgs {
+    /// Show the resolved package versions for all Python versions and platforms, rather than
+    /// filtering to those that are relevant for the current environment.
+    #[arg(long)]
+    pub universal: bool,
+
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
@@ -3054,8 +3063,4 @@ pub struct DisplayTreeArgs {
     /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
-
-    /// Show the version constraint(s) imposed on each package.
-    #[arg(long)]
-    pub show_version_specifiers: bool,
 }
