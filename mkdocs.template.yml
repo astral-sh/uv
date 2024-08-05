@@ -122,7 +122,6 @@ nav:
   - Reference:
       - Commands: reference/cli.md
       - Settings: reference/settings.md
-      - Resolution Internals: reference/resolution-internals.md
-  - Policies:
+      - Resolver: reference/resolver-internals.md
       - Versioning: versioning.md
       - Platform support: platforms.md
