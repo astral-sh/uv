@@ -144,9 +144,13 @@ jobs:
   cargo-test-linux:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    strategy:
+      matrix:
+        partition: [1, 2, 3, 4]
+      fail-fast: false
     runs-on:
       labels: "ubuntu-latest-large"
-    name: "cargo test | ubuntu"
+    name: "cargo test | ubuntu [${{ matrix.partition }}/4]"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
@@ -171,6 +175,7 @@ jobs:
           cargo nextest run \
             --features python-patch \
             --workspace \
+            --partition count:${{ matrix.partition }}/4 \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
@@ -182,9 +187,13 @@ jobs:
   cargo-test-macos:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    strategy:
+      matrix:
+        partition: [1, 2, 3, 4]
+      fail-fast: false
     runs-on:
       labels: "macos-14"
-    name: "cargo test | macos"
+    name: "cargo test | macos [${{ matrix.partition }}/4]"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
@@ -209,6 +218,7 @@ jobs:
           cargo nextest run \
             --features python-patch \
             --workspace \
+            --partition count:${{ matrix.partition }}/4 \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
@@ -220,9 +230,13 @@ jobs:
   cargo-test-windows:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    strategy:
+      matrix:
+        partition: [1, 2, 3, 4]
+      fail-fast: false
     runs-on:
       labels: "windows-latest-large"
-    name: "cargo test | windows"
+    name: "cargo test | windows [${{ matrix.partition }}/4]"
     steps:
       - name: Create Dev Drive using ReFS
         run: |
@@ -281,7 +295,7 @@ jobs:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: |
-          cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+          cargo nextest run --partition count:${{ matrix.partition }}/4 --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test"
         working-directory: ${{ env.DEV_DRIVE }}/uv
