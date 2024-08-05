@@ -2629,8 +2629,6 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
-    /// The underlying [`Lock`] to display.
-    lock: &'env Lock,
     /// The root nodes in the [`Lock`].
     roots: Vec<&'env DistributionId>,
     /// The edges in the [`Lock`].
@@ -2713,7 +2711,6 @@ impl<'env> TreeDisplay<'env> {
             .collect::<Vec<_>>();
 
         Self {
-            lock,
             roots,
             edges,
             depth,
@@ -2809,9 +2806,9 @@ impl<'env> TreeDisplay<'env> {
 
     /// Depth-first traverse the nodes to render the tree.
     fn render(&self) -> Vec<String> {
-        let mut visited: FxHashMap<&DistributionId, Vec<&DistributionId>> = FxHashMap::default();
-        let mut path: Vec<&DistributionId> = Vec::new();
-        let mut lines: Vec<String> = Vec::new();
+        let mut visited = FxHashMap::default();
+        let mut path = Vec::new();
+        let mut lines = Vec::new();
 
         if self.package.is_empty() {
             for id in &self.roots {
@@ -2819,11 +2816,10 @@ impl<'env> TreeDisplay<'env> {
                 lines.extend(self.visit(id, &mut visited, &mut path));
             }
         } else {
-            // Index all the IDs by package.
-            let by_package: FxHashMap<_, _> =
-                self.lock.by_id.keys().map(|id| (&id.name, id)).collect();
-            for (index, package) in self.package.iter().enumerate() {
-                if index != 0 {
+            let by_package: FxHashMap<_, _> = self.roots.iter().map(|id| (&id.name, id)).collect();
+            let mut first = true;
+            for package in &self.package {
+                if std::mem::take(&mut first) {
                     lines.push(String::new());
                 }
                 if let Some(id) = by_package.get(package) {
