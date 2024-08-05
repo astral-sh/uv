@@ -406,9 +406,7 @@ fn dev_dependencies() -> Result<()> {
     "#,
     )?;
 
-    // Dev dependencies should be omitted.
     uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
-    uv_snapshot!(context.filters(), context.tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -449,7 +447,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -494,7 +492,7 @@ fn optional_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -546,7 +544,7 @@ fn optional_dependencies_inverted() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
