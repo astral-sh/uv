@@ -18,12 +18,14 @@ An extremely fast Python package and project manager, written in Rust.
 
 - 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
-- 🐍 [Installs and manages](./guides/install-python.md) Python versions.
-- 🛠️ [Runs and installs](./guides/tools.md) Python applications.
+- 🐍 [Installs and manages](#python-management) Python versions.
+- 🛠️ [Runs and installs](#tool-management) Python applications.
 - ❇️ [Runs scripts](./guides/scripts.md), with support for
   [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
-- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a
+- 🗂️ Provides [comprehensive project management](#project-management), with a
   [universal lockfile](./concepts/projects.md#lockfile).
+- 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
+  familiar CLI.
 - 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
 - 💾 Disk-space efficient, with a [global cache](./concepts/cache.md) for dependency deduplication.
 - ⏬ Installable without Rust or Python via `curl` or `pip`.
@@ -199,7 +201,7 @@ Installed 43 packages in 208ms
 
 See the [pip interface documentation](./pip/index.md) to get started.
 
-## Next steps
+## Learn more
 
 See the [first steps](./first-steps.md) or jump straight to the [guides](./guides/index.md) to start
 using uv.
