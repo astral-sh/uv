@@ -16,8 +16,6 @@ use uv_normalize::PackageName;
 pub enum Error {
     #[error("Building source distributions is disabled")]
     NoBuild,
-    #[error("Using pre-built wheels is disabled")]
-    NoBinary,
 
     // Network error
     #[error("Failed to parse URL: {0}")]

@@ -145,14 +145,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        if self
-            .build_context
-            .build_options()
-            .no_binary_package(dist.name())
-        {
-            return Err(Error::NoBinary);
-        }
-
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
