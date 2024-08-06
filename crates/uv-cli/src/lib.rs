@@ -438,6 +438,27 @@ pub enum PipCommand {
 #[derive(Subcommand)]
 pub enum ProjectCommand {
     /// Run a command or script (experimental).
+    ///
+    /// Ensures that the command runs in a Python environment.
+    ///
+    /// When used with a file ending in `.py`, the file will be treated as a
+    /// script and run with a Python interpreter, i.e., `uv run file.py` is
+    /// equivalent to `uv run python file.py`. If the script contains inline
+    /// dependency metadata, it will be installed into an isolated, ephemeral
+    /// environment.
+    ///
+    /// When used in a project, the project environment will be created and
+    /// updated before invoking the command.
+    ///
+    /// When used outside a project, if a virtual environment can be found in
+    /// the current directory or a parent directory, the command will be run in
+    /// that environment. Otherwise, the command will be run in the environment
+    /// of the discovered interpreter.
+    ///
+    /// Arguments following the command (or script) are not interpreted as
+    /// arguments to uv. All options to uv must be provided before the command,
+    /// e.g., `uv run --verbose foo`. A `--` can be used to separate the command
+    /// from uv options for clarity, e.g., `uv run --python 3.12 -- python`.
     #[command(
         after_help = "Use `uv help run` for more details.",
         after_long_help = ""
@@ -1962,15 +1983,23 @@ pub struct InitArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// May be provided more than once.
+    ///
+    /// Optional dependencies are defined via `project.optional-dependencies` in
+    /// a `pyproject.toml`.
+    ///
+    /// This option is only available when running in a project.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Optional dependencies are defined via `project.optional-dependencies` in
+    /// a `pyproject.toml`.
+    ///
+    /// This option is only available when running in a project.
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
@@ -1978,37 +2007,70 @@ pub struct RunArgs {
     pub no_all_extras: bool,
 
     /// Include development dependencies.
+    ///
+    /// Development dependencies are defined via `tool.uv.dev-dependencies` in a
+    /// `pyproject.toml`.
+    ///
+    /// This option is only available when running in a project.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
     /// Omit development dependencies.
+    ///
+    /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
     /// The command to run.
+    ///
+    /// If the path to a Python script (i.e., ending in `.py`), it will be
+    /// executed with the Python interpreter.
     #[command(subcommand)]
     pub command: ExternalCommand,
 
     /// Run with the given packages installed.
+    ///
+    /// When used in a project, these dependencies will be layered on top of
+    /// the project environment in a separate, ephemeral environment. These
+    /// dependencies are allowed to conflict with those specified by the project.
     #[arg(long)]
     pub with: Vec<String>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     ///
+    /// The same environment semantics as `--with` apply.
+    ///
     /// Using `pyproject.toml`, `setup.py`, or `setup.cfg` files is not allowed.
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
-    /// Run the tool in an isolated virtual environment, rather than leveraging the base environment
-    /// for the current project, to enforce strict isolation between dependencies.
+    /// Run the tool in an isolated virtual environment.
+    ///
+    /// Usually, the project environment is reused for performance. This option
+    /// forces a fresh environment to be used for the project, enforcing strict
+    /// isolation between dependencies and declaration of requirements.
+    ///
+    /// An editable installation is still used for the project.
+    ///
+    /// When used with `--with` or `--with-requirements`, the additional
+    /// dependencies will still be layered in a second environment.
     #[arg(long)]
     pub isolated: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing, or
+    /// if it needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Install without updating the `uv.lock` file.
+    /// Run without updating the `uv.lock` file.
+    ///
+    /// Instead of checking if the lockfile is up-to-date, uses the versions in
+    /// the lockfile as the source of truth. If the lockfile is missing, uv will
+    /// exit with an error. If the `pyproject.toml` includes new dependencies
+    /// that have not been included in the lockfile yet, they will not be
+    /// present in the environment.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2022,11 +2084,20 @@ pub struct RunArgs {
     pub refresh: RefreshArgs,
 
     /// Run the command in a specific package in the workspace.
+    ///
+    /// If not in a workspace, or if the workspace member does not exist, uv
+    /// will exit with an error.
     #[arg(long)]
     pub package: Option<PackageName>,
 
-    /// Avoid discovering the project or workspace in the current directory or any parent directory.
-    /// Instead, run in an isolated, ephemeral environment populated by the `--with` requirements.
+    /// Avoid discovering the project or workspace.
+    ///
+    /// Instead of searching for projects in the current directory and parent
+    /// directories, run in an isolated, ephemeral environment populated by the
+    /// `--with` requirements.
+    ///
+    /// If a virtual environment is active or found in a current or parent
+    /// directory, it will be used as if there was no project or workspace.
     #[arg(long, alias = "no_workspace", conflicts_with = "package")]
     pub no_project: bool,
 
@@ -2037,6 +2108,7 @@ pub struct RunArgs {
     /// option allows you to specify a different interpreter.
     ///
     /// Supported formats:
+    ///
     /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.

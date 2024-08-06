@@ -44,7 +44,17 @@ uv [OPTIONS] <COMMAND>
 
 ## uv run
 
-Run a command or script (experimental)
+Run a command or script (experimental).
+
+Ensures that the command runs in a Python environment.
+
+When used with a file ending in `.py`, the file will be treated as a script and run with a Python interpreter, i.e., `uv run file.py` is equivalent to `uv run python file.py`. If the script contains inline dependency metadata, it will be installed into an isolated, ephemeral environment.
+
+When used in a project, the project environment will be created and updated before invoking the command.
+
+When used outside a project, if a virtual environment can be found in the current directory or a parent directory, the command will be run in that environment. Otherwise, the command will be run in the environment of the discovered interpreter.
+
+Arguments following the command (or script) are not interpreted as arguments to uv. All options to uv must be provided before the command, e.g., `uv run --verbose foo`. A `--` can be used to separate the command from uv options for clarity, e.g., `uv run --python 3.12 -- python`.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -54,13 +64,21 @@ uv run [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name; may be provided more than once.</p>
+<dl class="cli-reference"><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name.</p>
 
-<p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
+<p>May be provided more than once.</p>
 
-</dd><dt><code>--with</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
+<p>Optional dependencies are defined via <code>project.optional-dependencies</code> in a <code>pyproject.toml</code>.</p>
+
+<p>This option is only available when running in a project.</p>
+
+</dd><dt><code>--with</code> <i>with</i></dt><dd><p>Run with the given packages installed.</p>
+
+<p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 
 </dd><dt><code>--with-requirements</code> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files.</p>
+
+<p>The same environment semantics as <code>--with</code> apply.</p>
 
 <p>Using <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> files is not allowed.</p>
 
@@ -169,7 +187,9 @@ uv run [OPTIONS] <COMMAND>
 
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
-</dd><dt><code>--package</code> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace</p>
+</dd><dt><code>--package</code> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace.</p>
+
+<p>If not in a workspace, or if the workspace member does not exist, uv will exit with an error.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
 
