@@ -1288,6 +1288,11 @@ def main():
         default=10,
     )
     parser.add_argument(
+        "--runs",
+        type=int,
+        help="The number of runs to perform.",
+    )
+    parser.add_argument(
         "--benchmark",
         "-b",
         type=str,
@@ -1373,6 +1378,7 @@ def main():
     json = args.json
     warmup = args.warmup
     min_runs = args.min_runs
+    runs = args.runs
 
     requirements_file = os.path.abspath(args.file)
     if not os.path.exists(requirements_file):
@@ -1454,6 +1460,7 @@ def main():
                     commands=commands,
                     warmup=warmup,
                     min_runs=min_runs,
+                    runs=runs,
                     verbose=verbose,
                     json=json,
                 )

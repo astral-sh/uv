@@ -246,6 +246,11 @@ def main():
         default=10,
     )
     parser.add_argument(
+        "--runs",
+        type=int,
+        help="The number of runs to perform.",
+    )
+    parser.add_argument(
         "--benchmark",
         "-b",
         type=str,
@@ -287,6 +292,7 @@ def main():
     json = args.json
     warmup = args.warmup
     min_runs = args.min_runs
+    runs = args.runs
 
     # Determine the tools to benchmark, based on the user-provided arguments.
     suites = []
@@ -328,6 +334,7 @@ def main():
                     commands=commands,
                     warmup=warmup,
                     min_runs=min_runs,
+                    runs=runs,
                     verbose=verbose,
                     json=json,
                 )
