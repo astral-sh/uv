@@ -28,13 +28,13 @@ By default, the script will run the resolution benchmarks when a `requirements.i
 is provided, and the installation benchmarks when a `requirements.txt` file is provided:
 
     # Run the resolution benchmarks against the Trio project.
-    uv run benchmark\
+    uv run resolver \
         --uv-path ../../target/release/uv \
         --uv-path ../../target/release/baseline \
         ../requirements/trio.in
 
     # Run the installation benchmarks against the Trio project.
-    uv run benchmark\
+    uv run resolver \
         --uv-path ../../target/release/uv \
         --uv-path ../../target/release/baseline \
         ../requirements/compiled/trio.txt
@@ -42,7 +42,7 @@ is provided, and the installation benchmarks when a `requirements.txt` file is p
 You can also specify the benchmark to run explicitly:
 
     # Run the "uncached install" benchmark against the Trio project.
-    uv run benchmark\
+    uv run resolver \
         --uv-path ../../target/release/uv \
         --uv-path ../../target/release/baseline \
         --benchmark install-cold \
@@ -302,7 +302,7 @@ class PipSync(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
-            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.12 {venv_dir}",
+            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.11 {venv_dir}",
             command=[
                 self.path,
                 os.path.abspath(requirements_file),
@@ -319,7 +319,7 @@ class PipSync(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-            prepare=f"virtualenv --clear -p 3.12 {venv_dir}",
+            prepare=f"virtualenv --clear -p 3.11 {venv_dir}",
             command=[
                 self.path,
                 os.path.abspath(requirements_file),
@@ -359,7 +359,7 @@ class Poetry(Suite):
                 "bench",
                 "--no-interaction",
                 "--python",
-                "3.12.3",
+                "3.11.7",
             ],
             cwd=cwd,
             stdout=subprocess.DEVNULL,
@@ -559,7 +559,7 @@ class Poetry(Suite):
                 f"rm -rf {config_dir} && "
                 f"rm -rf {cache_dir} && "
                 f"rm -rf {data_dir} &&"
-                f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"
+                f"virtualenv --clear -p 3.11 {venv_dir} --no-seed"
             ),
             command=[
                 f"POETRY_CONFIG_DIR={config_dir}",
@@ -599,7 +599,7 @@ class Poetry(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-            prepare=f"virtualenv --clear -p 3.12 {venv_dir}",
+            prepare=f"virtualenv --clear -p 3.11 {venv_dir}",
             command=[
                 f"POETRY_CONFIG_DIR={config_dir}",
                 f"POETRY_CACHE_DIR={cache_dir}",
@@ -636,7 +636,7 @@ class Pdm(Suite):
 
         # Create a PDM project.
         subprocess.check_call(
-            [self.path, "init", "--non-interactive", "--python", "3.12"],
+            [self.path, "init", "--non-interactive", "--python", "3.11"],
             cwd=cwd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -792,7 +792,7 @@ class Pdm(Suite):
             prepare=(
                 f"rm -rf {cache_dir} && "
                 f"{self.path} config cache_dir {cache_dir} && "
-                f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"
+                f"virtualenv --clear -p 3.11 {venv_dir} --no-seed"
             ),
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
@@ -826,7 +826,7 @@ class Pdm(Suite):
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
             prepare=(
                 f"{self.path} config cache_dir {cache_dir} && "
-                f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"
+                f"virtualenv --clear -p 3.11 {venv_dir} --no-seed"
             ),
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
@@ -841,7 +841,7 @@ class Pdm(Suite):
 class UvPip(Suite):
     def __init__(self, *, path: str | None = None) -> Command | None:
         """Initialize a uv benchmark."""
-        self.name = path or "uv"
+        self.name = path or "uv pip"
         self.path = path or os.path.join(
             os.path.dirname(
                 os.path.dirname(
@@ -967,7 +967,7 @@ class UvPip(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
-            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.12 {venv_dir}",
+            prepare=f"rm -rf {cache_dir} && virtualenv --clear -p 3.11 {venv_dir}",
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
@@ -985,7 +985,7 @@ class UvPip(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
-            prepare=f"virtualenv --clear -p 3.12 {venv_dir}",
+            prepare=f"virtualenv --clear -p 3.11 {venv_dir}",
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
@@ -1037,7 +1037,7 @@ class UvProject(Suite):
                 "--name",
                 "bench",
                 "--python",
-                "3.12.3",
+                "3.11",
             ],
             cwd=cwd,
             stdout=subprocess.DEVNULL,
@@ -1073,7 +1073,7 @@ class UvProject(Suite):
                 "--directory",
                 cwd,
                 "--python",
-                "3.12.3",
+                "3.11",
             ],
         )
 
@@ -1094,7 +1094,7 @@ class UvProject(Suite):
                 "--directory",
                 cwd,
                 "--python",
-                "3.12.3",
+                "3.11",
             ],
         )
 
@@ -1147,7 +1147,7 @@ class UvProject(Suite):
                 "--directory",
                 cwd,
                 "--python",
-                "3.12.3",
+                "3.11",
             ],
         )
 
@@ -1180,7 +1180,7 @@ class UvProject(Suite):
                 "--directory",
                 cwd,
                 "--python",
-                "3.12.3",
+                "3.11",
             ],
         )
 
@@ -1207,7 +1207,7 @@ class UvProject(Suite):
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
             prepare=(
                 f"rm -rf {cache_dir} && "
-                f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"
+                f"virtualenv --clear -p 3.11 {venv_dir} --no-seed"
             ),
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
@@ -1218,7 +1218,7 @@ class UvProject(Suite):
                 "--directory",
                 cwd,
                 "--python",
-                "3.12.3",
+                "3.11",
             ],
         )
 
@@ -1243,7 +1243,7 @@ class UvProject(Suite):
 
         return Command(
             name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
-            prepare=(f"virtualenv --clear -p 3.12 {venv_dir} --no-seed"),
+            prepare=(f"virtualenv --clear -p 3.11 {venv_dir} --no-seed"),
             command=[
                 f"VIRTUAL_ENV={venv_dir}",
                 self.path,
@@ -1253,7 +1253,7 @@ class UvProject(Suite):
                 "--directory",
                 cwd,
                 "--python",
-                "3.12.3",
+                "3.11",
             ],
         )
 

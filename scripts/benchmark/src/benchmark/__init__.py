@@ -47,7 +47,7 @@ class Hyperfine(typing.NamedTuple):
             args.append("--show-output")
         args.append("--warmup")
         args.append(str(self.warmup))
-        args.append("--min-runs")
+        args.append("--runs")
         args.append(str(self.min_runs))
 
         # Add all command names,
