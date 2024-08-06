@@ -2902,7 +2902,7 @@ pub struct InstallerArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any local or Git
     /// sources.
-    #[arg(long)]
+    #[arg(long, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
 
@@ -3044,7 +3044,7 @@ pub struct ResolverArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any local or Git
     /// sources.
-    #[arg(long)]
+    #[arg(long, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
 
@@ -3234,7 +3234,7 @@ pub struct ResolverInstallerArgs {
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any local or Git
     /// sources.
-    #[arg(long)]
+    #[arg(long, help_heading = "Resolver options")]
     pub no_sources: bool,
 }
 
