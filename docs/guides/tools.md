@@ -3,7 +3,7 @@
 Many Python packages provide applications that can be used as tools. uv has specialized support for
 easily invoking and installing tools.
 
-## Using `uvx`
+## Running tools
 
 The `uvx` command invokes a tool without installing it.
 
@@ -39,9 +39,11 @@ $ uvx pycowsay hello from uv
 
 ```
 
+Tools are installed into temporary, isolated environmnets when using `uvx`.
+
 ## Commands with different package names
 
-When you invoke `uvx ruff`, uv installs the `ruff` package which provides the `ruff` command.
+When `uvx ruff` is invoked, uv installs the `ruff` package which provides the `ruff` command.
 However, sometimes the package and command names differ.
 
 The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is
@@ -77,7 +79,7 @@ Note the `@` syntax cannot be used for anything other than an exact version.
 
 The `--from` option can also be used to install from alternative sources.
 
-To pull from git:
+For example, to pull from git:
 
 ```console
 $ uvx --from git+https://github.com/httpie/cli httpie
@@ -93,8 +95,8 @@ $ uvx --with mkdocs-material mkdocs --help
 
 ## Installing tools
 
-If a tool is used often, it can be useful to install it to a persistent environment and add it to
-the `PATH` instead of invoking `uvx` repeatedly.
+If a tool is used often, it is useful to install it to a persistent environment and add it to the
+`PATH` instead of invoking `uvx` repeatedly.
 
 To install `ruff`:
 
