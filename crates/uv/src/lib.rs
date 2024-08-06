@@ -110,6 +110,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //    found, this file is combined with the user configuration file. In this case, we don't
     //    search for `pyproject.toml` files, since we're not in a workspace.
     let filesystem = if let Some(config_file) = cli.config_file.as_ref() {
+        if config_file
+            .file_name()
+            .is_some_and(|file_name| file_name == "pyproject.toml")
+        {
+            warn_user!("The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--directory` argument instead.");
+        }
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.no_config {
         None

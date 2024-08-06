@@ -76,10 +76,14 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
+// NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
+// `crates/uv-settings/src/settings.rs`.
 #[derive(Serialize, Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
+    /// The sources to use (e.g., workspace members, Git repositories, local paths) when resolving
+    /// dependencies.
     pub sources: Option<BTreeMap<PackageName, Source>>,
     /// The workspace definition for the project, if any.
     #[option_group]

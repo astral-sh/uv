@@ -2680,3 +2680,233 @@ fn resolve_both() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Read from a `--config-file` command line argument.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_config_file() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a `uv.toml` to a temporary location. (Use the cache directory for convenience, since
+    // it's already obfuscated in the fixtures.)
+    let config_dir = &context.cache_dir;
+    let config = config_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        [pip]
+        resolution = "lowest-direct"
+        generate-hashes = true
+        index-url = "https://pypi.org/simple"
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("--show-settings")
+        .arg("--config-file")
+        .arg(config.path())
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        build_constraint: [],
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                index: Some(
+                    Pypi(
+                        VerbatimUrl {
+                            url: Url {
+                                scheme: "https",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: Some(
+                                    Domain(
+                                        "pypi.org",
+                                    ),
+                                ),
+                                port: None,
+                                path: "/simple",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "https://pypi.org/simple",
+                            ),
+                        },
+                    ),
+                ),
+                extra_index: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: LowestDirect,
+            prerelease: IfNecessaryOrExplicit,
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: true,
+            setup_py: Pep517,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+            concurrency: Concurrency {
+                downloads: 50,
+                builds: 16,
+                installs: 8,
+            },
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    // Write in `pyproject.toml` schema.
+    config.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+
+        [tool.uv.pip]
+        resolution = "lowest-direct"
+        generate-hashes = true
+        index-url = "https://pypi.org/simple"
+    "#})?;
+
+    // The file should be rejected for violating the schema.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("--show-settings")
+        .arg("--config-file")
+        .arg(config.path())
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `[CACHE_DIR]/uv.toml`
+      Caused by: TOML parse error at line 1, column 1
+      |
+    1 | [project]
+      | ^
+    unknown field `project`
+
+    "###
+    );
+
+    // Write an _actual_ `pyproject.toml`.
+    let config = config_dir.child("pyproject.toml");
+    config.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+
+        [tool.uv.pip]
+        resolution = "lowest-direct"
+        generate-hashes = true
+        index-url = "https://pypi.org/simple"
+        """#
+    })?;
+
+    // The file should be rejected for violating the schema, with a custom warning.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("--show-settings")
+        .arg("--config-file")
+        .arg(config.path())
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--directory` argument instead.
+    error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
+      Caused by: TOML parse error at line 9, column 3
+      |
+    9 | ""
+      |   ^
+    expected `.`, `=`
+
+    "###
+    );
+
+    Ok(())
+}
