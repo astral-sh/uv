@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
+use pep508_rs::VerbatimUrl;
 use pypi_types::{CoreMetadata, HashDigest, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
@@ -149,6 +150,8 @@ impl Display for FileLocation {
     Clone,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Hash,
     Serialize,
     Deserialize,
@@ -177,6 +180,24 @@ impl AsRef<str> for UrlString {
 impl From<Url> for UrlString {
     fn from(value: Url) -> Self {
         UrlString(value.to_string())
+    }
+}
+
+impl From<&Url> for UrlString {
+    fn from(value: &Url) -> Self {
+        UrlString(value.to_string())
+    }
+}
+
+impl From<VerbatimUrl> for UrlString {
+    fn from(value: VerbatimUrl) -> Self {
+        UrlString(value.raw().to_string())
+    }
+}
+
+impl From<&VerbatimUrl> for UrlString {
+    fn from(value: &VerbatimUrl) -> Self {
+        UrlString(value.raw().to_string())
     }
 }
 
