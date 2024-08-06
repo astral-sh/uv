@@ -1,7 +1,10 @@
-use anyhow::{Context, Result};
-use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
-use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Entry;
+
+use anyhow::{Context, Result};
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashMap};
+
+use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -19,7 +22,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::{ArrayEdit, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
@@ -60,13 +63,28 @@ pub(crate) async fn add(
 
     // Find the project in the workspace.
     let project = if let Some(package) = package {
-        Workspace::discover(&CWD, &DiscoveryOptions::default())
-            .await?
-            .with_current_project(package.clone())
-            .with_context(|| format!("Package `{package}` not found in workspace"))?
+        VirtualProject::Project(
+            Workspace::discover(&CWD, &DiscoveryOptions::default())
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+        )
     } else {
-        ProjectWorkspace::discover(&CWD, &DiscoveryOptions::default()).await?
+        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
     };
+
+    // For virtual projects, allow dev dependencies, but nothing else.
+    if project.is_virtual() {
+        match dependency_type {
+            DependencyType::Production => {
+                anyhow::bail!("Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `{}`)", "uv add --dev".green())
+            }
+            DependencyType::Optional(_) => {
+                anyhow::bail!("Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `{}`)", "uv add --dev".green())
+            }
+            DependencyType::Dev => (),
+        }
+    }
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
@@ -163,7 +181,7 @@ pub(crate) async fn add(
     .await?;
 
     // Add the requirements to the `pyproject.toml`.
-    let existing = project.current_project().pyproject_toml();
+    let existing = project.pyproject_toml();
     let mut pyproject = PyProjectTomlMut::from_toml(existing)?;
     let mut edits = Vec::with_capacity(requirements.len());
     for mut requirement in requirements {
@@ -227,10 +245,7 @@ pub(crate) async fn add(
     }
 
     // Save the modified `pyproject.toml`.
-    fs_err::write(
-        project.current_project().root().join("pyproject.toml"),
-        pyproject.to_string(),
-    )?;
+    fs_err::write(project.root().join("pyproject.toml"), pyproject.to_string())?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
     // to exist at all.
@@ -273,10 +288,7 @@ pub(crate) async fn add(
             anstream::eprint!("{report:?}");
 
             // Revert the changes to the `pyproject.toml`.
-            fs_err::write(
-                project.current_project().root().join("pyproject.toml"),
-                existing,
-            )?;
+            fs_err::write(project.root().join("pyproject.toml"), existing)?;
 
             return Ok(ExitStatus::Failure);
         }
@@ -352,10 +364,7 @@ pub(crate) async fn add(
 
         // Save the modified `pyproject.toml`.
         if modified {
-            fs_err::write(
-                project.current_project().root().join("pyproject.toml"),
-                pyproject.to_string(),
-            )?;
+            fs_err::write(project.root().join("pyproject.toml"), pyproject.to_string())?;
         }
     }
 
@@ -379,7 +388,7 @@ pub(crate) async fn add(
     };
 
     project::sync::do_sync(
-        &VirtualProject::Project(project),
+        &project,
         &venv,
         &lock.lock,
         &extras,
