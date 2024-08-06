@@ -2590,3 +2590,96 @@ fn add_lower_bound_local() -> Result<()> {
 
     Ok(())
 }
+
+/// Add dependencies to a virtual workspace root.
+#[test]
+fn add_virtual() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r"
+        [tool.uv.workspace]
+        members = []
+    "})?;
+
+    // Adding `iniconfig` should fail, since virtual workspace roots don't support production
+    // dependencies.
+    uv_snapshot!(context.filters(), context.add(&["iniconfig"]), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    error: Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `uv add --dev`)
+    "###);
+
+    // Adding `iniconfig` as optional should fail, since virtual workspace roots don't support
+    // optional dependencies.
+    uv_snapshot!(context.filters(), context.add(&["iniconfig"]).arg("--optional").arg("async"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    error: Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `uv add --dev`)
+    "###);
+
+    // Adding `iniconfig` as a dev dependency should succeed.
+    uv_snapshot!(context.filters(), context.add(&["iniconfig"]).arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [tool.uv]
+        dev-dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+        [tool.uv.workspace]
+        members = []
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[distribution]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}

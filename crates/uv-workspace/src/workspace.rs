@@ -1199,7 +1199,7 @@ fn is_included_in_workspace(
 ///
 /// The project could be a package within a workspace, a real workspace root, or even a virtual
 /// workspace root.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VirtualProject {
     /// A project (which could be within a workspace, or an implicit workspace root).
     Project(ProjectWorkspace),
@@ -1286,6 +1286,42 @@ impl VirtualProject {
         }
     }
 
+    /// Set the `pyproject.toml` for the current project.
+    ///
+    /// Assumes that the project name is unchanged in the updated [`PyProjectToml`].
+    #[must_use]
+    pub fn with_pyproject_toml(self, pyproject_toml: PyProjectToml) -> Option<Self> {
+        match self {
+            VirtualProject::Project(project) => Some(VirtualProject::Project(
+                project.with_pyproject_toml(pyproject_toml)?,
+            )),
+            VirtualProject::Virtual(workspace) => {
+                // If the project is virtual, the root isn't a member, so we can just update the
+                // top-level `pyproject.toml`.
+                Some(VirtualProject::Virtual(Workspace {
+                    pyproject_toml,
+                    ..workspace.clone()
+                }))
+            }
+        }
+    }
+
+    /// Return the root of the project.
+    pub fn root(&self) -> &Path {
+        match self {
+            VirtualProject::Project(project) => project.project_root(),
+            VirtualProject::Virtual(workspace) => workspace.install_path(),
+        }
+    }
+
+    /// Return the [`PyProjectToml`] of the project.
+    pub fn pyproject_toml(&self) -> &PyProjectToml {
+        match self {
+            VirtualProject::Project(project) => project.current_project().pyproject_toml(),
+            VirtualProject::Virtual(workspace) => &workspace.pyproject_toml,
+        }
+    }
+
     /// Return the [`Workspace`] of the project.
     pub fn workspace(&self) -> &Workspace {
         match self {
@@ -1343,6 +1379,11 @@ impl VirtualProject {
             VirtualProject::Project(project) => Some(project.project_name()),
             VirtualProject::Virtual(_) => None,
         }
+    }
+
+    /// Returns `true` if the project is a virtual workspace.
+    pub fn is_virtual(&self) -> bool {
+        matches!(self, VirtualProject::Virtual(_))
     }
 }
 
