@@ -223,6 +223,7 @@ async fn do_lock(
         link_mode,
         upgrade,
         build_options,
+        sources,
     } = settings;
 
     // When locking, include the project itself (as editable).
@@ -423,6 +424,7 @@ async fn do_lock(
                 link_mode,
                 build_options,
                 exclude_newer,
+                sources,
                 concurrency,
                 preview,
             );
@@ -502,6 +504,7 @@ async fn do_lock(
                 link_mode,
                 build_options,
                 exclude_newer,
+                sources,
                 concurrency,
                 preview,
             );

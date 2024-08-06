@@ -184,6 +184,7 @@ pub struct ResolverOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub no_sources: Option<bool>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -359,6 +360,17 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub compile_bytecode: Option<bool>,
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-sources = true
+        "#
+    )]
+    pub no_sources: Option<bool>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -1036,6 +1048,17 @@ pub struct PipOptions {
         "#
     )]
     pub verify_hashes: Option<bool>,
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-sources = true
+        "#
+    )]
+    pub no_sources: Option<bool>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",

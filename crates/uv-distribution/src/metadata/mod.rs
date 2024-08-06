@@ -7,7 +7,7 @@ use crate::metadata::lowering::LoweringError;
 pub use crate::metadata::requires_dist::RequiresDist;
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{HashDigest, Metadata23};
-use uv_configuration::PreviewMode;
+use uv_configuration::{PreviewMode, SourceStrategy};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_workspace::WorkspaceError;
 
@@ -58,6 +58,7 @@ impl Metadata {
         metadata: Metadata23,
         install_path: &Path,
         lock_path: &Path,
+        sources: SourceStrategy,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -74,6 +75,7 @@ impl Metadata {
             },
             install_path,
             lock_path,
+            sources,
             preview_mode,
         )
         .await?;

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use uv_configuration::PreviewMode;
+use uv_configuration::{PreviewMode, SourceStrategy};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -39,21 +39,27 @@ impl RequiresDist {
         metadata: pypi_types::RequiresDist,
         install_path: &Path,
         lock_path: &Path,
+        sources: SourceStrategy,
         preview_mode: PreviewMode,
     ) -> Result<Self, MetadataError> {
-        // TODO(konsti): Limit discovery for Git checkouts to Git root.
-        // TODO(konsti): Cache workspace discovery.
-        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
-            install_path,
-            lock_path,
-            &DiscoveryOptions::default(),
-        )
-        .await?
-        else {
-            return Ok(Self::from_metadata23(metadata));
-        };
+        match sources {
+            SourceStrategy::Enabled => {
+                // TODO(konsti): Limit discovery for Git checkouts to Git root.
+                // TODO(konsti): Cache workspace discovery.
+                let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+                    install_path,
+                    lock_path,
+                    &DiscoveryOptions::default(),
+                )
+                .await?
+                else {
+                    return Ok(Self::from_metadata23(metadata));
+                };
 
-        Self::from_project_workspace(metadata, &project_workspace, preview_mode)
+                Self::from_project_workspace(metadata, &project_workspace, preview_mode)
+            }
+            SourceStrategy::Disabled => Ok(Self::from_metadata23(metadata)),
+        }
     }
 
     fn from_project_workspace(

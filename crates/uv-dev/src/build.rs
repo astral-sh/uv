@@ -12,7 +12,7 @@ use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     BuildKind, BuildOptions, Concurrency, ConfigSettings, IndexStrategy, PreviewMode,
-    SetupPyStrategy,
+    SetupPyStrategy, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
@@ -68,6 +68,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let index_urls = IndexLocations::default();
     let index_strategy = IndexStrategy::default();
     let setup_py = SetupPyStrategy::default();
+    let sources = SourceStrategy::default();
     let python = PythonEnvironment::find(
         &PythonRequest::default(),
         EnvironmentPreference::OnlyVirtual,
@@ -93,6 +94,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         install_wheel_rs::linker::LinkMode::default(),
         &build_options,
         exclude_newer,
+        sources,
         concurrency,
         PreviewMode::Enabled,
     );

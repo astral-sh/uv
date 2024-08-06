@@ -84,6 +84,7 @@ mod resolver {
     use uv_client::RegistryClient;
     use uv_configuration::{
         BuildOptions, Concurrency, ConfigSettings, IndexStrategy, PreviewMode, SetupPyStrategy,
+        SourceStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -149,6 +150,7 @@ mod resolver {
         let installed_packages = EmptyInstalledPackages;
         let interpreter = venv.interpreter();
         let python_requirement = PythonRequirement::from_interpreter(interpreter);
+        let sources = SourceStrategy::default();
 
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
         let build_constraints = [];
@@ -170,6 +172,7 @@ mod resolver {
             LinkMode::default(),
             &build_options,
             exclude_newer,
+            sources,
             concurrency,
             PreviewMode::Disabled,
         );

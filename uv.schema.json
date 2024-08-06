@@ -185,6 +185,13 @@
         "null"
       ]
     },
+    "no-sources": {
+      "description": "Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "offline": {
       "description": "Disable network access, relying only on locally cached data and locally available files.",
       "type": [
@@ -761,6 +768,13 @@
         },
         "no-index": {
           "description": "Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and those provided via `--find-links`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no-sources": {
+          "description": "Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources.",
           "type": [
             "boolean",
             "null"

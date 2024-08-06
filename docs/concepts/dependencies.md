@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-bird-feeder = { path = "/path/to/bird-feeder" }
+bird-feeder = { path = "./packages/bird-feeder" }
 ```
 
 ## Project dependencies
@@ -73,8 +73,18 @@ additional sources are supported by uv:
 Only a single source may be defined for each dependency.
 
 Note that if a non-uv project uses a project with sources as a Git- or path-dependency, only
-`project.dependencies` and `project.optional-dependencies` are respected, the information in the
-source table will need to be re-specified in a format specific to the other package manager.
+`project.dependencies` and `project.optional-dependencies` are respected. Any information provided
+in the source table will need to be re-specified in a format specific to the other package manager.
+
+To instruct uv to ignore the `tool.uv.sources` table (e.g., to simulate resolving with the package's
+published metadata), use the `--no-sources` flag:
+
+```console
+$ uv lock --no-sources
+```
+
+The use of `--no-sources` will also prevent uv from discovering any
+[workspace members](#workspace-member) that could satisfy a given dependency.
 
 ### Git
 
@@ -181,7 +191,7 @@ $ uv add ~/projects/bar/
     $ uv add --editable ~/projects/bar/
     ```
 
-    However, it is recommended to use [_workspaces_](#workspaces) instead of manual path
+    However, it is recommended to use [_workspaces_](./workspaces) instead of manual path
     dependencies.
 
 ### Workspace member

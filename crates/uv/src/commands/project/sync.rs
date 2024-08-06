@@ -152,6 +152,7 @@ pub(super) async fn do_sync(
         compile_bytecode,
         reinstall,
         build_options,
+        sources,
     } = settings;
 
     // Validate that the Python version is supported by the lockfile.
@@ -229,6 +230,7 @@ pub(super) async fn do_sync(
         link_mode,
         build_options,
         exclude_newer,
+        sources,
         concurrency,
         preview,
     );

@@ -46,8 +46,8 @@ mod revision;
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
-    reporter: Option<Arc<dyn Reporter>>,
     preview_mode: PreviewMode,
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
@@ -64,8 +64,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     pub(crate) fn new(build_context: &'a T, preview_mode: PreviewMode) -> Self {
         Self {
             build_context,
-            reporter: None,
             preview_mode,
+            reporter: None,
         }
     }
 
@@ -426,6 +426,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             requires_dist,
             project_root,
             project_root,
+            self.build_context.sources(),
             self.preview_mode,
         )
         .await?;
@@ -990,6 +991,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
+                    self.build_context.sources(),
                     self.preview_mode,
                 )
                 .await?,
@@ -1015,6 +1017,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
+                    self.build_context.sources(),
                     self.preview_mode,
                 )
                 .await?,
@@ -1047,6 +1050,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 metadata,
                 resource.install_path.as_ref(),
                 resource.lock_path.as_ref(),
+                self.build_context.sources(),
                 self.preview_mode,
             )
             .await?,
@@ -1257,6 +1261,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         metadata,
                         fetch.path(),
                         fetch.path(),
+                        self.build_context.sources(),
                         self.preview_mode,
                     )
                     .await?,
@@ -1279,8 +1284,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, fetch.path(), fetch.path(), self.preview_mode)
-                    .await?,
+                Metadata::from_workspace(
+                    metadata,
+                    fetch.path(),
+                    fetch.path(),
+                    self.build_context.sources(),
+                    self.preview_mode,
+                )
+                .await?,
             ));
         }
 
@@ -1306,8 +1317,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(metadata, fetch.path(), fetch.path(), self.preview_mode)
-                .await?,
+            Metadata::from_workspace(
+                metadata,
+                fetch.path(),
+                fetch.path(),
+                self.build_context.sources(),
+                self.preview_mode,
+            )
+            .await?,
         ))
     }
 

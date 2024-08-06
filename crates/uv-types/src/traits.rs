@@ -7,7 +7,7 @@ use distribution_types::{CachedDist, IndexLocations, InstalledDist, Resolution, 
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions};
+use uv_configuration::{BuildKind, BuildOptions, SourceStrategy};
 use uv_git::GitResolver;
 use uv_python::PythonEnvironment;
 
@@ -62,6 +62,9 @@ pub trait BuildContext {
     /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
+
+    /// Whether to incorporate `tool.uv.sources` when resolving requirements.
+    fn sources(&self) -> SourceStrategy;
 
     /// The index locations being searched.
     fn index_locations(&self) -> &IndexLocations;

@@ -525,6 +525,33 @@ those provided via `--find-links`.
 
 ---
 
+#### [`no-sources`](#no-sources) {: #no-sources }
+
+Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+standards-compliant, publishable package metadata, as opposed to using any local or Git
+sources.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    no-sources = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    no-sources = true
+    ```
+
+---
+
 #### [`offline`](#offline) {: #offline }
 
 Disable network access, relying only on locally cached data and locally available files.
@@ -1769,6 +1796,34 @@ those provided via `--find-links`.
     ```toml
     [pip]
     no-index = true
+    ```
+
+---
+
+#### [`no-sources`](#pip_no-sources) {: #pip_no-sources }
+<span id="no-sources"></span>
+
+Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+standards-compliant, publishable package metadata, as opposed to using any local or Git
+sources.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    no-sources = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    no-sources = true
     ```
 
 ---

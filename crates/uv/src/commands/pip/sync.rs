@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -61,6 +61,7 @@ pub(crate) async fn pip_sync(
     break_system_packages: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
+    sources: SourceStrategy,
     concurrency: Concurrency,
     native_tls: bool,
     preview: PreviewMode,
@@ -259,6 +260,7 @@ pub(crate) async fn pip_sync(
         link_mode,
         &build_options,
         exclude_newer,
+        sources,
         concurrency,
         preview,
     );

@@ -17,7 +17,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, PreviewMode, SetupPyStrategy,
+    NoBuild, PreviewMode, SetupPyStrategy, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
@@ -269,14 +269,15 @@ async fn venv_impl(
         // Initialize any shared state.
         let state = SharedState::default();
 
-        // For seed packages, assume the default settings and concurrency is sufficient.
-        let config_settings = ConfigSettings::default();
+        // For seed packages, assume a bunch of default settings and concurrency are sufficient.
+        let build_constraints = [];
         let concurrency = Concurrency::default();
+        let config_settings = ConfigSettings::default();
+        let setup_py = SetupPyStrategy::default();
+        let sources = SourceStrategy::Disabled;
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
-
-        let build_constraints = [];
 
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
@@ -290,12 +291,13 @@ async fn venv_impl(
             &state.git,
             &state.in_flight,
             index_strategy,
-            SetupPyStrategy::default(),
+            setup_py,
             &config_settings,
             BuildIsolation::Isolated,
             link_mode,
             &build_options,
             exclude_newer,
+            sources,
             concurrency,
             preview,
         );
