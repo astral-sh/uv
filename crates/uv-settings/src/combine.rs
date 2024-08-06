@@ -97,3 +97,9 @@ impl Combine for Option<ConfigSettings> {
         }
     }
 }
+
+impl Combine for serde::de::IgnoredAny {
+    fn combine(self, _other: Self) -> Self {
+        self
+    }
+}

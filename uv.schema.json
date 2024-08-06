@@ -295,6 +295,7 @@
       ]
     },
     "sources": {
+      "description": "The sources to use (e.g., workspace members, Git repositories, local paths) when resolving dependencies.",
       "type": [
         "object",
         "null"

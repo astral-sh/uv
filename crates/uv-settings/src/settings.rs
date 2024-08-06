@@ -31,7 +31,7 @@ pub(crate) struct Tools {
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
     #[serde(flatten)]
@@ -49,6 +49,24 @@ pub struct Options {
     )]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`.
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    workspace: serde::de::IgnoredAny,
+
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    sources: serde::de::IgnoredAny,
+
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    dev_dependencies: serde::de::IgnoredAny,
+
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    managed: serde::de::IgnoredAny,
 }
 
 /// Global settings, relevant to all invocations.
