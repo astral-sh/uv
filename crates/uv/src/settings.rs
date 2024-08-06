@@ -569,7 +569,14 @@ impl SyncSettings {
             python,
         } = args;
 
-        let modifications = if no_clean {
+        let settings = ResolverInstallerSettings::combine(
+            resolver_installer_options(installer, build),
+            filesystem,
+        );
+
+        // By default, sync with exact semantics, unless the user set `--no-build-isolation`;
+        // otherwise, we'll end up removing build dependencies.
+        let modifications = if no_clean || settings.no_build_isolation {
             Modifications::Sufficient
         } else {
             Modifications::Exact
@@ -587,10 +594,7 @@ impl SyncSettings {
             package,
             python,
             refresh: Refresh::from(refresh),
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
-                filesystem,
-            ),
+            settings,
         }
     }
 }
@@ -859,8 +863,6 @@ impl PipCompileSettings {
             no_generate_hashes,
             legacy_setup_py,
             no_legacy_setup_py,
-            no_build_isolation,
-            build_isolation,
             no_build,
             build,
             no_binary,
@@ -935,7 +937,6 @@ impl PipCompileSettings {
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
-                    no_build_isolation: flag(no_build_isolation, build_isolation),
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
                     no_deps: flag(no_deps, deps),
@@ -1004,8 +1005,6 @@ impl PipSyncSettings {
             no_allow_empty_requirements,
             legacy_setup_py,
             no_legacy_setup_py,
-            no_build_isolation,
-            build_isolation,
             no_build,
             build,
             no_binary,
@@ -1047,7 +1046,6 @@ impl PipSyncSettings {
                         no_allow_empty_requirements,
                     ),
                     legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
-                    no_build_isolation: flag(no_build_isolation, build_isolation),
                     python_version,
                     python_platform,
                     strict: flag(strict, no_strict),
@@ -1109,8 +1107,6 @@ impl PipInstallSettings {
             prefix,
             legacy_setup_py,
             no_legacy_setup_py,
-            no_build_isolation,
-            build_isolation,
             no_build,
             build,
             no_binary,
@@ -1181,7 +1177,6 @@ impl PipInstallSettings {
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
-                    no_build_isolation: flag(no_build_isolation, build_isolation),
                     strict: flag(strict, no_strict),
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
@@ -1507,6 +1502,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) no_build_isolation: bool,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -1528,6 +1524,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
+    pub(crate) no_build_isolation: bool,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: Upgrade,
@@ -1543,6 +1540,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) no_build_isolation: bool,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: &'a Upgrade,
@@ -1563,6 +1561,7 @@ impl ResolverSettings {
             resolution,
             prerelease,
             config_settings,
+            no_build_isolation,
             exclude_newer,
             link_mode,
             compile_bytecode: _,
@@ -1603,6 +1602,10 @@ impl ResolverSettings {
                 .config_settings
                 .combine(config_settings)
                 .unwrap_or_default(),
+            no_build_isolation: args
+                .no_build_isolation
+                .combine(no_build_isolation)
+                .unwrap_or_default(),
             exclude_newer: args.exclude_newer.combine(exclude_newer),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
             upgrade: Upgrade::from_args(
@@ -1642,6 +1645,7 @@ impl ResolverSettings {
             resolution: self.resolution,
             prerelease: self.prerelease,
             config_setting: &self.config_setting,
+            no_build_isolation: self.no_build_isolation,
             exclude_newer: self.exclude_newer,
             link_mode: self.link_mode,
             upgrade: &self.upgrade,
@@ -1665,6 +1669,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
+    pub(crate) no_build_isolation: bool,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -1682,6 +1687,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) no_build_isolation: bool,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -1707,6 +1713,7 @@ impl ResolverInstallerSettings {
             resolution,
             prerelease,
             config_settings,
+            no_build_isolation,
             exclude_newer,
             link_mode,
             compile_bytecode,
@@ -1746,6 +1753,10 @@ impl ResolverInstallerSettings {
             config_setting: args
                 .config_settings
                 .combine(config_settings)
+                .unwrap_or_default(),
+            no_build_isolation: args
+                .no_build_isolation
+                .combine(no_build_isolation)
                 .unwrap_or_default(),
             exclude_newer: args.exclude_newer.combine(exclude_newer),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
@@ -1796,6 +1807,7 @@ impl ResolverInstallerSettings {
             resolution: self.resolution,
             prerelease: self.prerelease,
             config_setting: &self.config_setting,
+            no_build_isolation: self.no_build_isolation,
             exclude_newer: self.exclude_newer,
             link_mode: self.link_mode,
             compile_bytecode: self.compile_bytecode,
@@ -1933,6 +1945,7 @@ impl PipSettings {
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
             config_settings: top_level_config_settings,
+            no_build_isolation: top_level_no_build_isolation,
             exclude_newer: top_level_exclude_newer,
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
@@ -1960,6 +1973,7 @@ impl PipSettings {
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
         let config_settings = config_settings.combine(top_level_config_settings);
+        let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
         let exclude_newer = exclude_newer.combine(top_level_exclude_newer);
         let link_mode = link_mode.combine(top_level_link_mode);
         let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
@@ -2151,6 +2165,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             resolution: settings.resolution,
             prerelease: settings.prerelease,
             config_setting: settings.config_setting,
+            no_build_isolation: settings.no_build_isolation,
             exclude_newer: settings.exclude_newer,
             link_mode: settings.link_mode,
             upgrade: settings.upgrade,
@@ -2167,6 +2182,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
             index_strategy: settings.index_strategy,
             keyring_provider: settings.keyring_provider,
             config_setting: settings.config_setting,
+            no_build_isolation: settings.no_build_isolation,
             exclude_newer: settings.exclude_newer,
             link_mode: settings.link_mode,
             compile_bytecode: settings.compile_bytecode,

@@ -18,7 +18,7 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
-use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
+use uv_python::{Interpreter, PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverMarkers,
@@ -219,6 +219,7 @@ async fn do_lock(
         resolution,
         prerelease,
         config_setting,
+        no_build_isolation,
         exclude_newer,
         link_mode,
         upgrade,
@@ -277,6 +278,15 @@ async fn do_lock(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&environment)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
@@ -287,7 +297,7 @@ async fn do_lock(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
     let extras = ExtrasSpecification::default();
     let setup_py = SetupPyStrategy::default();
 
@@ -404,8 +414,6 @@ async fn do_lock(
             // Prefill the index with the lockfile metadata.
             let index = lock.to_index(workspace.install_path(), upgrade)?;
 
-            // TODO: read locked build constraints
-            let build_constraints = [];
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
                 &client,
@@ -484,8 +492,6 @@ async fn do_lock(
         None => {
             debug!("Starting clean resolution");
 
-            // TODO: read locked build constraints
-            let build_constraints = [];
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
                 &client,

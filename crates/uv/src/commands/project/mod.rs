@@ -405,6 +405,7 @@ pub(crate) async fn resolve_names(
         resolution: _,
         prerelease: _,
         config_setting,
+        no_build_isolation,
         exclude_newer,
         link_mode,
         compile_bytecode: _,
@@ -430,15 +431,22 @@ pub(crate) async fn resolve_names(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if *no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&environment)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
     let flat_index = FlatIndex::default();
-
-    // TODO: read locked build constraints
     let build_constraints = [];
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -496,6 +504,7 @@ pub(crate) async fn resolve_environment<'a>(
         resolution,
         prerelease,
         config_setting,
+        no_build_isolation,
         exclude_newer,
         link_mode,
         upgrade: _,
@@ -534,6 +543,15 @@ pub(crate) async fn resolve_environment<'a>(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&environment)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
@@ -543,12 +561,12 @@ pub(crate) async fn resolve_environment<'a>(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
     let dev = Vec::default();
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
     let setup_py = SetupPyStrategy::default();
+    let build_constraints = [];
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls and
     // upgrades aren't relevant.
@@ -562,8 +580,6 @@ pub(crate) async fn resolve_environment<'a>(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
-    // TODO: read locked build constraints
-    let build_constraints = [];
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
         &client,
@@ -635,6 +651,7 @@ pub(crate) async fn sync_environment(
         index_strategy,
         keyring_provider,
         config_setting,
+        no_build_isolation,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -666,9 +683,16 @@ pub(crate) async fn sync_environment(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
     let dry_run = false;
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
@@ -680,8 +704,6 @@ pub(crate) async fn sync_environment(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
-    // TODO: read locked build constraints
-    let build_constraints = [];
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -757,6 +779,7 @@ pub(crate) async fn update_environment(
         resolution,
         prerelease,
         config_setting,
+        no_build_isolation,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -822,6 +845,13 @@ pub(crate) async fn update_environment(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if *no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
@@ -831,7 +861,7 @@ pub(crate) async fn update_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
     let dev = Vec::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
@@ -845,9 +875,6 @@ pub(crate) async fn update_environment(
         let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
-
-    // TODO: read locked build constraints
-    let build_constraints = [];
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

@@ -147,6 +147,7 @@ pub(super) async fn do_sync(
         index_strategy,
         keyring_provider,
         config_setting,
+        no_build_isolation,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -194,9 +195,16 @@ pub(super) async fn do_sync(
         .platform(venv.interpreter().platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
     let dry_run = false;
     let setup_py = SetupPyStrategy::default();
 
@@ -210,8 +218,6 @@ pub(super) async fn do_sync(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
-    // TODO: read locked build constraints
-    let build_constraints = [];
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
