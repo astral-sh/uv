@@ -312,7 +312,7 @@ pub struct ResolverInstallerOptions {
         default = "{}",
         value_type = "dict",
         example = r#"
-            config-settings = { "editable_mode": "compat" }
+            config-settings = { editable_mode = "compat" }
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
@@ -843,7 +843,7 @@ pub struct PipOptions {
         default = "{}",
         value_type = "dict",
         example = r#"
-            config-settings = { "editable_mode": "compat" }
+            config-settings = { editable_mode = "compat" }
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
