@@ -2572,9 +2572,9 @@ fn add_lower_bound_local() -> Result<()> {
         name = "local-simple-a"
         version = "1.2.3+foo"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo.tar.gz#sha256=ebd55c4a79d0a5759126657cb289ff97558902abcfb142e036b993781497edac", hash = "sha256:ebd55c4a79d0a5759126657cb289ff97558902abcfb142e036b993781497edac" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo.tar.gz", hash = "sha256:ebd55c4a79d0a5759126657cb289ff97558902abcfb142e036b993781497edac" }
         wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo-py3-none-any.whl#sha256=6f30e2e709b3e171cd734bb58705229a582587c29e0a7041227435583c7224cc", hash = "sha256:6f30e2e709b3e171cd734bb58705229a582587c29e0a7041227435583c7224cc" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo-py3-none-any.whl", hash = "sha256:6f30e2e709b3e171cd734bb58705229a582587c29e0a7041227435583c7224cc" },
         ]
 
         [[distribution]]
