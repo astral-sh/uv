@@ -38,9 +38,8 @@ fn help() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, managed,
-              system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -52,16 +51,14 @@ fn help() {
                                        always, never]
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access, relying only on locally cached data and
-                                       locally available files
-          --no-progress                Hides all progress outputs when set
+          --offline                    Disable network access
+          --no-progress                Hide all progress outputs
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) in the current directory, parent directories, or user
-                                       configuration directories [env: UV_NO_CONFIG=]
-      -h, --help                       Print help
-      -V, --version                    Print version
+                                       `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help                       Display the concise help for this command
+      -V, --version                    Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 
@@ -104,9 +101,8 @@ fn help_flag() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, managed,
-              system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -118,16 +114,14 @@ fn help_flag() {
                                        always, never]
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access, relying only on locally cached data and
-                                       locally available files
-          --no-progress                Hides all progress outputs when set
+          --offline                    Disable network access
+          --no-progress                Hide all progress outputs
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) in the current directory, parent directories, or user
-                                       configuration directories [env: UV_NO_CONFIG=]
-      -h, --help                       Print help
-      -V, --version                    Print version
+                                       `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help                       Display the concise help for this command
+      -V, --version                    Display the uv version
 
     Use `uv help` for more details.
 
@@ -169,9 +163,8 @@ fn help_short_flag() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, managed,
-              system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -183,16 +176,14 @@ fn help_short_flag() {
                                        always, never]
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access, relying only on locally cached data and
-                                       locally available files
-          --no-progress                Hides all progress outputs when set
+          --offline                    Disable network access
+          --no-progress                Hide all progress outputs
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) in the current directory, parent directories, or user
-                                       configuration directories [env: UV_NO_CONFIG=]
-      -h, --help                       Print help
-      -V, --version                    Print version
+                                       `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help                       Display the concise help for this command
+      -V, --version                    Display the uv version
 
     Use `uv help` for more details.
 
@@ -237,8 +228,11 @@ fn help_subcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv
+              Whether to prefer uv-managed or system Python installations.
+              
+              By default, uv prefers using Python versions it manages. However, it will use system
+              Python installations if a uv-managed Python is not installed. This option allows
+              prioritizing or ignoring system Python installations.
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -291,27 +285,36 @@ fn help_subcommand() {
               [env: UV_NATIVE_TLS=]
 
           --offline
-              Disable network access, relying only on locally cached data and locally available files
+              Disable network access.
+              
+              When disabled, uv will only use locally cached data and locally available files.
 
           --no-progress
-              Hides all progress outputs when set
+              Hide all progress outputs.
+              
+              For example, spinners or progress bars.
 
           --config-file <CONFIG_FILE>
-              The path to a `uv.toml` file to use for configuration
+              The path to a `uv.toml` file to use for configuration.
+              
+              While uv configuration can be included in a `pyproject.toml` file, it is not allowed in
+              this context.
               
               [env: UV_CONFIG_FILE=]
 
           --no-config
-              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
-              directory, parent directories, or user configuration directories
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`).
+              
+              Normally, configuration files are discovered in the current directory, parent directories,
+              or user configuration directories.
               
               [env: UV_NO_CONFIG=]
 
       -h, --help
-              Print help
+              Display the concise help for this command
 
       -V, --version
-              Print version
+              Display the uv version
 
     Use `uv help python <command>` for more information on a specific command.
 
@@ -361,8 +364,11 @@ fn help_subsubcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv
+              Whether to prefer uv-managed or system Python installations.
+              
+              By default, uv prefers using Python versions it manages. However, it will use system
+              Python installations if a uv-managed Python is not installed. This option allows
+              prioritizing or ignoring system Python installations.
 
               Possible values:
               - only-managed: Only use managed Python installations; never use system Python
@@ -415,27 +421,36 @@ fn help_subsubcommand() {
               [env: UV_NATIVE_TLS=]
 
           --offline
-              Disable network access, relying only on locally cached data and locally available files
+              Disable network access.
+              
+              When disabled, uv will only use locally cached data and locally available files.
 
           --no-progress
-              Hides all progress outputs when set
+              Hide all progress outputs.
+              
+              For example, spinners or progress bars.
 
           --config-file <CONFIG_FILE>
-              The path to a `uv.toml` file to use for configuration
+              The path to a `uv.toml` file to use for configuration.
+              
+              While uv configuration can be included in a `pyproject.toml` file, it is not allowed in
+              this context.
               
               [env: UV_CONFIG_FILE=]
 
           --no-config
-              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current
-              directory, parent directories, or user configuration directories
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`).
+              
+              Normally, configuration files are discovered in the current directory, parent directories,
+              or user configuration directories.
               
               [env: UV_NO_CONFIG=]
 
       -h, --help
-              Print help
+              Display the concise help for this command
 
       -V, --version
-              Print version
+              Display the uv version
 
 
     ----- stderr -----
@@ -469,9 +484,8 @@ fn help_flag_subcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, managed,
-              system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -483,16 +497,14 @@ fn help_flag_subcommand() {
                                        always, never]
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access, relying only on locally cached data and
-                                       locally available files
-          --no-progress                Hides all progress outputs when set
+          --offline                    Disable network access
+          --no-progress                Hide all progress outputs
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) in the current directory, parent directories, or user
-                                       configuration directories [env: UV_NO_CONFIG=]
-      -h, --help                       Print help
-      -V, --version                    Print version
+                                       `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help                       Display the concise help for this command
+      -V, --version                    Display the uv version
 
     Use `uv help python` for more details.
 
@@ -525,9 +537,8 @@ fn help_flag_subsubcommand() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, managed,
-              system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -539,16 +550,14 @@ fn help_flag_subsubcommand() {
                                        always, never]
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access, relying only on locally cached data and
-                                       locally available files
-          --no-progress                Hides all progress outputs when set
+          --offline                    Disable network access
+          --no-progress                Hide all progress outputs
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) in the current directory, parent directories, or user
-                                       configuration directories [env: UV_NO_CONFIG=]
-      -h, --help                       Print help
-      -V, --version                    Print version
+                                       `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help                       Display the concise help for this command
+      -V, --version                    Display the uv version
 
     ----- stderr -----
     "###);
@@ -658,9 +667,8 @@ fn help_with_global_option() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, managed,
-              system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -672,16 +680,14 @@ fn help_with_global_option() {
                                        always, never]
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access, relying only on locally cached data and
-                                       locally available files
-          --no-progress                Hides all progress outputs when set
+          --offline                    Disable network access
+          --no-progress                Hide all progress outputs
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) in the current directory, parent directories, or user
-                                       configuration directories [env: UV_NO_CONFIG=]
-      -h, --help                       Print help
-      -V, --version                    Print version
+                                       `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help                       Display the concise help for this command
+      -V, --version                    Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 
@@ -760,9 +766,8 @@ fn help_with_no_pager() {
 
     Python options:
           --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer using Python installations that are already present on the system, or
-              those that are downloaded and installed by uv [possible values: only-managed, managed,
-              system, only-system]
+              Whether to prefer uv-managed or system Python installations [possible values:
+              only-managed, managed, system, only-system]
           --python-fetch <PYTHON_FETCH>
               Whether to automatically download Python when required [possible values: automatic,
               manual]
@@ -774,16 +779,14 @@ fn help_with_no_pager() {
                                        always, never]
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access, relying only on locally cached data and
-                                       locally available files
-          --no-progress                Hides all progress outputs when set
+          --offline                    Disable network access
+          --no-progress                Hide all progress outputs
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
                                        UV_CONFIG_FILE=]
           --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) in the current directory, parent directories, or user
-                                       configuration directories [env: UV_NO_CONFIG=]
-      -h, --help                       Print help
-      -V, --version                    Print version
+                                       `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help                       Display the concise help for this command
+      -V, --version                    Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 
