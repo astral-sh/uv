@@ -16,18 +16,18 @@ fn help() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      pip      Manage Python packages with a pip-compatible interface
+      run      Run a command or script (experimental)
+      init     Create a new project (experimental)
+      add      Add dependencies to the project (experimental)
+      remove   Remove dependencies from the project (experimental)
+      sync     Update the project's environment (experimental)
+      lock     Update the project's lockfile (experimental)
+      tree     Display the project's dependency tree (experimental)
       tool     Run and manage tools provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
-      init     Create a new project (experimental)
-      run      Run a command in an environment (experimental)
-      sync     Update the project's environment to match the project's dependencies (experimental)
-      lock     Create or update a lockfile for the project's dependencies (experimental)
-      add      Add one or more packages to the project's dependencies (experimental)
-      remove   Remove one or more packages from the project's dependencies (experimental)
-      tree     Display the dependency tree for the project (experimental)
+      pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
-      cache    Manage the cache
+      cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
 
@@ -82,18 +82,18 @@ fn help_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      pip      Manage Python packages with a pip-compatible interface
+      run      Run a command or script (experimental)
+      init     Create a new project (experimental)
+      add      Add dependencies to the project (experimental)
+      remove   Remove dependencies from the project (experimental)
+      sync     Update the project's environment (experimental)
+      lock     Update the project's lockfile (experimental)
+      tree     Display the project's dependency tree (experimental)
       tool     Run and manage tools provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
-      init     Create a new project (experimental)
-      run      Run a command in an environment (experimental)
-      sync     Update the project's environment to match the project's dependencies (experimental)
-      lock     Create or update a lockfile for the project's dependencies (experimental)
-      add      Add one or more packages to the project's dependencies (experimental)
-      remove   Remove one or more packages from the project's dependencies (experimental)
-      tree     Display the dependency tree for the project (experimental)
+      pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
-      cache    Manage the cache
+      cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
 
@@ -147,18 +147,18 @@ fn help_short_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      pip      Manage Python packages with a pip-compatible interface
+      run      Run a command or script (experimental)
+      init     Create a new project (experimental)
+      add      Add dependencies to the project (experimental)
+      remove   Remove dependencies from the project (experimental)
+      sync     Update the project's environment (experimental)
+      lock     Update the project's lockfile (experimental)
+      tree     Display the project's dependency tree (experimental)
       tool     Run and manage tools provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
-      init     Create a new project (experimental)
-      run      Run a command in an environment (experimental)
-      sync     Update the project's environment to match the project's dependencies (experimental)
-      lock     Create or update a lockfile for the project's dependencies (experimental)
-      add      Add one or more packages to the project's dependencies (experimental)
-      remove   Remove one or more packages from the project's dependencies (experimental)
-      tree     Display the dependency tree for the project (experimental)
+      pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
-      cache    Manage the cache
+      cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
 
@@ -565,16 +565,16 @@ fn help_unknown_subcommand() {
 
     ----- stderr -----
     error: There is no command `foobar` for `uv`. Did you mean one of:
-        pip
-        tool
-        python
-        init
         run
-        sync
-        lock
+        init
         add
         remove
+        sync
+        lock
         tree
+        tool
+        python
+        pip
         venv
         cache
         version
@@ -587,16 +587,16 @@ fn help_unknown_subcommand() {
 
     ----- stderr -----
     error: There is no command `foo bar` for `uv`. Did you mean one of:
-        pip
-        tool
-        python
-        init
         run
-        sync
-        lock
+        init
         add
         remove
+        sync
+        lock
         tree
+        tool
+        python
+        pip
         venv
         cache
         version
@@ -636,18 +636,18 @@ fn help_with_global_option() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      pip      Manage Python packages with a pip-compatible interface
+      run      Run a command or script (experimental)
+      init     Create a new project (experimental)
+      add      Add dependencies to the project (experimental)
+      remove   Remove dependencies from the project (experimental)
+      sync     Update the project's environment (experimental)
+      lock     Update the project's lockfile (experimental)
+      tree     Display the project's dependency tree (experimental)
       tool     Run and manage tools provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
-      init     Create a new project (experimental)
-      run      Run a command in an environment (experimental)
-      sync     Update the project's environment to match the project's dependencies (experimental)
-      lock     Create or update a lockfile for the project's dependencies (experimental)
-      add      Add one or more packages to the project's dependencies (experimental)
-      remove   Remove one or more packages from the project's dependencies (experimental)
-      tree     Display the dependency tree for the project (experimental)
+      pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
-      cache    Manage the cache
+      cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
 
@@ -738,18 +738,18 @@ fn help_with_no_pager() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      pip      Manage Python packages with a pip-compatible interface
+      run      Run a command or script (experimental)
+      init     Create a new project (experimental)
+      add      Add dependencies to the project (experimental)
+      remove   Remove dependencies from the project (experimental)
+      sync     Update the project's environment (experimental)
+      lock     Update the project's lockfile (experimental)
+      tree     Display the project's dependency tree (experimental)
       tool     Run and manage tools provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
-      init     Create a new project (experimental)
-      run      Run a command in an environment (experimental)
-      sync     Update the project's environment to match the project's dependencies (experimental)
-      lock     Create or update a lockfile for the project's dependencies (experimental)
-      add      Add one or more packages to the project's dependencies (experimental)
-      remove   Remove one or more packages from the project's dependencies (experimental)
-      tree     Display the dependency tree for the project (experimental)
+      pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
-      cache    Manage the cache
+      cache    Manage uv's cache
       version  Display uv's version
       help     Display documentation for a command
 

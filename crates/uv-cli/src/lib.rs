@@ -213,12 +213,9 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
-    /// Manage Python packages with a pip-compatible interface.
-    #[command(
-        after_help = "Use `uv help pip`` for more details.",
-        after_long_help = ""
-    )]
-    Pip(PipNamespace),
+    /// Manage Python projects.
+    #[command(flatten)]
+    Project(Box<ProjectCommand>),
     /// Run and manage tools provided by Python packages (experimental).
     #[command(
         after_help = "Use `uv help tool` for more details.",
@@ -231,9 +228,12 @@ pub enum Commands {
         after_long_help = ""
     )]
     Python(PythonNamespace),
-    /// Manage Python projects.
-    #[command(flatten)]
-    Project(Box<ProjectCommand>),
+    /// Manage Python packages with a pip-compatible interface.
+    #[command(
+        after_help = "Use `uv help pip`` for more details.",
+        after_long_help = ""
+    )]
+    Pip(PipNamespace),
     /// Create a virtual environment.
     #[command(
         alias = "virtualenv",
@@ -242,7 +242,7 @@ pub enum Commands {
         after_long_help = ""
     )]
     Venv(VenvArgs),
-    /// Manage the cache.
+    /// Manage uv's cache.
     #[command(
         after_help = "Use `uv help cache` for more details.",
         after_long_help = ""
@@ -415,39 +415,39 @@ pub enum PipCommand {
 
 #[derive(Subcommand)]
 pub enum ProjectCommand {
-    /// Create a new project (experimental).
-    Init(InitArgs),
-    /// Run a command in an environment (experimental).
+    /// Run a command or script (experimental).
     #[command(
         after_help = "Use `uv help run` for more details.",
         after_long_help = ""
     )]
     Run(RunArgs),
-    /// Update the project's environment to match the project's dependencies (experimental).
-    #[command(
-        after_help = "Use `uv help sync` for more details.",
-        after_long_help = ""
-    )]
-    Sync(SyncArgs),
-    /// Create or update a lockfile for the project's dependencies (experimental).
-    #[command(
-        after_help = "Use `uv help lock` for more details.",
-        after_long_help = ""
-    )]
-    Lock(LockArgs),
-    /// Add one or more packages to the project's dependencies (experimental).
+    /// Create a new project (experimental).
+    Init(InitArgs),
+    /// Add dependencies to the project (experimental).
     #[command(
         after_help = "Use `uv help add` for more details.",
         after_long_help = ""
     )]
     Add(AddArgs),
-    /// Remove one or more packages from the project's dependencies (experimental).
+    /// Remove dependencies from the project (experimental).
     #[command(
         after_help = "Use `uv help remove` for more details.",
         after_long_help = ""
     )]
     Remove(RemoveArgs),
-    /// Display the dependency tree for the project (experimental).
+    /// Update the project's environment (experimental).
+    #[command(
+        after_help = "Use `uv help sync` for more details.",
+        after_long_help = ""
+    )]
+    Sync(SyncArgs),
+    /// Update the project's lockfile (experimental).
+    #[command(
+        after_help = "Use `uv help lock` for more details.",
+        after_long_help = ""
+    )]
+    Lock(LockArgs),
+    /// Display the project's dependency tree (experimental).
     Tree(TreeArgs),
 }
 
