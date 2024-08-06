@@ -2117,11 +2117,6 @@ impl ForkState {
                 if let Some(specifier) = specifier {
                     let locals = locals.get(name, &self.markers);
 
-                    // Prioritize local versions over the original version range.
-                    if !locals.is_empty() {
-                        *version = Range::empty();
-                    }
-
                     // It's possible that there are multiple matching local versions requested with
                     // different marker expressions. All of these are potentially compatible until we
                     // narrow to a specific fork.
