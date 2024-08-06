@@ -97,3 +97,8 @@ uv release artifacts can be downloaded directly from
 
 Each release page includes binaries for all supported platforms as well as instructions for using
 the standalone installer via `github.com` instead of `astral.sh`.
+
+## Next steps
+
+See the [first steps](./first-steps.md) or jump straight to the [guides](./guides/index.md) to start
+using uv.
