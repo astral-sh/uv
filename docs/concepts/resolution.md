@@ -271,3 +271,8 @@ packages.
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
 as if they do not exist.
+
+## Learn more
+
+For more details about the internals of the resolver, see the
+[resolver reference](../reference/resolver-internals.md) documentation.
