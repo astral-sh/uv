@@ -76,13 +76,13 @@ specified as `KEY=VALUE` pairs.
 
     ```toml
     [tool.uv]
-    config-settings = { "editable_mode": "compat" }
+    config-settings = { editable_mode = "compat" }
     ```
 === "uv.toml"
 
     ```toml
     
-    config-settings = { "editable_mode": "compat" }
+    config-settings = { editable_mode = "compat" }
     ```
 
 ---
@@ -1063,13 +1063,13 @@ specified as `KEY=VALUE` pairs.
 
     ```toml
     [tool.uv.pip]
-    config-settings = { "editable_mode": "compat" }
+    config-settings = { editable_mode = "compat" }
     ```
 === "uv.toml"
 
     ```toml
     [pip]
-    config-settings = { "editable_mode": "compat" }
+    config-settings = { editable_mode = "compat" }
     ```
 
 ---
