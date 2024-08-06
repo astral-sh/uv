@@ -191,7 +191,7 @@ $ uv add ~/projects/bar/
     $ uv add --editable ~/projects/bar/
     ```
 
-    However, it is recommended to use [_workspaces_](./workspaces) instead of manual path
+    However, it is recommended to use [_workspaces_](./workspaces.md) instead of manual path
     dependencies.
 
 ### Workspace member

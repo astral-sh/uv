@@ -97,3 +97,8 @@ self-update:
 - `uv tool dir`: Show the uv tool directory path.
 - `uv python dir`: Show the uv installed Python versions path.
 - `uv self update`: Update uv to the latest version.
+
+## Next steps
+
+Read the [guides](./guides/index.md) for an introduction to each feature or check out
+[concept](./concepts/index.md) pages for in-depth details about uv's features.
