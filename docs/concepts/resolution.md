@@ -237,8 +237,8 @@ available versions for a transitive dependency without adding a direct requireme
 
 Overrides allow bypassing failing or undesirable resolutions by overriding the declared dependencies
 of a package. Overrides are a useful last resort for cases in which the you know that a dependency
-is compatible with a newer version of a package than the package declares, but the package has not
-yet been updated to declare that compatibility.
+is compatible with a newer version of a package than it declares, but the it has not yet been
+updated to declare that compatibility.
 
 For example, if a transitive dependency declares the requirement `pydantic>=1.0,<2.0`, but _works_
 with `pydantic>=2.0`, the user can override the declared dependency with `pydantic>=1.0,<3` to allow
