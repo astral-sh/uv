@@ -448,6 +448,34 @@ distributions will exit with an error.
 
 ---
 
+#### [`no-build-isolation`](#no-build-isolation) {: #no-build-isolation }
+
+Disable isolation when building source distributions.
+
+Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+are already installed.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    no-build-isolation = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    no-build-isolation = true
+    ```
+
+---
+
 #### [`no-build-package`](#no-build-package) {: #no-build-package }
 
 Don't build source distributions for a specific package.

@@ -161,6 +161,13 @@
         "null"
       ]
     },
+    "no-build-isolation": {
+      "description": "Disable isolation when building source distributions.\n\nAssumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "no-build-package": {
       "description": "Don't build source distributions for a specific package.",
       "type": [

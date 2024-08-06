@@ -680,20 +680,6 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
     pub no_legacy_setup_py: bool,
 
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        env = "UV_NO_BUILD_ISOLATION",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("build_isolation")
-    )]
-    pub no_build_isolation: bool,
-
-    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
-    pub build_isolation: bool,
-
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -980,20 +966,6 @@ pub struct PipSyncArgs {
 
     #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
     pub no_legacy_setup_py: bool,
-
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        env = "UV_NO_BUILD_ISOLATION",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("build_isolation")
-    )]
-    pub no_build_isolation: bool,
-
-    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
-    pub build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -1285,20 +1257,6 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
     pub no_legacy_setup_py: bool,
-
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        env = "UV_NO_BUILD_ISOLATION",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("build_isolation")
-    )]
-    pub no_build_isolation: bool,
-
-    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
-    pub build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -2103,9 +2061,10 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Does not clean the environment.
+    /// When syncing, make the minimum necessary changes to satisfy the requirements.
     ///
-    /// When omitted, any extraneous installations will be removed.
+    /// By default, `uv sync` will remove any extraneous packages from the environment, unless
+    /// `--no-build-isolation` is enabled.
     #[arg(long)]
     pub no_clean: bool,
 
@@ -2874,6 +2833,26 @@ pub struct InstallerArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[arg(
+        long,
+        overrides_with("build_isolation"),
+        help_heading = "Build options",
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub no_build_isolation: bool,
+
+    #[arg(
+        long,
+        overrides_with("no_build_isolation"),
+        hide = true,
+        help_heading = "Build options"
+    )]
+    pub build_isolation: bool,
+
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
@@ -3021,6 +3000,26 @@ pub struct ResolverArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[arg(
+        long,
+        overrides_with("build_isolation"),
+        help_heading = "Build options",
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub no_build_isolation: bool,
+
+    #[arg(
+        long,
+        overrides_with("no_build_isolation"),
+        hide = true,
+        help_heading = "Build options"
+    )]
+    pub build_isolation: bool,
+
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
@@ -3165,6 +3164,26 @@ pub struct ResolverInstallerArgs {
         help_heading = "Build options"
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[arg(
+        long,
+        overrides_with("build_isolation"),
+        help_heading = "Build options",
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub no_build_isolation: bool,
+
+    #[arg(
+        long,
+        overrides_with("no_build_isolation"),
+        hide = true,
+        help_heading = "Build options"
+    )]
+    pub build_isolation: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///

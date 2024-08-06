@@ -159,6 +159,8 @@ pub struct InstallerOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub no_build_isolation: Option<bool>,
+    pub no_sources: Option<bool>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -184,6 +186,7 @@ pub struct ResolverOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub no_build_isolation: Option<bool>,
     pub no_sources: Option<bool>,
 }
 
@@ -317,6 +320,18 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// are already installed.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-build-isolation = true
+        "#
+    )]
+    pub no_build_isolation: Option<bool>,
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
