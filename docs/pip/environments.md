@@ -11,7 +11,7 @@ installation's environment. Unlike `pip`, uv requires using a virtual environmen
 
 uv supports creating virtual environments, e.g., to create a virtual environment at `.venv`:
 
-```console]
+```console
 $ uv venv
 ```
 
@@ -39,8 +39,8 @@ environment during subsequent invocations.
 ```console
 $ uv venv
 
-# Install a package in the new virtual environment
-uv pip install ruff
+$ # Install a package in the new virtual environment
+$ uv pip install ruff
 ```
 
 The virtual environment can be "activated" to make its packages available:
