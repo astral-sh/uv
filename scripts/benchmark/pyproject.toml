@@ -2,7 +2,7 @@
 name = "benchmark"
 version = "0.0.1"
 description = "Benchmark package resolution tools"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
   "pdm",
   "pip-tools",

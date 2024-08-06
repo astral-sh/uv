@@ -21,11 +21,14 @@ class Hyperfine(typing.NamedTuple):
     commands: list[Command]
     """The commands to benchmark."""
 
-    warmup: int
+    warmup: int | None
     """The number of warmup runs to perform."""
 
-    min_runs: int
+    min_runs: int | None
     """The minimum number of runs to perform."""
+
+    runs: int | None
+    """The number of runs to perform."""
 
     verbose: bool
     """Whether to print verbose output."""
@@ -45,10 +48,15 @@ class Hyperfine(typing.NamedTuple):
         # Preamble: benchmark-wide setup.
         if self.verbose:
             args.append("--show-output")
-        args.append("--warmup")
-        args.append(str(self.warmup))
-        args.append("--min-runs")
-        args.append(str(self.min_runs))
+        if self.warmup is not None:
+            args.append("--warmup")
+            args.append(str(self.warmup))
+        if self.min_runs is not None:
+            args.append("--min-runs")
+            args.append(str(self.min_runs))
+        if self.runs is not None:
+            args.append("--runs")
+            args.append(str(self.runs))
 
         # Add all command names,
         for command in self.commands:
