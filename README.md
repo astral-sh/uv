@@ -24,20 +24,20 @@ replacement for common `pip` and `pip-tools` workflows.
 
 ## Highlights
 
-- ⚖️ Drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands.
-- ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip` and
-  `pip-tools` (`pip-compile` and `pip-sync`).
-- 💾 Disk-space efficient, with a global cache for dependency deduplication.
-- 🐍 Installable via `curl`, `pip`, `pipx`, etc. uv is a static binary that can be installed without
-  Rust or Python.
-- 🧪 Tested at-scale against the top 10,000 PyPI packages.
-- 🖥️ Support for macOS, Linux, and Windows.
-- 🧰 Advanced features such as [dependency version overrides](#dependency-overrides) and
-  [alternative resolution strategies](#resolution-strategy).
-- ⁉️ Best-in-class error messages with a conflict-tracking resolver.
-- 🤝 Support for a wide range of advanced `pip` features, including editable installs, Git
-  dependencies, direct URL dependencies, local dependencies, constraints, source distributions, HTML
-  and JSON indexes, and more.
+-   ⚖️ Drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands.
+-   ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip` and
+    `pip-tools` (`pip-compile` and `pip-sync`).
+-   💾 Disk-space efficient, with a global cache for dependency deduplication.
+-   🐍 Installable via `curl`, `pip`, `pipx`, etc. uv is a static binary that can be installed
+    without Rust or Python.
+-   🧪 Tested at-scale against the top 10,000 PyPI packages.
+-   🖥️ Support for macOS, Linux, and Windows.
+-   🧰 Advanced features such as [dependency version overrides](#dependency-overrides) and
+    [alternative resolution strategies](#resolution-strategy).
+-   ⁉️ Best-in-class error messages with a conflict-tracking resolver.
+-   🤝 Support for a wide range of advanced `pip` features, including editable installs, Git
+    dependencies, direct URL dependencies, local dependencies, constraints, source distributions,
+    HTML and JSON indexes, and more.
 
 uv is backed by [Astral](https://astral.sh), the creators of
 [Ruff](https://github.com/astral-sh/ruff).
@@ -154,9 +154,9 @@ dependencies into the environment and (2) build source distributions.
 When running `pip sync` or `pip install`, uv will search for a virtual environment in the following
 order:
 
-- An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
-- An activated Conda environment based on the `CONDA_PREFIX` environment variable.
-- A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
+-   An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
+-   An activated Conda environment based on the `CONDA_PREFIX` environment variable.
+-   A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
 
 If no virtual environment is found, uv will prompt the user to create one in the current directory
 via `uv venv`.
@@ -164,21 +164,21 @@ via `uv venv`.
 When running `pip compile`, uv does not _require_ a virtual environment and will search for a Python
 interpreter in the following order:
 
-- An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
-- An activated Conda environment based on the `CONDA_PREFIX` environment variable.
-- A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
-- The Python interpreter available as `python3` on macOS and Linux, or `python.exe` on Windows.
+-   An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
+-   An activated Conda environment based on the `CONDA_PREFIX` environment variable.
+-   A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
+-   The Python interpreter available as `python3` on macOS and Linux, or `python.exe` on Windows.
 
 If a `--python-version` is provided to `pip compile` (e.g., `--python-version=3.7`), uv will search
 for a Python interpreter matching that version in the following order:
 
-- An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
-- An activated Conda environment based on the `CONDA_PREFIX` environment variable.
-- A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
-- The Python interpreter available as, e.g., `python3.7` on macOS and Linux.
-- The Python interpreter available as `python3` on macOS and Linux, or `python.exe` on Windows.
-- On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
-  version.
+-   An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
+-   An activated Conda environment based on the `CONDA_PREFIX` environment variable.
+-   A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
+-   The Python interpreter available as, e.g., `python3.7` on macOS and Linux.
+-   The Python interpreter available as `python3` on macOS and Linux, or `python.exe` on Windows.
+-   On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
+    version.
 
 ### Installing into arbitrary Python environments
 
@@ -272,8 +272,8 @@ with private repositories.
 
 Using SSH:
 
-- `git+ssh://git@<hostname>/...` (e.g. `git+ssh://git@github.com/astral-sh/uv`)
-- `git+ssh://git@<host>/...` (e.g. `git+ssh://git@github.com-key-2/astral-sh/uv`)
+-   `git+ssh://git@<hostname>/...` (e.g. `git+ssh://git@github.com/astral-sh/uv`)
+-   `git+ssh://git@<host>/...` (e.g. `git+ssh://git@github.com-key-2/astral-sh/uv`)
 
 See the
 [GitHub SSH documentation](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/about-ssh)
@@ -281,10 +281,11 @@ for more details on how to configure SSH.
 
 Using a password or token:
 
-- `git+https://<user>:<token>@<hostname>/...` (e.g.
-  `git+https://git:github_pat_asdf@github.com/astral-sh/uv`)
-- `git+https://<token>@<hostname>/...` (e.g. `git+https://github_pat_asdf@github.com/astral-sh/uv`)
-- `git+https://<user>@<hostname>/...` (e.g. `git+https://git@github.com/astral-sh/uv`)
+-   `git+https://<user>:<token>@<hostname>/...` (e.g.
+    `git+https://git:github_pat_asdf@github.com/astral-sh/uv`)
+-   `git+https://<token>@<hostname>/...` (e.g.
+    `git+https://github_pat_asdf@github.com/astral-sh/uv`)
+-   `git+https://<user>@<hostname>/...` (e.g. `git+https://git@github.com/astral-sh/uv`)
 
 When using a GitHub personal access token, the username is arbitrary. GitHub does not support
 logging in with password directly, although other hosts may. If a username is provided without
@@ -299,9 +300,9 @@ uv supports credentials over HTTP when querying package registries.
 
 Authentication can come from the following sources, in order of precedence:
 
-- The URL, e.g., `https://<user>:<password>@<hostname>/...`
-- A [`netrc`](https://everything.curl.dev/usingcurl/netrc) configuration file
-- A [keyring](https://github.com/jaraco/keyring) provider (requires opt-in)
+-   The URL, e.g., `https://<user>:<password>@<hostname>/...`
+-   A [`netrc`](https://everything.curl.dev/usingcurl/netrc) configuration file
+-   A [keyring](https://github.com/jaraco/keyring) provider (requires opt-in)
 
 If authentication is found for a single net location (scheme, host, and port), it will be cached for
 the duration of the command and used for other queries to that net location. Authentication is not
@@ -312,10 +313,10 @@ keyring-based authentication.
 
 Authentication may be used for hosts specified in the following contexts:
 
-- `index-url`
-- `extra-index-url`
-- `find-links`
-- `package @ https://...`
+-   `index-url`
+-   `extra-index-url`
+-   `find-links`
+-   `package @ https://...`
 
 See the [`pip` compatibility guide](PIP_COMPATIBILITY.md#registry-authentication) for details on
 differences from `pip`.
@@ -327,15 +328,16 @@ been accessed in prior runs.
 
 The specifics of uv's caching semantics vary based on the nature of the dependency:
 
-- **For registry dependencies** (like those downloaded from PyPI), uv respects HTTP caching headers.
-- **For direct URL dependencies**, uv respects HTTP caching headers, and also caches based on the
-  URL itself.
-- **For Git dependencies**, uv caches based on the fully-resolved Git commit hash. As such,
-  `uv pip compile` will pin Git dependencies to a specific commit hash when writing the resolved
-  dependency set.
-- **For local dependencies**, uv caches based on the last-modified time of the source archive (i.e.,
-  the local `.whl` or `.tar.gz` file). For directories, uv caches based on the last-modified time of
-  the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
+-   **For registry dependencies** (like those downloaded from PyPI), uv respects HTTP caching
+    headers.
+-   **For direct URL dependencies**, uv respects HTTP caching headers, and also caches based on the
+    URL itself.
+-   **For Git dependencies**, uv caches based on the fully-resolved Git commit hash. As such,
+    `uv pip compile` will pin Git dependencies to a specific commit hash when writing the resolved
+    dependency set.
+-   **For local dependencies**, uv caches based on the last-modified time of the source archive
+    (i.e., the local `.whl` or `.tar.gz` file). For directories, uv caches based on the
+    last-modified time of the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
 
 It's safe to run multiple `uv` commands concurrently, even against the same virtual environment.
 uv's cache is designed to be thread-safe and append-only, and thus robust to multiple concurrent
@@ -348,11 +350,11 @@ directory).
 
 If you're running into caching issues, uv includes a few escape hatches:
 
-- To force uv to revalidate cached data for all dependencies, run `uv pip install --refresh ...`.
-- To force uv to revalidate cached data for a specific dependency, run, e.g.,
-  `uv pip install --refresh-package flask ...`.
-- To force uv to ignore existing installed versions, run `uv pip install --reinstall ...`.
-- To clear the global cache entirely, run `uv cache clean`.
+-   To force uv to revalidate cached data for all dependencies, run `uv pip install --refresh ...`.
+-   To force uv to revalidate cached data for a specific dependency, run, e.g.,
+    `uv pip install --refresh-package flask ...`.
+-   To force uv to ignore existing installed versions, run `uv pip install --reinstall ...`.
+-   To clear the global cache entirely, run `uv cache clean`.
 
 ### Resolution strategy
 
@@ -524,10 +526,10 @@ key.
 
 uv has Tier 1 support for the following platforms:
 
-- macOS (Apple Silicon)
-- macOS (x86_64)
-- Linux (x86_64)
-- Windows (x86_64)
+-   macOS (Apple Silicon)
+-   macOS (x86_64)
+-   Linux (x86_64)
+-   Windows (x86_64)
 
 uv is continuously built, tested, and developed against its Tier 1 platforms. Inspired by the Rust
 project, Tier 1 can be thought of as
@@ -537,12 +539,12 @@ uv has Tier 2 support
 (["guaranteed to build"](https://doc.rust-lang.org/beta/rustc/platform-support.html)) for the
 following platforms:
 
-- Linux (PPC64)
-- Linux (PPC64LE)
-- Linux (aarch64)
-- Linux (armv7)
-- Linux (i686)
-- Linux (s390x)
+-   Linux (PPC64)
+-   Linux (PPC64LE)
+-   Linux (aarch64)
+-   Linux (armv7)
+-   Linux (i686)
+-   Linux (s390x)
 
 uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv/) for its Tier 1 and Tier 2
 platforms. However, while Tier 2 platforms are continuously built, they are not continuously tested
@@ -559,98 +561,100 @@ uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
 
 uv accepts the following command-line arguments as environment variables:
 
-- `UV_INDEX_URL`: Equivalent to the `--index-url` command-line argument. If set, uv will use this
-  URL as the base index for searching for packages.
-- `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv will
-  use this space-separated list of URLs as additional indexes when searching for packages.
-- `UV_CACHE_DIR`: Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
-  directory for caching instead of the default cache directory.
-- `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
-  cache for any operations.
-- `UV_RESOLUTION`: Equivalent to the `--resolution` command-line argument. For example, if set to
-  `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
-- `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. For example, if set to
-  `allow`, uv will allow pre-release versions for all dependencies.
-- `UV_SYSTEM_PYTHON`: Equivalent to the `--system` command-line argument. If set to `true`, uv will
-  use the first Python interpreter found in the system `PATH`. WARNING: `UV_SYSTEM_PYTHON=true` is
-  intended for use in continuous integration (CI) or containerized environments and should be used
-  with caution, as modifying the system Python can lead to unexpected behavior.
-- `UV_PYTHON`: Equivalent to the `--python` command-line argument. If set to a path, uv will use
-  this Python interpreter for all operations.
-- `UV_BREAK_SYSTEM_PACKAGES`: Equivalent to the `--break-system-packages` command-line argument. If
-  set to `true`, uv will allow the installation of packages that conflict with system-installed
-  packages. WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integration
-  (CI) or containerized environments and should be used with caution, as modifying the system Python
-  can lead to unexpected behavior.
-- `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
-  use the system's trust store instead of the bundled `webpki-roots` crate.
-- `UV_INDEX_STRATEGY`: Equivalent to the `--index-strategy` command-line argument. For example, if
-  set to `unsafe-any-match`, uv will consider versions of a given package available across all index
-  URLs, rather than limiting its search to the first index URL that contains the package.
-- `UV_REQUIRE_HASHES`: Equivalent to the `--require-hashes` command-line argument. If set to `true`,
-  uv will require that all dependencies have a hash specified in the requirements file.
-- `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use this
-  file as the constraints file. Uses space-separated list of files.
-- `UV_BUILD_CONSTRAINT`: Equivalent to the `--build-constraint` command-line argument. If set, uv
-  will use this file as constraints for any source distribution builds. Uses space-separated list of
-  files.
-- `UV_OVERRIDE`: Equivalent to the `--override` command-line argument. If set, uv will use this file
-  as the overrides file. Uses space-separated list of files.
-- `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
-  a link mode.
-- `UV_NO_BUILD_ISOLATION`: Equivalent to the `--no-build-isolation` command-line argument. If set,
-  uv will skip isolation when building source distributions.
-- `UV_CUSTOM_COMPILE_COMMAND`: Used to override `uv` in the output header of the `requirements.txt`
-  files generated by `uv pip compile`. Intended for use-cases in which `uv pip compile` is called
-  from within a wrapper script, to include the name of the wrapper script in the output file.
-- `UV_KEYRING_PROVIDER`: Equivalent to the `--keyring-provider` command-line argument. If set, uv
-  will use this value as the keyring provider.
-- `UV_CONFIG_FILE`: Equivalent to the `--config-file` command-line argument. Expects a path to a
-  local `uv.toml` file to use as the configuration file.
-- `UV_NO_CONFIG`: Equivalent to the `--no-config` command-line argument. If set, uv will not read
-  any configuration files from the current directory, parent directories, or user configuration
-  directories.
-- `UV_CONCURRENT_DOWNLOADS`: Sets the maximum number of in-flight concurrent downloads that `uv`
-  will perform at any given time.
-- `UV_CONCURRENT_BUILDS`: Sets the maximum number of source distributions that `uv` will build
-  concurrently at any given time.
-- `UV_CONCURRENT_INSTALLS`: Used to control the number of threads used when installing and unzipping
-  packages.
-- `UV_EXCLUDE_NEWER`: Equivalent to the `--exclude-newer` command-line argument. If set, uv will
-  exclude distributions published after the specified date.
+-   `UV_INDEX_URL`: Equivalent to the `--index-url` command-line argument. If set, uv will use this
+    URL as the base index for searching for packages.
+-   `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv
+    will use this space-separated list of URLs as additional indexes when searching for packages.
+-   `UV_CACHE_DIR`: Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
+    directory for caching instead of the default cache directory.
+-   `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
+    cache for any operations.
+-   `UV_RESOLUTION`: Equivalent to the `--resolution` command-line argument. For example, if set to
+    `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
+-   `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. For example, if set to
+    `allow`, uv will allow pre-release versions for all dependencies.
+-   `UV_SYSTEM_PYTHON`: Equivalent to the `--system` command-line argument. If set to `true`, uv
+    will use the first Python interpreter found in the system `PATH`. WARNING:
+    `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) or containerized
+    environments and should be used with caution, as modifying the system Python can lead to
+    unexpected behavior.
+-   `UV_PYTHON`: Equivalent to the `--python` command-line argument. If set to a path, uv will use
+    this Python interpreter for all operations.
+-   `UV_BREAK_SYSTEM_PACKAGES`: Equivalent to the `--break-system-packages` command-line argument.
+    If set to `true`, uv will allow the installation of packages that conflict with system-installed
+    packages. WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integration
+    (CI) or containerized environments and should be used with caution, as modifying the system
+    Python can lead to unexpected behavior.
+-   `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv
+    will use the system's trust store instead of the bundled `webpki-roots` crate.
+-   `UV_INDEX_STRATEGY`: Equivalent to the `--index-strategy` command-line argument. For example, if
+    set to `unsafe-any-match`, uv will consider versions of a given package available across all
+    index URLs, rather than limiting its search to the first index URL that contains the package.
+-   `UV_REQUIRE_HASHES`: Equivalent to the `--require-hashes` command-line argument. If set to
+    `true`, uv will require that all dependencies have a hash specified in the requirements file.
+-   `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use
+    this file as the constraints file. Uses space-separated list of files.
+-   `UV_BUILD_CONSTRAINT`: Equivalent to the `--build-constraint` command-line argument. If set, uv
+    will use this file as constraints for any source distribution builds. Uses space-separated list
+    of files.
+-   `UV_OVERRIDE`: Equivalent to the `--override` command-line argument. If set, uv will use this
+    file as the overrides file. Uses space-separated list of files.
+-   `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this
+    as a link mode.
+-   `UV_NO_BUILD_ISOLATION`: Equivalent to the `--no-build-isolation` command-line argument. If set,
+    uv will skip isolation when building source distributions.
+-   `UV_CUSTOM_COMPILE_COMMAND`: Used to override `uv` in the output header of the
+    `requirements.txt` files generated by `uv pip compile`. Intended for use-cases in which
+    `uv pip compile` is called from within a wrapper script, to include the name of the wrapper
+    script in the output file.
+-   `UV_KEYRING_PROVIDER`: Equivalent to the `--keyring-provider` command-line argument. If set, uv
+    will use this value as the keyring provider.
+-   `UV_CONFIG_FILE`: Equivalent to the `--config-file` command-line argument. Expects a path to a
+    local `uv.toml` file to use as the configuration file.
+-   `UV_NO_CONFIG`: Equivalent to the `--no-config` command-line argument. If set, uv will not read
+    any configuration files from the current directory, parent directories, or user configuration
+    directories.
+-   `UV_CONCURRENT_DOWNLOADS`: Sets the maximum number of in-flight concurrent downloads that `uv`
+    will perform at any given time.
+-   `UV_CONCURRENT_BUILDS`: Sets the maximum number of source distributions that `uv` will build
+    concurrently at any given time.
+-   `UV_CONCURRENT_INSTALLS`: Used to control the number of threads used when installing and
+    unzipping packages.
+-   `UV_EXCLUDE_NEWER`: Equivalent to the `--exclude-newer` command-line argument. If set, uv will
+    exclude distributions published after the specified date.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
 In addition, uv respects the following environment variables:
 
-- `SSL_CERT_FILE`: If set, uv will use this file as the certificate bundle instead of the system's
-  trust store.
-- `SSL_CLIENT_CERT`: If set, uv will use this file for mTLS authentication. This should be a single
-  file containing both the certificate and the private key in PEM format.
-- `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
-  any filter compatible with the `tracing_subscriber` crate. For example, `RUST_LOG=trace` will
-  enable trace-level logging. See the
-  [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
-  for more.
-- `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: The proxy to use for all HTTP/HTTPS requests.
-- `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
-  for HTTP reads (default: 30 s).
-- `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`. See:
-  [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
-- `VIRTUAL_ENV`: Used to detect an activated virtual environment.
-- `CONDA_PREFIX`: Used to detect an activated Conda environment.
-- `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
-- `NU_VERSION`: Used to detect the use of NuShell.
-- `FISH_VERSION`: Used to detect the use of the Fish shell.
-- `BASH_VERSION`: Used to detect the use of the Bash shell.
-- `ZSH_VERSION`: Used to detect the use of the Zsh shell.
-- `MACOSX_DEPLOYMENT_TARGET`: Used with `--python-platform macos` and related variants to set the
-  deployment target (i.e., the minimum supported macOS version). Defaults to `12.0`, the
-  least-recent non-EOL macOS version at time of writing.
-- `NO_COLOR`: Disable colors. Takes precedence over `FORCE_COLOR`. See
-  [no-color.org](https://no-color.org).
-- `FORCE_COLOR`: Enforce colors regardless of TTY support. See
-  [force-color.org](https://force-color.org).
+-   `SSL_CERT_FILE`: If set, uv will use this file as the certificate bundle instead of the system's
+    trust store.
+-   `SSL_CLIENT_CERT`: If set, uv will use this file for mTLS authentication. This should be a
+    single file containing both the certificate and the private key in PEM format.
+-   `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
+    any filter compatible with the `tracing_subscriber` crate. For example, `RUST_LOG=trace` will
+    enable trace-level logging. See the
+    [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
+    for more.
+-   `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: The proxy to use for all HTTP/HTTPS requests.
+-   `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the
+    timeout for HTTP reads (default: 30 s).
+-   `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`. See:
+    [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
+-   `VIRTUAL_ENV`: Used to detect an activated virtual environment.
+-   `CONDA_PREFIX`: Used to detect an activated Conda environment.
+-   `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
+-   `NU_VERSION`: Used to detect the use of NuShell.
+-   `FISH_VERSION`: Used to detect the use of the Fish shell.
+-   `BASH_VERSION`: Used to detect the use of the Bash shell.
+-   `ZSH_VERSION`: Used to detect the use of the Zsh shell.
+-   `MACOSX_DEPLOYMENT_TARGET`: Used with `--python-platform macos` and related variants to set the
+    deployment target (i.e., the minimum supported macOS version). Defaults to `12.0`, the
+    least-recent non-EOL macOS version at time of writing.
+-   `NO_COLOR`: Disable colors. Takes precedence over `FORCE_COLOR`. See
+    [no-color.org](https://no-color.org).
+-   `FORCE_COLOR`: Enforce colors regardless of TTY support. See
+    [force-color.org](https://force-color.org).
 
 ## Versioning
 
@@ -678,9 +682,9 @@ for Windows support.
 
 uv is licensed under either of
 
-- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-  https://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT)
+-   Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+    https://www.apache.org/licenses/LICENSE-2.0)
+-   MIT license ([LICENSE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT)
 
 at your option.
 

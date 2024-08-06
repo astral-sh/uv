@@ -10,9 +10,9 @@ To compile requirements via pre-commit, add the following to the `.pre-commit-co
   # uv version.
   rev: 0.2.33
   hooks:
-    # Compile requirements
-    - id: pip-compile
-      args: [requirements.in, -o, requirements.txt]
+      # Compile requirements
+      - id: pip-compile
+        args: [requirements.in, -o, requirements.txt]
 ```
 
 To compile alternative files, modify `args` and `files`:
@@ -22,10 +22,10 @@ To compile alternative files, modify `args` and `files`:
   # uv version.
   rev: 0.2.33
   hooks:
-    # Compile requirements
-    - id: pip-compile
-      args: [requirements-dev.in, -o, requirements-dev.txt]
-      files: ^requirements-dev\.(in|txt)$
+      # Compile requirements
+      - id: pip-compile
+        args: [requirements-dev.in, -o, requirements-dev.txt]
+        files: ^requirements-dev\.(in|txt)$
 ```
 
 To run the hook over multiple files at the same time:
@@ -35,12 +35,12 @@ To run the hook over multiple files at the same time:
   # uv version.
   rev: 0.2.33
   hooks:
-    # Compile requirements
-    - id: pip-compile
-      name: pip-compile requirements.in
-      args: [requirements.in, -o, requirements.txt]
-    - id: pip-compile
-      name: pip-compile requirements-dev.in
-      args: [requirements-dev.in, -o, requirements-dev.txt]
-      files: ^requirements-dev\.(in|txt)$
+      # Compile requirements
+      - id: pip-compile
+        name: pip-compile requirements.in
+        args: [requirements.in, -o, requirements.txt]
+      - id: pip-compile
+        name: pip-compile requirements-dev.in
+        args: [requirements-dev.in, -o, requirements-dev.txt]
+        files: ^requirements-dev\.(in|txt)$
 ```

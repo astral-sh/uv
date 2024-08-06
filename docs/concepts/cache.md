@@ -7,15 +7,16 @@ been accessed in prior runs.
 
 The specifics of uv's caching semantics vary based on the nature of the dependency:
 
-- **For registry dependencies** (like those downloaded from PyPI), uv respects HTTP caching headers.
-- **For direct URL dependencies**, uv respects HTTP caching headers, and also caches based on the
-  URL itself.
-- **For Git dependencies**, uv caches based on the fully-resolved Git commit hash. As such,
-  `uv pip compile` will pin Git dependencies to a specific commit hash when writing the resolved
-  dependency set.
-- **For local dependencies**, uv caches based on the last-modified time of the source archive (i.e.,
-  the local `.whl` or `.tar.gz` file). For directories, uv caches based on the last-modified time of
-  the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
+-   **For registry dependencies** (like those downloaded from PyPI), uv respects HTTP caching
+    headers.
+-   **For direct URL dependencies**, uv respects HTTP caching headers, and also caches based on the
+    URL itself.
+-   **For Git dependencies**, uv caches based on the fully-resolved Git commit hash. As such,
+    `uv pip compile` will pin Git dependencies to a specific commit hash when writing the resolved
+    dependency set.
+-   **For local dependencies**, uv caches based on the last-modified time of the source archive
+    (i.e., the local `.whl` or `.tar.gz` file). For directories, uv caches based on the
+    last-modified time of the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
 
 It's safe to run multiple uv commands concurrently, even against the same virtual environment. uv's
 cache is designed to be thread-safe and append-only, and thus robust to multiple concurrent readers
@@ -27,21 +28,21 @@ are running, and _never_ safe to modify the cache directly (e.g., by removing a 
 
 If you're running into caching issues, uv includes a few escape hatches:
 
-- To force uv to revalidate cached data for all dependencies, run `uv pip install --refresh ...`.
-- To force uv to revalidate cached data for a specific dependency, run, e.g.,
-  `uv pip install --refresh-package flask ...`.
-- To force uv to ignore existing installed versions, run `uv pip install --reinstall ...`.
+-   To force uv to revalidate cached data for all dependencies, run `uv pip install --refresh ...`.
+-   To force uv to revalidate cached data for a specific dependency, run, e.g.,
+    `uv pip install --refresh-package flask ...`.
+-   To force uv to ignore existing installed versions, run `uv pip install --reinstall ...`.
 
 ## Clearing the cache
 
 uv provides a few different mechanisms for removing entries from the cache:
 
-- `uv cache clean` removes _all_ cache entries from the cache directory, clearing it out entirely.
-- `uv cache clean ruff` removes all cache entries for the `ruff` package, useful for invalidating
-  the cache for a single or finite set of packages.
-- `uv cache prune` removes all _unused_ cache entries. For example, the cache directory may contain
-  entries created in previous uv versions that are no longer necessary and can be safely removed.
-  `uv cache prune` is safe to run periodically, to keep the cache directory clean.
+-   `uv cache clean` removes _all_ cache entries from the cache directory, clearing it out entirely.
+-   `uv cache clean ruff` removes all cache entries for the `ruff` package, useful for invalidating
+    the cache for a single or finite set of packages.
+-   `uv cache prune` removes all _unused_ cache entries. For example, the cache directory may
+    contain entries created in previous uv versions that are no longer necessary and can be safely
+    removed. `uv cache prune` is safe to run periodically, to keep the cache directory clean.
 
 ## Caching in continuous integration
 

@@ -102,18 +102,18 @@ The documentation is divided into:
 1. `NO_COLOR` must be respected when using any colors or styling.
 1. `UV_NO_PROGRESS` must be respected when using progress-styling like bars or spinners.
 1. In general, use:
-   - Green for success.
-   - Red for error.
-   - Yellow for warning.
-   - Cyan for hints.
-   - Cyan for file paths.
-   - Cyan for important user-facing literals (e.g., a package name in a message).
-   - Green for commands.
+    - Green for success.
+    - Red for error.
+    - Yellow for warning.
+    - Cyan for hints.
+    - Cyan for file paths.
+    - Cyan for important user-facing literals (e.g., a package name in a message).
+    - Green for commands.
 
 ### Logging
 
 1. `warn`, `info`, `debug`, and `trace` logs are all shown with the `--verbose` flag.
-   - Note that the displayed level is controlled with `RUST_LOG`.
+    - Note that the displayed level is controlled with `RUST_LOG`.
 1. All logging should be to stderr.
 
 ### Output
@@ -123,8 +123,8 @@ The documentation is divided into:
 ### Warnings
 
 1. `warn_user` and `warn_user_once` are shown without the `--verbose `flag.
-   - These methods should be preferred over tracing warnings when the warning is actionable.
-   - Deprecation warnings should use these methods.
+    - These methods should be preferred over tracing warnings when the warning is actionable.
+    - Deprecation warnings should use these methods.
 1. Deprecation warnings must be actionable.
 
 ### Hints

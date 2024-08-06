@@ -16,18 +16,20 @@ An extremely fast Python package and project manager, written in Rust.
 
 ## Highlights
 
-- 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
-- ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
-- 🐍 [Installs and manages](./guides/install-python.md) Python versions.
-- 🛠️ [Runs and installs](./guides/tools.md) Python applications.
-- ❇️ [Runs scripts](./guides/scripts.md), with support for
-  [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
-- 🗂️ Provides [comprehensive project management](./guides/projects.md), with a
-  [universal lockfile](./concepts/projects.md#lockfile).
-- 🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
-- 💾 Disk-space efficient, with a [global cache](./concepts/cache.md) for dependency deduplication.
-- ⏬ Installable without Rust or Python via `curl` or `pip`.
-- 🖥️ Supports macOS, Linux, and Windows.
+-   🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and
+    more.
+-   ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
+-   🐍 [Installs and manages](./guides/install-python.md) Python versions.
+-   🛠️ [Runs and installs](./guides/tools.md) Python applications.
+-   ❇️ [Runs scripts](./guides/scripts.md), with support for
+    [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
+-   🗂️ Provides [comprehensive project management](./guides/projects.md), with a
+    [universal lockfile](./concepts/projects.md#lockfile).
+-   🏢 Supports Cargo-style [workspaces](./concepts/workspaces.md) for scalable projects.
+-   💾 Disk-space efficient, with a [global cache](./concepts/cache.md) for dependency
+    deduplication.
+-   ⏬ Installable without Rust or Python via `curl` or `pip`.
+-   🖥️ Supports macOS, Linux, and Windows.
 
 uv is backed by [Astral](https://astral.sh), the creators of
 [Ruff](https://github.com/astral-sh/ruff).

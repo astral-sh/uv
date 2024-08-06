@@ -31,19 +31,19 @@ create the virtual environment with it.
 
 The following Python version request formats are supported:
 
-- `<version>` e.g. `3`, `3.12`, `3.12.3`
-- `<version-specifier>` e.g. `>=3.12,<3.13`
-- `<implementation>` e.g. `cpython` or `cp`
-- `<implementation>@<version>` e.g. `cpython@3.12`
-- `<implementation><version>` e.g. `cpython3.12` or `cp312`
-- `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
-- `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
+-   `<version>` e.g. `3`, `3.12`, `3.12.3`
+-   `<version-specifier>` e.g. `>=3.12,<3.13`
+-   `<implementation>` e.g. `cpython` or `cp`
+-   `<implementation>@<version>` e.g. `cpython@3.12`
+-   `<implementation><version>` e.g. `cpython3.12` or `cp312`
+-   `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
+-   `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
 
 Additionally, a specific system Python interpreter can be requested with:
 
-- `<executable-path>` e.g. `/opt/homebrew/bin/python3`
-- `<executable-name>` e.g. `mypython3`
-- `<install-dir>` e.g. `/some/environment/`
+-   `<executable-path>` e.g. `/opt/homebrew/bin/python3`
+-   `<executable-name>` e.g. `mypython3`
+-   `<install-dir>` e.g. `/some/environment/`
 
 By default, uv will automatically download Python versions if they cannot be found on the system.
 This behavior can be
@@ -138,11 +138,11 @@ $ uv python list --only-installed
 
 When searching for a Python version, the following locations are checked:
 
-- Managed Python installations in the `UV_PYTHON_INSTALL_DIR`.
-- A Python interpreter on the `PATH` as `python`, `python3`, or `python3.x` on macOS and Linux, or
-  `python.exe` on Windows.
-- On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
-  version.
+-   Managed Python installations in the `UV_PYTHON_INSTALL_DIR`.
+-   A Python interpreter on the `PATH` as `python`, `python3`, or `python3.x` on macOS and Linux, or
+    `python.exe` on Windows.
+-   On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
+    version.
 
 When performing discovery, non-executable files will be ignored. Each discovered executable is
 queried for metadata to ensure it meets the [requested Python version](#requesting-a-version). If
@@ -169,9 +169,9 @@ system Python installations are still preferred over downloading a managed Pytho
 
 The following alternative options are available:
 
-- `only-managed`: Only use managed Python installations; never use system Python installations
-- `system`: Prefer system Python installations over managed Python installations
-- `only-system`: Only use system Python installations; never use managed Python installations
+-   `only-managed`: Only use managed Python installations; never use system Python installations
+-   `system`: Prefer system Python installations over managed Python installations
+-   `only-system`: Only use system Python installations; never use managed Python installations
 
 These options allow disabling uv's managed Python versions entirely or always using them and
 ignoring any existing system installations.
@@ -188,9 +188,9 @@ supported, uv will fail to discover its interpreter.
 
 The implementations may be requested with either the long or short name:
 
-- CPython: `cpython`, `cp`
-- PyPy: `pypy`, `pp`
-- GraalPy: `graalpy`, `gp`
+-   CPython: `cpython`, `cp`
+-   PyPy: `pypy`, `pp`
+-   GraalPy: `graalpy`, `gp`
 
 Implementation name requests are not case sensitive.
 

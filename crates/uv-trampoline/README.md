@@ -88,12 +88,12 @@ Basically, this looks up `python.exe` (for console programs) and invokes
 
 The intended use is:
 
-- take your Python script, name it `__main__.py`, and pack it into a `.zip` file. Then concatenate
-  that `.zip` file onto the end of one of our prebuilt `.exe`s.
-- After the zip file content, write the path to the Python executable that the script uses to run
-  the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit little-endian
-  integer.
-- At the very end, write the magic number `UVUV` in bytes.
+-   take your Python script, name it `__main__.py`, and pack it into a `.zip` file. Then concatenate
+    that `.zip` file onto the end of one of our prebuilt `.exe`s.
+-   After the zip file content, write the path to the Python executable that the script uses to run
+    the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit
+    little-endian integer.
+-   At the very end, write the magic number `UVUV` in bytes.
 
 |       `launcher.exe`        |
 | :-------------------------: |
@@ -126,24 +126,25 @@ In order to minimize binary size, this uses, `panic="abort"`, and carefully avoi
 Of course the tradeoff is that this is an awkward super-limited environment. No C runtime and
 limited platform APIs... you don't even panicking support by default. To work around this:
 
-- We use `windows` to access Win32 APIs directly. Who needs a C runtime? Though uh, this does mean
-  that literally all of our code is `unsafe`. Sorry!
+-   We use `windows` to access Win32 APIs directly. Who needs a C runtime? Though uh, this does mean
+    that literally all of our code is `unsafe`. Sorry!
 
-- `diagnostics.rs` uses `ufmt` and some cute Windows tricks to get a convenient version of
-  `eprintln!` that works without `core::fmt`, and automatically prints to either the console if
-  available or pops up a message box if not.
+-   `diagnostics.rs` uses `ufmt` and some cute Windows tricks to get a convenient version of
+    `eprintln!` that works without `core::fmt`, and automatically prints to either the console if
+    available or pops up a message box if not.
 
-- All the meat is in `bounce.rs`.
+-   All the meat is in `bounce.rs`.
 
 Miscellaneous tips:
 
-- `cargo-bloat` is a useful tool for checking what code is ending up in the final binary and how
-  much space it's taking. (It makes it very obvious whether you've pulled in `core::fmt`!)
+-   `cargo-bloat` is a useful tool for checking what code is ending up in the final binary and how
+    much space it's taking. (It makes it very obvious whether you've pulled in `core::fmt`!)
 
-- Lots of Rust built-in panicking checks will pull in `core::fmt`, e.g., if you ever use `.unwrap()`
-  then suddenly our binaries double in size, because the `if foo.is_none() { panic!(...) }` that's
-  hidden inside `.unwrap()` will invoke `core::fmt`, even if the unwrap will actually never fail.
-  `.unwrap_unchecked()` avoids this. Similar for `slice[idx]` vs `slice.get_unchecked(idx)`.
+-   Lots of Rust built-in panicking checks will pull in `core::fmt`, e.g., if you ever use
+    `.unwrap()` then suddenly our binaries double in size, because the
+    `if foo.is_none() { panic!(...) }` that's hidden inside `.unwrap()` will invoke `core::fmt`,
+    even if the unwrap will actually never fail. `.unwrap_unchecked()` avoids this. Similar for
+    `slice[idx]` vs `slice.get_unchecked(idx)`.
 
 ### How do you build this stupid thing?
 

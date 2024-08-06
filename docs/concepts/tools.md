@@ -102,9 +102,9 @@ notably including Windows and macOS — there is no clear alternative location t
 these platforms. The installation directory is determined from the first available environment
 variable:
 
-- `$XDG_BIN_HOME`
-- `$XDG_DATA_HOME/../bin`
-- `$HOME/.local/bin`
+-   `$XDG_BIN_HOME`
+-   `$XDG_DATA_HOME/../bin`
+-   `$HOME/.local/bin`
 
 Executables provided by dependencies of tool packages are not installed.
 
@@ -130,8 +130,8 @@ $ uv run --no-project --with <name> -- <name>
 
 However, there are a couple notable differences when using uv's tool interface:
 
-- The `--with` option is not needed — the required package is inferred from the command name.
-- The temporary environment is cached in a dedicated location.
-- The `--no-project` flag is not needed — tools are always run isolated from the project.
-- If a tool is already installed, `uv tool run` will use the installed version but `uv run` will
-  not.
+-   The `--with` option is not needed — the required package is inferred from the command name.
+-   The temporary environment is cached in a dedicated location.
+-   The `--no-project` flag is not needed — tools are always run isolated from the project.
+-   If a tool is already installed, `uv tool run` will use the installed version but `uv run` will
+    not.

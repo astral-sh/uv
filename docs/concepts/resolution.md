@@ -7,12 +7,12 @@ package versions that fulfil your requirements and the requirements of all inclu
 
 Imagine you have the following dependency tree:
 
-- Your project depends on `foo>=1,<3` and `bar>=1,<3`.
-- `foo` has two versions, 1.0.0 and 2.0.0. `foo` 2.0.0 depends on `lib==2.0.0`, `foo` 1.0.0 has no
-  dependencies.
-- `bar` has two versions, 1.0.0 and 2.0.0. `bar` 2.0.0 depends on `lib==1.0.0`, `bar` 1.0.0 has no
-  dependencies.
-- `lib` has two versions, 1.0.0 and 2.0.0. Both versions have no dependencies.
+-   Your project depends on `foo>=1,<3` and `bar>=1,<3`.
+-   `foo` has two versions, 1.0.0 and 2.0.0. `foo` 2.0.0 depends on `lib==2.0.0`, `foo` 1.0.0 has no
+    dependencies.
+-   `bar` has two versions, 1.0.0 and 2.0.0. `bar` 2.0.0 depends on `lib==1.0.0`, `bar` 1.0.0 has no
+    dependencies.
+-   `lib` has two versions, 1.0.0 and 2.0.0. Both versions have no dependencies.
 
 We can't install both `foo` 2.0.0 and `bar` 2.0.0 because they conflict on the version of `lib`, so
 the resolver will pick either `foo` 1.0.0 or `bar` 1.0.0. Both are valid solutions, at the resolvers

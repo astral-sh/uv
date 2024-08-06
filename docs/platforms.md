@@ -2,10 +2,10 @@
 
 uv has Tier 1 support for the following platforms:
 
-- macOS (Apple Silicon)
-- macOS (x86_64)
-- Linux (x86_64)
-- Windows (x86_64)
+-   macOS (Apple Silicon)
+-   macOS (x86_64)
+-   Linux (x86_64)
+-   Windows (x86_64)
 
 uv is continuously built, tested, and developed against its Tier 1 platforms. Inspired by the Rust
 project, Tier 1 can be thought of as
@@ -15,12 +15,12 @@ uv has Tier 2 support
 (["guaranteed to build"](https://doc.rust-lang.org/beta/rustc/platform-support.html)) for the
 following platforms:
 
-- Linux (PPC64)
-- Linux (PPC64LE)
-- Linux (aarch64)
-- Linux (armv7)
-- Linux (i686)
-- Linux (s390x)
+-   Linux (PPC64)
+-   Linux (PPC64LE)
+-   Linux (aarch64)
+-   Linux (armv7)
+-   Linux (i686)
+-   Linux (s390x)
 
 uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv/) for its Tier 1 and Tier 2
 platforms. However, while Tier 2 platforms are continuously built, they are not continuously tested

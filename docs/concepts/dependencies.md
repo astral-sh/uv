@@ -65,10 +65,10 @@ stands-compliant `project.dependencies` table.
 During development, a project may rely on a package that isn't available on PyPI. The following
 additional sources are supported by uv:
 
-- Git: A Git repository.
-- URL: A remote wheel or source distribution.
-- Path: A local wheel, source distribution, or project directory.
-- Workspace: A member of the current workspace.
+-   Git: A Git repository.
+-   URL: A remote wheel or source distribution.
+-   Path: A local wheel, source distribution, or project directory.
+-   Workspace: A member of the current workspace.
 
 Only a single source may be defined for each dependency.
 
@@ -282,10 +282,10 @@ $ uv add ruff --dev
 [PEP 508](https://peps.python.org/pep-0508/) defines a syntax for dependency specification. It is
 composed of, in order:
 
-- The dependency name
-- The extras you want (optional)
-- The version specifier
-- An environment marker (optional)
+-   The dependency name
+-   The extras you want (optional)
+-   The version specifier
+-   An environment marker (optional)
 
 The version specifiers are comma separated and added together, e.g., `foo >=1.2.3,<2,!=1.4.0` is
 interpreted as "a version of `foo` that's at least 1.2.3, but less than 2, and not 1.4.0".

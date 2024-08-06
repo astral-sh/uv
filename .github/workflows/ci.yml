@@ -59,7 +59,7 @@ jobs:
       - name: "Prettier"
         run: |
           npx prettier --check "**/*.{json5,yaml,yml}"
-          npx prettier --prose-wrap always --check "**/*.md"
+          npx prettier --prose-wrap always --tab-width 4 --check "**/*.md"
 
       - name: "README check"
         run: python scripts/transform_readme.py --target pypi

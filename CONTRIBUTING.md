@@ -141,13 +141,13 @@ To preview any changes to the documentation locally:
 
 1. Run the development server with:
 
-   ```shell
-   # For contributors.
-   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.public.yml
+    ```shell
+    # For contributors.
+    uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.public.yml
 
-   # For members of the Astral org, which has access to MkDocs Insiders via sponsorship.
-   uvx --with-requirements docs/requirements-insiders.txt -- mkdocs serve -f mkdocs.insiders.yml
-   ```
+    # For members of the Astral org, which has access to MkDocs Insiders via sponsorship.
+    uvx --with-requirements docs/requirements-insiders.txt -- mkdocs serve -f mkdocs.insiders.yml
+    ```
 
 The documentation should then be available locally at
 [http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
@@ -167,7 +167,7 @@ Cloudflare Pages.
 After making changes to the documentation, format the markdown files with:
 
 ```shell
-npx prettier --prose-wrap always --write "**/*.md"
+npx prettier --prose-wrap always --tab-width 4 --write "**/*.md"
 ```
 
 ## Releases

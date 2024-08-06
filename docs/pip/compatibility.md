@@ -97,11 +97,11 @@ the specifier, since it was provided as a direct dependency.
 
 As compared to pip, the main differences in observed behavior are as follows:
 
-- In general, local versions must be provided as direct dependencies. Resolution may succeed for
-  transitive dependencies that request a non-local version, but this is not guaranteed.
-- If _only_ local versions exist for a package `foo` at a given version (e.g., `1.2.3+local` exists,
-  but `1.2.3` does not), `uv pip install foo==1.2.3` will fail, while `pip install foo==1.2.3` will
-  resolve to an arbitrary local version.
+-   In general, local versions must be provided as direct dependencies. Resolution may succeed for
+    transitive dependencies that request a non-local version, but this is not guaranteed.
+-   If _only_ local versions exist for a package `foo` at a given version (e.g., `1.2.3+local`
+    exists, but `1.2.3` does not), `uv pip install foo==1.2.3` will fail, while
+    `pip install foo==1.2.3` will resolve to an arbitrary local version.
 
 ## Packages that exist on multiple indexes
 
@@ -137,13 +137,13 @@ As of v0.1.39, users can opt in to `pip`-style behavior for multiple indexes via
 `--index-strategy` command-line option, or the `UV_INDEX_STRATEGY` environment variable, which
 supports the following values:
 
-- `first-match` (default): Search for each package across all indexes, limiting the candidate
-  versions to those present in the first index that contains the package, prioritizing the
-  `--extra-index-url` indexes over the default index URL.
-- `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
-  a compatible version, even if newer versions are available on other indexes.
-- `unsafe-best-match`: Search for each package across all indexes, and select the best version from
-  the combined set of candidate versions.
+-   `first-match` (default): Search for each package across all indexes, limiting the candidate
+    versions to those present in the first index that contains the package, prioritizing the
+    `--extra-index-url` indexes over the default index URL.
+-   `unsafe-first-match`: Search for each package across all indexes, but prefer the first index
+    with a compatible version, even if newer versions are available on other indexes.
+-   `unsafe-best-match`: Search for each package across all indexes, and select the best version
+    from the combined set of candidate versions.
 
 While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users to the risk of
 "dependency confusion" attacks.
@@ -277,12 +277,12 @@ too loose, and that the user should consider tightening them. For example, in th
 
 At present, `uv pip check` will surface the following diagnostics:
 
-- A package has no `METADATA` file, or the `METADATA` file can't be parsed.
-- A package has a `Requires-Python` that doesn't match the Python version of the running
-  interpreter.
-- A package has a dependency on a package that isn't installed.
-- A package has a dependency on a package that's installed, but at an incompatible version.
-- Multiple versions of a package are installed in the virtual environment.
+-   A package has no `METADATA` file, or the `METADATA` file can't be parsed.
+-   A package has a `Requires-Python` that doesn't match the Python version of the running
+    interpreter.
+-   A package has a dependency on a package that isn't installed.
+-   A package has a dependency on a package that's installed, but at an incompatible version.
+-   Multiple versions of a package are installed in the virtual environment.
 
 In some cases, `uv pip check` will surface diagnostics that `pip check` does not, and vice versa.
 For example, unlike `uv pip check`, `pip check` will _not_ warn when multiple versions of a package
@@ -343,9 +343,9 @@ does support a large subset.
 Missing options and subcommands are prioritized based on user demand and the complexity of the
 implementation, and tend to be tracked in individual issues. For example:
 
-- [`--prefix`](https://github.com/astral-sh/uv/issues/3076)
-- [`--trusted-host`](https://github.com/astral-sh/uv/issues/1339)
-- [`--user`](https://github.com/astral-sh/uv/issues/2077)
+-   [`--prefix`](https://github.com/astral-sh/uv/issues/3076)
+-   [`--trusted-host`](https://github.com/astral-sh/uv/issues/1339)
+-   [`--user`](https://github.com/astral-sh/uv/issues/2077)
 
 If you encounter a missing option or subcommand, please search the issue tracker to see if it has
 already been reported, and if not, consider opening a new issue. Feel free to upvote any existing
