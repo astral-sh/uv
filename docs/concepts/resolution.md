@@ -235,18 +235,20 @@ available versions for a transitive dependency without adding a direct requireme
 
 ## Dependency overrides
 
-Sometimes, the requirements defined by a dependency are too strict, and a working version of a
-package is not allowed (often, causing resolution to fail). uv allows overriding requirements
-defined by dependencies to unblock resolution.
+Overrides allow bypassing failing or undesirable resolutions by overriding the declared dependencies
+of a package. Overrides are a useful last resort for cases in which the you know that a dependency
+is compatible with a newer version of a package than it declares, but the it has not yet been
+updated to declare that compatibility.
 
 For example, if a transitive dependency declares the requirement `pydantic>=1.0,<2.0`, but _works_
 with `pydantic>=2.0`, the user can override the declared dependency with `pydantic>=1.0,<3` to allow
 the resolver to installer a newer version of `pydantic`.
 
-Constraints and direct dependency declarations will _not_ result in the same behavior as an
-override, as they can only add _additional_ constraints to the allowed version instead of
-_replacing_ existing constraints. As with constraints, overrides do not _add_ a dependency on the
-package and only take affect if the package is requested in a direct or transitive dependency.
+While constraints and dependencies are purely additive, and thus cannot expand the set of acceptable
+versions for a package, overrides can expand the set of acceptable versions for a package, providing
+an escape hatch for erroneous upper version bounds. As with constraints, overrides do not add a
+dependency on the package and only take affect if the package is requested in a direct or transitive
+dependency.
 
 In a `pyproject.toml`, use `tool.uv.override-dependencies` to define a list of overrides. In the
 pip-compatible interface, the `--override` option can be used to pass files with the same format as
