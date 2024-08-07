@@ -207,6 +207,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
+    default-source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
     environment-markers = [
         "python_version < '3.12'",
@@ -221,15 +222,14 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "0.1.0"
     source = { editable = "." }
     dependencies = [
-        { name = "anyio", version = "4.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
-        { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.12'" },
+        { name = "anyio", version = "4.2.0", marker = "python_version < '3.12'" },
+        { name = "anyio", version = "4.3.0", marker = "python_version >= '3.12'" },
         { name = "b" },
     ]
 
     [[distribution]]
     name = "anyio"
     version = "4.2.0"
-    source = { registry = "https://pypi.org/simple" }
     environment-markers = [
         "python_version < '3.12'",
     ]
@@ -245,7 +245,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
     [[distribution]]
     name = "anyio"
     version = "4.3.0"
-    source = { registry = "https://pypi.org/simple" }
     environment-markers = [
         "python_version >= '3.12'",
     ]
@@ -286,7 +285,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
     [[distribution]]
     name = "idna"
     version = "3.6"
-    source = { registry = "https://pypi.org/simple" }
     sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
     wheels = [
         { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -317,7 +315,6 @@ fn root_package_splits_transitive_too() -> Result<()> {
     [[distribution]]
     name = "sniffio"
     version = "1.3.1"
-    source = { registry = "https://pypi.org/simple" }
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
     wheels = [
         { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -383,6 +380,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
+    default-source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
     environment-markers = [
         "python_version < '3.12'",
@@ -397,8 +395,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "0.1.0"
     source = { editable = "." }
     dependencies = [
-        { name = "anyio", version = "4.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
-        { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.12'" },
+        { name = "anyio", version = "4.2.0", marker = "python_version < '3.12'" },
+        { name = "anyio", version = "4.3.0", marker = "python_version >= '3.12'" },
         { name = "b1", marker = "python_version < '3.12'" },
         { name = "b2", marker = "python_version >= '3.12'" },
     ]
@@ -406,7 +404,6 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     [[distribution]]
     name = "anyio"
     version = "4.2.0"
-    source = { registry = "https://pypi.org/simple" }
     environment-markers = [
         "python_version < '3.12'",
     ]
@@ -422,7 +419,6 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     [[distribution]]
     name = "anyio"
     version = "4.3.0"
-    source = { registry = "https://pypi.org/simple" }
     environment-markers = [
         "python_version >= '3.12'",
     ]
@@ -440,7 +436,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "b1" }
     dependencies = [
-        { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
+        { name = "iniconfig", version = "1.1.1", marker = "python_version < '3.12'" },
     ]
 
     [[distribution]]
@@ -448,13 +444,12 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "b2" }
     dependencies = [
-        { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.12'" },
+        { name = "iniconfig", version = "2.0.0", marker = "python_version >= '3.12'" },
     ]
 
     [[distribution]]
     name = "idna"
     version = "3.6"
-    source = { registry = "https://pypi.org/simple" }
     sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
     wheels = [
         { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -463,7 +458,6 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     [[distribution]]
     name = "iniconfig"
     version = "1.1.1"
-    source = { registry = "https://pypi.org/simple" }
     environment-markers = [
         "python_version < '3.12'",
     ]
@@ -475,7 +469,6 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     [[distribution]]
     name = "iniconfig"
     version = "2.0.0"
-    source = { registry = "https://pypi.org/simple" }
     environment-markers = [
         "python_version >= '3.12'",
     ]
@@ -487,7 +480,6 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     [[distribution]]
     name = "sniffio"
     version = "1.3.1"
-    source = { registry = "https://pypi.org/simple" }
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
     wheels = [
         { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
@@ -530,6 +522,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
+    default-source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
     environment-markers = [
         "python_version < '3.12'",
@@ -544,14 +537,13 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     version = "0.1.0"
     source = { editable = "." }
     dependencies = [
-        { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
+        { name = "iniconfig", version = "1.1.1", marker = "python_version < '3.12'" },
         { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_version >= '3.12'" },
     ]
 
     [[distribution]]
     name = "iniconfig"
     version = "1.1.1"
-    source = { registry = "https://pypi.org/simple" }
     environment-markers = [
         "python_version < '3.12'",
     ]
@@ -609,6 +601,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
+    default-source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
     environment-markers = [
         "python_version < '3.12'",
@@ -730,6 +723,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
+    default-source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
 
     [options]

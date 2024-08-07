@@ -7,6 +7,7 @@ Ok(
         version: 1,
         fork_markers: None,
         requires_python: None,
+        default_source: None,
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,

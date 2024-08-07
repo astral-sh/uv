@@ -571,7 +571,10 @@ async fn do_lock(
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    Ok(Lock::from_resolution_graph(&resolution)?)
+    Ok(Lock::from_resolution_graph(
+        &resolution,
+        index_locations.index(),
+    )?)
 }
 
 /// Write the lockfile to disk.
