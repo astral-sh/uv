@@ -69,6 +69,8 @@ fn add_registry() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -222,6 +224,8 @@ fn add_git() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -427,6 +431,8 @@ fn add_git_raw() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -581,6 +587,8 @@ fn add_unnamed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -674,6 +682,8 @@ fn add_remove_dev() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -790,6 +800,8 @@ fn add_remove_dev() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -875,6 +887,8 @@ fn add_remove_optional() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -992,6 +1006,8 @@ fn add_remove_optional() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1116,6 +1132,8 @@ fn add_remove_workspace() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1189,6 +1207,8 @@ fn add_remove_workspace() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1298,6 +1318,8 @@ fn add_workspace_editable() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1493,6 +1515,8 @@ fn update() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1760,6 +1784,8 @@ fn add_no_clean() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1892,6 +1918,8 @@ fn remove_registry() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -2462,6 +2490,8 @@ fn add_lower_bound_optional() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -2667,6 +2697,8 @@ fn add_virtual() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]

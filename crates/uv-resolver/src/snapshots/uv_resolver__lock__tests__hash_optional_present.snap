@@ -7,9 +7,11 @@ Ok(
         version: 1,
         fork_markers: None,
         requires_python: None,
-        resolution_mode: Highest,
-        prerelease_mode: IfNecessaryOrExplicit,
-        exclude_newer: None,
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            exclude_newer: None,
+        },
         distributions: [
             Distribution {
                 id: DistributionId {

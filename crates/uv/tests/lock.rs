@@ -66,6 +66,8 @@ fn lock_wheel_registry() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -238,6 +240,8 @@ fn lock_sdist_git() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -310,6 +314,8 @@ fn lock_wheel_url() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -409,6 +415,8 @@ fn lock_sdist_url() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -509,6 +517,8 @@ fn lock_project_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -735,6 +745,8 @@ fn lock_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -922,6 +934,8 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -1173,6 +1187,8 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -1343,6 +1359,8 @@ fn lock_upgrade_log() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -1419,6 +1437,8 @@ fn lock_upgrade_log() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1504,6 +1524,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
                 "sys_platform == 'win32'",
                 "sys_platform != 'win32'",
             ]
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -1584,6 +1606,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             "sys_platform == 'win32'",
             "sys_platform != 'win32'",
         ]
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1654,6 +1678,8 @@ fn lock_preference() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -1710,6 +1736,8 @@ fn lock_preference() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1752,6 +1780,8 @@ fn lock_preference() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1814,6 +1844,8 @@ fn lock_git_sha() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -1871,6 +1903,8 @@ fn lock_git_sha() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -1912,6 +1946,8 @@ fn lock_git_sha() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2011,6 +2047,8 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2160,6 +2198,8 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7.9"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2299,6 +2339,8 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2429,6 +2471,8 @@ fn lock_requires_python_wheels() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12, <3.13"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2499,6 +2543,8 @@ fn lock_requires_python_wheels() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2594,6 +2640,8 @@ fn lock_requires_python_star() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2704,6 +2752,8 @@ fn lock_requires_python_pre() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2813,6 +2863,8 @@ fn lock_requires_python_unbounded() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = "<=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2900,6 +2952,8 @@ fn lock_python_version_marker_complement() -> Result<()> {
                 "python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10'",
                 "python_full_version > '3.10' and python_version > '3.10'",
             ]
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -2985,6 +3039,8 @@ fn lock_dev() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -3086,6 +3142,8 @@ fn lock_conditional_unconditional() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -3148,6 +3206,8 @@ fn lock_multiple_markers() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -3250,6 +3310,8 @@ fn relative_and_absolute_paths() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.13"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -3314,6 +3376,8 @@ fn lock_cycles() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -3502,6 +3566,8 @@ fn lock_new_extras() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -3612,6 +3678,8 @@ fn lock_new_extras() -> Result<()> {
             lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -3829,6 +3897,8 @@ fn lock_resolution_mode() -> Result<()> {
             lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -3906,6 +3976,8 @@ fn lock_resolution_mode() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         resolution-mode = "lowest-direct"
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
@@ -4057,6 +4129,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin'",
         ]
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -4238,6 +4312,8 @@ fn lock_exclusion() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -4341,6 +4417,8 @@ fn lock_dev_transitive() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -4428,6 +4506,8 @@ fn lock_redact() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -4546,6 +4626,8 @@ fn lock_no_sources() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -4600,6 +4682,8 @@ fn lock_no_sources() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]

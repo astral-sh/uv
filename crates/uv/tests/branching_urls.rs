@@ -212,6 +212,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
         "python_version < '3.12'",
         "python_version >= '3.12'",
     ]
+
+    [options]
     exclude-newer = "2024-03-25 00:00:00 UTC"
 
     [[distribution]]
@@ -386,6 +388,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
         "python_version < '3.12'",
         "python_version >= '3.12'",
     ]
+
+    [options]
     exclude-newer = "2024-03-25 00:00:00 UTC"
 
     [[distribution]]
@@ -531,6 +535,8 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
         "python_version < '3.12'",
         "python_version >= '3.12'",
     ]
+
+    [options]
     exclude-newer = "2024-03-25 00:00:00 UTC"
 
     [[distribution]]
@@ -608,6 +614,8 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
         "python_version < '3.12'",
         "python_version >= '3.12'",
     ]
+
+    [options]
     exclude-newer = "2024-03-25 00:00:00 UTC"
 
     [[distribution]]
@@ -723,6 +731,8 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
     requires-python = ">=3.11, <3.13"
+
+    [options]
     exclude-newer = "2024-03-25 00:00:00 UTC"
 
     [[distribution]]

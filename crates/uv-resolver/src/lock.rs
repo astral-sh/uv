@@ -59,12 +59,8 @@ pub struct Lock {
     fork_markers: Option<BTreeSet<MarkerTree>>,
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
-    /// The [`ResolutionMode`] used to generate this lock.
-    resolution_mode: ResolutionMode,
-    /// The [`PrereleaseMode`] used to generate this lock.
-    prerelease_mode: PrereleaseMode,
-    /// The [`ExcludeNewer`] used to generate this lock.
-    exclude_newer: Option<ExcludeNewer>,
+    /// We discard the lockfile if these options match.
+    options: ResolverOptions,
     /// The actual locked version and their metadata.
     distributions: Vec<Distribution>,
     /// A map from distribution ID to index in `distributions`.
@@ -161,14 +157,16 @@ impl Lock {
 
         let distributions = locked_dists.into_values().collect();
         let requires_python = graph.requires_python.clone();
-        let options = graph.options;
+        let options = ResolverOptions {
+            resolution_mode: graph.options.resolution_mode,
+            prerelease_mode: graph.options.prerelease_mode,
+            exclude_newer: graph.options.exclude_newer,
+        };
         let lock = Self::new(
             VERSION,
             distributions,
             requires_python,
-            options.resolution_mode,
-            options.prerelease_mode,
-            options.exclude_newer,
+            options,
             graph.fork_markers.clone(),
         )?;
         Ok(lock)
@@ -179,9 +177,7 @@ impl Lock {
         version: u32,
         mut distributions: Vec<Distribution>,
         requires_python: Option<RequiresPython>,
-        resolution_mode: ResolutionMode,
-        prerelease_mode: PrereleaseMode,
-        exclude_newer: Option<ExcludeNewer>,
+        options: ResolverOptions,
         fork_markers: Option<BTreeSet<MarkerTree>>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each distribution in a canonical order and
@@ -338,9 +334,7 @@ impl Lock {
             version,
             fork_markers,
             requires_python,
-            resolution_mode,
-            prerelease_mode,
-            exclude_newer,
+            options,
             distributions,
             by_id,
         })
@@ -363,17 +357,17 @@ impl Lock {
 
     /// Returns the resolution mode used to generate this lock.
     pub fn resolution_mode(&self) -> ResolutionMode {
-        self.resolution_mode
+        self.options.resolution_mode
     }
 
     /// Returns the pre-release mode used to generate this lock.
     pub fn prerelease_mode(&self) -> PrereleaseMode {
-        self.prerelease_mode
+        self.options.prerelease_mode
     }
 
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
-        self.exclude_newer
+        self.options.exclude_newer
     }
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
@@ -491,14 +485,25 @@ impl Lock {
         // Write the settings that were used to generate the resolution.
         // This enables us to invalidate the lockfile if the user changes
         // their settings.
-        if self.resolution_mode != ResolutionMode::default() {
-            doc.insert("resolution-mode", value(self.resolution_mode.to_string()));
-        }
-        if self.prerelease_mode != PrereleaseMode::default() {
-            doc.insert("prerelease-mode", value(self.prerelease_mode.to_string()));
-        }
-        if let Some(exclude_newer) = self.exclude_newer {
-            doc.insert("exclude-newer", value(exclude_newer.to_string()));
+        if self.options != ResolverOptions::default() {
+            let mut options_table = Table::new();
+
+            if self.options.resolution_mode != ResolutionMode::default() {
+                options_table.insert(
+                    "resolution-mode",
+                    value(self.options.resolution_mode.to_string()),
+                );
+            }
+            if self.options.prerelease_mode != PrereleaseMode::default() {
+                options_table.insert(
+                    "prerelease-mode",
+                    value(self.options.prerelease_mode.to_string()),
+                );
+            }
+            if let Some(exclude_newer) = self.options.exclude_newer {
+                options_table.insert("exclude-newer", value(exclude_newer.to_string()));
+            }
+            doc.insert("options", Item::Table(options_table));
         }
 
         // Count the number of distributions for each package name. When
@@ -603,6 +608,20 @@ impl Lock {
     }
 }
 
+/// We discard the lockfile if these options match.
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+struct ResolverOptions {
+    /// The [`ResolutionMode`] used to generate this lock.
+    #[serde(default)]
+    resolution_mode: ResolutionMode,
+    /// The [`PrereleaseMode`] used to generate this lock.
+    #[serde(default)]
+    prerelease_mode: PrereleaseMode,
+    /// The [`ExcludeNewer`] used to generate this lock.
+    exclude_newer: Option<ExcludeNewer>,
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
@@ -613,12 +632,9 @@ struct LockWire {
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "environment-markers")]
     fork_markers: Option<BTreeSet<MarkerTree>>,
+    /// We discard the lockfile if these options match.
     #[serde(default)]
-    resolution_mode: ResolutionMode,
-    #[serde(default)]
-    prerelease_mode: PrereleaseMode,
-    #[serde(default)]
-    exclude_newer: Option<ExcludeNewer>,
+    options: ResolverOptions,
     #[serde(rename = "distribution", default)]
     distributions: Vec<DistributionWire>,
 }
@@ -629,9 +645,7 @@ impl From<Lock> for LockWire {
             version: lock.version,
             requires_python: lock.requires_python,
             fork_markers: lock.fork_markers,
-            resolution_mode: lock.resolution_mode,
-            prerelease_mode: lock.prerelease_mode,
-            exclude_newer: lock.exclude_newer,
+            options: lock.options,
             distributions: lock
                 .distributions
                 .into_iter()
@@ -671,9 +685,7 @@ impl TryFrom<LockWire> for Lock {
             wire.version,
             distributions,
             wire.requires_python,
-            wire.resolution_mode,
-            wire.prerelease_mode,
-            wire.exclude_newer,
+            wire.options,
             wire.fork_markers,
         )
     }
