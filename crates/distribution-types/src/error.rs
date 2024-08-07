@@ -21,7 +21,4 @@ pub enum Error {
 
     #[error("Requested package name `{0}` does not match `{1}` in the distribution filename: {2}")]
     PackageNameMismatch(PackageName, PackageName, String),
-
-    #[error("Unknown file kind: {0}")]
-    UnknownFileKind(Url),
 }

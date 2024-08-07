@@ -1459,7 +1459,40 @@ mod test {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
-            -e http://localhost:8080/
+            -e https://localhost:8080/
+        "})?;
+
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @r###"
+            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
+            Expected direct URL (`https://localhost:8080/`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
+            https://localhost:8080/
+            ^^^^^^^^^^^^^^^^^^^^^^^
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unsupported_editable_extension() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            -e https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz
         "})?;
 
         let error = RequirementsTxt::parse(
@@ -1478,7 +1511,7 @@ mod test {
         }, {
             insta::assert_snapshot!(errors, @r###"
             Unsupported editable requirement in `<REQUIREMENTS_TXT>`
-            Editable must refer to a local directory, not an HTTPS URL: `http://localhost:8080/`
+            Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz`
             "###);
         });
 

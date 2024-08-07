@@ -5,14 +5,14 @@ use anyhow::{bail, Result};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{DistExtension, WheelFilename};
 use distribution_types::{
     CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, Name, PathBuiltDist,
     PathSourceDist, RemoteSource, Verbatim,
 };
 use platform_tags::Tags;
-use pypi_types::{FileKind, Requirement, RequirementSource};
+use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
@@ -153,11 +153,11 @@ impl<'a> Planner<'a> {
                 RequirementSource::Url {
                     location,
                     subdirectory,
-                    kind,
+                    ext,
                     url,
                 } => {
-                    match kind {
-                        FileKind::Wheel => {
+                    match ext {
+                        DistExtension::Wheel => {
                             // Validate that the name in the wheel matches that of the requirement.
                             let filename = WheelFilename::from_str(&url.filename()?)?;
                             if filename.name != requirement.name {
@@ -215,16 +215,12 @@ impl<'a> Planner<'a> {
                                 }
                             }
                         }
-                        FileKind::Zip
-                        | FileKind::TarGz
-                        | FileKind::TarBz2
-                        | FileKind::TarXz
-                        | FileKind::TarZstd => {
+                        DistExtension::Source(ext) => {
                             let sdist = DirectUrlSourceDist {
                                 name: requirement.name.clone(),
                                 location: location.clone(),
                                 subdirectory: subdirectory.clone(),
-                                kind: *kind,
+                                ext: *ext,
                                 url: url.clone(),
                             };
                             // Find the most-compatible wheel from the cache, since we don't know
@@ -304,7 +300,7 @@ impl<'a> Planner<'a> {
                 }
 
                 RequirementSource::Path {
-                    kind,
+                    ext,
                     url,
                     install_path,
                     lock_path,
@@ -318,8 +314,8 @@ impl<'a> Planner<'a> {
                         Err(err) => return Err(err.into()),
                     };
 
-                    match kind {
-                        FileKind::Wheel => {
+                    match ext {
+                        DistExtension::Wheel => {
                             // Validate that the name in the wheel matches that of the requirement.
                             let filename = WheelFilename::from_str(&url.filename()?)?;
                             if filename.name != requirement.name {
@@ -381,13 +377,13 @@ impl<'a> Planner<'a> {
                                 }
                             }
                         }
-                        kind => {
+                        DistExtension::Source(ext) => {
                             let sdist = PathSourceDist {
                                 name: requirement.name.clone(),
                                 url: url.clone(),
                                 install_path: path,
                                 lock_path: lock_path.clone(),
-                                kind: *kind,
+                                ext: *ext,
                             };
 
                             // Find the most-compatible wheel from the cache, since we don't know

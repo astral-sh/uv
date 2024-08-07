@@ -1,34 +1,33 @@
+use distribution_filename::{DistExtension, ExtensionError};
+use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use url::{ParseError, Url};
-
-use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
 use uv_git::{GitReference, GitSha, GitUrl, OidParseError};
 
-use crate::{ArchiveInfo, DirInfo, DirectUrl, FileKind, VcsInfo, VcsKind};
+use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {
     #[error("Unsupported URL prefix `{prefix}` in URL: `{url}` ({message})")]
     UnsupportedUrlPrefix {
         prefix: String,
-        url: Url,
+        url: String,
         message: &'static str,
     },
     #[error("Invalid path in file URL: `{0}`")]
-    InvalidFileUrl(Url),
+    InvalidFileUrl(String),
     #[error("Failed to parse Git reference from URL: `{0}`")]
-    GitShaParse(Url, #[source] OidParseError),
+    GitShaParse(String, #[source] OidParseError),
     #[error("Not a valid URL: `{0}`")]
     UrlParse(String, #[source] ParseError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
-
-    #[error("Expected direct URL dependency to include an extension: `{0}`")]
-    MissingExtension(Url),
-    #[error("Expected path dependency to include an extension: `{0}`")]
-    MissingExtensionPath(PathBuf),
+    #[error("Expected direct URL (`{0}`) to end in a supported file extension: {1}")]
+    MissingExtensionUrl(String, ExtensionError),
+    #[error("Expected path (`{0}`) to end in a supported file extension: {1}")]
+    MissingExtensionPath(PathBuf, ExtensionError),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
@@ -80,8 +79,9 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
                 lock_path: path.as_ref().to_path_buf(),
-                kind: FileKind::from_path(path)
-                    .ok_or(ParsedUrlError::MissingExtension(verbatim.to_url()))?,
+                ext: DistExtension::from_path(&path).map_err(|err| {
+                    ParsedUrlError::MissingExtensionPath(path.as_ref().to_path_buf(), err)
+                })?,
             })
         };
         Ok(Self {
@@ -110,8 +110,9 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
                 lock_path: path.as_ref().to_path_buf(),
-                kind: FileKind::from_path(path)
-                    .ok_or(ParsedUrlError::MissingExtension(verbatim.to_url()))?,
+                ext: DistExtension::from_path(&path).map_err(|err| {
+                    ParsedUrlError::MissingExtensionPath(path.as_ref().to_path_buf(), err)
+                })?,
             })
         };
         Ok(Self {
@@ -190,8 +191,8 @@ pub struct ParsedPathUrl {
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
     /// are resolved, and unlike the install path, we did not yet join it on the base directory.
     pub lock_path: PathBuf,
-    /// The type of file (e.g., `.zip` or `.tar.gz`).
-    pub kind: FileKind,
+    /// The file extension, e.g. `tar.gz`, `zip`, etc.
+    pub ext: DistExtension,
 }
 
 impl ParsedPathUrl {
@@ -199,14 +200,14 @@ impl ParsedPathUrl {
     pub fn from_source(
         install_path: PathBuf,
         lock_path: PathBuf,
-        kind: FileKind,
+        ext: DistExtension,
         url: Url,
     ) -> Self {
         Self {
             url,
             install_path,
             lock_path,
-            kind,
+            ext,
         }
     }
 }
@@ -275,7 +276,7 @@ impl ParsedGitUrl {
 impl TryFrom<Url> for ParsedGitUrl {
     type Error = ParsedUrlError;
 
-    /// Supports URLS with and without the `git+` prefix.
+    /// Supports URLs with and without the `git+` prefix.
     ///
     /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
     /// excluded, it's presumed to come from `tool.uv.sources`.
@@ -288,7 +289,7 @@ impl TryFrom<Url> for ParsedGitUrl {
             .unwrap_or(url_in.as_str());
         let url = Url::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)
-            .map_err(|err| ParsedUrlError::GitShaParse(url_in.clone(), err))?;
+            .map_err(|err| ParsedUrlError::GitShaParse(url_in.to_string(), err))?;
         Ok(Self { url, subdirectory })
     }
 }
@@ -303,16 +304,16 @@ impl TryFrom<Url> for ParsedGitUrl {
 pub struct ParsedArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,
-    pub kind: FileKind,
+    pub ext: DistExtension,
 }
 
 impl ParsedArchiveUrl {
     /// Construct a [`ParsedArchiveUrl`] from a URL requirement source.
-    pub fn from_source(location: Url, subdirectory: Option<PathBuf>, kind: FileKind) -> Self {
+    pub fn from_source(location: Url, subdirectory: Option<PathBuf>, ext: DistExtension) -> Self {
         Self {
             url: location,
             subdirectory,
-            kind,
+            ext,
         }
     }
 }
@@ -320,18 +321,14 @@ impl ParsedArchiveUrl {
 impl TryFrom<Url> for ParsedArchiveUrl {
     type Error = ParsedUrlError;
 
-    /// Supports URLS with and without the `git+` prefix.
-    ///
-    /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
-    /// excluded, it's presumed to come from `tool.uv.sources`.
     fn try_from(url: Url) -> Result<Self, Self::Error> {
         let subdirectory = get_subdirectory(&url);
-        let kind =
-            FileKind::from_path(url.path()).ok_or(ParsedUrlError::MissingExtension(url.clone()))?;
+        let ext = DistExtension::from_path(url.path())
+            .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
         Ok(Self {
             url,
             subdirectory,
-            kind,
+            ext,
         })
     }
 }
@@ -359,22 +356,22 @@ impl TryFrom<Url> for ParsedUrl {
                 "git" => Ok(Self::Git(ParsedGitUrl::try_from(url)?)),
                 "bzr" => Err(ParsedUrlError::UnsupportedUrlPrefix {
                     prefix: prefix.to_string(),
-                    url: url.clone(),
+                    url: url.to_string(),
                     message: "Bazaar is not supported",
                 }),
                 "hg" => Err(ParsedUrlError::UnsupportedUrlPrefix {
                     prefix: prefix.to_string(),
-                    url: url.clone(),
+                    url: url.to_string(),
                     message: "Mercurial is not supported",
                 }),
                 "svn" => Err(ParsedUrlError::UnsupportedUrlPrefix {
                     prefix: prefix.to_string(),
-                    url: url.clone(),
+                    url: url.to_string(),
                     message: "Subversion is not supported",
                 }),
                 _ => Err(ParsedUrlError::UnsupportedUrlPrefix {
                     prefix: prefix.to_string(),
-                    url: url.clone(),
+                    url: url.to_string(),
                     message: "Unknown scheme",
                 }),
             }
@@ -386,7 +383,7 @@ impl TryFrom<Url> for ParsedUrl {
         } else if url.scheme().eq_ignore_ascii_case("file") {
             let path = url
                 .to_file_path()
-                .map_err(|()| ParsedUrlError::InvalidFileUrl(url.clone()))?;
+                .map_err(|()| ParsedUrlError::InvalidFileUrl(url.to_string()))?;
             let is_dir = if let Ok(metadata) = path.metadata() {
                 metadata.is_dir()
             } else {
@@ -402,8 +399,8 @@ impl TryFrom<Url> for ParsedUrl {
             } else {
                 Ok(Self::Path(ParsedPathUrl {
                     url,
-                    kind: FileKind::from_path(&path)
-                        .ok_or_else(|| ParsedUrlError::MissingExtensionPath(path.clone()))?,
+                    ext: DistExtension::from_path(&path)
+                        .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
                     install_path: path.clone(),
                     lock_path: path,
                 }))

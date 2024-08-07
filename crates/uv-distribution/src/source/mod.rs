@@ -13,14 +13,14 @@ use tracing::{debug, info_span, instrument, Instrument};
 use url::Url;
 use zip::ZipArchive;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{SourceDistExtension, WheelFilename};
 use distribution_types::{
     BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
     PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
-use pypi_types::{FileKind, HashDigest, Metadata23, ParsedArchiveUrl};
+use pypi_types::{HashDigest, Metadata23};
 use uv_cache::{
     ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Timestamp, WheelCache,
 };
@@ -111,7 +111,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 &PathSourceUrl {
                                     url: &url,
                                     path: Cow::Borrowed(path),
-                                    kind: dist.kind,
+                                    ext: dist.ext,
                                 },
                                 &cache_shard,
                                 tags,
@@ -133,7 +133,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             &PathSourceUrl {
                                 url: &url,
                                 path: Cow::Owned(path),
-                                kind: dist.kind,
+                                ext: dist.ext,
                             },
                             &cache_shard,
                             tags,
@@ -149,7 +149,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &url,
                     &cache_shard,
                     None,
-                    dist.kind,
+                    dist.ext,
                     tags,
                     hashes,
                     client,
@@ -159,25 +159,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
                 let filename = dist.filename().expect("Distribution must have a filename");
-                let ParsedArchiveUrl {
-                    url,
-                    subdirectory,
-                    kind,
-                } = ParsedArchiveUrl::try_from(dist.url.to_url())?;
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Url(&url).root(),
+                    WheelCache::Url(&dist.url).root(),
                 );
 
                 self.url(
                     source,
                     &filename,
-                    &url,
+                    &dist.url,
                     &cache_shard,
-                    subdirectory.as_deref(),
-                    kind,
+                    dist.subdirectory.as_deref(),
+                    dist.ext,
                     tags,
                     hashes,
                     client,
@@ -215,25 +210,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .url
                     .filename()
                     .expect("Distribution must have a filename");
-                let ParsedArchiveUrl {
-                    url,
-                    subdirectory,
-                    kind,
-                } = ParsedArchiveUrl::try_from(resource.url.clone())?;
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Url(&url).root(),
+                    WheelCache::Url(resource.url).root(),
                 );
 
                 self.url(
                     source,
                     &filename,
-                    &url,
+                    resource.url,
                     &cache_shard,
-                    subdirectory.as_deref(),
-                    kind,
+                    resource.subdirectory,
+                    resource.ext,
                     tags,
                     hashes,
                     client,
@@ -298,7 +288,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 &PathSourceUrl {
                                     url: &url,
                                     path: Cow::Borrowed(path),
-                                    kind: dist.kind,
+                                    ext: dist.ext,
                                 },
                                 &cache_shard,
                                 hashes,
@@ -319,7 +309,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             &PathSourceUrl {
                                 url: &url,
                                 path: Cow::Owned(path),
-                                kind: dist.kind,
+                                ext: dist.ext,
                             },
                             &cache_shard,
                             hashes,
@@ -334,7 +324,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &url,
                     &cache_shard,
                     None,
-                    dist.kind,
+                    dist.ext,
                     hashes,
                     client,
                 )
@@ -356,7 +346,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &dist.url,
                     &cache_shard,
                     dist.subdirectory.as_deref(),
-                    dist.kind,
+                    dist.ext,
                     hashes,
                     client,
                 )
@@ -400,7 +390,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.url,
                     &cache_shard,
                     resource.subdirectory,
-                    resource.kind,
+                    resource.ext,
                     hashes,
                     client,
                 )
@@ -453,7 +443,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
-        kind: FileKind,
+        ext: SourceDistExtension,
         tags: &Tags,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
@@ -462,7 +452,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Fetch the revision for the source distribution.
         let revision = self
-            .url_revision(source, filename, kind, url, cache_shard, hashes, client)
+            .url_revision(source, filename, ext, url, cache_shard, hashes, client)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -525,7 +515,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
-        kind: FileKind,
+        ext: SourceDistExtension,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
@@ -533,7 +523,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Fetch the revision for the source distribution.
         let revision = self
-            .url_revision(source, filename, kind, url, cache_shard, hashes, client)
+            .url_revision(source, filename, ext, url, cache_shard, hashes, client)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -614,7 +604,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         filename: &str,
-        kind: FileKind,
+        ext: SourceDistExtension,
         url: &Url,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
@@ -641,7 +631,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 debug!("Downloading source distribution: {source}");
                 let entry = cache_shard.shard(revision.id()).entry(filename);
                 let hashes = self
-                    .download_archive(response, source, filename, kind, entry.path(), hashes)
+                    .download_archive(response, source, filename, ext, entry.path(), hashes)
                     .await?;
 
                 Ok(revision.with_hashes(hashes))
@@ -874,7 +864,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         debug!("Unpacking source distribution: {source}");
         let entry = cache_shard.shard(revision.id()).entry("source");
         let hashes = self
-            .persist_archive(&resource.path, resource.kind, entry.path(), hashes)
+            .persist_archive(&resource.path, resource.ext, entry.path(), hashes)
             .await?;
         let revision = revision.with_hashes(hashes);
 
@@ -1315,7 +1305,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         response: Response,
         source: &BuildableSource<'_>,
         filename: &str,
-        kind: FileKind,
+        ext: SourceDistExtension,
         target: &Path,
         hashes: HashPolicy<'_>,
     ) -> Result<Vec<HashDigest>, Error> {
@@ -1337,7 +1327,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Download and unzip the source distribution into a temporary directory.
         let span = info_span!("download_source_dist", filename = filename, source_dist = %source);
-        uv_extract::stream::archive(&mut hasher, kind, temp_dir.path()).await?;
+        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path()).await?;
         drop(span);
 
         // If necessary, exhaust the reader to compute the hash.
@@ -1369,7 +1359,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn persist_archive(
         &self,
         path: &Path,
-        kind: FileKind,
+        ext: SourceDistExtension,
         target: &Path,
         hashes: HashPolicy<'_>,
     ) -> Result<Vec<HashDigest>, Error> {
@@ -1391,7 +1381,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         // Unzip the archive into a temporary directory.
-        uv_extract::stream::archive(&mut hasher, kind, &temp_dir.path()).await?;
+        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path()).await?;
 
         // If necessary, exhaust the reader to compute the hash.
         if !hashes.is_none() {

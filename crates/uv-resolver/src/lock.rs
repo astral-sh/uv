@@ -15,7 +15,7 @@ use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
 use cache_key::RepositoryUrl;
-use distribution_filename::WheelFilename;
+use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
     DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, Name,
@@ -29,7 +29,7 @@ use pep508_rs::{
 };
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{
-    FileKind, HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
+    HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
 };
 use uv_configuration::{ExtrasSpecification, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
@@ -787,12 +787,11 @@ impl Package {
                     Ok(Dist::Built(built_dist))
                 }
                 Source::Direct(url, direct) => {
-                    let kind = FileKind::from_path(url.as_ref()).expect("STOPSHIP");
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let url = Url::from(ParsedArchiveUrl {
                         url: url.to_url(),
                         subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
-                        kind,
+                        ext: DistExtension::Wheel,
                     });
                     let direct_dist = DirectUrlBuiltDist {
                         filename,
@@ -840,13 +839,12 @@ impl Package {
     ) -> Result<Option<distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
-                let kind = FileKind::from_path(workspace_root.join(path)).expect("STOPSHIP");
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
-                    kind,
+                    ext: SourceDistExtension::from_path(path)?,
                 };
                 distribution_types::SourceDist::Path(path_dist)
             }
@@ -899,17 +897,18 @@ impl Package {
                 distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
-                let kind = FileKind::from_path(url.as_ref()).expect("STOPSHIP");
+                let ext = SourceDistExtension::from_path(url.as_ref())?;
+                let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: url.to_url(),
-                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
-                    kind,
+                    subdirectory: subdirectory.clone(),
+                    ext: DistExtension::Source(ext),
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
                     location: url.clone(),
-                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
-                    kind,
+                    subdirectory: subdirectory.clone(),
+                    ext,
                     url: VerbatimUrl::from_url(url),
                 };
                 distribution_types::SourceDist::DirectUrl(direct_dist)
@@ -927,7 +926,7 @@ impl Package {
                     .ok_or_else(|| LockErrorKind::MissingFilename {
                         id: self.id.clone(),
                     })?;
-                let kind = FileKind::from_path(filename.as_ref()).expect("STOPSHIP");
+                let ext = SourceDistExtension::from_path(filename.as_ref())?;
                 let file = Box::new(distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
@@ -947,7 +946,7 @@ impl Package {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
                     file,
-                    kind,
+                    ext,
                     index,
                     wheels: vec![],
                 };
@@ -2238,11 +2237,10 @@ impl Dependency {
                 RequirementSource::from_verbatim_parsed_url(parsed_url)
             }
             Source::Direct(url, direct) => {
-                let kind = FileKind::from_path(url.as_ref()).expect("STOPSHIP");
                 let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl {
                     url: url.to_url(),
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
-                    kind,
+                    ext: DistExtension::from_path(url.as_ref())?,
                 });
                 RequirementSource::from_verbatim_parsed_url(parsed_url)
             }
@@ -2250,7 +2248,7 @@ impl Dependency {
                 lock_path: path.clone(),
                 install_path: workspace_root.join(path),
                 url: verbatim_url(workspace_root.join(path), &self.package_id)?,
-                kind: FileKind::from_path(workspace_root.join(path)).expect("STOPSHIP"),
+                ext: DistExtension::from_path(path)?,
             },
             Source::Directory(ref path) => RequirementSource::Directory {
                 editable: false,
@@ -2471,6 +2469,10 @@ enum LockErrorKind {
         #[source]
         ToUrlError,
     ),
+    /// An error that occurs when the extension can't be determined
+    /// for a given wheel or source distribution.
+    #[error("failed to parse file extension; expected one of: {0}")]
+    MissingExtension(#[from] ExtensionError),
     /// Failed to parse a git source URL.
     #[error("failed to parse source git URL")]
     InvalidGitSourceUrl(

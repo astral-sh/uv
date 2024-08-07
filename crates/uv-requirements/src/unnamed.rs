@@ -9,7 +9,7 @@ use serde::Deserialize;
 use tracing::debug;
 use url::Host;
 
-use distribution_filename::{SourceDistFilename, WheelFilename};
+use distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
     RemoteSource, SourceUrl, UnresolvedRequirement, UnresolvedRequirementSpecification, VersionId,
@@ -260,16 +260,28 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     editable: parsed_directory_url.editable,
                 })
             }
-            ParsedUrl::Path(parsed_path_url) => SourceUrl::Path(PathSourceUrl {
-                url: &requirement.url.verbatim,
-                path: Cow::Borrowed(&parsed_path_url.install_path),
-                kind: parsed_path_url.kind,
-            }),
-            ParsedUrl::Archive(parsed_archive_url) => SourceUrl::Direct(DirectSourceUrl {
-                url: &parsed_archive_url.url,
-                subdirectory: parsed_archive_url.subdirectory.as_deref(),
-                kind: parsed_archive_url.kind,
-            }),
+            ParsedUrl::Path(parsed_path_url) => {
+                let ext = match parsed_path_url.ext {
+                    DistExtension::Source(ext) => ext,
+                    DistExtension::Wheel => unreachable!(),
+                };
+                SourceUrl::Path(PathSourceUrl {
+                    url: &requirement.url.verbatim,
+                    path: Cow::Borrowed(&parsed_path_url.install_path),
+                    ext,
+                })
+            }
+            ParsedUrl::Archive(parsed_archive_url) => {
+                let ext = match parsed_archive_url.ext {
+                    DistExtension::Source(ext) => ext,
+                    DistExtension::Wheel => unreachable!(),
+                };
+                SourceUrl::Direct(DirectSourceUrl {
+                    url: &parsed_archive_url.url,
+                    subdirectory: parsed_archive_url.subdirectory.as_deref(),
+                    ext,
+                })
+            }
             ParsedUrl::Git(parsed_git_url) => SourceUrl::Git(GitSourceUrl {
                 url: &requirement.url.verbatim,
                 git: &parsed_git_url.url,

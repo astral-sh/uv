@@ -16,7 +16,7 @@
 
 \
 
-pandas  [tabulate]  @  https://github.com/pandas-dev/pandas \
+pandas  [tabulate]  @  git+https://github.com/pandas-dev/pandas.git \
  # üh
 
 

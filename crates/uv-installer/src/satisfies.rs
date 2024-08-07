@@ -44,7 +44,7 @@ impl RequirementSatisfaction {
                 // records `"url": "https://github.com/tqdm/tqdm"` in `direct_url.json`.
                 location: requested_url,
                 subdirectory: requested_subdirectory,
-                kind: _,
+                ext: _,
                 url: _,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist {
@@ -151,7 +151,7 @@ impl RequirementSatisfaction {
             RequirementSource::Path {
                 install_path: requested_path,
                 lock_path: _,
-                kind: _,
+                ext: _,
                 url: _,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution

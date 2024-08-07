@@ -2,18 +2,18 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use thiserror::Error;
-use url::Url;
-
+use distribution_filename::DistExtension;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
+use thiserror::Error;
+use url::Url;
 use uv_fs::PortablePathBuf;
 use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::{
-    FileKind, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
-    ParsedUrlError, VerbatimParsedUrl,
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError,
+    VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -100,13 +100,13 @@ impl From<Requirement> for pep508_rs::Requirement<VerbatimParsedUrl> {
                 RequirementSource::Url {
                     location,
                     subdirectory,
-                    kind,
+                    ext,
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
                         url: location,
                         subdirectory,
-                        kind,
+                        ext,
                     }),
                     verbatim: url,
                 })),
@@ -133,14 +133,14 @@ impl From<Requirement> for pep508_rs::Requirement<VerbatimParsedUrl> {
                 RequirementSource::Path {
                     install_path,
                     lock_path,
-                    kind,
+                    ext,
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Path(ParsedPathUrl {
                         url: url.to_url(),
                         install_path,
                         lock_path,
-                        kind,
+                        ext,
                     }),
                     verbatim: url,
                 })),
@@ -271,8 +271,8 @@ pub enum RequirementSource {
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
         subdirectory: Option<PathBuf>,
-        /// The type of file (e.g., `.zip` or `.tar.gz`).
-        kind: FileKind,
+        /// The file extension, e.g. `tar.gz`, `zip`, etc.
+        ext: DistExtension,
         /// The PEP 508 style URL in the format
         /// `<scheme>://<domain>/<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -301,8 +301,8 @@ pub enum RequirementSource {
         /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
         /// are resolved, and unlike the install path, we did not yet join it on the base directory.
         lock_path: PathBuf,
-        /// The type of file (e.g., `.zip` or `.tar.gz`).
-        kind: FileKind,
+        /// The file extension, e.g. `tar.gz`, `zip`, etc.
+        ext: DistExtension,
         /// The PEP 508 style URL in the format
         /// `file:///<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -332,7 +332,7 @@ impl RequirementSource {
             ParsedUrl::Path(local_file) => RequirementSource::Path {
                 install_path: local_file.install_path.clone(),
                 lock_path: local_file.lock_path.clone(),
-                kind: local_file.kind,
+                ext: local_file.ext,
                 url,
             },
             ParsedUrl::Directory(directory) => RequirementSource::Directory {
@@ -352,7 +352,7 @@ impl RequirementSource {
                 url,
                 location: archive.url,
                 subdirectory: archive.subdirectory,
-                kind: archive.kind,
+                ext: archive.ext,
             },
         }
     }
@@ -370,26 +370,26 @@ impl RequirementSource {
             Self::Url {
                 location,
                 subdirectory,
-                kind,
+                ext,
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Archive(ParsedArchiveUrl::from_source(
                     location.clone(),
                     subdirectory.clone(),
-                    *kind,
+                    *ext,
                 )),
                 verbatim: url.clone(),
             }),
             Self::Path {
                 install_path,
                 lock_path,
-                kind,
+                ext,
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Path(ParsedPathUrl::from_source(
                     install_path.clone(),
                     lock_path.clone(),
-                    *kind,
+                    *ext,
                     url.to_url(),
                 )),
                 verbatim: url.clone(),
@@ -521,7 +521,7 @@ impl From<RequirementSource> for RequirementSourceWire {
             RequirementSource::Url {
                 subdirectory,
                 location,
-                kind: _,
+                ext: _,
                 url: _,
             } => Self::Direct {
                 url: location,
@@ -582,7 +582,7 @@ impl From<RequirementSource> for RequirementSourceWire {
             RequirementSource::Path {
                 install_path,
                 lock_path: _,
-                kind: _,
+                ext: _,
                 url: _,
             } => Self::Path {
                 path: PortablePathBuf::from(install_path),
@@ -647,15 +647,15 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 url: VerbatimUrl::from_url(url.clone()),
                 location: url.clone(),
                 subdirectory: subdirectory.map(PathBuf::from),
-                kind: FileKind::from_path(url.path())
-                    .ok_or_else(|| ParsedUrlError::MissingExtension(url))?,
+                ext: DistExtension::from_path(url.path())
+                    .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
             }),
             RequirementSourceWire::Path { path } => {
                 let path = PathBuf::from(path);
                 Ok(Self::Path {
                     url: VerbatimUrl::from_path(path.as_path())?,
-                    kind: FileKind::from_path(path.as_path())
-                        .ok_or_else(|| ParsedUrlError::MissingExtensionPath(path.clone()))?,
+                    ext: DistExtension::from_path(path.as_path())
+                        .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
                     install_path: path.clone(),
                     lock_path: path,
                 })

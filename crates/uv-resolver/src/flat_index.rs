@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename};
+use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{
     File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
     PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
@@ -12,7 +12,7 @@ use distribution_types::{
 };
 use pep440_rs::Version;
 use platform_tags::{TagCompatibility, Tags};
-use pypi_types::{FileKind, HashDigest};
+use pypi_types::HashDigest;
 use uv_client::FlatIndexEntries;
 use uv_configuration::BuildOptions;
 use uv_normalize::PackageName;
@@ -93,17 +93,11 @@ impl FlatIndex {
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility =
                     Self::source_dist_compatibility(&filename, &file.hashes, hasher, build_options);
-                let kind = match filename.extension {
-                    SourceDistExtension::Zip => FileKind::Zip,
-                    SourceDistExtension::TarGz => FileKind::TarGz,
-                    SourceDistExtension::TarBz2 => FileKind::TarBz2,
-                    SourceDistExtension::TarZstd => FileKind::TarZstd,
-                };
                 let dist = RegistrySourceDist {
                     name: filename.name.clone(),
                     version: filename.version.clone(),
+                    ext: filename.extension,
                     file: Box::new(file),
-                    kind,
                     index,
                     wheels: vec![],
                 };

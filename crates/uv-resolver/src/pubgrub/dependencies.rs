@@ -106,13 +106,13 @@ impl PubGrubRequirement {
             RequirementSource::Url {
                 subdirectory,
                 location,
-                kind,
+                ext,
                 url,
             } => {
                 let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl::from_source(
                     location.clone(),
                     subdirectory.clone(),
-                    *kind,
+                    *ext,
                 ));
                 (url, parsed_url)
             }
@@ -132,7 +132,7 @@ impl PubGrubRequirement {
                 (url, parsed_url)
             }
             RequirementSource::Path {
-                kind,
+                ext,
                 url,
                 install_path,
                 lock_path,
@@ -140,7 +140,7 @@ impl PubGrubRequirement {
                 let parsed_url = ParsedUrl::Path(ParsedPathUrl::from_source(
                     install_path.clone(),
                     lock_path.clone(),
-                    *kind,
+                    *ext,
                     url.to_url(),
                 ));
                 (url, parsed_url)

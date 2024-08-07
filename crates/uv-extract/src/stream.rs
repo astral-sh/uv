@@ -2,8 +2,8 @@ use std::path::Path;
 use std::pin::Pin;
 
 use crate::Error;
+use distribution_filename::SourceDistExtension;
 use futures::StreamExt;
-use pypi_types::FileKind;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
@@ -231,26 +231,23 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
 /// without requiring `Seek`.
 pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
-    kind: FileKind,
+    ext: SourceDistExtension,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    match kind {
-        FileKind::Wheel => {
+    match ext {
+        SourceDistExtension::Zip => {
             unzip(reader, target).await?;
         }
-        FileKind::Zip => {
-            unzip(reader, target).await?;
-        }
-        FileKind::TarGz => {
+        SourceDistExtension::TarGz => {
             untar_gz(reader, target).await?;
         }
-        FileKind::TarBz2 => {
+        SourceDistExtension::TarBz2 => {
             untar_bz2(reader, target).await?;
         }
-        FileKind::TarXz => {
+        SourceDistExtension::TarXz => {
             untar_xz(reader, target).await?;
         }
-        FileKind::TarZstd => {
+        SourceDistExtension::TarZst => {
             untar_zst(reader, target).await?;
         }
     }

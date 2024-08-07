@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::path::Path;
 
+use distribution_filename::SourceDistExtension;
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
-use pypi_types::FileKind;
 use url::Url;
 use uv_git::GitUrl;
 
@@ -111,7 +111,7 @@ impl std::fmt::Display for SourceUrl<'_> {
 pub struct DirectSourceUrl<'a> {
     pub url: &'a Url,
     pub subdirectory: Option<&'a Path>,
-    pub kind: FileKind,
+    pub ext: SourceDistExtension,
 }
 
 impl std::fmt::Display for DirectSourceUrl<'_> {
@@ -149,7 +149,7 @@ impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
 pub struct PathSourceUrl<'a> {
     pub url: &'a Url,
     pub path: Cow<'a, Path>,
-    pub kind: FileKind,
+    pub ext: SourceDistExtension,
 }
 
 impl std::fmt::Display for PathSourceUrl<'_> {
@@ -163,7 +163,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
         Self {
             url: &dist.url,
             path: Cow::Borrowed(&dist.install_path),
-            kind: dist.kind,
+            ext: dist.ext,
         }
     }
 }
