@@ -1159,9 +1159,15 @@ uv tree [OPTIONS]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
-</dd><dt><code>--python-version</code> <i>python-version</i></dt><dd><p>The Python version to use when filtering the tree (via <code>--filter</code>). For example, pass <code>--python-version 3.10</code> to display the dependencies that would be included when installing on Python 3.10</p>
+</dd><dt><code>--python-version</code> <i>python-version</i></dt><dd><p>The Python version to use when filtering the tree.</p>
 
-</dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform to use when filtering the tree (via <code>--filter</code>). For example, pass <code>--platform windows</code> to display the dependencies that would be included when installing on Windows.</p>
+<p>For example, pass <code>--python-version 3.10</code> to display the dependencies that would be included when installing on Python 3.10.</p>
+
+<p>Defaults to the version of the discovered Python interpreter.</p>
+
+</dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform to use when filtering the tree.</p>
+
+<p>For example, pass <code>--platform windows</code> to display the dependencies that would be included when installing on Windows.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
 
@@ -1200,9 +1206,9 @@ uv tree [OPTIONS]
 
 <li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
 </ul>
-</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolution.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for locking and filtering.</p>
 
-<p>A Python interpreter is required to perform the lock before displaying the tree.</p>
+<p>By default, the tree is filtered to match the platform as reported by the Python interpreter. Use <code>--universal</code> to display the tree for all platforms, or use <code>--python-version</code> or <code>--python-platform</code> to override a subset of markers.</p>
 
 <p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 

@@ -2414,25 +2414,32 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
-    /// The Python version to use when filtering the tree (via `--filter`). For example, pass
-    /// `--python-version 3.10` to display the dependencies that would be included when installing
-    /// on Python 3.10.
+    /// The Python version to use when filtering the tree.
+    ///
+    /// For example, pass `--python-version 3.10` to display the dependencies
+    /// that would be included when installing on Python 3.10.
+    ///
+    /// Defaults to the version of the discovered Python interpreter.
     #[arg(long, conflicts_with = "universal")]
     pub python_version: Option<PythonVersion>,
 
-    /// The platform to use when filtering the tree (via `--filter`). For example, pass `--platform
-    /// windows` to display the dependencies that would be included when installing on Windows.
+    /// The platform to use when filtering the tree.
     ///
-    /// Represented as a "target triple", a string that describes the target platform in terms of
-    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
-    /// `aaarch64-apple-darwin`.
+    /// For example, pass `--platform windows` to display the dependencies that
+    /// would be included when installing on Windows.
+    ///
+    /// Represented as a "target triple", a string that describes the target
+    /// platform in terms of its CPU, vendor, and operating system name, like
+    /// `x86_64-unknown-linux-gnu` or `aaarch64-apple-darwin`.
     #[arg(long, conflicts_with = "universal")]
     pub python_platform: Option<TargetTriple>,
 
-    /// The Python interpreter to use for resolution.
+    /// The Python interpreter to use for locking and filtering.
     ///
-    /// A Python interpreter is required to perform the lock before displaying
-    /// the tree.
+    /// By default, the tree is filtered to match the platform as reported by
+    /// the Python interpreter. Use `--universal` to display the tree for all
+    /// platforms, or use `--python-version` or `--python-platform` to override
+    /// a subset of markers.
     ///
     /// See `uv help python` for details on Python discovery and supported
     /// request formats.
