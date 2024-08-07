@@ -74,6 +74,9 @@ pub struct Cli {
     pub global_args: Box<GlobalArgs>,
 
     /// The path to a `uv.toml` file to use for configuration.
+    ///
+    /// While uv configuration can be included in a `pyproject.toml` file, it is
+    /// not allowed in this context.
     #[arg(
         global = true,
         long,
@@ -82,17 +85,18 @@ pub struct Cli {
     )]
     pub config_file: Option<PathBuf>,
 
-    /// Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) in the current directory,
+    /// Avoid discovering configuration files (`pyproject.toml`, `uv.toml`).
+    ///
+    /// Normally, configuration files are discovered in the current directory,
     /// parent directories, or user configuration directories.
     #[arg(global = true, long, env = "UV_NO_CONFIG", value_parser = clap::builder::BoolishValueParser::new(), help_heading = "Global options")]
     pub no_config: bool,
 
-    /// Print help.
+    /// Display the concise help for this command.
     #[arg(global = true, short, long, action = clap::ArgAction::HelpShort, help_heading = "Global options")]
     help: Option<bool>,
 
-    /// Print version.
-    // This enable it to show under Global options section.
+    /// Display the uv version.
     #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version, help_heading = "Global options")]
     version: Option<bool>,
 }
@@ -101,8 +105,12 @@ pub struct Cli {
 #[command(next_help_heading = "Global options", next_display_order = 1000)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
-    /// Whether to prefer using Python installations that are already present on the system, or
-    /// those that are downloaded and installed by uv.
+    /// Whether to prefer uv-managed or system Python installations.
+    ///
+    /// By default, uv prefers using Python versions it manages. However, it
+    /// will use system Python installations if a uv-managed Python is not
+    /// installed. This option allows prioritizing or ignoring system Python
+    /// installations.
     #[arg(
         global = true,
         long,
@@ -126,7 +134,9 @@ pub struct GlobalArgs {
     #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "quiet")]
     pub verbose: u8,
 
-    /// Disable colors; provided for compatibility with `pip`.
+    /// Disable colors.
+    ///
+    /// Provided for compatibility with `pip`, use `--color` instead.
     #[arg(global = true, long, hide = true, conflicts_with = "color")]
     pub no_color: bool,
 
@@ -156,7 +166,9 @@ pub struct GlobalArgs {
     #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
     pub no_native_tls: bool,
 
-    /// Disable network access, relying only on locally cached data and locally available files.
+    /// Disable network access.
+    ///
+    /// When disabled, uv will only use locally cached data and locally available files.
     #[arg(global = true, long, overrides_with("no_offline"))]
     pub offline: bool,
 
@@ -164,22 +176,32 @@ pub struct GlobalArgs {
     pub no_offline: bool,
 
     /// Whether to enable experimental, preview features.
+    ///
+    /// Preview features may change without warning.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
     pub preview: bool,
 
     #[arg(global = true, long, overrides_with("preview"), hide = true)]
     pub no_preview: bool,
 
-    /// Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-    /// parent directories.
+    /// Avoid discovering a `pyproject.toml` or `uv.toml` file.
+    ///
+    /// Normally, configuration files are discovered in the current directory,
+    /// parent directories, or user configuration directories.
+    ///
+    /// This option is deprecated in favor of `--no-config`.
     #[arg(global = true, long, hide = true)]
     pub isolated: bool,
 
     /// Show the resolved settings for the current command.
+    ///
+    /// This option is used for debugging and development purposes.
     #[arg(global = true, long, hide = true)]
     pub show_settings: bool,
 
-    /// Hides all progress outputs when set
+    /// Hide all progress outputs.
+    ///
+    /// For example, spinners or progress bars.
     #[arg(global = true, long)]
     pub no_progress: bool,
 
