@@ -862,9 +862,15 @@ impl Distribution {
                 distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Git(url, git) => {
+                // Remove the fragment and query from the URL; they're already present in the
+                // `GitSource`.
+                let mut url = url.to_url();
+                url.set_fragment(None);
+                url.set_query(None);
+
                 // Reconstruct the `GitUrl` from the `GitSource`.
                 let git_url = uv_git::GitUrl::from_commit(
-                    url.to_url(),
+                    url,
                     GitReference::from(git.kind.clone()),
                     git.precise,
                 );
@@ -1613,13 +1619,14 @@ impl TryFrom<SourceWire> for Source {
         match wire {
             Registry { registry } => Ok(Source::Registry(registry)),
             Git { git } => {
-                let mut url = Url::parse(&git)
+                let url = Url::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
                         given: git.to_string(),
                         err,
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
-                let git_source = GitSource::from_url(&mut url)
+
+                let git_source = GitSource::from_url(&url)
                     .map_err(|err| match err {
                         GitSourceError::InvalidSha => SourceParseError::InvalidSha {
                             given: git.to_string(),
@@ -1629,6 +1636,7 @@ impl TryFrom<SourceWire> for Source {
                         },
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
+
                 Ok(Source::Git(UrlString::from(url), git_source))
             }
             Direct { url, subdirectory } => Ok(Source::Direct(url, DirectSource { subdirectory })),
@@ -1663,12 +1671,9 @@ enum GitSourceError {
 }
 
 impl GitSource {
-    /// Extracts a git source reference from the query pairs and the hash
+    /// Extracts a Git source reference from the query pairs and the hash
     /// fragment in the given URL.
-    ///
-    /// This also removes the query pairs and hash fragment from the given
-    /// URL in place.
-    fn from_url(url: &mut Url) -> Result<GitSource, GitSourceError> {
+    fn from_url(url: &Url) -> Result<GitSource, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
         for (key, val) in url.query_pairs() {
@@ -1683,8 +1688,6 @@ impl GitSource {
         let precise = GitSha::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
 
-        url.set_query(None);
-        url.set_fragment(None);
         Ok(GitSource {
             precise,
             subdirectory,
