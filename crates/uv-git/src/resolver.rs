@@ -37,9 +37,7 @@ impl GitResolver {
         self.0.get(reference)
     }
 
-    /// Download a source distribution from a Git repository.
-    ///
-    /// Assumes that the URL is a precise Git URL, with a full commit hash.
+    /// Fetch a remote Git repository.
     pub async fn fetch(
         &self,
         url: &GitUrl,
@@ -68,50 +66,13 @@ impl GitResolver {
             .await?
             .map_err(GitResolverError::Git)?;
 
-        Ok(fetch)
-    }
-
-    /// Given a remote source distribution, return a precise variant.
-    ///
-    /// For example, given a Git dependency with a reference to a branch or tag, return a URL
-    /// with a precise reference to the current commit of that branch or tag.
-    ///
-    /// This method takes into account various normalizations that are independent from the Git
-    /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
-    /// prefix kinds.
-    ///
-    /// Returns `Ok(None)` if the URL already has a precise reference (i.e., it includes a full
-    /// commit hash in the URL itself, as opposed to, e.g., a branch name).
-    pub async fn resolve(
-        &self,
-        url: &GitUrl,
-        client: ClientWithMiddleware,
-        cache: PathBuf,
-        reporter: Option<impl Reporter + 'static>,
-    ) -> Result<Option<GitUrl>, GitResolverError> {
-        // If the Git reference already contains a complete SHA, short-circuit.
-        if url.precise().is_some() {
-            return Ok(None);
-        }
-
-        // If the Git reference is in the in-memory cache, return it.
-        {
-            let reference = RepositoryReference::from(url);
-            if let Some(precise) = self.get(&reference) {
-                return Ok(Some(url.clone().with_precise(*precise)));
-            }
-        }
-
-        let fetch = self.fetch(url, client, cache, reporter).await?;
-        let git = fetch.into_git();
-
         // Insert the resolved URL into the in-memory cache.
-        if let Some(precise) = git.precise() {
+        if let Some(precise) = fetch.git().precise() {
             let reference = RepositoryReference::from(url);
             self.insert(reference, precise);
         }
 
-        Ok(Some(git))
+        Ok(fetch)
     }
 
     /// Given a remote source distribution, return a precise variant, if possible.
