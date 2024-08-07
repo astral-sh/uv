@@ -201,6 +201,45 @@ fn help_subcommand() {
     ----- stdout -----
     Manage Python versions and installations (experimental)
 
+    Generally, uv first searches for Python in a virtual environment, either
+    active or in a `.venv` directory  in the current working directory or
+    any parent directory. If a virtual environment is not required, uv will
+    then search for a Python interpreter. Python interpreters are found by
+    searching for Python executables in the `PATH` environment variable.
+
+    On Windows, the `py` launcher is also invoked to find Python
+    executables.
+
+    When preview is enabled, i.e., via `--preview` or by using a preview
+    command, uv will download Python if a version cannot be found. This
+    behavior can be disabled with the `--python-fetch` option.
+
+    The `--python` option allows requesting a different interpreter.
+
+    The following Python version request formats are supported:
+
+    - `<version>` e.g. `3`, `3.12`, `3.12.3`
+    - `<version-specifier>` e.g. `>=3.12,<3.13`
+    - `<implementation>` e.g. `cpython` or `cp`
+    - `<implementation>@<version>` e.g. `cpython@3.12`
+    - `<implementation><version>` e.g. `cpython3.12` or `cp312`
+    - `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
+    - `<implementation>-<version>-<os>-<arch>-<libc>` e.g.
+      `cpython-3.12.3-macos-aarch64-none`
+
+    Additionally, a specific system Python interpreter can often be
+    requested with:
+
+    - `<executable-path>` e.g. `/opt/homebrew/bin/python3`
+    - `<executable-name>` e.g. `mypython3`
+    - `<install-dir>` e.g. `/some/environment/`
+
+    When the `--python` option is used, normal discovery rules apply but
+    discovered interpreters are checked for compatibility with the request,
+    e.g., if `pypy` is requested, uv will first check if the virtual
+    environment contains a PyPy interpreter then check if each executable in
+    the path is a PyPy interpreter.
+
     Usage: uv python [OPTIONS] <COMMAND>
 
     Commands:
@@ -342,6 +381,8 @@ fn help_subsubcommand() {
               If not provided, the requested Python version(s) will be read from the `.python-versions`
               or `.python-version` files. If neither file is present, uv will check if it has installed
               any Python versions. If not, it will install the latest stable version of Python.
+              
+              See `uv help python` to view supported request formats.
 
     Options:
       -r, --reinstall

@@ -462,19 +462,9 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Add the dependency to a specific package in the workspace</p>
 
-</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 
-<p>By default, uv installs into the virtual environment in the current working directory or any parent directory. The <code>--python</code> option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.</p>
-
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -649,19 +639,9 @@ uv remove [OPTIONS] <REQUIREMENTS>...
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Remove the dependency from a specific package in the workspace</p>
 
-</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 
-<p>By default, uv installs into the virtual environment in the current working directory or any parent directory. The <code>--python</code> option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.</p>
-
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -832,19 +812,13 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Sync a specific package in the workspace</p>
 
-</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the project environment.</p>
 
-<p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--python</code> option allows you to specify a different interpreter.</p>
+<p>By default, the first interpreter that meets the project&#8217;s <code>requires-python</code> constraint is used.</p>
 
-<p>Supported formats:</p>
+<p>If a Python interpreter in a virtual environment is provided, the packages will not be synced to the given environment. The interpreter will be used to create a virtual environment in the project.</p>
 
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1009,19 +983,13 @@ uv lock [OPTIONS]
 
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
-</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
-<p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--python</code> option allows you to specify a different interpreter.</p>
+<p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
 
-<p>Supported formats:</p>
+<p>The interpreter is also used as the fallback value for the minimum Python version if <code>requires-python</code> is not set.</p>
 
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1232,19 +1200,11 @@ uv tree [OPTIONS]
 
 <li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
 </ul>
-</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolution.</p>
 
-<p>By default, uv installs into the virtual environment in the current working directory or any parent directory. The <code>--python</code> option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.</p>
+<p>A Python interpreter is required to perform the lock before displaying the tree.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1445,17 +1405,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
 
-<p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--python</code> option allows you to specify a different interpreter.</p>
-
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1632,17 +1582,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the tool environment.</p>
 
-<p>By default, uv will search for a Python executable in the <code>PATH</code>. uv ignores virtual environments while looking for interpreter for tools. The <code>--python</code> option allows you to specify a different interpreter.</p>
-
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1932,6 +1872,45 @@ uv tool dir [OPTIONS]
 
 Manage Python versions and installations (experimental)
 
+Generally, uv first searches for Python in a virtual environment, either
+active or in a `.venv` directory  in the current working directory or
+any parent directory. If a virtual environment is not required, uv will
+then search for a Python interpreter. Python interpreters are found by
+searching for Python executables in the `PATH` environment variable.
+
+On Windows, the `py` launcher is also invoked to find Python
+executables.
+
+When preview is enabled, i.e., via `--preview` or by using a preview
+command, uv will download Python if a version cannot be found. This
+behavior can be disabled with the `--python-fetch` option.
+
+The `--python` option allows requesting a different interpreter.
+
+The following Python version request formats are supported:
+
+- `<version>` e.g. `3`, `3.12`, `3.12.3`
+- `<version-specifier>` e.g. `>=3.12,<3.13`
+- `<implementation>` e.g. `cpython` or `cp`
+- `<implementation>@<version>` e.g. `cpython@3.12`
+- `<implementation><version>` e.g. `cpython3.12` or `cp312`
+- `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
+- `<implementation>-<version>-<os>-<arch>-<libc>` e.g.
+  `cpython-3.12.3-macos-aarch64-none`
+
+Additionally, a specific system Python interpreter can often be
+requested with:
+
+- `<executable-path>` e.g. `/opt/homebrew/bin/python3`
+- `<executable-name>` e.g. `mypython3`
+- `<install-dir>` e.g. `/some/environment/`
+
+When the `--python` option is used, normal discovery rules apply but
+discovered interpreters are checked for compatibility with the request,
+e.g., if `pypy` is requested, uv will first check if the virtual
+environment contains a PyPy interpreter then check if each executable in
+the path is a PyPy interpreter.
+
 <h3 class="cli-reference">Usage</h3>
 
 ```
@@ -2028,6 +2007,8 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>If not provided, the requested Python version(s) will be read from the <code>.python-versions</code> or <code>.python-version</code> files. If neither file is present, uv will check if it has installed any Python versions. If not, it will install the latest stable version of Python.</p>
 
+<p>See <code>uv help python</code> to view supported request formats.</p>
+
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -2090,7 +2071,9 @@ uv python find [OPTIONS] [REQUEST]
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>REQUEST</code></dt><dd><p>The Python request</p>
+<dl class="cli-reference"><dt><code>REQUEST</code></dt><dd><p>The Python request.</p>
+
+<p>See <code>uv help python</code> to view supported request formats.</p>
 
 </dd></dl>
 
@@ -2154,7 +2137,11 @@ uv python pin [OPTIONS] [REQUEST]
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>REQUEST</code></dt><dd><p>The Python version</p>
+<dl class="cli-reference"><dt><code>REQUEST</code></dt><dd><p>The Python version request.</p>
+
+<p>uv supports more formats than other tools that read <code>.python-version</code> files, i.e., <code>pyenv</code>. If compatibility with those tools is needed, only use version numbers instead of complex requests such as <code>cpython@3.10</code>.</p>
+
+<p>See <code>uv help python</code> to view supported request formats.</p>
 
 </dd></dl>
 
@@ -2276,7 +2263,9 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall</p>
+<dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall.</p>
+
+<p>See <code>uv help python</code> to view supported request formats.</p>
 
 </dd></dl>
 
@@ -2522,19 +2511,13 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Used to reflect custom build scripts and commands that wrap <code>uv pip compile</code>.</p>
 
-</dd><dt><code>--python</code> <i>python</i></dt><dd><p>The Python interpreter against which to compile the requirements.</p>
+</dd><dt><code>--python</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
-<p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--python</code> option allows you to specify a different interpreter.</p>
+<p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
 
-<p>Supported formats:</p>
+<p>The interpreter is also used to determine the default minimum Python version, unless <code>--python-version</code> is provided.</p>
 
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--no-binary</code> <i>no-binary</i></dt><dd><p>Don&#8217;t install pre-built wheels.</p>
 
@@ -2548,7 +2531,13 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Multiple packages may be provided. Disable binaries for all packages with <code>:all:</code>. Clear previously specified packages with <code>:none:</code>.</p>
 
-</dd><dt><code>--python-version</code>, <code>-p</code> <i>python-version</i></dt><dd><p>The minimum Python version that should be supported by the resolved requirements (e.g., <code>3.8</code> or <code>3.8.17</code>).</p>
+</dd><dt><code>--python-version</code>, <code>-p</code> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
+
+<p>For example, <code>3.8</code> or <code>3.8.17</code>.</p>
+
+<p>Defaults to the version of the Python interpreter used for resolution.</p>
+
+<p>Defines the minimum Python version that must be supported by the resolved requirements.</p>
 
 <p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.8</code> is mapped to <code>3.8.0</code>.</p>
 
@@ -2742,17 +2731,9 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
 
-<p>By default, uv installs into the virtual environment in the current working directory or any parent directory. The <code>--python</code> option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.</p>
+<p>By default, syncing requires a virtual environment. An path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
@@ -3012,17 +2993,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
 
-<p>By default, uv installs into the virtual environment in the current working directory or any parent directory. The <code>--python</code> option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.</p>
+<p>By default, installation requires a virtual environment. An path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
@@ -3155,17 +3128,9 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter from which packages should be uninstalled.</p>
 
-<p>By default, uv uninstalls from the virtual environment in the current working directory or any parent directory. The <code>--python</code> option allows you to specify a different interpreter, which is intended for use in continuous integration (CI) environments or other automated workflows.</p>
+<p>By default, uninstallation requires a virtual environment. An path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
 
@@ -3244,17 +3209,9 @@ uv pip freeze [OPTIONS]
 
 <dl class="cli-reference"><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
-<p>By default, uv lists packages in the currently activated virtual environment, or a virtual environment (<code>.venv</code>) located in the current working directory or any parent directory, falling back to the system Python if no virtual environment is found.</p>
+<p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3330,17 +3287,9 @@ uv pip list [OPTIONS]
 </ul>
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
-<p>By default, uv lists packages in the currently activated virtual environment, or a virtual environment (<code>.venv</code>) located in the current working directory or any parent directory, falling back to the system Python if no virtual environment is found.</p>
+<p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3406,19 +3355,11 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
+<dl class="cli-reference"><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to find the package in.</p>
 
-<p>By default, uv lists packages in the currently activated virtual environment, or a virtual environment (<code>.venv</code>) located in the current working directory or any parent directory, falling back to the system Python if no virtual environment is found.</p>
+<p>By default, uv looks for packages in a virtual environment but will look for packages in a system Python environment if no virtual environment is found.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3487,17 +3428,9 @@ uv pip tree [OPTIONS]
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
-<p>By default, uv lists packages in the currently activated virtual environment, or a virtual environment (<code>.venv</code>) located in the current working directory or any parent directory, falling back to the system Python if no virtual environment is found.</p>
+<p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3557,19 +3490,11 @@ uv pip check [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
+<dl class="cli-reference"><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be checked.</p>
 
-<p>By default, uv lists packages in the currently activated virtual environment, or a virtual environment (<code>.venv</code>) located in the current working directory or any parent directory, falling back to the system Python if no virtual environment is found.</p>
+<p>By default, uv checks packages in a virtual environment but will check packages in a system Python environment if no virtual environment is found.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3637,17 +3562,9 @@ uv venv [OPTIONS] [NAME]
 
 <dl class="cli-reference"><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the virtual environment.</p>
 
-<p>Supported formats:</p>
+<p>During virtual environment creation, uv will not look for Python interpreters in virtual environments.</p>
 
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
-
-<p>Note that this is different from <code>--python-version</code> in <code>pip compile</code>, which takes <code>3.10</code> or <code>3.10.13</code> and doesn&#8217;t look for a Python interpreter on disk.</p>
+<p>See <code>uv python help</code> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--prompt</code> <i>prompt</i></dt><dd><p>Provide an alternative prompt prefix for the virtual environment.</p>
 
