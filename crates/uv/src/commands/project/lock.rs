@@ -600,37 +600,34 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
 
 /// Reports on the versions that were upgraded in the new lockfile.
 fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> anyhow::Result<()> {
-    let existing_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
-        existing_lock.distributions().iter().fold(
-            FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
-            |mut acc, distribution| {
-                acc.entry(distribution.name())
+    let existing_packages: FxHashMap<&PackageName, BTreeSet<&Version>> =
+        existing_lock.packages().iter().fold(
+            FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
+            |mut acc, package| {
+                acc.entry(package.name())
                     .or_default()
-                    .insert(distribution.version());
+                    .insert(package.version());
                 acc
             },
         );
 
     let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
-        new_lock.distributions().iter().fold(
-            FxHashMap::with_capacity_and_hasher(new_lock.distributions().len(), FxBuildHasher),
-            |mut acc, distribution| {
-                acc.entry(distribution.name())
+        new_lock.packages().iter().fold(
+            FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
+            |mut acc, package| {
+                acc.entry(package.name())
                     .or_default()
-                    .insert(distribution.version());
+                    .insert(package.version());
                 acc
             },
         );
 
-    for name in existing_distributions
+    for name in existing_packages
         .keys()
         .chain(new_distributions.keys())
         .collect::<BTreeSet<_>>()
     {
-        match (
-            existing_distributions.get(name),
-            new_distributions.get(name),
-        ) {
+        match (existing_packages.get(name), new_distributions.get(name)) {
             (Some(existing_versions), Some(new_versions)) => {
                 if existing_versions != new_versions {
                     let existing_versions = existing_versions

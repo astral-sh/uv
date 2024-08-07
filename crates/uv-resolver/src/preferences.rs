@@ -85,12 +85,12 @@ impl Preference {
     }
 
     /// Create a [`Preference`] from a locked distribution.
-    pub fn from_lock(dist: &crate::lock::Distribution) -> Self {
+    pub fn from_lock(package: &crate::lock::Package) -> Self {
         Self {
-            name: dist.id.name.clone(),
-            version: dist.id.version.clone(),
+            name: package.id.name.clone(),
+            version: package.id.version.clone(),
             marker: None,
-            fork_markers: dist.fork_markers().cloned(),
+            fork_markers: package.fork_markers().cloned(),
             hashes: Vec::new(),
         }
     }

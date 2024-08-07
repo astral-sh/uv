@@ -2,15 +2,164 @@
 source: crates/uv-resolver/src/lock.rs
 expression: result
 ---
-Err(
-    Error {
-        inner: Error {
-            inner: TomlError {
-                message: "dependency a has missing `version` field but has more than one matching distribution",
-                raw: None,
-                keys: [],
-                span: None,
+Ok(
+    Lock {
+        version: 1,
+        fork_markers: None,
+        requires_python: None,
+        resolution_mode: Highest,
+        prerelease_mode: IfNecessaryOrExplicit,
+        exclude_newer: None,
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: "0.1.0",
+                    source: Registry(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: None,
+                dependencies: [],
+                optional_dependencies: {},
+                dev_dependencies: {},
             },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: "0.1.1",
+                    source: Registry(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: None,
+                dependencies: [],
+                optional_dependencies: {},
+                dev_dependencies: {},
+            },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "b",
+                    ),
+                    version: "0.1.0",
+                    source: Registry(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: None,
+                dependencies: [],
+                optional_dependencies: {},
+                dev_dependencies: {},
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: "0.1.0",
+                source: Registry(
+                    UrlString(
+                        "https://pypi.org/simple",
+                    ),
+                ),
+            }: 0,
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: "0.1.1",
+                source: Registry(
+                    UrlString(
+                        "https://pypi.org/simple",
+                    ),
+                ),
+            }: 1,
+            PackageId {
+                name: PackageName(
+                    "b",
+                ),
+                version: "0.1.0",
+                source: Registry(
+                    UrlString(
+                        "https://pypi.org/simple",
+                    ),
+                ),
+            }: 2,
         },
     },
 )

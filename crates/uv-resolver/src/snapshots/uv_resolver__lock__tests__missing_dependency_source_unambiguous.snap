@@ -12,9 +12,9 @@ Ok(
             prerelease_mode: IfNecessaryOrExplicit,
             exclude_newer: None,
         },
-        distributions: [
-            Distribution {
-                id: DistributionId {
+        packages: [
+            Package {
+                id: PackageId {
                     name: PackageName(
                         "a",
                     ),
@@ -51,8 +51,8 @@ Ok(
                 optional_dependencies: {},
                 dev_dependencies: {},
             },
-            Distribution {
-                id: DistributionId {
+            Package {
+                id: PackageId {
                     name: PackageName(
                         "b",
                     ),
@@ -85,29 +85,13 @@ Ok(
                 ),
                 wheels: [],
                 fork_markers: None,
-                dependencies: [
-                    Dependency {
-                        distribution_id: DistributionId {
-                            name: PackageName(
-                                "a",
-                            ),
-                            version: "0.1.0",
-                            source: Registry(
-                                UrlString(
-                                    "https://pypi.org/simple",
-                                ),
-                            ),
-                        },
-                        extra: {},
-                        marker: None,
-                    },
-                ],
+                dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
             },
         ],
         by_id: {
-            DistributionId {
+            PackageId {
                 name: PackageName(
                     "a",
                 ),
@@ -118,7 +102,7 @@ Ok(
                     ),
                 ),
             }: 0,
-            DistributionId {
+            PackageId {
                 name: PackageName(
                     "b",
                 ),
