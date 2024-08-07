@@ -14,7 +14,7 @@ static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"))
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
-    pub dependencies: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+    pub dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
     pub requires_python: Option<pep440_rs::VersionSpecifiers>,
 }
 

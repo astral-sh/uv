@@ -92,6 +92,7 @@ pub(crate) async fn run(
     let reporter = PythonDownloadReporter::single(printer.filter(show_resolution));
 
     // Determine whether the command to execute is a PEP 723 script.
+    let temp_dir;
     let script_interpreter = if let RunCommand::Python(target, _) = &command {
         if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
             writeln!(
@@ -129,28 +130,39 @@ pub(crate) async fn run(
             .await?
             .into_interpreter();
 
-            // Install the script requirements.
-            let requirements = metadata
-                .dependencies
-                .into_iter()
-                .map(Requirement::from)
-                .collect();
-            let spec = RequirementsSpecification::from_requirements(requirements);
-            let environment = CachedEnvironment::get_or_create(
-                spec,
-                interpreter,
-                &settings,
-                &state,
-                preview,
-                connectivity,
-                concurrency,
-                native_tls,
-                cache,
-                printer.filter(show_resolution),
-            )
-            .await?;
+            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
+            if let Some(dependencies) = metadata.dependencies {
+                let requirements = dependencies.into_iter().map(Requirement::from).collect();
+                let spec = RequirementsSpecification::from_requirements(requirements);
+                let environment = CachedEnvironment::get_or_create(
+                    spec,
+                    interpreter,
+                    &settings,
+                    &state,
+                    preview,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    cache,
+                    printer.filter(show_resolution),
+                )
+                .await?;
 
-            Some(environment.into_interpreter())
+                Some(environment.into_interpreter())
+            } else {
+                // Create a virtual environment
+                temp_dir = cache.environment()?;
+                let environment = uv_virtualenv::create_venv(
+                    temp_dir.path(),
+                    interpreter,
+                    uv_virtualenv::Prompt::None,
+                    false,
+                    false,
+                    false,
+                )?;
+
+                Some(environment.into_interpreter())
+            }
         } else {
             None
         }

@@ -199,7 +199,7 @@ fn run_args() -> Result<()> {
 /// Run a PEP 723-compatible script. The script should take precedence over the workspace
 /// dependencies.
 #[test]
-fn run_script() -> Result<()> {
+fn run_pep723_script() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -296,6 +296,28 @@ fn run_script() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
+    "###);
+
+    // If the script contains a PEP 723 tag, it can omit the dependencies field.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # ///
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    // Running the script should install the requirements.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
     "###);
 
     Ok(())
