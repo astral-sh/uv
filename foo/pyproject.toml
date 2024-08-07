@@ -1,0 +1,16 @@
+[project]
+name = "foo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "elmer-circuitbuilder",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+elmer-circuitbuilder = { git = "https://github.com/ElmerCSC/elmer_circuitbuilder.git", rev = "44d2f4b19d6837ea990c16f494bdf7543d57483d" }

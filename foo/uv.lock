@@ -1,0 +1,15 @@
+version = 1
+requires-python = ">=3.12"
+
+[[distribution]]
+name = "elmer-circuitbuilder"
+version = "1.0.0"
+source = { git = "https://github.com/ElmerCSC/elmer_circuitbuilder.git?rev=44d2f4b19d6837ea990c16f494bdf7543d57483d#44d2f4b19d6837ea990c16f494bdf7543d57483d" }
+
+[[distribution]]
+name = "foo"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "elmer-circuitbuilder" },
+]

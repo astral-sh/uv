@@ -166,6 +166,7 @@ pub(super) async fn do_safe_lock(
         )
         .await?;
 
+
         // If the locks disagree, return an error.
         if lock != existing {
             return Err(ProjectError::LockMismatch);

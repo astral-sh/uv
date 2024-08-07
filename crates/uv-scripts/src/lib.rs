@@ -40,7 +40,7 @@ pub async fn read_pep723_metadata(
         Err(err) => return Err(err.into()),
     };
 
-    // Extract the `script` tag.
+    // Extract the `script` tag.u
     let Some(contents) = extract_script_tag(&contents)? else {
         return Ok(None);
     };

@@ -586,6 +586,7 @@ impl Lock {
             let hashes = distribution.hashes();
             let metadata = distribution.to_metadata(install_path)?;
 
+
             // Add metadata to the distributions index.
             let response = MetadataResponse::Found(ArchiveMetadata::with_hashes(metadata, hashes));
             distributions.done(version_id, Arc::new(response));
@@ -1488,7 +1489,9 @@ impl Source {
             UrlString::from(locked_git_url(git_dist)),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
-                precise: git_dist.git.precise().expect("precise commit"),
+                precise: git_dist.git.precise().unwrap_or_else(|| {
+                    panic!("Git distribution is missing a precise hash: {git_dist}")
+                }),
                 subdirectory: git_dist
                     .subdirectory
                     .as_deref()

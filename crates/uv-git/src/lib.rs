@@ -27,6 +27,11 @@ pub struct GitUrl {
 
 impl GitUrl {
     pub fn new(repository: Url, reference: GitReference) -> Self {
+        let precise = if let GitReference::FullCommit(rev) = &reference {
+            Some(GitSha::from_str(rev).expect("valid GitSha"))
+        } else {
+            None
+        };
         Self {
             repository,
             reference,
@@ -86,7 +91,7 @@ impl TryFrom<Url> for GitUrl {
         Ok(Self {
             repository: url,
             reference,
-            precise,
+            precise
         })
     }
 }
