@@ -495,6 +495,21 @@ impl ManagedPythonDownload {
             extracted = extracted.join("install");
         }
 
+        // If the distribution is missing a `python`-to-`pythonX.Y` symlink, add it. PEP 394 permits
+        // it, and python-build-standalone releases after `20240726` include it, but releases prior
+        // to that date do not.
+        #[cfg(unix)]
+        {
+            match std::os::unix::fs::symlink(
+                format!("python{}.{}", self.key.major, self.key.minor),
+                extracted.join("bin").join("python"),
+            ) {
+                Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
+
         // Persist it to the target
         debug!("Moving {} to {}", extracted.display(), path.user_display());
         rename_with_retry(extracted, &path)
