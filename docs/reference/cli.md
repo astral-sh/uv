@@ -191,19 +191,11 @@ uv run [OPTIONS] <COMMAND>
 
 <p>If not in a workspace, or if the workspace member does not exist, uv will exit with an error.</p>
 
-</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
+</dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the run environment.</p>
 
-<p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--python</code> option allows you to specify a different interpreter.</p>
+<p>If the interpreter request is satisfied by a discovered environment, the environment will be used.</p>
 
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> to view supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -253,7 +245,15 @@ uv run [OPTIONS] <COMMAND>
 
 ## uv init
 
-Create a new project (experimental)
+Create a new project (experimental).
+
+Follows the `pyproject.toml` specification.
+
+If a `pyproject.toml` already exists at the target, uv will exit with an error.
+
+If a `pyproject.toml` is found in any of the parent directories of the target path, the project will be added as a workspace member of the parent.
+
+Some project state is not created until needed, e.g., the project virtual environment (`.venv`) and lockfile (`uv.lock`) are lazily created during the first sync.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -263,27 +263,23 @@ uv init [OPTIONS] [PATH]
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>PATH</code></dt><dd><p>The path of the project</p>
+<dl class="cli-reference"><dt><code>PATH</code></dt><dd><p>The path to use for the project.</p>
+
+<p>Defaults to the current working directory. Accepts relative and absolute paths.</p>
+
+<p>If a <code>pyproject.toml</code> is found in any of the parent directories of the target path, the project will be added as a workspace member of the parent, unless <code>--no-workspace</code> is provided.</p>
 
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the project, defaults to the name of the directory</p>
+<dl class="cli-reference"><dt><code>--name</code> <i>name</i></dt><dd><p>The name of the project.</p>
+
+<p>Defaults to the name of the directory.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to determine the minimum supported Python version.</p>
 
-<p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--python</code> option allows you to specify a different interpreter.</p>
-
-<p>Supported formats:</p>
-
-<ul>
-<li><code>3.10</code> looks for an installed Python 3.10 using <code>py --list-paths</code> on Windows, or <code>python3.10</code> on Linux and macOS.</li>
-
-<li><code>python3.10</code> or <code>python.exe</code> looks for a binary with the given name in <code>PATH</code>.</li>
-
-<li><code>/home/ferris/.local/bin/python3.10</code> uses the exact Python at the given path.</li>
-</ul>
+<p>See <code>uv help python</code> to view supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 

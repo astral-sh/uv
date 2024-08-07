@@ -465,6 +465,19 @@ pub enum ProjectCommand {
     )]
     Run(RunArgs),
     /// Create a new project (experimental).
+    ///
+    /// Follows the `pyproject.toml` specification.
+    ///
+    /// If a `pyproject.toml` already exists at the target, uv will exit with an
+    /// error.
+    ///
+    /// If a `pyproject.toml` is found in any of the parent directories of the
+    /// target path, the project will be added as a workspace member of
+    /// the parent.
+    ///
+    /// Some project state is not created until needed, e.g., the project
+    /// virtual environment (`.venv`) and lockfile (`uv.lock`) are lazily
+    /// created during the first sync.
     Init(InitArgs),
     /// Add dependencies to the project (experimental).
     #[command(
@@ -1939,14 +1952,27 @@ impl ExternalCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
-    /// The path of the project.
+    /// The path to use for the project.
+    ///
+    /// Defaults to the current working directory. Accepts relative and absolute
+    /// paths.
+    ///
+    /// If a `pyproject.toml` is found in any of the parent directories of the
+    /// target path, the project will be added as a workspace member of the
+    /// parent, unless `--no-workspace` is provided.
     pub path: Option<String>,
 
-    /// The name of the project, defaults to the name of the directory.
+    /// The name of the project.
+    ///
+    /// Defaults to the name of the directory.
     #[arg(long)]
     pub name: Option<PackageName>,
 
     /// Create a virtual workspace instead of a project.
+    ///
+    /// A virtual workspace does not define project dependencies and cannot be
+    /// published. Instead, workspace members declare project dependencies.
+    /// Development dependencies may still be declared.
     #[arg(long)]
     pub r#virtual: bool,
 
@@ -1954,22 +1980,18 @@ pub struct InitArgs {
     #[arg(long)]
     pub no_readme: bool,
 
-    /// Avoid discovering the workspace in the current directory or any parent directory. Instead,
-    /// create a standalone project.
+    /// Avoid discovering a workspace.
+    ///
+    /// Instead, create a standalone project.
+    ///
+    /// By default, uv searches for workspaces in the current directory or any
+    /// parent directory.
     #[arg(long, alias = "no_project")]
     pub no_workspace: bool,
 
     /// The Python interpreter to use to determine the minimum supported Python version.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` to view supported request formats.
     #[arg(
         long,
         short,
@@ -2101,18 +2123,12 @@ pub struct RunArgs {
     #[arg(long, alias = "no_workspace", conflicts_with = "package")]
     pub no_project: bool,
 
-    /// The Python interpreter to use to build the run environment.
+    /// The Python interpreter to use for the run environment.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
+    /// If the interpreter request is satisfied by a discovered environment, the
+    /// environment will be used.
     ///
-    /// Supported formats:
-    ///
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` to view supported request formats.
     #[arg(
         long,
         short,
