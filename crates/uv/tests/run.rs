@@ -1014,3 +1014,75 @@ fn run_isolated_python_version() -> Result<()> {
 
     Ok(())
 }
+
+/// Ignore the existing project when executing with `--no-project`.
+#[test]
+fn run_no_project() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+        "#
+    })?;
+
+    let src = context.temp_dir.child("src").child("foo");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // `run` should run in the context of the project.
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // `run --no-project` should not (but it should still run in the same environment, as it would
+    // if there were no project at all).
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    "###);
+
+    // `run --no-project --isolated` should run in an entirely isolated environment.
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    "###);
+
+    Ok(())
+}
