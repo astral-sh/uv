@@ -3025,7 +3025,7 @@ version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 version = "0.1.0"
 "#;
@@ -3050,7 +3050,7 @@ version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 source =  { registry = "https://pypi.org/simple" }
 "#;
@@ -3075,7 +3075,7 @@ version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
@@ -3105,7 +3105,7 @@ version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 version = "0.1.0"
 "#;
@@ -3136,7 +3136,7 @@ version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 source =  { registry = "https://pypi.org/simple" }
 "#;
@@ -3167,7 +3167,7 @@ version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);

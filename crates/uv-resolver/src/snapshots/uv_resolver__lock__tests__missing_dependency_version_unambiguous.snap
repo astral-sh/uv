@@ -85,7 +85,23 @@ Ok(
                 ),
                 wheels: [],
                 fork_markers: None,
-                dependencies: [],
+                dependencies: [
+                    Dependency {
+                        package_id: PackageId {
+                            name: PackageName(
+                                "a",
+                            ),
+                            version: "0.1.0",
+                            source: Registry(
+                                UrlString(
+                                    "https://pypi.org/simple",
+                                ),
+                            ),
+                        },
+                        extra: {},
+                        marker: None,
+                    },
+                ],
                 optional_dependencies: {},
                 dev_dependencies: {},
             },
