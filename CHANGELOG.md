@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.34
+
+### Enhancements
+
+- Always strip in release mode ([#5745](https://github.com/astral-sh/uv/pull/5745))
+- Assume `git+` prefix when URLs end in `.git` ([#5868](https://github.com/astral-sh/uv/pull/5868))
+- Support build constraints ([#5639](https://github.com/astral-sh/uv/pull/5639))
+
+### CLI
+
+- Create help sections for build, install, resolve, and index ([#5693](https://github.com/astral-sh/uv/pull/5693))
+- Improve CLI documentation for global options ([#5834](https://github.com/astral-sh/uv/pull/5834))
+- Improve `--python` CLI documentation ([#5869](https://github.com/astral-sh/uv/pull/5869))
+- Improve display order of top-level commands ([#5830](https://github.com/astral-sh/uv/pull/5830))
+
+### Bug fixes
+
+- Allow downloading wheels for metadata with `--no-binary` ([#5707](https://github.com/astral-sh/uv/pull/5707))
+- Reject `pyproject.toml` in `--config-file` ([#5842](https://github.com/astral-sh/uv/pull/5842))
+- Remove double-proxy nodes in error reporting ([#5738](https://github.com/astral-sh/uv/pull/5738))
+- Respect pre-release preferences from input files ([#5736](https://github.com/astral-sh/uv/pull/5736))
+- Support overlapping local and non-local requirements in forks ([#5812](https://github.com/astral-sh/uv/pull/5812))
+
 ## 0.2.33
 
 ### Enhancements
