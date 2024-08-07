@@ -195,7 +195,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>If the interpreter request is satisfied by a discovered environment, the environment will be used.</p>
 
-<p>See <code>uv help python</code> to view supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -279,7 +279,7 @@ uv init [OPTIONS] [PATH]
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to determine the minimum supported Python version.</p>
 
-<p>See <code>uv help python</code> to view supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -464,7 +464,7 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -641,7 +641,7 @@ uv remove [OPTIONS] <REQUIREMENTS>...
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -818,7 +818,7 @@ uv sync [OPTIONS]
 
 <p>If a Python interpreter in a virtual environment is provided, the packages will not be synced to the given environment. The interpreter will be used to create a virtual environment in the project.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -989,7 +989,7 @@ uv lock [OPTIONS]
 
 <p>The interpreter is also used as the fallback value for the minimum Python version if <code>requires-python</code> is not set.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1204,7 +1204,7 @@ uv tree [OPTIONS]
 
 <p>A Python interpreter is required to perform the lock before displaying the tree.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1405,7 +1405,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1582,7 +1582,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the tool environment.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -2007,7 +2007,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>If not provided, the requested Python version(s) will be read from the <code>.python-versions</code> or <code>.python-version</code> files. If neither file is present, uv will check if it has installed any Python versions. If not, it will install the latest stable version of Python.</p>
 
-<p>See <code>uv help python</code> to view supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 </dd></dl>
 
@@ -2073,7 +2073,7 @@ uv python find [OPTIONS] [REQUEST]
 
 <dl class="cli-reference"><dt><code>REQUEST</code></dt><dd><p>The Python request.</p>
 
-<p>See <code>uv help python</code> to view supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 </dd></dl>
 
@@ -2141,7 +2141,7 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>uv supports more formats than other tools that read <code>.python-version</code> files, i.e., <code>pyenv</code>. If compatibility with those tools is needed, only use version numbers instead of complex requests such as <code>cpython@3.10</code>.</p>
 
-<p>See <code>uv help python</code> to view supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 </dd></dl>
 
@@ -2265,7 +2265,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <dl class="cli-reference"><dt><code>TARGETS</code></dt><dd><p>The Python version(s) to uninstall.</p>
 
-<p>See <code>uv help python</code> to view supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 </dd></dl>
 
@@ -2517,7 +2517,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>The interpreter is also used to determine the default minimum Python version, unless <code>--python-version</code> is provided.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--no-binary</code> <i>no-binary</i></dt><dd><p>Don&#8217;t install pre-built wheels.</p>
 
@@ -2733,7 +2733,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>By default, syncing requires a virtual environment. An path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
@@ -2995,7 +2995,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>By default, installation requires a virtual environment. An path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
@@ -3130,7 +3130,7 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 <p>By default, uninstallation requires a virtual environment. An path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
 
@@ -3211,7 +3211,7 @@ uv pip freeze [OPTIONS]
 
 <p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3289,7 +3289,7 @@ uv pip list [OPTIONS]
 
 <p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3359,7 +3359,7 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>By default, uv looks for packages in a virtual environment but will look for packages in a system Python environment if no virtual environment is found.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3430,7 +3430,7 @@ uv pip tree [OPTIONS]
 
 <p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -3494,7 +3494,7 @@ uv pip check [OPTIONS]
 
 <p>By default, uv checks packages in a virtual environment but will check packages in a system Python environment if no virtual environment is found.</p>
 
-<p>See <code>uv help python</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 

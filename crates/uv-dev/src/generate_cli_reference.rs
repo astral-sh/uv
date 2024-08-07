@@ -13,6 +13,15 @@ use crate::ROOT_DIR;
 
 use uv_cli::Cli;
 
+const REPLACEMENTS: &[(&str, &str)] = &[
+    // Replace suggestions to use `uv help python` with a link to the
+    // `uv python` section
+    (
+        "<code>uv help python</code>",
+        "<a href=\"#uv-python\">uv python</a>",
+    ),
+];
+
 #[derive(clap::Args)]
 pub(crate) struct Args {
     /// Write the generated output to stdout (rather than to `settings.md`).
@@ -83,6 +92,10 @@ fn generate() -> String {
 
     output.push_str("# CLI Reference\n\n");
     generate_command(&mut output, &uv, &mut parents);
+
+    for (value, replacement) in REPLACEMENTS {
+        output = output.replace(value, replacement);
+    }
 
     output
 }
