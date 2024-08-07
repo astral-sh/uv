@@ -90,11 +90,11 @@ jobs:
     name: "cargo clippy | ubuntu"
     steps:
       - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
@@ -105,8 +105,6 @@ jobs:
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup target add x86_64-pc-windows-msvc
       - name: Load xwin cache
         uses: actions/cache@v4
         with:
@@ -116,6 +114,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Install Rust toolchain"
+        run: rustup target add x86_64-pc-windows-msvc
       - name: "Install cargo-xwin"
         uses: taiki-e/install-action@v2
         with:
@@ -149,12 +149,13 @@ jobs:
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup show
 
       - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
 
       - name: "Install required Python versions"
         run: |
@@ -187,12 +188,13 @@ jobs:
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup show
 
       - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
 
       - name: "Install required Python versions"
         run: |
@@ -241,13 +243,6 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.DEV_DRIVE }}/uv" -Recurse
 
-      - name: "Install Rust toolchain"
-        working-directory: ${{ env.DEV_DRIVE }}/uv
-        env:
-          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
-          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
-        run: rustup show
-
       # We do not test with Python patch versions on Windows
       # so we can use `setup-python` instead of our bootstrapping code
       # this is much faster on the extremely slow GitHub Windows runners.
@@ -266,6 +261,13 @@ jobs:
         env:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.DEV_DRIVE }}/uv
+        env:
+          CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
+          RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
+        run: rustup show
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -308,12 +310,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Install Rust toolchain"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: |
-          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
-          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
-
       - name: Load xwin cache
         uses: actions/cache@v4
         with:
@@ -325,6 +321,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ github.workspace }}/crates/uv-trampoline
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        run: |
+          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-xwin and cargo-bloat"
         uses: taiki-e/install-action@v2
@@ -1477,6 +1479,8 @@ jobs:
       - name: "Checkout Branch"
         uses: actions/checkout@v4
 
+      - uses: Swatinem/rust-cache@v2
+
       - name: "Install Rust toolchain"
         run: rustup show
 
@@ -1484,8 +1488,6 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-codspeed
-
-      - uses: Swatinem/rust-cache@v2
 
       - name: "Install requirements and prime cache"
         run: |
