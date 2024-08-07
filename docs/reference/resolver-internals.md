@@ -8,10 +8,10 @@
 ## Resolver
 
 As defined in a textbook, resolution, or finding a set of version to install from a given set of
-requirements, is equivalent to the [SAT
-problem](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem) and thereby NP-complete: in
-the worst case you have to try all possible combinations of all versions of all packages and there
-are no general, fast algorithms. In practice, this is misleading for a number of reasons:
+requirements, is equivalent to the
+[SAT problem](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem) and thereby NP-complete:
+in the worst case you have to try all possible combinations of all versions of all packages and
+there are no general, fast algorithms. In practice, this is misleading for a number of reasons:
 
 - The slowest part of resolution in uv is loading package and version metadata, even if it's cached.
 - There are many possible solutions, but some are preferable than others. For example we generally
@@ -30,34 +30,33 @@ uv uses [pubgrub-rs](https://github.com/pubgrub-rs/pubgrub), the Rust implementa
 [PubGrub](https://nex3.medium.com/pubgrub-2fb6470504f), an incremental version solver. PubGrub in uv
 works in the following steps:
 
-- Start with a partial solution that declares which packages versions have been selected and
-  which are undecided. Initially, this may be all undecided.
+- Start with a partial solution that declares which packages versions have been selected and which
+  are undecided. Initially, only a virtual root package is decided.
 - The highest priority package is selected from the undecided packages. Package with URLs (including
   file, git, etc.) have the highest priority, then those with more exact specifiers (such as `==`),
   then those with less strict specifiers. Inside each category, packages are ordered by when they
   were first seen (i.e. order in a file), making the resolution deterministic.
 - A version is picked for the selected package. The version must works with all specifiers from the
   requirements in the partial solution and must not be previously marked as incompatible. The
-  resolver prefers versions from a lockfile (`uv.lock` or `-o requirements.txt`) and that are
-  installed in the current environment. Versions are checked from highest to lowest (unless using an
+  resolver prefers versions from a lockfile (`uv.lock` or `-o requirements.txt`) and those installed
+  in the current environment. Versions are checked from highest to lowest (unless using an
   alternative [resolution strategy](../concepts/resolution.md#resolution-strategy)).
 - All requirements of the selected package version are added to the undecided packages. uv
   prefetches their metadata in the background to improve performance.
 - The process is either repeated with the next package unless a conflict is detected, in which the
-  resolver will backtrack. For example, if the partial solution contains, among other packages, `a
-  2` then `b 2` with the requirements `a 2 -> c 1` and `b 2 -> c 2`. No compatible version of `c`
-  can be found. PubGrub can determine this was caused by `a 2` and `b 2` and add the incompatibility
-  `{a 2, b 2}`, meaning that when either is picked, the other cannot be selected. The partial solution is
-  restored to `a 2` with the tracked incompatibility and the resolver attempts to pick a new version
-  for `b`.
+  resolver will backtrack. For example, the partial solution contains, among other packages, `a 2`
+  then `b 2` with the requirements `a 2 -> c 1` and `b 2 -> c 2`. No compatible version of `c` can
+  be found. PubGrub can determine this was caused by `a 2` and `b 2` and add the incompatibility
+  `{a 2, b 2}`, meaning that when either is picked, the other cannot be selected. The partial
+  solution is restored to `a 2` with the tracked incompatibility and the resolver attempts to pick a
+  new version for `b`.
 
 Eventually, the resolver either picks compatible versions for all packages (a successful resolution)
-or there is an incompatibility including the "root" package which defines the versions requested by
-the user. An incompatibility with the root package indicates that whatever versions of the root
-dependencies and their transitive dependencies are picked, there will always be a conflict. From the
-incompatibilities tracked in PubGrub, an error message is constructed to enumerate the involved
-packages.
-
+or there is an incompatibility including the virtual "root" package which defines the versions
+requested by the user. An incompatibility with the root package indicates that whatever versions of
+the root dependencies and their transitive dependencies are picked, there will always be a conflict.
+From the incompatibilities tracked in PubGrub, an error message is constructed to enumerate the
+involved packages.
 
 !!! tip
 
@@ -67,8 +66,8 @@ packages.
 ## Forking
 
 Python resolvers historically didn't support backtracking, and even with backtracking, resolution
-was usually limited to single environment, which one specific architecture, operating system,
-Python version, and Python implementation. Some packages use contradictory requirements for different
+was usually limited to single environment, which one specific architecture, operating system, Python
+version, and Python implementation. Some packages use contradictory requirements for different
 environments, for example:
 
 ```text
@@ -81,7 +80,7 @@ Since Python only allows one version of each package, a naive resolver would err
 multiple requirements for a package with different markers, the resolution is split.
 
 In the above example, the partial solution would be split into two resolutions, one for
-`python_version >= "3.11"` and one for `python_version < "3.11"`. 
+`python_version >= "3.11"` and one for `python_version < "3.11"`.
 
 If markers overlap or are missing a part of the marker space, the resolver splits additional times —
 there can be many forks per package. For example, given:
@@ -111,7 +110,7 @@ resolver is invoked again, a different solution is found because the preferences
 fork points. To avoid this, the `environment-markers` of each fork and each package that diverges
 between forks is written to the lockfile. When performing a new resolution, the forks from the
 lockfile are used to ensure the resolution is stable. When requirements change, new forks may be
-added to the saved forks. 
+added to the saved forks.
 
 ## Requires-python
 
@@ -120,8 +119,8 @@ included Python versions, uv requires that all dependencies have the same minimu
 Package versions that declare a higher minimum Python version, e.g., `requires-python = ">=3.10"`,
 are rejected, because a resolution with that version can't be installed on Python 3.9. For
 simplicity and forward compatibility, only lower bounds in `requires-python` are respected. For
-example, if a package declares `requires-python = ">=3.8,<4"`, the `<4` marker is not propagated
-to the entire resolution.
+example, if a package declares `requires-python = ">=3.8,<4"`, the `<4` marker is not propagated to
+the entire resolution.
 
 ## Wheel tags
 
