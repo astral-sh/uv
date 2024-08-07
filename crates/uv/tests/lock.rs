@@ -247,15 +247,15 @@ fn lock_sdist_git() -> Result<()> {
 
     deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+            success: true
+            exit_code: 0
+            ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        warning: `uv.sources` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+            warning: `uv.sources` is experimental and may change without warning
+            Resolved 2 packages in [TIME]
+            "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -264,25 +264,25 @@ fn lock_sdist_git() -> Result<()> {
         }, {
             assert_snapshot!(
                 lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
+                version = 1
+                requires-python = ">=3.12"
 
-            [options]
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[package]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+                [[package]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
 
-            [[package]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-            "###
+                [[package]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+                "###
             );
         });
     }
@@ -342,15 +342,15 @@ fn lock_sdist_git() -> Result<()> {
 
     deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+            success: true
+            exit_code: 0
+            ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        warning: `uv.sources` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+            warning: `uv.sources` is experimental and may change without warning
+            Resolved 2 packages in [TIME]
+            "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -359,25 +359,25 @@ fn lock_sdist_git() -> Result<()> {
         }, {
             assert_snapshot!(
                 lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
+                version = 1
+                requires-python = ">=3.12"
 
-            [options]
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+                [[distribution]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-            "###
+                [[distribution]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+                "###
             );
         });
     }
@@ -399,15 +399,15 @@ fn lock_sdist_git() -> Result<()> {
 
     deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+            success: true
+            exit_code: 0
+            ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        warning: `uv.sources` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+            warning: `uv.sources` is experimental and may change without warning
+            Resolved 2 packages in [TIME]
+            "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -416,25 +416,25 @@ fn lock_sdist_git() -> Result<()> {
         }, {
             assert_snapshot!(
                 lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
+                version = 1
+                requires-python = ">=3.12"
 
-            [options]
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+                [[distribution]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-            "###
+                [[distribution]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+                "###
             );
         });
     }
@@ -456,15 +456,15 @@ fn lock_sdist_git() -> Result<()> {
 
     deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+            success: true
+            exit_code: 0
+            ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        warning: `uv.sources` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+            warning: `uv.sources` is experimental and may change without warning
+            Resolved 2 packages in [TIME]
+            "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -473,25 +473,25 @@ fn lock_sdist_git() -> Result<()> {
         }, {
             assert_snapshot!(
                 lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
+                version = 1
+                requires-python = ">=3.12"
 
-            [options]
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+                [[distribution]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-            "###
+                [[distribution]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+                "###
             );
         });
     }
@@ -516,44 +516,44 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     deterministic! { context =>
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+                version = 1
+                requires-python = ">=3.12"
 
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
-        name = "project"
-        version = "0.1.0"
-        source = { editable = "." }
-        dependencies = [
-            { name = "uv-public-pypackage" },
-        ]
+                [[distribution]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
 
-        [[distribution]]
-        name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
-        );
-    });
+                [[distribution]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+                "###
+            );
+        });
     }
 
     // Re-run with `--locked`.
@@ -580,44 +580,44 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     deterministic! { context =>
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+                version = 1
+                requires-python = ">=3.12"
 
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
-        name = "project"
-        version = "0.1.0"
-        source = { editable = "." }
-        dependencies = [
-            { name = "uv-public-pypackage" },
-        ]
+                [[distribution]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
 
-        [[distribution]]
-        name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
-        );
-    });
+                [[distribution]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+                "###
+            );
+        });
     }
 
     // Re-lock with a different commit.
@@ -633,44 +633,44 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     deterministic! { context =>
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+                version = 1
+                requires-python = ">=3.12"
 
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
-        name = "project"
-        version = "0.1.0"
-        source = { editable = "." }
-        dependencies = [
-            { name = "uv-public-pypackage" },
-        ]
+                [[distribution]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
 
-        [[distribution]]
-        name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
-        );
-    });
+                [[distribution]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+                "###
+            );
+        });
     }
 
     // Re-lock with a different tag (which matches the new commit).
@@ -686,44 +686,44 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     deterministic! { context =>
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
 
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+                version = 1
+                requires-python = ">=3.12"
 
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
-        name = "project"
-        version = "0.1.0"
-        source = { editable = "." }
-        dependencies = [
-            { name = "uv-public-pypackage" },
-        ]
+                [[distribution]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
 
-        [[distribution]]
-        name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-        "###
-        );
-    });
+                [[distribution]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+                "###
+            );
+        });
     }
 
     Ok(())
