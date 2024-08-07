@@ -922,6 +922,10 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+            environment-markers = [
+                "python_version < '3.10'",
+                "python_version >= '3.10'",
+            ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -1074,7 +1078,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
             [distribution.optional-dependencies]
             socks = [
-                { name = "pysocks" },
+                { name = "pysocks", marker = "python_version < '3.10'" },
             ]
 
             [[distribution]]
@@ -1581,8 +1585,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         environment-markers = [
-            "sys_platform == 'win32'",
             "sys_platform != 'win32'",
+            "sys_platform == 'win32'",
         ]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
@@ -2891,12 +2895,12 @@ fn lock_python_version_marker_complement() -> Result<()> {
             version = 1
             requires-python = ">=3.8"
             environment-markers = [
-                "python_full_version > '3.10' and python_version > '3.10'",
-                "python_full_version > '3.10' and python_version == '3.10'",
                 "python_full_version > '3.10' and python_version < '3.10'",
-                "python_full_version <= '3.10' and python_version > '3.10'",
-                "python_full_version <= '3.10' and python_version == '3.10'",
                 "python_full_version <= '3.10' and python_version < '3.10'",
+                "python_full_version > '3.10' and python_version == '3.10'",
+                "python_full_version > '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version == '3.10'",
+                "python_full_version <= '3.10' and python_version > '3.10'",
             ]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 

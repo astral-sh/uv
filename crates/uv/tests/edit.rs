@@ -1493,6 +1493,10 @@ fn update() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        environment-markers = [
+            "python_version <= '3.7'",
+            "python_version > '3.7'",
+        ]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
