@@ -1,4 +1,5 @@
 .venv
 CHANGELOG.md
 PREVIEW-CHANGELOG.md
-docs/reference/{cli,settings}.md
+docs/reference/cli.md
+docs/reference/settings.md

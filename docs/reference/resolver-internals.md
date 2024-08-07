@@ -8,11 +8,10 @@
 ## Resolver
 
 As defined in a textbook, resolution, or finding a set of version to install from a given set of
-requirements, is equivalent to
-the [SAT problem](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem) and thereby
-NP-complete: in the worst case you have to try all possible combinations of all versions of all
-packages and there are no general, fast algorithms. In practice, this is misleading for a number of
-reasons:
+requirements, is equivalent to the
+[SAT problem](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem) and thereby NP-complete:
+in the worst case you have to try all possible combinations of all versions of all packages and
+there are no general, fast algorithms. In practice, this is misleading for a number of reasons:
 
 - The slowest part of resolution in uv is loading package and version metadata, even if it's cached.
 - There are many possible solutions, but some are preferable than others. For example we generally
@@ -45,9 +44,9 @@ works in the following steps:
 - All requirements of the selected package version are added to the undecided packages. uv
   prefetches their metadata in the background to improve performance.
 - The process is either repeated with the next package unless a conflict is detected, in which the
-  resolver will backtrack. For example, the partial solution contains, among other packages,
-  `a 2` then `b 2` with the requirements `a 2 -> c 1` and `b 2 -> c 2`. No compatible version of `c`
-  can be found. PubGrub can determine this was caused by `a 2` and `b 2` and add the incompatibility
+  resolver will backtrack. For example, the partial solution contains, among other packages, `a 2`
+  then `b 2` with the requirements `a 2 -> c 1` and `b 2 -> c 2`. No compatible version of `c` can
+  be found. PubGrub can determine this was caused by `a 2` and `b 2` and add the incompatibility
   `{a 2, b 2}`, meaning that when either is picked, the other cannot be selected. The partial
   solution is restored to `a 2` with the tracked incompatibility and the resolver attempts to pick a
   new version for `b`.
