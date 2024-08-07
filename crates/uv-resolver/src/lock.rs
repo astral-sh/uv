@@ -1385,9 +1385,8 @@ enum Source {
 impl Source {
     fn from_resolved_dist(resolved_dist: &ResolvedDist) -> Source {
         match *resolved_dist {
-            // TODO: Do we want to try to lock already-installed distributions?
-            // Or should we return an error?
-            ResolvedDist::Installed(_) => todo!(),
+            // We pass empty installed packages for locking.
+            ResolvedDist::Installed(_) => unreachable!(),
             ResolvedDist::Installable(ref dist) => Source::from_dist(dist),
         }
     }
@@ -1766,9 +1765,8 @@ impl SourceDist {
         annotated_dist: &AnnotatedDist,
     ) -> Result<Option<SourceDist>, LockError> {
         match annotated_dist.dist {
-            // TODO: Do we want to try to lock already-installed distributions?
-            // Or should we return an error?
-            ResolvedDist::Installed(_) => todo!(),
+            // We pass empty installed packages for locking.
+            ResolvedDist::Installed(_) => unreachable!(),
             ResolvedDist::Installable(ref dist) => {
                 SourceDist::from_dist(id, dist, &annotated_dist.hashes)
             }
@@ -2007,9 +2005,8 @@ struct Wheel {
 impl Wheel {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Wheel>, LockError> {
         match annotated_dist.dist {
-            // TODO: Do we want to try to lock already-installed distributions?
-            // Or should we return an error?
-            ResolvedDist::Installed(_) => todo!(),
+            // We pass empty installed packages for locking.
+            ResolvedDist::Installed(_) => unreachable!(),
             ResolvedDist::Installable(ref dist) => Wheel::from_dist(dist, &annotated_dist.hashes),
         }
     }
