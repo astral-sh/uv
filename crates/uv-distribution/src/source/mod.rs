@@ -1121,29 +1121,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // Resolve to a precise Git SHA.
-        let url = if let Some(url) = self
-            .build_context
-            .git()
-            .resolve(
-                resource.git,
-                client.unmanaged.uncached_client().client(),
-                self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
-            )
-            .await?
-        {
-            Cow::Owned(url)
-        } else {
-            Cow::Borrowed(resource.git)
-        };
-
         // Fetch the Git repository.
         let fetch = self
             .build_context
             .git()
             .fetch(
-                &url,
+                resource.git,
                 client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
@@ -1208,29 +1191,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // Resolve to a precise Git SHA.
-        let url = if let Some(url) = self
-            .build_context
-            .git()
-            .resolve(
-                resource.git,
-                client.unmanaged.uncached_client().client(),
-                self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
-            )
-            .await?
-        {
-            Cow::Owned(url)
-        } else {
-            Cow::Borrowed(resource.git)
-        };
-
         // Fetch the Git repository.
         let fetch = self
             .build_context
             .git()
             .fetch(
-                &url,
+                resource.git,
                 client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
