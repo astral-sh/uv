@@ -18,6 +18,7 @@ mod common;
 /// This test ensures that multiple non-conflicting but also
 /// non-overlapping dependency specifications with the same package name
 /// are allowed and supported.
+///
 /// At time of writing, this provokes a fork in the resolver, but it
 /// arguably shouldn't since the requirements themselves do not conflict
 /// with one another. However, this does impact resolution. Namely, it
@@ -127,6 +128,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 
 /// This test ensures that multiple non-conflicting dependency
 /// specifications with the same package name are allowed and supported.
+///
 /// This test exists because the universal resolver forks itself based on
 /// duplicate dependency specifications by looking at package name. So at
 /// first glance, a case like this could perhaps cause an errant fork.
@@ -427,6 +429,7 @@ fn conflict_in_fork() -> Result<()> {
 
 /// This test ensures that conflicting dependency specifications lead to an
 /// unsatisfiable result.
+///
 /// In particular, this is a case that should not fork even though there
 /// are conflicting requirements because their marker expressions are
 /// overlapping. (Well, there aren't any marker expressions here, which
@@ -491,12 +494,14 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
 /// This tests that sibling dependencies of a package that provokes a
 /// fork are correctly filtered out of forks where they are otherwise
 /// impossible.
+///
 /// In this case, a previous version of the universal resolver would
 /// include both `b` and `c` in *both* of the forks produced by the
 /// conflicting dependency specifications on `a`. This in turn led to
 /// transitive dependency specifications on both `d==1.0.0` and `d==2.0.0`.
 /// Since the universal resolver only forks based on local conditions, this
 /// led to a failed resolution.
+///
 /// The correct thing to do here is to ensure that `b` is only part of the
 /// `a==4.4.0` fork and `c` is only par of the `a==4.3.0` fork.
 ///
@@ -965,6 +970,7 @@ fn fork_marker_accrue() -> Result<()> {
 /// completely disjoint. Here, we provide two completely incompatible dependency
 /// specifications with equivalent markers. Thus, they are trivially not disjoint,
 /// and resolution should fail.
+///
 /// NOTE: This acts a regression test for the initial version of universal
 /// resolution that would fork whenever a package was repeated in the list of
 /// dependency specifications. So previously, this would produce a resolution with
@@ -1826,6 +1832,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 /// This tests that markers which provoked a fork in the universal resolver
 /// are used to ignore dependencies which cannot possibly be installed by a
 /// resolution produced by that fork.
+///
 /// In this example, the `a<2` dependency is only active on Darwin
 /// platforms. But the `a==1.0.0` distribution has a dependency on `b`
 /// that is only active on Linux, where as `a==2.0.0` does not. Therefore,
@@ -1952,6 +1959,7 @@ fn fork_marker_inherit() -> Result<()> {
 
 /// This is like `fork-marker-inherit`, but it tests that dependency
 /// filtering only occurs in the context of a fork.
+///
 /// For example, as in `fork-marker-inherit`, the `c` dependency of
 /// `a<2` should be entirely excluded here since it is possible for
 /// `sys_platform` to be simultaneously equivalent to Darwin and Linux.
@@ -2243,6 +2251,7 @@ fn fork_marker_selection() -> Result<()> {
     Ok(())
 }
 
+///
 ///
 /// ```text
 /// fork-marker-track
@@ -2683,14 +2692,19 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 /// it emulates a common pattern in the ecosystem where marker expressions
 /// are used to progressively increase the version constraints of a package
 /// as the Python version increases.
+///
 /// In this case, there is actually a split occurring between
 /// `python_version < '3.10'` and the other marker expressions, so this
 /// isn't just a scenario with overlapping but non-disjoint markers.
+///
 /// In particular, this serves as a regression test. uv used to create a
 /// lock file with a dependency on `a` with the following markers:
+///
 ///     python_version < '3.10' or python_version >= '3.11'
+///
 /// But this implies that `a` won't be installed for Python 3.10, which is
 /// clearly wrong.
+///
 /// The issue was that uv was intersecting *all* marker expressions. So
 /// that `a>=1.1.0` and `a>=1.2.0` fork was getting `python_version >=
 /// '3.10' and python_version >= '3.11'`, which, of course, simplifies
@@ -2698,6 +2712,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 /// `python_version >= '3.10' or python_version >= '3.11'`, which of course
 /// simplifies to `python_version >= '3.10'`. And thus, the resulting forks
 /// are not just disjoint but complete in this case.
+///
 /// Since there are no other constraints on `a`, this causes uv to select
 /// `1.2.0` unconditionally. (The marker expressions get normalized out
 /// entirely.)
@@ -2809,8 +2824,10 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// splitting of resolution forks: We meet one of two fork points depending on the
 /// preferences, creating a resolution whose preferences lead us the other fork
 /// point.
+///
 /// In the first case, we are in cleaver 2 and fork on `sys_platform`, in the
 /// second case, we are in foo 1 or bar 1 amd fork over `os_name`.
+///
 /// First case: We select cleaver 2, fork on `sys_platform`, we reject cleaver 2
 /// (missing fork `os_name`), we select cleaver 1 and don't fork on `os_name` in
 /// `fork-if-not-forked`, done.
@@ -3043,6 +3060,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 }
 
 /// Like `preferences-dependent-forking`, but when we don't fork the resolution fails.
+///
 /// Consider a fresh run without preferences:
 /// * We start with cleaver 2
 /// * We fork
@@ -3050,10 +3068,12 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 /// * We find cleaver solution in fork 1 with foo 2 with bar 1
 /// * We find cleaver solution in fork 2 with foo 1 with bar 2
 /// * We write cleaver 1, foo 1, foo 2, bar 1 and bar 2 to the lockfile
+///
 /// In a subsequent run, we read the preference cleaver 1 from the lockfile (the preferences for foo and bar don't matter):
 /// * We start with cleaver 1
 /// * We're in universal mode, cleaver requires foo 1, bar 1
 /// * foo 1 requires bar 2, conflict
+///
 /// Design sketch:
 /// ```text
 /// root -> clear, foo, bar
@@ -3155,6 +3175,7 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// This test case is like "preferences-dependent-forking-bistable", but with three
 /// states instead of two. The first two locks are in a different state, then we
 /// enter the tristable state.
+///
 /// It's not polished, but it's useful to have something with a higher period
 /// than 2 in our test suite.
 ///
@@ -3462,6 +3483,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 
 /// This test contains a scenario where the solution depends on whether we fork, and whether we fork depends on the
 /// preferences.
+///
 /// Consider a fresh run without preferences:
 /// * We start with cleaver 2
 /// * We fork
@@ -3469,11 +3491,14 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 /// * We find cleaver solution in fork 1 with foo 2 with bar 1
 /// * We find cleaver solution in fork 2 with foo 1 with bar 2
 /// * We write cleaver 1, foo 1, foo 2, bar 1 and bar 2 to the lockfile
+///
 /// In a subsequent run, we read the preference cleaver 1 from the lockfile (the preferences for foo and bar don't matter):
 /// * We start with cleaver 1
 /// * We're in universal mode, we resolve foo 1 and bar 1
 /// * We write cleaver 1 and bar 1 to the lockfile
+///
 /// We call a resolution that's different on the second run to the first unstable.
+///
 /// Design sketch:
 /// ```text
 /// root -> clear, foo, bar
@@ -3657,11 +3682,13 @@ fn preferences_dependent_forking() -> Result<()> {
 /// from disjoint markers that don't union to the universe, we need to
 /// create *another* fork corresponding to the difference between the
 /// universe and the union of the forks.
+///
 /// But when we do this, that remaining universe fork needs to be created
 /// like any other fork: it should start copying whatever set of forks
 /// existed by the time we got to this point, intersecting the markers with
 /// the markers describing the remaining universe and then filtering out
 /// any dependencies that are disjoint with the resulting markers.
+///
 /// This test exercises that logic by ensuring that a package `z` in the
 /// remaining universe is excluded based on the combination of markers
 /// from a parent fork. That is, if the remaining universe fork does not
@@ -3830,6 +3857,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
 
 /// This tests that a `Requires-Python` specifier will result in the
 /// exclusion of dependency specifications that cannot possibly satisfy it.
+///
 /// In particular, this is tested via the `python_full_version` marker with
 /// a pre-release version.
 ///
@@ -3912,6 +3940,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 
 /// This tests that a `Requires-Python` specifier will result in the
 /// exclusion of dependency specifications that cannot possibly satisfy it.
+///
 /// In particular, this is tested via the `python_full_version` marker
 /// instead of the more common `python_version` marker.
 ///
@@ -3995,6 +4024,7 @@ fn fork_requires_python_full() -> Result<()> {
 /// This tests that a `Requires-Python` specifier that includes a Python
 /// patch version will not result in excluded a dependency specification
 /// with a `python_version == '3.10'` marker.
+///
 /// This is a regression test for the universal resolver where it would
 /// convert a `Requires-Python: >=3.10.1` specifier into a `python_version
 /// >= '3.10.1'` marker expression, which would be considered disjoint

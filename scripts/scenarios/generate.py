@@ -129,22 +129,23 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
     # preserve.
     for scenario in data["scenarios"]:
         if scenario["_textwrap"]:
-            scenario["description_lines"] = textwrap.wrap(
+            scenario["description"] = textwrap.wrap(
                 scenario["description"], width=80
             )
         else:
-            scenario["description_lines"] = scenario["description"].splitlines()
+            scenario["description"] = scenario["description"].splitlines()
+        # Don't drop empty lines like chevron would.
+        scenario["description"] = "\n/// ".join(scenario["description"])
 
     # Apply the same wrapping to the expected explanation
     for scenario in data["scenarios"]:
         expected = scenario["expected"]
         if explanation := expected["explanation"]:
             if scenario["_textwrap"]:
-                expected["explanation_lines"] = textwrap.wrap(explanation, width=80)
+                expected["explanation"] = textwrap.wrap(explanation, width=80)
             else:
-                expected["explanation_lines"] = explanation.splitlines()
-        else:
-            expected["explanation_lines"] = []
+                expected["explanation"] = explanation.splitlines()
+            expected["explanation"] = "\n// ".join(expected["explanation"])
 
     # Hack to track which scenarios require a specific Python patch version
     for scenario in data["scenarios"]:
