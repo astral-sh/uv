@@ -453,40 +453,38 @@ pub(crate) async fn run(
         // "installed" packages, so that we can skip re-installing them in the ephemeral
         // environment.
 
-        // Create a virtual environment
-        temp_dir = cache.environment()?;
-        let venv = uv_virtualenv::create_venv(
-            temp_dir.path(),
-            interpreter,
-            uv_virtualenv::Prompt::None,
-            false,
-            false,
-            false,
-        )?;
-
-        match spec {
-            None => Some(venv),
-            Some(spec) if spec.is_empty() => Some(venv),
+        Some(match spec.filter(|spec| !spec.is_empty()) {
+            None => {
+                // Create a virtual environment
+                temp_dir = cache.environment()?;
+                uv_virtualenv::create_venv(
+                    temp_dir.path(),
+                    interpreter,
+                    uv_virtualenv::Prompt::None,
+                    false,
+                    false,
+                    false,
+                )?
+            }
             Some(spec) => {
                 debug!("Syncing ephemeral requirements");
-                // Install the ephemeral requirements.
-                Some(
-                    project::update_environment(
-                        venv,
-                        spec,
-                        &settings,
-                        &state,
-                        preview,
-                        connectivity,
-                        concurrency,
-                        native_tls,
-                        cache,
-                        printer.filter(show_resolution),
-                    )
-                    .await?,
+
+                CachedEnvironment::get_or_create(
+                    spec,
+                    interpreter,
+                    &settings,
+                    &state,
+                    preview,
+                    connectivity,
+                    concurrency,
+                    native_tls,
+                    cache,
+                    printer.filter(show_resolution),
                 )
+                .await?
+                .into()
             }
-        }
+        })
     };
 
     // If we're running in an ephemeral environment, add a `sitecustomize.py` to enable loading of
