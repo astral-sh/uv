@@ -9,8 +9,13 @@ the PyPA tools [`build`](https://github.com/pypa/build) and
 Build your package with the official `build` frontend:
 
 ```console
-$ uvx --from build pyproject-build
+$ uvx --from build pyproject-build --installer uv
 ```
+
+!!! note
+
+    Using `--installer uv` is not required, but uses uv instead of the default, pip, for faster
+    builds.
 
 The build artifacts will be placed in `dist/`.
 
