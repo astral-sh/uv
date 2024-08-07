@@ -129,9 +129,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
     # preserve.
     for scenario in data["scenarios"]:
         if scenario["_textwrap"]:
-            scenario["description"] = textwrap.wrap(
-                scenario["description"], width=80
-            )
+            scenario["description"] = textwrap.wrap(scenario["description"], width=80)
         else:
             scenario["description"] = scenario["description"].splitlines()
         # Don't drop empty lines like chevron would.
