@@ -246,10 +246,11 @@ impl ParsedGitUrl {
         precise: Option<GitSha>,
         subdirectory: Option<PathBuf>,
     ) -> Self {
-        let mut url = GitUrl::new(repository, reference);
-        if let Some(precise) = precise {
-            url = url.with_precise(precise);
-        }
+        let url = if let Some(precise) = precise {
+            GitUrl::from_commit(repository, reference, precise)
+        } else {
+            GitUrl::from_reference(repository, reference)
+        };
         Self { url, subdirectory }
     }
 }

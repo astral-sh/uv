@@ -863,9 +863,11 @@ impl Distribution {
             }
             Source::Git(url, git) => {
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url =
-                    uv_git::GitUrl::new(url.to_url(), GitReference::from(git.kind.clone()))
-                        .with_precise(git.precise);
+                let git_url = uv_git::GitUrl::from_commit(
+                    url.to_url(),
+                    GitReference::from(git.kind.clone()),
+                    git.precise,
+                );
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {
@@ -1488,7 +1490,9 @@ impl Source {
             UrlString::from(locked_git_url(git_dist)),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
-                precise: git_dist.git.precise().expect("precise commit"),
+                precise: git_dist.git.precise().unwrap_or_else(|| {
+                    panic!("Git distribution is missing a precise hash: {git_dist}")
+                }),
                 subdirectory: git_dist
                     .subdirectory
                     .as_deref()
@@ -2205,9 +2209,11 @@ impl Dependency {
                 index: None,
             },
             Source::Git(repository, git) => {
-                let git_url =
-                    uv_git::GitUrl::new(repository.to_url(), GitReference::from(git.kind.clone()))
-                        .with_precise(git.precise);
+                let git_url = uv_git::GitUrl::from_commit(
+                    repository.to_url(),
+                    GitReference::from(git.kind.clone()),
+                    git.precise,
+                );
 
                 let parsed_url = ParsedUrl::Git(ParsedGitUrl {
                     url: git_url.clone(),

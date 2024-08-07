@@ -241,10 +241,11 @@ impl<'a> Planner<'a> {
                     subdirectory,
                     url,
                 } => {
-                    let mut git = GitUrl::new(repository.clone(), reference.clone());
-                    if let Some(precise) = precise {
-                        git = git.with_precise(*precise);
-                    }
+                    let git = if let Some(precise) = precise {
+                        GitUrl::from_commit(repository.clone(), reference.clone(), *precise)
+                    } else {
+                        GitUrl::from_reference(repository.clone(), reference.clone())
+                    };
                     let sdist = GitSourceDist {
                         name: requirement.name.clone(),
                         git: Box::new(git),

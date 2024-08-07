@@ -71,7 +71,7 @@ impl GitResolver {
         Ok(fetch)
     }
 
-    /// Given a remote source distribution, return a precise variant, if possible.
+    /// Given a remote source distribution, return a precise variant.
     ///
     /// For example, given a Git dependency with a reference to a branch or tag, return a URL
     /// with a precise reference to the current commit of that branch or tag.
@@ -79,6 +79,9 @@ impl GitResolver {
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
+    ///
+    /// Returns `Ok(None)` if the URL already has a precise reference (i.e., it includes a full
+    /// commit hash in the URL itself, as opposed to, e.g., a branch name).
     pub async fn resolve(
         &self,
         url: &GitUrl,
@@ -121,7 +124,8 @@ impl GitResolver {
     /// prefix kinds.
     ///
     /// This method will only return precise URLs for URLs that have already been resolved via
-    /// [`resolve_precise`].
+    /// [`resolve_precise`], and will return `None` for URLs that have not been resolved _or_
+    /// already have a precise reference.
     pub fn precise(&self, url: GitUrl) -> Option<GitUrl> {
         let reference = RepositoryReference::from(&url);
         let precise = self.get(&reference)?;
