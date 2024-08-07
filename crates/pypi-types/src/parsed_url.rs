@@ -347,6 +347,11 @@ impl TryFrom<Url> for ParsedUrl {
                     message: "Unknown scheme",
                 }),
             }
+        } else if Path::new(url.path())
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("git"))
+        {
+            Ok(Self::Git(ParsedGitUrl::try_from(url)?))
         } else if url.scheme().eq_ignore_ascii_case("file") {
             let path = url
                 .to_file_path()
