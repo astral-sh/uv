@@ -361,6 +361,8 @@ fn lock_sdist_git() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -416,6 +418,8 @@ fn lock_sdist_git() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -471,6 +475,8 @@ fn lock_sdist_git() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
             [[distribution]]
@@ -527,23 +533,25 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+        version = 1
+        requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-            "###
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
         );
     });
     }
@@ -589,23 +597,25 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+        version = 1
+        requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-            "###
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
         );
     });
     }
@@ -640,23 +650,25 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+        version = 1
+        requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-            "###
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+        "###
         );
     });
     }
@@ -691,23 +703,25 @@ fn lock_sdist_git_pep508() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+        version = 1
+        requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
-            "###
+        [[distribution]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [[distribution]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+        "###
         );
     });
     }
