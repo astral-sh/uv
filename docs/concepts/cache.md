@@ -61,4 +61,4 @@ To support this caching strategy, uv provides a `uv cache prune --ci` command, w
 pre-built wheels from the cache but retains any wheels that were built from source. We recommend
 running `uv cache prune --ci` at the end of your continuous integration job to ensure maximum cache
 efficiency. For an example, see the
-[GitHub integration guide](../guides/integration/github/#caching).
+[GitHub integration guide](../guides/integration/github.md#caching).
