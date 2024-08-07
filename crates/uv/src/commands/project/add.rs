@@ -106,7 +106,7 @@ pub(crate) async fn add(
 
     // Read the requirements.
     let RequirementsSpecification { requirements, .. } =
-        RequirementsSpecification::from_sources(&requirements, &[], &[], &client_builder).await?;
+        RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
