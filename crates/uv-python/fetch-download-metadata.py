@@ -129,6 +129,8 @@ class CPythonFinder(Finder):
     FLAVOR_PREFERENCES = [
         "install_only_stripped",
         "install_only",
+    ]
+    HIDDEN_FLAVORS = [
         "shared-pgo",
         "shared-noopt",
         "static-noopt",
@@ -136,8 +138,6 @@ class CPythonFinder(Finder):
         "pgo",
         "lto",
         "debug",
-    ]
-    HIDDEN_FLAVORS = [
         "noopt",
     ]
     SPECIAL_TRIPLES = {
@@ -274,6 +274,8 @@ class CPythonFinder(Finder):
         # Ex)
         # https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
         if url.endswith(".sha256"):
+            return None
+        if url.endswith(".tar.zst"):
             return None
         filename = unquote(url.rsplit("/", maxsplit=1)[-1])
 
