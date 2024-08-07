@@ -586,7 +586,6 @@ impl Lock {
             let hashes = distribution.hashes();
             let metadata = distribution.to_metadata(install_path)?;
 
-
             // Add metadata to the distributions index.
             let response = MetadataResponse::Found(ArchiveMetadata::with_hashes(metadata, hashes));
             distributions.done(version_id, Arc::new(response));
@@ -864,9 +863,11 @@ impl Distribution {
             }
             Source::Git(url, git) => {
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url =
-                    uv_git::GitUrl::new(url.to_url(), GitReference::from(git.kind.clone()))
-                        .with_precise(git.precise);
+                let git_url = uv_git::GitUrl::from_commit(
+                    url.to_url(),
+                    GitReference::from(git.kind.clone()),
+                    git.precise,
+                );
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {
@@ -2208,9 +2209,11 @@ impl Dependency {
                 index: None,
             },
             Source::Git(repository, git) => {
-                let git_url =
-                    uv_git::GitUrl::new(repository.to_url(), GitReference::from(git.kind.clone()))
-                        .with_precise(git.precise);
+                let git_url = uv_git::GitUrl::from_commit(
+                    repository.to_url(),
+                    GitReference::from(git.kind.clone()),
+                    git.precise,
+                );
 
                 let parsed_url = ParsedUrl::Git(ParsedGitUrl {
                     url: git_url.clone(),

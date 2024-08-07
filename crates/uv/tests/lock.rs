@@ -385,7 +385,6 @@ fn lock_sdist_git() -> Result<()> {
         });
     }
 
-
     // Re-lock with a different tag (which matches the new commit).
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -461,7 +460,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     // deterministic! { context =>
-        uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -471,13 +470,13 @@ fn lock_sdist_git_pep508() -> Result<()> {
         Resolved 2 packages in [TIME]
         "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
             version = 1
             requires-python = ">=3.12"
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -495,8 +494,8 @@ fn lock_sdist_git_pep508() -> Result<()> {
             version = "0.1.0"
             source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
             "###
-            );
-        });
+        );
+    });
     // }
 
     // Re-lock with a precise commit that maps to the same tag.
@@ -512,7 +511,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     // deterministic! { context =>
-        uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -522,13 +521,13 @@ fn lock_sdist_git_pep508() -> Result<()> {
         Resolved 2 packages in [TIME]
         "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
             version = 1
             requires-python = ">=3.12"
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -546,8 +545,8 @@ fn lock_sdist_git_pep508() -> Result<()> {
             version = "0.1.0"
             source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
             "###
-            );
-        });
+        );
+    });
     // }
 
     // Re-lock with a different commit.
@@ -563,7 +562,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     // deterministic! { context =>
-        uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -573,13 +572,13 @@ fn lock_sdist_git_pep508() -> Result<()> {
         Resolved 2 packages in [TIME]
         "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
             version = 1
             requires-python = ">=3.12"
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -597,10 +596,9 @@ fn lock_sdist_git_pep508() -> Result<()> {
             version = "0.1.0"
             source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
             "###
-            );
-        });
+        );
+    });
     // }
-
 
     // Re-lock with a different tag (which matches the new commit).
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -615,7 +613,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
     )?;
 
     // deterministic! { context =>
-        uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -625,13 +623,13 @@ fn lock_sdist_git_pep508() -> Result<()> {
         Resolved 2 packages in [TIME]
         "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
             version = 1
             requires-python = ">=3.12"
             exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -649,8 +647,8 @@ fn lock_sdist_git_pep508() -> Result<()> {
             version = "0.1.0"
             source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
             "###
-            );
-        });
+        );
+    });
     // }
 
     Ok(())

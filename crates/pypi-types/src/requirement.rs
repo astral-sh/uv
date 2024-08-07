@@ -113,9 +113,9 @@ impl From<Requirement> for pep508_rs::Requirement<VerbatimParsedUrl> {
                     url,
                 } => {
                     let git_url = if let Some(precise) = precise {
-                        GitUrl::new(repository, reference).with_precise(precise)
+                        GitUrl::from_commit(repository, reference, precise)
                     } else {
-                        GitUrl::new(repository, reference)
+                        GitUrl::from_reference(repository, reference)
                     };
                     Some(VersionOrUrl::Url(VerbatimParsedUrl {
                         parsed_url: ParsedUrl::Git(ParsedGitUrl {

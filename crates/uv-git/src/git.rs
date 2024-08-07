@@ -3,8 +3,10 @@
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::str::{self};
+use std::str::{self, FromStr};
 
+use crate::sha::GitOid;
+use crate::GitSha;
 use anyhow::{anyhow, Context, Result};
 use cargo_util::{paths, ProcessBuilder};
 use reqwest::StatusCode;
@@ -12,8 +14,6 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 use url::Url;
 use uv_fs::Simplified;
-
-use crate::sha::GitOid;
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -106,6 +106,15 @@ impl GitReference {
             Self::BranchOrTagOrCommit(_) => "branch, tag, or commit",
             Self::NamedRef(_) => "ref",
             Self::DefaultBranch => "default branch",
+        }
+    }
+
+    /// Returns the precise [`GitSha`] of this reference, if it's a full commit.
+    pub(crate) fn as_sha(&self) -> Option<GitSha> {
+        if let Self::FullCommit(rev) = self {
+            Some(GitSha::from_str(rev).expect("Full commit should be exactly 40 characters"))
+        } else {
+            None
         }
     }
 }

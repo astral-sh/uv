@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use url::Url;
 
 pub use crate::git::GitReference;
@@ -26,16 +25,22 @@ pub struct GitUrl {
 }
 
 impl GitUrl {
-    pub fn new(repository: Url, reference: GitReference) -> Self {
-        let precise = if let GitReference::FullCommit(rev) = &reference {
-            Some(GitSha::from_str(rev).expect("valid GitSha"))
-        } else {
-            None
-        };
+    /// Create a new [`GitUrl`] from a repository URL and a reference.
+    pub fn from_reference(repository: Url, reference: GitReference) -> Self {
+        let precise = reference.as_sha();
         Self {
             repository,
             reference,
-            precise: None,
+            precise,
+        }
+    }
+
+    /// Create a new [`GitUrl`] from a repository URL and a precise commit.
+    pub fn from_commit(repository: Url, reference: GitReference, precise: GitSha) -> Self {
+        Self {
+            repository,
+            reference,
+            precise: Some(precise),
         }
     }
 
@@ -82,17 +87,7 @@ impl TryFrom<Url> for GitUrl {
             url.set_path(&prefix);
         }
 
-        let precise = if let GitReference::FullCommit(rev) = &reference {
-            Some(GitSha::from_str(rev)?)
-        } else {
-            None
-        };
-
-        Ok(Self {
-            repository: url,
-            reference,
-            precise
-        })
+        Ok(Self::from_reference(url, reference))
     }
 }
 
