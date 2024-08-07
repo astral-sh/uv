@@ -2771,7 +2771,6 @@ fn add_virtual() -> Result<()> {
 
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
-    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

@@ -183,7 +183,6 @@ fn empty() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning
-    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 0 packages in [TIME]
     Audited 0 packages in [TIME]
     "###);
@@ -198,7 +197,6 @@ fn empty() -> Result<()> {
 
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning
-    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 0 packages in [TIME]
     Audited 0 packages in [TIME]
     "###);
