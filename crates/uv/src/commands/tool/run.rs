@@ -38,6 +38,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// The user-facing command used to invoke a tool run.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ToolRunCommand {
     /// via the `uvx` alias
     Uvx,
@@ -412,6 +413,8 @@ async fn get_or_create_environment(
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
+
+    // STOPSHIP(charlie): Same deal here with respect to spinners.
 
     let environment = CachedEnvironment::get_or_create(
         spec,

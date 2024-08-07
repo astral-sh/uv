@@ -89,7 +89,7 @@ pub(crate) async fn run(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    let reporter = PythonDownloadReporter::single(printer.filter(show_resolution));
+    let reporter = PythonDownloadReporter::single(printer);
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -134,6 +134,7 @@ pub(crate) async fn run(
             if let Some(dependencies) = metadata.dependencies {
                 let requirements = dependencies.into_iter().map(Requirement::from).collect();
                 let spec = RequirementsSpecification::from_requirements(requirements);
+                // STOPSHIP(charlie): Here, we resolve and install.
                 let environment = CachedEnvironment::get_or_create(
                     spec,
                     interpreter,
@@ -150,7 +151,7 @@ pub(crate) async fn run(
 
                 Some(environment.into_interpreter())
             } else {
-                // Create a virtual environment
+                // Create a virtual environment.
                 temp_dir = cache.environment()?;
                 let environment = uv_virtualenv::create_venv(
                     temp_dir.path(),
@@ -265,6 +266,12 @@ pub(crate) async fn run(
                 .await?
             };
 
+            // STOPSHIP(charlie): Here, we resolve and install... It'd be nice to avoid showing any
+            // output if we resolve from the lockfile alone, and nice to avoid showing any output
+            // if we determine that the environment is up-to-date (fast paths).
+            //
+            // If we _do_ have work to do, we should show a single spinner for the whole operation,
+            // and then a summary of the changes. Maybe just the `in Xms` messages with the counts.
             let lock = match project::lock::do_safe_lock(
                 locked,
                 frozen,
@@ -449,9 +456,7 @@ pub(crate) async fn run(
             .into_interpreter()
         };
 
-        // TODO(charlie): Pass the already-installed versions as preferences, or even as the
-        // "installed" packages, so that we can skip re-installing them in the ephemeral
-        // environment.
+        // STOPSHIP(charlie): We should show a spinner here, and perhaps use `CachedEnvironment`?
 
         Some(match spec.filter(|spec| !spec.is_empty()) {
             None => {
