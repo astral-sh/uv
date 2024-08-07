@@ -259,9 +259,6 @@ pub(crate) async fn add(
         .with_pyproject_toml(pyproject.to_toml()?)
         .context("Failed to update `pyproject.toml`")?;
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-
     // Lock and sync the environment, if necessary.
     let lock = match project::lock::do_safe_lock(
         locked,
@@ -269,7 +266,6 @@ pub(crate) async fn add(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
-        &state,
         preview,
         connectivity,
         concurrency,
@@ -386,6 +382,9 @@ pub(crate) async fn add(
             (extras, dev)
         }
     };
+
+    // Initialize any shared state.
+    let state = SharedState::default();
 
     project::sync::do_sync(
         &project,

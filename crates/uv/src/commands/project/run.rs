@@ -259,7 +259,6 @@ pub(crate) async fn run(
                 project.workspace(),
                 venv.interpreter(),
                 settings.as_ref().into(),
-                &state,
                 preview,
                 connectivity,
                 concurrency,

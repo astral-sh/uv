@@ -72,16 +72,12 @@ pub(crate) async fn sync(
     )
     .await?;
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-
     let lock = match do_safe_lock(
         locked,
         frozen,
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
-        &state,
         preview,
         connectivity,
         concurrency,
@@ -101,6 +97,9 @@ pub(crate) async fn sync(
         }
         Err(err) => return Err(err.into()),
     };
+
+    // Initialize any shared state.
+    let state = SharedState::default();
 
     // Perform the sync operation.
     do_sync(

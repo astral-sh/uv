@@ -18,8 +18,6 @@ use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
-use super::SharedState;
-
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
@@ -72,7 +70,6 @@ pub(crate) async fn tree(
         &workspace,
         &interpreter,
         settings.as_ref(),
-        &SharedState::default(),
         preview,
         connectivity,
         concurrency,
