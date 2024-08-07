@@ -15,13 +15,12 @@ use pep440_rs::{Version, VersionParseError, VersionSpecifier};
 use uv_normalize::ExtraName;
 
 use crate::cursor::Cursor;
-use crate::marker::bdd::NodeId;
 use crate::marker::parse;
 use crate::{
     MarkerEnvironment, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter, TracingReporter,
 };
 
-use super::bdd::{RangeMap, Variable, BDD};
+use super::algebra::{Edges, NodeId, Variable, INTERNER};
 use super::simplify;
 
 /// Ways in which marker evaluation can fail
@@ -649,7 +648,7 @@ impl MarkerTree {
 
     /// Returns a marker tree from a single expression.
     pub fn expression(expr: MarkerExpression) -> MarkerTree {
-        MarkerTree(BDD.terminal(expr))
+        MarkerTree(INTERNER.lock().terminal(expr))
     }
 
     /// Whether the marker always evaluates to `true`.
@@ -678,7 +677,7 @@ impl MarkerTree {
     /// Returns `true` if there is no environment in which both marker trees can both
     /// apply, i.e. the expression `first and second` is always false.
     pub fn is_disjoint(&self, tree: &MarkerTree) -> bool {
-        BDD.and(self.0, tree.0).is_false()
+        INTERNER.lock().and(self.0, tree.0).is_false()
     }
 
     /// The logical implication operator, `=>`.
@@ -686,7 +685,7 @@ impl MarkerTree {
     /// Returns `true` if the current marker being `true` implies that the second marker
     /// is `true` in all cases.
     pub fn implies(&self, tree: &MarkerTree) -> bool {
-        BDD.or(self.0.not(), tree.0).is_true()
+        INTERNER.lock().or(self.0.not(), tree.0).is_true()
     }
 
     /// Returns a new marker tree that is the negation of this one.
@@ -701,7 +700,7 @@ impl MarkerTree {
     /// already, then `tree` is added to it instead of creating a new
     /// conjunction.
     pub fn and(&mut self, tree: MarkerTree) {
-        self.0 = BDD.and(self.0, tree.0);
+        self.0 = INTERNER.lock().and(self.0, tree.0);
     }
 
     /// Combine this marker tree with the one given via a disjunction.
@@ -710,7 +709,7 @@ impl MarkerTree {
     /// already, then `tree` is added to it instead of creating a new
     /// disjunction.
     pub fn or(&mut self, tree: MarkerTree) {
-        self.0 = BDD.or(self.0, tree.0);
+        self.0 = INTERNER.lock().or(self.0, tree.0);
     }
 
     /// Does this marker apply in the given environment?
@@ -988,10 +987,10 @@ impl MarkerTree {
             return MarkerTreeKind::False;
         }
 
-        let node = BDD.node(self.0);
+        let node = INTERNER.shared.node(self.0);
         match &node.var {
             Variable::Version(key) => {
-                let RangeMap::Version { ref map } = node.children else {
+                let Edges::Version { edges: ref map } = node.children else {
                     unreachable!()
                 };
                 MarkerTreeKind::Version(VersionMarkerTree {
@@ -1001,7 +1000,7 @@ impl MarkerTree {
                 })
             }
             Variable::String(key) => {
-                let RangeMap::String { ref map } = node.children else {
+                let Edges::String { edges: ref map } = node.children else {
                     unreachable!()
                 };
                 MarkerTreeKind::String(StringMarkerTree {
@@ -1011,7 +1010,7 @@ impl MarkerTree {
                 })
             }
             Variable::In { key, value } => {
-                let RangeMap::Boolean { low, high } = node.children else {
+                let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
                 };
                 MarkerTreeKind::In(InMarkerTree {
@@ -1022,7 +1021,7 @@ impl MarkerTree {
                 })
             }
             Variable::Contains { key, value } => {
-                let RangeMap::Boolean { low, high } = node.children else {
+                let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
                 };
                 MarkerTreeKind::Contains(ContainsMarkerTree {
@@ -1033,7 +1032,7 @@ impl MarkerTree {
                 })
             }
             Variable::Extra(name) => {
-                let RangeMap::Boolean { low, high } = node.children else {
+                let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
                 };
                 MarkerTreeKind::Extra(ExtraMarkerTree {
@@ -1106,7 +1105,7 @@ impl MarkerTree {
         python_version: Range<Version>,
         full_python_version: Range<Version>,
     ) -> MarkerTree {
-        MarkerTree(BDD.restrict_versions(self.0, |var| match var {
+        MarkerTree(INTERNER.lock().restrict_versions(self.0, &|var| match var {
             Variable::Version(MarkerValueVersion::PythonVersion) => Some(python_version.clone()),
             Variable::Version(MarkerValueVersion::PythonFullVersion) => {
                 Some(full_python_version.clone())
@@ -1146,7 +1145,7 @@ impl MarkerTree {
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
-        MarkerTree(BDD.restrict(self.0, |var| match var {
+        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name).then_some(true),
             _ => None,
         }))
@@ -1387,7 +1386,7 @@ mod test {
     }
 
     #[test]
-    fn test_marker_simplification() {
+    fn complex_marker_simplification() {
         assert_eq!(
             m("python_version > '3.7'").try_to_string().unwrap(),
             "python_version > '3.7'"

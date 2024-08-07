@@ -9,7 +9,7 @@
 //! outcomes. This implementation tries to carefully validate everything and emit warnings whenever
 //! bogus comparisons with unintended semantics are made.
 
-mod bdd;
+mod algebra;
 mod environment;
 pub(crate) mod parse;
 mod range;

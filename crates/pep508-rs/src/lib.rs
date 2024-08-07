@@ -1124,10 +1124,10 @@ mod tests {
     use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
     use crate::cursor::Cursor;
-    use crate::marker::{
-        parse, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
+    use crate::marker::{parse, MarkerExpression, MarkerTree, MarkerValueVersion};
+    use crate::{
+        MarkerOperator, MarkerValueString, Requirement, TracingReporter, VerbatimUrl, VersionOrUrl,
     };
-    use crate::{Requirement, TracingReporter, VerbatimUrl, VersionOrUrl};
 
     fn parse_pep508_err(input: &str) -> String {
         Requirement::<VerbatimUrl>::from_str(input)
@@ -1457,46 +1457,46 @@ mod tests {
         assert_eq!(pip_url, expected);
     }
 
-    // TODO
-    // #[test]
-    // fn test_marker_parsing() {
-    //     let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
-    //     let actual = parse::parse_markers_cursor::<VerbatimUrl>(
-    //         &mut Cursor::new(marker),
-    //         &mut TracingReporter,
-    //     )
-    //     .unwrap();
-    //     let expected = MarkerTree::And(vec![
-    //         MarkerTree::Expression(MarkerExpression::Version {
-    //             key: MarkerValueVersion::PythonVersion,
-    //             specifier: VersionSpecifier::from_pattern(
-    //                 pep440_rs::Operator::Equal,
-    //                 "2.7".parse().unwrap(),
-    //             )
-    //             .unwrap(),
-    //         }),
-    //         MarkerTree::Or(vec![
-    //             MarkerTree::Expression(MarkerExpression::String {
-    //                 key: MarkerValueString::SysPlatform,
-    //                 operator: MarkerOperator::Equal,
-    //                 value: "win32".to_string(),
-    //             }),
-    //             MarkerTree::And(vec![
-    //                 MarkerTree::Expression(MarkerExpression::String {
-    //                     key: MarkerValueString::OsName,
-    //                     operator: MarkerOperator::Equal,
-    //                     value: "linux".to_string(),
-    //                 }),
-    //                 MarkerTree::Expression(MarkerExpression::String {
-    //                     key: MarkerValueString::ImplementationName,
-    //                     operator: MarkerOperator::Equal,
-    //                     value: "cpython".to_string(),
-    //                 }),
-    //             ]),
-    //         ]),
-    //     ]);
-    //     assert_eq!(expected, actual);
-    // }
+    #[test]
+    fn test_marker_parsing() {
+        let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
+        let actual = parse::parse_markers_cursor::<VerbatimUrl>(
+            &mut Cursor::new(marker),
+            &mut TracingReporter,
+        )
+        .unwrap()
+        .unwrap();
+
+        let mut a = MarkerTree::expression(MarkerExpression::Version {
+            key: MarkerValueVersion::PythonVersion,
+            specifier: VersionSpecifier::from_pattern(
+                pep440_rs::Operator::Equal,
+                "2.7".parse().unwrap(),
+            )
+            .unwrap(),
+        });
+        let mut b = MarkerTree::expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: "win32".to_string(),
+        });
+        let mut c = MarkerTree::expression(MarkerExpression::String {
+            key: MarkerValueString::OsName,
+            operator: MarkerOperator::Equal,
+            value: "linux".to_string(),
+        });
+        let d = MarkerTree::expression(MarkerExpression::String {
+            key: MarkerValueString::ImplementationName,
+            operator: MarkerOperator::Equal,
+            value: "cpython".to_string(),
+        });
+
+        c.and(d);
+        b.or(c);
+        a.and(b);
+
+        assert_eq!(a, actual);
+    }
 
     #[test]
     fn name_and_marker() {

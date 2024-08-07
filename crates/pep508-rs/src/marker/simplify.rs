@@ -1,4 +1,5 @@
-use std::{fmt, ops::Bound};
+use std::fmt;
+use std::ops::Bound;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -11,10 +12,6 @@ use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerT
 pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let mut dnf = Vec::new();
     collect_dnf(tree, &mut dnf, &mut Vec::new());
-
-    if dnf.len() > 10 {
-        return dnf;
-    }
 
     let mut redundant_solutions = Vec::new();
     'redundant: for i in 0..dnf.len() {
