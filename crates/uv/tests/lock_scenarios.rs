@@ -1135,7 +1135,7 @@ fn fork_marker_disjoint() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (sys_platform == 'linux'):
       ╰─▶ Because project==0.1.0 depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that project==0.1.0 cannot be used.
           And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
     "###
@@ -2896,7 +2896,8 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         requires-python = ">=3.8"
         environment-markers = [
             "python_version < '3.10'",
-            "python_version >= '3.10'",
+            "python_version >= '3.11'",
+            "python_version >= '3.10' and python_version < '3.11'",
         ]
 
         [[package]]
@@ -3442,14 +3443,28 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-bar"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
         dependencies = [
-            { name = "package-c", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-d", marker = "sys_platform != 'linux'" },
-            { name = "package-reject-cleaver-1" },
+            { name = "package-reject-cleaver-1", marker = "sys_platform != 'linux'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-1.0.0.tar.gz", hash = "sha256:5d7142b60729bd25206dde836b8f629c72a29593156dee4c4551ad23b7096e8c" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-1.0.0-py3-none-any.whl", hash = "sha256:a590cb59852676a12e3537efe2c812c0640a32408a2ea7f6e5611c7190683865" },
+        ]
+
+        [[package]]
+        name = "package-bar"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-2.0.0.tar.gz", hash = "sha256:cc856e6aca342176e6ba518a298198258b7be3ee7a6b86319c1d8b731e54991e" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-2.0.0-py3-none-any.whl", hash = "sha256:80195408d22da78f3d6ac3cc955840b5fcb2a76d774120e2aa007c7e7cbc2b4e" },
         ]
 
         [[package]]
@@ -3481,8 +3496,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-bar", marker = "sys_platform != 'linux'" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-bar", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-foo", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_cleaver-1.0.0.tar.gz", hash = "sha256:49ec5779d0722586652e3ceb4ca2bf053a79dc3fa2d7ccd428a359bcc885a248" }
         wheels = [
@@ -3505,28 +3520,14 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-foo"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
-            "sys_platform == 'linux'",
-        ]
         dependencies = [
             { name = "package-c", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
-            { name = "package-reject-cleaver-1", marker = "sys_platform == 'linux'" },
+            { name = "package-c", version = "3.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-reject-cleaver-1" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-1.0.0.tar.gz", hash = "sha256:7c1a2ca51dd2156cf36c3400e38595e11b09442052f4bd1d6b3d53eb5b2acf32" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-1.0.0-py3-none-any.whl", hash = "sha256:524dfd846c31a55bb6d6a0d0cec80d42c0a87c78aabbe0f1d5426c60493bd41b" },
-        ]
-
-        [[package]]
-        name = "package-foo"
-        version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
-            "sys_platform != 'linux'",
-        ]
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-2.0.0.tar.gz", hash = "sha256:1607aa970fac2e237de28636bf53b022b0c391ecc9039e34438638c8743cc83b" }
-        wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-2.0.0-py3-none-any.whl", hash = "sha256:8a757092c63519d20d312dacf83ed3c9cc8156495279305a2249175e0407e4df" },
         ]
 
         [[package]]
@@ -3571,10 +3572,10 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-bar" },
+            { name = "package-bar", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-bar", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-cleaver" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
-            { name = "package-foo", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-foo" },
         ]
         "###
         );
@@ -3720,9 +3721,24 @@ fn preferences_dependent_forking() -> Result<()> {
         name = "package-bar"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0.tar.gz", hash = "sha256:7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0-py3-none-any.whl", hash = "sha256:3cdaac4b0ba330f902d0628c0b1d6e62692f52255d02718d04f46ade7c8ad6a6" },
+        ]
+
+        [[package]]
+        name = "package-bar"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-2.0.0.tar.gz", hash = "sha256:f440dbb8c3b848be467c9d3cd4970963fae3144de12454fd48fe9077eb76e9ea" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-2.0.0-py3-none-any.whl", hash = "sha256:24fd0534fec4053f4cac960244943ef13d1bad26bbb5fffe6944a8cf898f26f0" },
         ]
 
         [[package]]
@@ -3730,8 +3746,8 @@ fn preferences_dependent_forking() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-bar", marker = "sys_platform != 'linux'" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-bar", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-foo", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_cleaver-1.0.0.tar.gz", hash = "sha256:0347b927fdf7731758ea53e1594309fc6311ca6983f36553bc11654a264062b2" }
         wheels = [
@@ -3742,24 +3758,9 @@ fn preferences_dependent_forking() -> Result<()> {
         name = "package-foo"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
-            "sys_platform == 'linux'",
-        ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-1.0.0.tar.gz", hash = "sha256:abf1c0ac825ee5961e683067634916f98c6651a6d4473ff87d8b57c17af8fed2" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-1.0.0-py3-none-any.whl", hash = "sha256:85348e8df4892b9f297560c16abcf231828f538dc07339ed121197a00a0626a5" },
-        ]
-
-        [[package]]
-        name = "package-foo"
-        version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
-            "sys_platform != 'linux'",
-        ]
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-2.0.0.tar.gz", hash = "sha256:ad54d14a4fd931b8ccb6412edef71fe223c36362d0ccfe3fa251c17d4f07e4a9" }
-        wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-2.0.0-py3-none-any.whl", hash = "sha256:bae278cf259c0e031e52b6cbb537d945e0e606d045e980b90d406d0f1e06aae9" },
         ]
 
         [[package]]
@@ -3767,10 +3768,10 @@ fn preferences_dependent_forking() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-bar" },
+            { name = "package-bar", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-bar", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-cleaver" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
-            { name = "package-foo", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-foo" },
         ]
         "###
         );
