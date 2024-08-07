@@ -516,3 +516,70 @@ fn sync_build_isolation() -> Result<()> {
 
     Ok(())
 }
+
+/// Avoid using incompatible versions for build dependencies that are also part of the resolved
+/// environment. This is a very subtle issue, but: when locking, we don't enforce platform
+/// compatibility. So, if we reuse the resolver state to install, and the install itself has to
+/// preform a resolution (e.g., for the build dependencies of a source distribution), that
+/// resolution may choose incompatible versions.
+///
+/// The key property here is that there's a shared package between the build dependencies and the
+/// project dependencies.
+#[test]
+fn sync_reset_state() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pydantic-core"]
+
+        [build-system]
+        requires = ["setuptools", "pydantic-core"]
+        build-backend = "setuptools.build_meta:__legacy__"
+        "#,
+    )?;
+
+    let setup_py = context.temp_dir.child("setup.py");
+    setup_py.write_str(indoc::indoc! { r#"
+        from setuptools import setup
+        import pydantic_core
+
+        setup(
+            name="project",
+            version="0.1.0",
+            packages=["project"],
+            install_requires=["pydantic-core"],
+        )
+    "# })?;
+
+    let src = context.temp_dir.child("project");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // Running `uv sync` should succeed.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + pydantic-core==2.17.0
+     + typing-extensions==4.10.0
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}

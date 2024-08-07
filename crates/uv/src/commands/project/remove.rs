@@ -104,9 +104,6 @@ pub(crate) async fn remove(
     )
     .await?;
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-
     // Lock and sync the environment, if necessary.
     let lock = project::lock::do_safe_lock(
         locked,
@@ -114,7 +111,6 @@ pub(crate) async fn remove(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
-        &state,
         preview,
         connectivity,
         concurrency,
@@ -128,6 +124,9 @@ pub(crate) async fn remove(
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let extras = ExtrasSpecification::All;
     let dev = true;
+
+    // Initialize any shared state.
+    let state = SharedState::default();
 
     project::sync::do_sync(
         &VirtualProject::Project(project),
