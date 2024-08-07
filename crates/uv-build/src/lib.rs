@@ -434,6 +434,8 @@ impl SourceBuild {
             Self::extract_pep517_backend(&source_tree, setup_py, &default_backend)
                 .map_err(|err| *err)?;
 
+        let package_name = project.clone().map(|p| p.name);
+
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = match build_isolation {
             BuildIsolation::Isolated => uv_virtualenv::create_venv(
@@ -445,11 +447,28 @@ impl SourceBuild {
                 false,
             )?,
             BuildIsolation::Shared(venv) => venv.clone(),
+            BuildIsolation::SharedPackage(venv, packages) => {
+                if package_name
+                    .as_ref()
+                    .is_some_and(|name| packages.iter().any(|p| p == name))
+                {
+                    venv.clone()
+                } else {
+                    uv_virtualenv::create_venv(
+                        temp_dir.path(),
+                        interpreter.clone(),
+                        uv_virtualenv::Prompt::None,
+                        false,
+                        false,
+                        false,
+                    )?
+                }
+            }
         };
 
         // Setup the build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
-        if build_isolation.is_isolated() {
+        if build_isolation.is_isolated(&package_name) {
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
@@ -499,7 +518,7 @@ impl SourceBuild {
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         let runner = PythonRunner::new(concurrent_builds);
-        if build_isolation.is_isolated() {
+        if build_isolation.is_isolated(&package_name) {
             if let Some(pep517_backend) = &pep517_backend {
                 create_pep517_build_environment(
                     &runner,

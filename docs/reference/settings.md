@@ -476,6 +476,34 @@ are already installed.
 
 ---
 
+#### [`no-build-isolation-package`](#no-build-isolation-package) {: #no-build-isolation-package }
+
+Disable isolation when building source distributions.
+
+Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+are already installed.
+
+**Default value**: `[]`
+
+**Type**: `Vec<PackageName>`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    no-build-isolation-package = ["package1", "package2"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    no-build-isolation-package = ["package1", "package2"]
+    ```
+
+---
+
 #### [`no-build-package`](#no-build-package) {: #no-build-package }
 
 Don't build source distributions for a specific package.
@@ -1717,6 +1745,35 @@ are already installed.
     ```toml
     [pip]
     no-build-isolation = true
+    ```
+
+---
+
+#### [`no-build-isolation-package`](#pip_no-build-isolation-package) {: #pip_no-build-isolation-package }
+<span id="no-build-isolation-package"></span>
+
+Disable isolation when building source distributions.
+
+Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+are already installed.
+
+**Default value**: `[]`
+
+**Type**: `Vec<PackageName>`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    no-build-isolation-package = ["package1", "package2"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    no-build-isolation-package = ["package1", "package2"]
     ```
 
 ---

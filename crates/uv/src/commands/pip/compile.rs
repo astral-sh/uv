@@ -76,6 +76,7 @@ pub(crate) async fn pip_compile(
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
+    no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
@@ -304,7 +305,12 @@ pub(crate) async fn pip_compile(
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
     } else {
-        BuildIsolation::Isolated
+        if no_build_isolation_package.is_empty() {
+            BuildIsolation::Isolated
+        } else {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
+        }
     };
 
     let build_dispatch = BuildDispatch::new(

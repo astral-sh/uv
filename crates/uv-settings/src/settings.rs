@@ -205,6 +205,7 @@ pub struct ResolverOptions {
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_build_isolation: Option<bool>,
+    pub no_build_isolation_package: Option<Vec<PackageName>>,
     pub no_sources: Option<bool>,
 }
 
@@ -350,6 +351,20 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// are already installed.
+    ///
+    #[option(
+        default = "[]",
+        value_type = "Vec<PackageName>",
+        example = r#"
+        no-build-isolation-package = ["package1", "package2"]
+    "#
+    )]
+    pub no_build_isolation_package: Option<Vec<PackageName>>,
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
@@ -717,6 +732,18 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// are already installed.
+    #[option(
+        default = "[]",
+        value_type = "Vec<PackageName>",
+        example = r#"
+            no-build-isolation-package = ["package1", "package2"]
+        "#
+    )]
+    pub no_build_isolation_package: Option<Vec<PackageName>>,
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[option(
