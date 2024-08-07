@@ -1068,6 +1068,7 @@ async fn run_project(
             commands::add(
                 args.locked,
                 args.frozen,
+                args.no_sync,
                 args.requirements,
                 args.editable,
                 args.dependency_type,
@@ -1103,6 +1104,7 @@ async fn run_project(
             commands::remove(
                 args.locked,
                 args.frozen,
+                args.no_sync,
                 args.requirements,
                 args.dependency_type,
                 args.package,

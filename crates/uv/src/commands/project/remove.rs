@@ -17,9 +17,11 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Remove one or more packages from the project requirements.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
     locked: bool,
     frozen: bool,
+    no_sync: bool,
     requirements: Vec<PackageName>,
     dependency_type: DependencyType,
     package: Option<PackageName>,
@@ -119,6 +121,10 @@ pub(crate) async fn remove(
         printer,
     )
     .await?;
+
+    if no_sync {
+        return Ok(ExitStatus::Success);
+    }
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?

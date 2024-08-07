@@ -37,6 +37,7 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn add(
     locked: bool,
     frozen: bool,
+    no_sync: bool,
     requirements: Vec<RequirementsSource>,
     editable: Option<bool>,
     dependency_type: DependencyType,
@@ -362,6 +363,10 @@ pub(crate) async fn add(
         if modified {
             fs_err::write(project.root().join("pyproject.toml"), pyproject.to_string())?;
         }
+    }
+
+    if no_sync {
+        return Ok(ExitStatus::Success);
     }
 
     // Sync the environment.
