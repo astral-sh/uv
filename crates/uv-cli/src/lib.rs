@@ -2304,6 +2304,10 @@ pub struct AddArgs {
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
+    /// Avoid syncing the virtual environment after re-locking the project.
+    #[arg(long, conflicts_with = "frozen")]
+    pub no_sync: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
@@ -2353,6 +2357,10 @@ pub struct RemoveArgs {
     /// Remove the requirements from the specified optional dependency group.
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
+
+    /// Avoid syncing the virtual environment after re-locking the project.
+    #[arg(long, conflicts_with = "frozen")]
+    pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
     #[arg(long, conflicts_with = "frozen")]

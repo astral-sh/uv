@@ -639,6 +639,7 @@ impl LockSettings {
 pub(crate) struct AddSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) no_sync: bool,
     pub(crate) requirements: Vec<RequirementsSource>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
@@ -668,6 +669,7 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            no_sync,
             locked,
             frozen,
             installer,
@@ -693,6 +695,7 @@ impl AddSettings {
         Self {
             locked,
             frozen,
+            no_sync,
             requirements,
             dependency_type,
             raw_sources,
@@ -718,6 +721,7 @@ impl AddSettings {
 pub(crate) struct RemoveSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) no_sync: bool,
     pub(crate) requirements: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) package: Option<PackageName>,
@@ -734,6 +738,7 @@ impl RemoveSettings {
             dev,
             optional,
             requirements,
+            no_sync,
             locked,
             frozen,
             installer,
@@ -754,6 +759,7 @@ impl RemoveSettings {
         Self {
             locked,
             frozen,
+            no_sync,
             requirements,
             dependency_type,
             package,
