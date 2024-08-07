@@ -247,12 +247,14 @@ fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution
         RequirementSource::Url {
             subdirectory,
             location,
+            kind,
             url,
         } => Dist::from_http_url(
             requirement.name.clone(),
             url.clone(),
             location.clone(),
             subdirectory.clone(),
+            *kind,
         )?,
         RequirementSource::Git {
             repository,
@@ -276,12 +278,14 @@ fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution
         RequirementSource::Path {
             install_path,
             lock_path,
+            kind,
             url,
         } => Dist::from_file_url(
             requirement.name.clone(),
             url.clone(),
             install_path,
             lock_path,
+            *kind,
         )?,
         RequirementSource::Directory {
             install_path,

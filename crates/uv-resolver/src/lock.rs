@@ -29,7 +29,7 @@ use pep508_rs::{
 };
 use platform_tags::{TagCompatibility, TagPriority, Tags};
 use pypi_types::{
-    HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
+    FileKind, HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
 };
 use uv_configuration::{ExtrasSpecification, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
@@ -787,10 +787,12 @@ impl Package {
                     Ok(Dist::Built(built_dist))
                 }
                 Source::Direct(url, direct) => {
+                    let kind = FileKind::from_path(url.as_ref()).expect("STOPSHIP");
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let url = Url::from(ParsedArchiveUrl {
                         url: url.to_url(),
                         subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                        kind,
                     });
                     let direct_dist = DirectUrlBuiltDist {
                         filename,
@@ -838,11 +840,13 @@ impl Package {
     ) -> Result<Option<distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
+                let kind = FileKind::from_path(workspace_root.join(path)).expect("STOPSHIP");
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
+                    kind,
                 };
                 distribution_types::SourceDist::Path(path_dist)
             }
@@ -895,14 +899,17 @@ impl Package {
                 distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
+                let kind = FileKind::from_path(url.as_ref()).expect("STOPSHIP");
                 let url = Url::from(ParsedArchiveUrl {
                     url: url.to_url(),
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    kind,
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
                     location: url.clone(),
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    kind,
                     url: VerbatimUrl::from_url(url),
                 };
                 distribution_types::SourceDist::DirectUrl(direct_dist)
@@ -920,6 +927,7 @@ impl Package {
                     .ok_or_else(|| LockErrorKind::MissingFilename {
                         id: self.id.clone(),
                     })?;
+                let kind = FileKind::from_path(filename.as_ref()).expect("STOPSHIP");
                 let file = Box::new(distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
@@ -939,6 +947,7 @@ impl Package {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
                     file,
+                    kind,
                     index,
                     wheels: vec![],
                 };
@@ -2229,9 +2238,11 @@ impl Dependency {
                 RequirementSource::from_verbatim_parsed_url(parsed_url)
             }
             Source::Direct(url, direct) => {
+                let kind = FileKind::from_path(url.as_ref()).expect("STOPSHIP");
                 let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl {
                     url: url.to_url(),
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    kind,
                 });
                 RequirementSource::from_verbatim_parsed_url(parsed_url)
             }
@@ -2239,6 +2250,7 @@ impl Dependency {
                 lock_path: path.clone(),
                 install_path: workspace_root.join(path),
                 url: verbatim_url(workspace_root.join(path), &self.package_id)?,
+                kind: FileKind::from_path(workspace_root.join(path)).expect("STOPSHIP"),
             },
             Source::Directory(ref path) => RequirementSource::Directory {
                 editable: false,

@@ -6,7 +6,7 @@ use url::{ParseError, Url};
 use pep508_rs::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
 use uv_git::{GitReference, GitSha, GitUrl, OidParseError};
 
-use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
+use crate::{ArchiveInfo, DirInfo, DirectUrl, FileKind, VcsInfo, VcsKind};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {
@@ -24,6 +24,11 @@ pub enum ParsedUrlError {
     UrlParse(String, #[source] ParseError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
+
+    #[error("Expected direct URL dependency to include an extension: `{0}`")]
+    MissingExtension(Url),
+    #[error("Expected path dependency to include an extension: `{0}`")]
+    MissingExtensionPath(PathBuf),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
@@ -75,6 +80,8 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
                 lock_path: path.as_ref().to_path_buf(),
+                kind: FileKind::from_path(path)
+                    .ok_or(ParsedUrlError::MissingExtension(verbatim.to_url()))?,
             })
         };
         Ok(Self {
@@ -103,6 +110,8 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
                 url: verbatim.to_url(),
                 install_path: verbatim.as_path()?,
                 lock_path: path.as_ref().to_path_buf(),
+                kind: FileKind::from_path(path)
+                    .ok_or(ParsedUrlError::MissingExtension(verbatim.to_url()))?,
             })
         };
         Ok(Self {
@@ -181,15 +190,23 @@ pub struct ParsedPathUrl {
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
     /// are resolved, and unlike the install path, we did not yet join it on the base directory.
     pub lock_path: PathBuf,
+    /// The type of file (e.g., `.zip` or `.tar.gz`).
+    pub kind: FileKind,
 }
 
 impl ParsedPathUrl {
     /// Construct a [`ParsedPathUrl`] from a path requirement source.
-    pub fn from_source(install_path: PathBuf, lock_path: PathBuf, url: Url) -> Self {
+    pub fn from_source(
+        install_path: PathBuf,
+        lock_path: PathBuf,
+        kind: FileKind,
+        url: Url,
+    ) -> Self {
         Self {
             url,
             install_path,
             lock_path,
+            kind,
         }
     }
 }
@@ -286,22 +303,36 @@ impl TryFrom<Url> for ParsedGitUrl {
 pub struct ParsedArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,
+    pub kind: FileKind,
 }
 
 impl ParsedArchiveUrl {
     /// Construct a [`ParsedArchiveUrl`] from a URL requirement source.
-    pub fn from_source(location: Url, subdirectory: Option<PathBuf>) -> Self {
+    pub fn from_source(location: Url, subdirectory: Option<PathBuf>, kind: FileKind) -> Self {
         Self {
             url: location,
             subdirectory,
+            kind,
         }
     }
 }
 
-impl From<Url> for ParsedArchiveUrl {
-    fn from(url: Url) -> Self {
+impl TryFrom<Url> for ParsedArchiveUrl {
+    type Error = ParsedUrlError;
+
+    /// Supports URLS with and without the `git+` prefix.
+    ///
+    /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
+    /// excluded, it's presumed to come from `tool.uv.sources`.
+    fn try_from(url: Url) -> Result<Self, Self::Error> {
         let subdirectory = get_subdirectory(&url);
-        Self { url, subdirectory }
+        let kind =
+            FileKind::from_path(url.path()).ok_or(ParsedUrlError::MissingExtension(url.clone()))?;
+        Ok(Self {
+            url,
+            subdirectory,
+            kind,
+        })
     }
 }
 
@@ -371,12 +402,14 @@ impl TryFrom<Url> for ParsedUrl {
             } else {
                 Ok(Self::Path(ParsedPathUrl {
                     url,
+                    kind: FileKind::from_path(&path)
+                        .ok_or_else(|| ParsedUrlError::MissingExtensionPath(path.clone()))?,
                     install_path: path.clone(),
                     lock_path: path,
                 }))
             }
         } else {
-            Ok(Self::Archive(ParsedArchiveUrl::from(url)))
+            Ok(Self::Archive(ParsedArchiveUrl::try_from(url)?))
         }
     }
 }

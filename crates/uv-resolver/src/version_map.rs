@@ -4,14 +4,14 @@ use std::sync::OnceLock;
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use tracing::instrument;
 
-use distribution_filename::{DistFilename, WheelFilename};
+use distribution_filename::{DistFilename, SourceDistExtension, WheelFilename};
 use distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
     RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::Version;
 use platform_tags::{IncompatibleTag, TagCompatibility, Tags};
-use pypi_types::{HashDigest, Yanked};
+use pypi_types::{FileKind, HashDigest, Yanked};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_normalize::PackageName;
@@ -388,10 +388,17 @@ impl VersionMapLazy {
                             excluded,
                             upload_time,
                         );
+                        let kind = match filename.extension {
+                            SourceDistExtension::Zip => FileKind::Zip,
+                            SourceDistExtension::TarGz => FileKind::TarGz,
+                            SourceDistExtension::TarBz2 => FileKind::TarBz2,
+                            SourceDistExtension::TarZstd => FileKind::TarZstd,
+                        };
                         let dist = RegistrySourceDist {
                             name: filename.name.clone(),
                             version: filename.version.clone(),
                             file: Box::new(file),
+                            kind,
                             index: self.index.clone(),
                             wheels: vec![],
                         };

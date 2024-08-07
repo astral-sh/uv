@@ -8,7 +8,7 @@ use url::Url;
 
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{VerbatimUrl, VersionOrUrl};
-use pypi_types::{Requirement, RequirementSource, VerbatimParsedUrl};
+use pypi_types::{FileKind, Requirement, RequirementSource, VerbatimParsedUrl};
 use uv_configuration::PreviewMode;
 use uv_fs::{relative_to, Simplified};
 use uv_git::GitReference;
@@ -155,10 +155,13 @@ pub(crate) fn lower_requirement(
                 verbatim_url.set_fragment(Some(subdirectory));
             }
 
+            let kind = FileKind::from_path(url.path()).expect("URLs are always valid paths");
+
             let verbatim_url = VerbatimUrl::from_url(verbatim_url);
             RequirementSource::Url {
                 location: url,
                 subdirectory: subdirectory.map(PathBuf::from),
+                kind,
                 url: verbatim_url,
             }
         }
@@ -290,6 +293,7 @@ fn path_source(
         Ok(RequirementSource::Path {
             install_path: absolute_path,
             lock_path: relative_to_workspace,
+            kind: FileKind::from_path(path).expect("STOPSHIP"),
             url,
         })
     }

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use pypi_types::{HashDigest, Requirement, RequirementSource};
+use pypi_types::{FileKind, HashDigest, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
@@ -143,12 +143,14 @@ impl From<&ResolvedDist> for Requirement {
                         url: wheel.url.clone(),
                         location,
                         subdirectory: None,
+                        kind: FileKind::Wheel,
                     }
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
                     install_path: wheel.path.clone(),
                     lock_path: wheel.path.clone(),
                     url: wheel.url.clone(),
+                    kind: FileKind::Wheel,
                 },
                 Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
                     specifier: pep440_rs::VersionSpecifiers::from(
@@ -163,6 +165,7 @@ impl From<&ResolvedDist> for Requirement {
                         url: sdist.url.clone(),
                         location,
                         subdirectory: sdist.subdirectory.clone(),
+                        kind: sdist.kind,
                     }
                 }
                 Dist::Source(SourceDist::Git(sdist)) => RequirementSource::Git {
@@ -176,6 +179,7 @@ impl From<&ResolvedDist> for Requirement {
                     install_path: sdist.install_path.clone(),
                     lock_path: sdist.lock_path.clone(),
                     url: sdist.url.clone(),
+                    kind: sdist.kind,
                 },
                 Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Directory {
                     install_path: sdist.install_path.clone(),

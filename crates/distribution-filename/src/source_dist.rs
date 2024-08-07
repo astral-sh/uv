@@ -24,6 +24,7 @@ pub enum SourceDistExtension {
     Zip,
     TarGz,
     TarBz2,
+    TarZstd,
 }
 
 impl FromStr for SourceDistExtension {
@@ -34,6 +35,7 @@ impl FromStr for SourceDistExtension {
             "zip" => Self::Zip,
             "tar.gz" => Self::TarGz,
             "tar.bz2" => Self::TarBz2,
+            "tar.zstd" => Self::TarZstd,
             other => return Err(other.to_string()),
         })
     }
@@ -45,6 +47,7 @@ impl Display for SourceDistExtension {
             Self::Zip => f.write_str("zip"),
             Self::TarGz => f.write_str("tar.gz"),
             Self::TarBz2 => f.write_str("tar.bz2"),
+            Self::TarZstd => f.write_str("tar.zstd"),
         }
     }
 }
@@ -59,6 +62,9 @@ impl SourceDistExtension {
         }
         if let Some(stem) = filename.strip_suffix(".tar.bz2") {
             return Some((stem, Self::TarBz2));
+        }
+        if let Some(stem) = filename.strip_suffix(".tar.zstd") {
+            return Some((stem, Self::TarZstd));
         }
         None
     }

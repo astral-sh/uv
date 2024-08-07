@@ -5705,23 +5705,15 @@ fn tool_uv_sources() -> Result<()> {
         .arg(require_path)
         .arg("--extra")
         .arg("utils"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Prepared 9 packages in [TIME]
-    Installed 9 packages in [TIME]
-     + anyio==4.3.0
-     + boltons==24.0.1.dev0 (from git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0)
-     + colorama==0.4.6
-     + idna==3.6
-     + packaging==24.1.dev0 (from git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e)
-     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
-     + sniffio==1.3.1
-     + tqdm==4.66.0 (from https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl)
-     + urllib3==2.2.1 (from https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl)
+    error: Failed to parse metadata from built wheel
+      Caused by: Expected direct URL dependency to include an extension: `https://example.org/does/not/exist`
+    broken @ https://example.org/does/not/exist ; extra == 'dont_install_me'
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###
     );
 

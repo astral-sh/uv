@@ -1,12 +1,12 @@
 use std::path::Path;
 use std::pin::Pin;
 
+use crate::Error;
 use futures::StreamExt;
+use pypi_types::FileKind;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
-
-use crate::Error;
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
@@ -231,77 +231,28 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
 /// without requiring `Seek`.
 pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
-    source: impl AsRef<Path>,
+    kind: FileKind,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    // `.zip`
-    if source
-        .as_ref()
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
-    {
-        unzip(reader, target).await?;
-        return Ok(());
+    match kind {
+        FileKind::Wheel => {
+            unzip(reader, target).await?;
+        }
+        FileKind::Zip => {
+            unzip(reader, target).await?;
+        }
+        FileKind::TarGz => {
+            untar_gz(reader, target).await?;
+        }
+        FileKind::TarBz2 => {
+            untar_bz2(reader, target).await?;
+        }
+        FileKind::TarXz => {
+            untar_xz(reader, target).await?;
+        }
+        FileKind::TarZstd => {
+            untar_zst(reader, target).await?;
+        }
     }
-
-    // `.tar.gz`
-    if source
-        .as_ref()
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
-        && source.as_ref().file_stem().is_some_and(|stem| {
-            Path::new(stem)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-        })
-    {
-        untar_gz(reader, target).await?;
-        return Ok(());
-    }
-
-    // `.tar.bz2`
-    if source
-        .as_ref()
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("bz2"))
-        && source.as_ref().file_stem().is_some_and(|stem| {
-            Path::new(stem)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-        })
-    {
-        untar_bz2(reader, target).await?;
-        return Ok(());
-    }
-    // `.tar.zst`
-    if source
-        .as_ref()
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("zst"))
-        && source.as_ref().file_stem().is_some_and(|stem| {
-            Path::new(stem)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-        })
-    {
-        untar_zst(reader, target).await?;
-        return Ok(());
-    }
-
-    // `.tar.xz`
-    if source
-        .as_ref()
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("xz"))
-        && source.as_ref().file_stem().is_some_and(|stem| {
-            Path::new(stem)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-        })
-    {
-        untar_xz(reader, target).await?;
-        return Ok(());
-    }
-
-    Err(Error::UnsupportedArchive(source.as_ref().to_path_buf()))
+    Ok(())
 }
