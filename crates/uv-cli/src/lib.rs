@@ -244,7 +244,48 @@ pub enum Commands {
         after_long_help = ""
     )]
     Tool(ToolNamespace),
-    /// Manage Python versions and installations (experimental).
+
+    /// Manage Python versions and installations (experimental)
+    ///
+    /// Generally, uv first searches for Python in a virtual environment, either
+    /// active or in a `.venv` directory  in the current working directory or
+    /// any parent directory. If a virtual environment is not required, uv will
+    /// then search for a Python interpreter. Python interpreters are found by
+    /// searching for Python executables in the `PATH` environment variable.
+    ///
+    /// On Windows, the `py` launcher is also invoked to find Python
+    /// executables.
+    ///
+    /// When preview is enabled, i.e., via `--preview` or by using a preview
+    /// command, uv will download Python if a version cannot be found. This
+    /// behavior can be disabled with the `--python-fetch` option.
+    ///
+    /// The `--python` option allows requesting a different interpreter.
+    ///
+    /// The following Python version request formats are supported:
+    ///
+    /// - `<version>` e.g. `3`, `3.12`, `3.12.3`
+    /// - `<version-specifier>` e.g. `>=3.12,<3.13`
+    /// - `<implementation>` e.g. `cpython` or `cp`
+    /// - `<implementation>@<version>` e.g. `cpython@3.12`
+    /// - `<implementation><version>` e.g. `cpython3.12` or `cp312`
+    /// - `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
+    /// - `<implementation>-<version>-<os>-<arch>-<libc>` e.g.
+    ///   `cpython-3.12.3-macos-aarch64-none`
+    ///
+    /// Additionally, a specific system Python interpreter can often be
+    /// requested with:
+    ///
+    /// - `<executable-path>` e.g. `/opt/homebrew/bin/python3`
+    /// - `<executable-name>` e.g. `mypython3`
+    /// - `<install-dir>` e.g. `/some/environment/`
+    ///
+    /// When the `--python` option is used, normal discovery rules apply but
+    /// discovered interpreters are checked for compatibility with the request,
+    /// e.g., if `pypy` is requested, uv will first check if the virtual
+    /// environment contains a PyPy interpreter then check if each executable in
+    /// the path is a PyPy interpreter.
+    #[clap(verbatim_doc_comment)]
     #[command(
         after_help = "Use `uv help python` for more details.",
         after_long_help = ""
@@ -690,17 +731,16 @@ pub struct PipCompileArgs {
     #[arg(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     pub custom_compile_command: Option<String>,
 
-    /// The Python interpreter against which to compile the requirements.
+    /// The Python interpreter to use during resolution.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
+    /// A Python interpreter is required for building source distributions to
+    /// determine package metadata when there are not wheels.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// The interpreter is also used to determine the default minimum Python
+    /// version, unless `--python-version` is provided.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(long, verbatim_doc_comment, help_heading = "Python options")]
     pub python: Option<String>,
 
@@ -781,11 +821,17 @@ pub struct PipCompileArgs {
     #[arg(long, conflicts_with = "no_build")]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
-    /// The minimum Python version that should be supported by the resolved requirements (e.g.,
-    /// `3.8` or `3.8.17`).
+    /// The Python version to use for resolution.
     ///
-    /// If a patch version is omitted, the minimum patch version is assumed. For example, `3.8` is
-    /// mapped to `3.8.0`.
+    /// For example, `3.8` or `3.8.17`.
+    ///
+    /// Defaults to the version of the Python interpreter used for resolution.
+    ///
+    /// Defines the minimum Python version that must be supported by the
+    /// resolved requirements.
+    ///
+    /// If a patch version is omitted, the minimum patch version is assumed. For
+    /// example, `3.8` is mapped to `3.8.0`.
     #[arg(long, short, help_heading = "Python options")]
     pub python_version: Option<PythonVersion>,
 
@@ -945,16 +991,13 @@ pub struct PipSyncArgs {
 
     /// The Python interpreter into which packages should be installed.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
+    /// By default, syncing requires a virtual environment. An path to an
+    /// alternative Python can be provided, but it is only recommended in
+    /// continuous integration (CI) environments and should be used with
+    /// caution, as it can modify the system Python installation.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1236,16 +1279,13 @@ pub struct PipInstallArgs {
 
     /// The Python interpreter into which packages should be installed.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
+    /// By default, installation requires a virtual environment. An path to an
+    /// alternative Python can be provided, but it is only recommended in
+    /// continuous integration (CI) environments and should be used with
+    /// caution, as it can modify the system Python installation.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1412,16 +1452,13 @@ pub struct PipUninstallArgs {
 
     /// The Python interpreter from which packages should be uninstalled.
     ///
-    /// By default, uv uninstalls from the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
+    /// By default, uninstallation requires a virtual environment. An path to an
+    /// alternative Python can be provided, but it is only recommended in
+    /// continuous integration (CI) environments and should be used with
+    /// caution, as it can modify the system Python installation.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1505,15 +1542,12 @@ pub struct PipFreezeArgs {
 
     /// The Python interpreter for which packages should be listed.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv lists packages in a virtual environment but will show
+    /// packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1523,15 +1557,11 @@ pub struct PipFreezeArgs {
     )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// List packages in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1576,15 +1606,12 @@ pub struct PipListArgs {
 
     /// The Python interpreter for which packages should be listed.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv lists packages in a virtual environment but will show
+    /// packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1594,15 +1621,11 @@ pub struct PipListArgs {
     )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// List packages in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1621,17 +1644,14 @@ pub struct PipListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipCheckArgs {
-    /// The Python interpreter for which packages should be listed.
+    /// The Python interpreter for which packages should be checked.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv checks packages in a virtual environment but will check
+    /// packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1641,15 +1661,11 @@ pub struct PipCheckArgs {
     )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// Check packages in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1676,17 +1692,14 @@ pub struct PipShowArgs {
     #[arg(long, overrides_with("strict"), hide = true)]
     pub no_strict: bool,
 
-    /// The Python interpreter for which packages should be listed.
+    /// The Python interpreter to find the package in.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv looks for packages in a virtual environment but will look
+    /// for packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1696,15 +1709,11 @@ pub struct PipShowArgs {
     )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// Show a package in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1740,15 +1749,12 @@ pub struct PipTreeArgs {
 
     /// The Python interpreter for which packages should be listed.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv lists packages in a virtual environment but will show
+    /// packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1758,15 +1764,11 @@ pub struct PipTreeArgs {
     )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// List packages in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1787,14 +1789,11 @@ pub struct PipTreeArgs {
 pub struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// During virtual environment creation, uv will not look for Python
+    /// interpreters in virtual environments.
     ///
-    /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
-    /// doesn't look for a Python interpreter on disk.
+    /// See `uv python help` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -1804,14 +1803,7 @@ pub struct VenvArgs {
     )]
     pub python: Option<String>,
 
-    /// Use the system Python to uninstall packages.
-    ///
-    /// By default, uv uninstalls from the virtual environment in the current working directory or
-    /// any parent directory. The `--system` option instructs uv to use the first Python found in
-    /// the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution, as it can modify the system Python installation.
+    // TODO(zanieb): Hide me, I do nothing.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -2199,17 +2191,17 @@ pub struct SyncArgs {
     #[arg(long)]
     pub package: Option<PackageName>,
 
-    /// The Python interpreter to use to build the run environment.
+    /// The Python interpreter to use for the project environment.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
+    /// By default, the first interpreter that meets the project's
+    /// `requires-python` constraint is used.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// If a Python interpreter in a virtual environment is provided, the
+    /// packages will not be synced to the given environment. The interpreter
+    /// will be used to create a virtual environment in the project.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -2240,17 +2232,16 @@ pub struct LockArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// The Python interpreter to use to build the run environment.
+    /// The Python interpreter to use during resolution.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
+    /// A Python interpreter is required for building source distributions to
+    /// determine package metadata when there are not wheels.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// The interpreter is also used as the fallback value for the minimum
+    /// Python version if `requires-python` is not set.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -2334,18 +2325,10 @@ pub struct AddArgs {
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
-    /// The Python interpreter into which packages should be installed.
+    /// The Python interpreter to use for resolving and syncing.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -2392,18 +2375,10 @@ pub struct RemoveArgs {
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
-    /// The Python interpreter into which packages should be installed.
+    /// The Python interpreter to use for resolving and syncing.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -2454,18 +2429,13 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with = "universal")]
     pub python_platform: Option<TargetTriple>,
 
-    /// The Python interpreter for which packages should be listed.
+    /// The Python interpreter to use for resolution.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
+    /// A Python interpreter is required to perform the lock before displaying
+    /// the tree.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -2552,15 +2522,8 @@ pub struct ToolRunArgs {
 
     /// The Python interpreter to use to build the run environment.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -2617,15 +2580,8 @@ pub struct ToolInstallArgs {
 
     /// The Python interpreter to use to build the tool environment.
     ///
-    /// By default, uv will search for a Python executable in the `PATH`. uv ignores virtual
-    /// environments while looking for interpreter for tools. The `--python` option allows
-    /// you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
     #[arg(
         long,
         short,
@@ -2716,9 +2672,12 @@ pub struct PythonListArgs {
 pub struct PythonInstallArgs {
     /// The Python version(s) to install.
     ///
-    /// If not provided, the requested Python version(s) will be read from the `.python-versions`
-    /// or `.python-version` files. If neither file is present, uv will check if it has
-    /// installed any Python versions. If not, it will install the latest stable version of Python.
+    /// If not provided, the requested Python version(s) will be read from the
+    /// `.python-versions` or `.python-version` files. If neither file is
+    /// present, uv will check if it has installed any Python versions. If not,
+    /// it will install the latest stable version of Python.
+    ///
+    /// See `uv help python` to view supported request formats.
     pub targets: Vec<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
@@ -2730,6 +2689,8 @@ pub struct PythonInstallArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
     /// The Python version(s) to uninstall.
+    ///
+    /// See `uv help python` to view supported request formats.
     #[arg(required = true)]
     pub targets: Vec<String>,
 
@@ -2742,13 +2703,21 @@ pub struct PythonUninstallArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonFindArgs {
     /// The Python request.
+    ///
+    /// See `uv help python` to view supported request formats.
     pub request: Option<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonPinArgs {
-    /// The Python version.
+    /// The Python version request.
+    ///
+    /// uv supports more formats than other tools that read `.python-version`
+    /// files, i.e., `pyenv`. If compatibility with those tools is needed, only
+    /// use version numbers instead of complex requests such as `cpython@3.10`.
+    ///
+    /// See `uv help python` to view supported request formats.
     pub request: Option<String>,
 
     /// Write the resolved Python interpreter path instead of the request.

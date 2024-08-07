@@ -1,6 +1,7 @@
 doc-valid-idents = [
   "PyPI",
   "PubGrub",
+  "PyPy",
   ".." # Include the defaults
 ]
 
