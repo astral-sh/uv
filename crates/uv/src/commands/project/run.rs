@@ -158,16 +158,14 @@ pub(crate) async fn run(
         None
     };
 
-    let temp_dir;
-
     // Discover and sync the base environment.
+    let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         Some(script_interpreter)
-    } else if no_project {
-        // package is `None` (`--no-project` and `--package` are marked as conflicting in Clap).
-        None
     } else {
-        let project = if let Some(package) = package {
+        let project = if no_project {
+            None
+        } else if let Some(package) = package {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
@@ -199,6 +197,8 @@ pub(crate) async fn run(
             }
 
             let venv = if isolated {
+                debug!("Creating isolated virtual environment");
+
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
                 let interpreter = {
@@ -301,23 +301,43 @@ pub(crate) async fn run(
         } else {
             debug!("No project found; searching for Python interpreter");
 
-            let client_builder = BaseClientBuilder::new()
-                .connectivity(connectivity)
-                .native_tls(native_tls);
+            let interpreter = {
+                let client_builder = BaseClientBuilder::new()
+                    .connectivity(connectivity)
+                    .native_tls(native_tls);
 
-            let python = PythonInstallation::find_or_fetch(
-                python.as_deref().map(PythonRequest::parse),
-                // No opt-in is required for system environments, since we are not mutating it.
-                EnvironmentPreference::Any,
-                python_preference,
-                python_fetch,
-                &client_builder,
-                cache,
-                Some(&reporter),
-            )
-            .await?;
+                let python = PythonInstallation::find_or_fetch(
+                    python.as_deref().map(PythonRequest::parse),
+                    // No opt-in is required for system environments, since we are not mutating it.
+                    EnvironmentPreference::Any,
+                    python_preference,
+                    python_fetch,
+                    &client_builder,
+                    cache,
+                    Some(&reporter),
+                )
+                .await?;
 
-            python.into_interpreter()
+                python.into_interpreter()
+            };
+
+            if isolated {
+                debug!("Creating isolated virtual environment");
+
+                // If we're isolating the environment, use an ephemeral virtual environment.
+                temp_dir = cache.environment()?;
+                let venv = uv_virtualenv::create_venv(
+                    temp_dir.path(),
+                    interpreter,
+                    uv_virtualenv::Prompt::None,
+                    false,
+                    false,
+                    false,
+                )?;
+                venv.into_interpreter()
+            } else {
+                interpreter
+            }
         };
 
         Some(interpreter)
