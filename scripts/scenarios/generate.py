@@ -163,9 +163,6 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             "local-used-without-sdist",
         ):
             expected["satisfiable"] = False
-            expected["explanation"] = (
-                "We do not have correct behavior for local version identifiers yet"
-            )
 
     # Split scenarios into `install`, `compile` and `lock` cases
     install_scenarios = []

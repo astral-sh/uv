@@ -1326,7 +1326,7 @@ fn local_simple() {
       ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // We do not have correct behavior for local version identifiers yet
+    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     assert_not_installed(&context.venv, "local_simple_a", &context.temp_dir);
 }
 
@@ -1412,7 +1412,7 @@ fn local_used_without_sdist() {
       ╰─▶ Because package-a==1.2.3 has no wheels with a matching Python ABI tag and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // We do not have correct behavior for local version identifiers yet
+    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     assert_not_installed(
         &context.venv,
         "local_used_without_sdist_a",
@@ -1787,7 +1787,7 @@ fn local_transitive_confounding() {
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // We do not have correct behavior for local version identifiers yet
+    // The version '2.0.0+foo' satisfies the constraint '==2.0.0'.
     assert_not_installed(
         &context.venv,
         "local_transitive_confounding_a",
@@ -2057,7 +2057,7 @@ fn local_less_than_or_equal() {
       ╰─▶ Because only package-a>1.2.3 is available and you require package-a<=1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // We do not have correct behavior for local version identifiers yet
+    // The version '1.2.3+foo' satisfies the constraint '<=1.2.3'.
     assert_not_installed(
         &context.venv,
         "local_less_than_or_equal_a",
