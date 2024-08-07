@@ -1394,6 +1394,16 @@
           "items": {
             "$ref": "#/definitions/String"
           }
+        },
+        "projects": {
+          "description": "Packages to include as workspace projects.\n\nSupports both globs and explicit paths.\n\nFor more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/String"
+          }
         }
       }
     }

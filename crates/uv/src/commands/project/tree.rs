@@ -11,7 +11,7 @@ use uv_fs::CWD;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
 use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject};
 
 use crate::commands::project::FoundInterpreter;
 use crate::commands::{project, ExitStatus};
@@ -47,11 +47,11 @@ pub(crate) async fn tree(
     }
 
     // Find the project requirements.
-    let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
+    let project = VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(
-        &workspace,
+        &project,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
         python_fetch,
@@ -67,7 +67,7 @@ pub(crate) async fn tree(
     let lock = project::lock::do_safe_lock(
         locked,
         frozen,
-        &workspace,
+        &project,
         &interpreter,
         settings.as_ref(),
         preview,

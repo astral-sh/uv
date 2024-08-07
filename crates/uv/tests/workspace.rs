@@ -955,3 +955,49 @@ fn workspace_hidden_member() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_shared_libraries() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let work_dir = context.temp_dir.join("shared-lib-ws");
+    copy_dir_ignore(workspaces_dir().join("shared-libs"), &work_dir)
+        .expect("Could not copy to temp dir");
+
+    for (app_name, numpy_version) in [("app1", "2.0.0"), ("app2", "1.26.4")] {
+        let app_dir = work_dir.join(app_name);
+
+        let mut filters = context.filters();
+
+        filters.push((app_name, "[app_name]"));
+        filters.push((numpy_version, "[numpy_version]"));
+
+        insta::allow_duplicates! {
+                uv_snapshot!(filters, context.run().env_remove("UV_EXCLUDE_NEWER")
+        .arg("--preview")
+        .arg(format!("{app_name}/app.py"))
+        .current_dir(&app_dir), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        shared-lib is loaded from [TEMP_DIR]/shared-lib-ws/shared_lib/shared_lib/__init__.py
+        six 1.16.0
+        shared-corelib is loaded from [TEMP_DIR]/shared-lib-ws/shared_corelib/shared_corelib/__init__.py
+        tqdm 4.66.2
+        numpy [numpy_version]
+
+        ----- stderr -----
+        Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+        Creating virtualenv at: .venv
+        Resolved [N] packages in [TIME]
+        Prepared [N] packages in [TIME]
+        Installed [N] packages in [TIME]
+         + [app_name]==1.0.0 (from file://[TEMP_DIR]/shared-lib-ws/[app_name])
+         + numpy==[numpy_version]
+         + shared-corelib==1.0.0 (from file://[TEMP_DIR]/shared-lib-ws/shared_corelib)
+         + shared-lib==1.0.0 (from file://[TEMP_DIR]/shared-lib-ws/shared_lib)
+         + six==1.16.0
+         + tqdm==4.66.2
+         "###);
+        }
+    }
+}

@@ -253,7 +253,7 @@ pub(crate) async fn run(
                 // If we're not isolating the environment, reuse the base environment for the
                 // project.
                 project::get_or_init_environment(
-                    project.workspace(),
+                    &project,
                     python.as_deref().map(PythonRequest::parse),
                     python_preference,
                     python_fetch,
@@ -268,7 +268,7 @@ pub(crate) async fn run(
             let lock = match project::lock::do_safe_lock(
                 locked,
                 frozen,
-                project.workspace(),
+                &project,
                 venv.interpreter(),
                 settings.as_ref().into(),
                 preview,

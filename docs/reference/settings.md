@@ -2532,3 +2532,33 @@ For more information on the glob syntax, refer to the [`glob` documentation](htt
 
 ---
 
+#### [`projects`](#workspace_projects) {: #workspace_projects }
+<span id="projects"></span>
+
+Packages to include as workspace projects.
+
+Supports both globs and explicit paths.
+
+For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.workspace]
+    projects = ["project1", "path/to/project2", "projects/*"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [workspace]
+    projects = ["project1", "path/to/project2", "projects/*"]
+    ```
+
+---
+
