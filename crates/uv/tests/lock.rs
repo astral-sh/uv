@@ -261,6 +261,18 @@ fn lock_sdist_git() -> Result<()> {
         });
     }
 
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning
+        warning: `uv.sources` is experimental and may change without warning
+        Resolved 2 packages in [TIME]
+        "###);
+
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
@@ -459,7 +471,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    // deterministic! { context =>
+    deterministic! { context =>
     uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -496,7 +508,18 @@ fn lock_sdist_git_pep508() -> Result<()> {
             "###
         );
     });
-    // }
+    }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
 
     // Re-lock with a precise commit that maps to the same tag.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -510,7 +533,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    // deterministic! { context =>
+    deterministic! { context =>
     uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -547,7 +570,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
             "###
         );
     });
-    // }
+    }
 
     // Re-lock with a different commit.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -561,7 +584,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    // deterministic! { context =>
+    deterministic! { context =>
     uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -598,7 +621,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
             "###
         );
     });
-    // }
+    }
 
     // Re-lock with a different tag (which matches the new commit).
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -612,7 +635,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    // deterministic! { context =>
+    deterministic! { context =>
     uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -649,7 +672,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
             "###
         );
     });
-    // }
+    }
 
     Ok(())
 }
