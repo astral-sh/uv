@@ -6,16 +6,16 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_configuration::{Concurrency, PreviewMode, Upgrade};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
+use crate::commands::{ExitStatus, SharedState, tool::common::install_executables};
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::project::update_environment;
-use crate::commands::tool::common::{remove_entrypoints, InstallAction};
-use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
+use crate::commands::tool::common::{InstallAction, remove_entrypoints};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -33,6 +33,13 @@ pub(crate) async fn upgrade(
     if preview.is_disabled() {
         warn_user_once!("`uv tool upgrade` is experimental and may change without warning");
     }
+
+    // Force upgrades.
+    let settings = ResolverInstallerSettings {
+        upgrade: Upgrade::All,
+        ..settings
+    };
+
     // Initialize any shared state.
     let state = SharedState::default();
 
