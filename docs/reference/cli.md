@@ -333,7 +333,17 @@ uv init [OPTIONS] [PATH]
 
 ## uv add
 
-Add dependencies to the project (experimental)
+Add dependencies to the project (experimental).
+
+Dependencies are added to the project's `pyproject.toml` file.
+
+If no constraint or URL is provided for a dependency, a lower bound is added equal to the latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in which case no resolution is performed.
+
+The lockfile and project environment will be updated to reflect the added dependencies. To skip updating the lockfile, use `--frozen`. To skip updating the environment, use `--no-sync`.
+
+If any of the requested dependencies cannot be found, uv will exit with an error, unless the `--frozen` flag is provided, in which case uv will add the dependencies verbatim without checking that they exist or are compatible with the project.
+
+uv will search for a project in the current directory or any parent directory. If a project cannot be found, uv will exit with an error.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -349,15 +359,23 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--optional</code> <i>optional</i></dt><dd><p>Add the requirements to the specified optional dependency group</p>
+<dl class="cli-reference"><dt><code>--optional</code> <i>optional</i></dt><dd><p>Add the requirements to the specified optional dependency group.</p>
 
-</dd><dt><code>--rev</code> <i>rev</i></dt><dd><p>Specific commit to use when adding from Git</p>
+<p>The group may then be activated when installing the project with the <code>--extra</code> flag.</p>
 
-</dd><dt><code>--tag</code> <i>tag</i></dt><dd><p>Tag to use when adding from git</p>
+<p>To enable an optional dependency group for this requirement instead, see <code>--extra</code>.</p>
 
-</dd><dt><code>--branch</code> <i>branch</i></dt><dd><p>Branch to use when adding from git</p>
+</dd><dt><code>--rev</code> <i>rev</i></dt><dd><p>Commit to use when adding a dependency from Git</p>
 
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Extras to activate for the dependency; may be provided more than once</p>
+</dd><dt><code>--tag</code> <i>tag</i></dt><dd><p>Tag to use when adding a dependency from Git</p>
+
+</dd><dt><code>--branch</code> <i>branch</i></dt><dd><p>Branch to use when adding a dependency from Git</p>
+
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Extras to enable for the dependency.</p>
+
+<p>May be provided more than once.</p>
+
+<p>To add this dependency to an optional group in the current project instead, see <code>--optional</code>.</p>
 
 </dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
@@ -522,7 +540,17 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 ## uv remove
 
-Remove dependencies from the project (experimental)
+Remove dependencies from the project (experimental).
+
+Dependencies are removed from the project's `pyproject.toml` file.
+
+The lockfile and project environment will be updated to reflect the removed dependencies. To skip updating the lockfile, use `--frozen`. To skip updating the environment, use `--no-sync`.
+
+If any of the requested dependencies are not present in the project, uv will exit with an error.
+
+If a package has been manually installed in the environment, i.e., with `uv pip install`, it will not be removed by `uv remove`.
+
+uv will search for a project in the current directory or any parent directory. If a project cannot be found, uv will exit with an error.
 
 <h3 class="cli-reference">Usage</h3>
 
