@@ -3056,8 +3056,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform != 'linux'",
+            "sys_platform == 'linux'",
         ]
 
         [[package]]
@@ -3434,8 +3434,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform != 'linux'",
+            "sys_platform == 'linux'",
         ]
 
         [[package]]
@@ -3882,10 +3882,10 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'windows'",
+            "sys_platform != 'illumos' and sys_platform != 'windows'",
             "os_name == 'darwin' and sys_platform == 'illumos'",
             "os_name == 'linux' and sys_platform == 'illumos'",
             "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
-            "sys_platform != 'illumos' and sys_platform != 'windows'",
         ]
 
         [[package]]
