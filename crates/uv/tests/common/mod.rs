@@ -515,7 +515,7 @@ impl TestContext {
     /// Create a `uv tool install` command with options shared across scenarios.
     pub fn tool_install(&self) -> Command {
         let mut command = self.tool_install_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+        command.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
         command
     }
 
