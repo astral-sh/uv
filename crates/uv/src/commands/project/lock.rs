@@ -420,8 +420,12 @@ async fn do_lock(
     // "preferences-dependent-forking" packse scenario). To avoid this, we store the forks in the
     // lockfile. We read those after all the lockfile filters, to allow the forks to change when
     // the environment changed, e.g. the python bound check above can lead to different forking.
-    let resolver_markers =
-        ResolverMarkers::universal(existing_lock.and_then(|lock| lock.fork_markers().clone()));
+    let resolver_markers = ResolverMarkers::universal(if upgrade.is_all() {
+        // We're discarding all preferences, so we're also discarding the existing forks.
+        None
+    } else {
+        existing_lock.and_then(|lock| lock.fork_markers().clone())
+    });
 
     let resolution = match existing_lock.filter(|_| upgrade.is_none()) {
         None => None,
