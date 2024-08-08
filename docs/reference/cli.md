@@ -315,9 +315,9 @@ uv run [OPTIONS] <COMMAND>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -734,9 +734,9 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 </dd><dt><code>--tag</code> <i>tag</i></dt><dd><p>Tag to use when adding a dependency from Git</p>
 
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -995,9 +995,9 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -1248,9 +1248,9 @@ uv sync [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -1477,9 +1477,9 @@ uv lock [OPTIONS]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -1768,9 +1768,9 @@ uv tree [OPTIONS]
 
 <p>Multiple versions may be shown for a each package.</p>
 
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -2031,9 +2031,9 @@ uv tool run [OPTIONS] [COMMAND]
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -2274,9 +2274,9 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -2511,9 +2511,9 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -3921,9 +3921,9 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Implies <code>--no-strip-markers</code>.</p>
 
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -4573,9 +4573,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--target</code> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
-</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt><code>--user</code></dt><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 

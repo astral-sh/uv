@@ -136,7 +136,9 @@ impl From<Upgrade> for Refresh {
         match value {
             Upgrade::None => Self::None(Timestamp::now()),
             Upgrade::All => Self::All(Timestamp::now()),
-            Upgrade::Packages(packages) => Self::Packages(packages.into_keys().collect::<Vec<_>>(), Timestamp::now()),
+            Upgrade::Packages(packages) => {
+                Self::Packages(packages.into_keys().collect::<Vec<_>>(), Timestamp::now())
+            }
         }
     }
 }

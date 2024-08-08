@@ -224,9 +224,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .src_file
@@ -317,9 +319,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .src_file
@@ -389,9 +393,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .package
@@ -705,9 +711,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .with
@@ -748,9 +756,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .with
@@ -996,9 +1006,11 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .with
@@ -1041,9 +1053,11 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             commands::sync(
                 args.locked,
@@ -1095,9 +1109,11 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             commands::add(
                 args.locked,
@@ -1131,9 +1147,11 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             commands::remove(
                 args.locked,
