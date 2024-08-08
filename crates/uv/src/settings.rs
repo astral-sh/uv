@@ -33,6 +33,7 @@ use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode,
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
+use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::pip::operations::Modifications;
@@ -399,7 +400,11 @@ impl ToolUpgradeSettings {
             refresh,
         } = args;
 
-        if !installer.upgrade && installer.upgrade_package.is_empty() {
+        if installer.upgrade {
+            // If `--upgrade` was passed explicitly, warn.
+            warn_user_once!("`--upgrade` is enabled by default on `uv tool upgrade`");
+        } else if installer.upgrade_package.is_empty() {
+            // If neither `--upgrade` nor `--upgrade-package` were passed in, assume `--upgrade`.
             installer.upgrade = true;
         }
 

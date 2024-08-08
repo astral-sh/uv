@@ -12,7 +12,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode, Upgrade};
+use uv_configuration::{Concurrency, PreviewMode};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
 use uv_tool::InstalledTools;
@@ -32,12 +32,6 @@ pub(crate) async fn upgrade(
     if preview.is_disabled() {
         warn_user_once!("`uv tool upgrade` is experimental and may change without warning");
     }
-
-    // Force upgrades.
-    let settings = ResolverInstallerSettings {
-        upgrade: Upgrade::All,
-        ..settings
-    };
 
     // Initialize any shared state.
     let state = SharedState::default();
