@@ -239,11 +239,17 @@ impl Workspace {
         }
     }
 
+    /// Returns `true` if the workspace has a virtual root.
     pub fn is_virtual(&self) -> bool {
         !self
             .packages
             .values()
             .any(|member| *member.root() == self.install_path)
+    }
+
+    /// Returns `true` if the workspace consists solely of a virtual root.
+    pub fn only_virtual(&self) -> bool {
+        self.packages.is_empty()
     }
 
     /// Returns the set of requirements that include all packages in the workspace.

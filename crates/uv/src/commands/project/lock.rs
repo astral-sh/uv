@@ -265,7 +265,13 @@ async fn do_lock(
     } else {
         let default =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-        warn_user!("No `requires-python` value found in the workspace. Defaulting to `{default}`.");
+        if workspace.only_virtual() {
+            debug!("No `requires-python` in virtual-only workspace. Defaulting to `{default}`.");
+        } else {
+            warn_user!(
+                "No `requires-python` value found in the workspace. Defaulting to `{default}`."
+            );
+        }
         default
     };
 
