@@ -1262,7 +1262,11 @@ uv sync [OPTIONS]
 
 ## uv lock
 
-Update the project's lockfile (experimental)
+Update the project's lockfile (experimental).
+
+If the project lockfile (`uv.lock`) does not exist, it will be created. If a lockfile is present, its contents will be used as preferences for the resolution.
+
+If there are no changes to the project's dependencies, locking will have no effect unless the `--upgrade` flag is provided.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1363,7 +1367,9 @@ uv lock [OPTIONS]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
-</dd><dt><code>--locked</code></dt><dd><p>Assert that the <code>uv.lock</code> will remain unchanged</p>
+</dd><dt><code>--locked</code></dt><dd><p>Assert that the <code>uv.lock</code> will remain unchanged.</p>
+
+<p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
