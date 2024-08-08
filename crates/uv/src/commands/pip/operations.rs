@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::fmt::{self, Write};
+use std::fmt::Write;
 use std::path::PathBuf;
 use tracing::debug;
 
@@ -39,7 +39,7 @@ use uv_resolver::{
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::loggers::InstallLogger;
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, DryRunEvent};
 use crate::printer::Printer;
@@ -106,9 +106,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     build_dispatch: &BuildDispatch<'_>,
     concurrency: Concurrency,
     options: Options,
+    logger: Box<dyn ResolveLogger>,
     printer: Printer,
     preview: PreviewMode,
-    quiet: bool,
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
@@ -262,31 +262,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         resolver.resolve().await?
     };
 
-    if !quiet {
-        resolution_success(&resolution, start, printer)?;
-    }
+    logger.on_complete(resolution.len(), start, printer)?;
 
     Ok(resolution)
-}
-
-// Prints a success message after completing resolution.
-pub(crate) fn resolution_success(
-    resolution: &ResolutionGraph,
-    start: std::time::Instant,
-    printer: Printer,
-) -> fmt::Result {
-    let s = if resolution.len() == 1 { "" } else { "s" };
-
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Resolved {} {}",
-            format!("{} package{}", resolution.len(), s).bold(),
-            format!("in {}", elapsed(start.elapsed())).dimmed()
-        )
-        .dimmed()
-    )
 }
 
 #[derive(Debug, Clone, Copy)]

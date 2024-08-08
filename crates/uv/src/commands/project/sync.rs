@@ -16,7 +16,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::do_safe_lock;
 use crate::commands::project::{ProjectError, SharedState};
@@ -79,6 +79,7 @@ pub(crate) async fn sync(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,

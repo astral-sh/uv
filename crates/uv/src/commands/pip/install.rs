@@ -29,7 +29,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
-use crate::commands::pip::loggers::DefaultInstallLogger;
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::{elapsed, ExitStatus, SharedState};
@@ -351,9 +351,9 @@ pub(crate) async fn pip_install(
         &build_dispatch,
         concurrency,
         options,
+        Box::new(DefaultResolveLogger),
         printer,
         preview,
-        false,
     )
     .await
     {

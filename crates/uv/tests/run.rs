@@ -926,6 +926,19 @@ fn run_without_output() -> Result<()> {
        "
     })?;
 
+    // On the first run, we only show the summary line for each environment.
+    uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Installed 4 packages in [TIME]
+    Installed 1 package in [TIME]
+    "###);
+
+    // Subsequent runs are quiet.
     uv_snapshot!(context.filters(), context.run().env_remove("UV_SHOW_RESOLUTION").arg("--with").arg("iniconfig").arg("main.py"), @r###"
     success: true
     exit_code: 0

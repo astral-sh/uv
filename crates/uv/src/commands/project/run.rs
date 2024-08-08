@@ -25,7 +25,9 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, SummaryInstallLogger};
+use crate::commands::pip::loggers::{
+    DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
+};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{ProjectError, WorkspacePython};
@@ -136,12 +138,16 @@ pub(crate) async fn run(
             if let Some(dependencies) = metadata.dependencies {
                 let requirements = dependencies.into_iter().map(Requirement::from).collect();
                 let spec = RequirementsSpecification::from_requirements(requirements);
-                // STOPSHIP(charlie): Here, we resolve and install.
                 let environment = CachedEnvironment::get_or_create(
                     spec,
                     interpreter,
                     &settings,
                     &state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
                     } else {
@@ -268,32 +274,27 @@ pub(crate) async fn run(
                     connectivity,
                     native_tls,
                     cache,
-                    // printer.filter(show_resolution),
                     printer,
                 )
                 .await?
             };
 
-            // STOPSHIP(charlie): Here, we resolve and install... It'd be nice to avoid showing any
-            // output if we resolve from the lockfile alone, and nice to avoid showing any output
-            // if we determine that the environment is up-to-date (fast paths).
-            //
-            // If we _do_ have work to do, we should show a single spinner for the whole operation,
-            // and then a summary of the changes. Maybe just the `in Xms` messages with the counts.
-            //
-            // Ok, let's do the same as with CachedEnvironment? Only show spinners for the lock.
             let lock = match project::lock::do_safe_lock(
                 locked,
                 frozen,
                 project.workspace(),
                 venv.interpreter(),
                 settings.as_ref().into(),
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
                 preview,
                 connectivity,
                 concurrency,
                 native_tls,
                 cache,
-                // printer.filter(show_resolution),
                 printer,
             )
             .await
@@ -309,7 +310,6 @@ pub(crate) async fn run(
                 Err(err) => return Err(err.into()),
             };
 
-            // STOPSHIP(charlie): Only show the output summary and spinners.
             project::sync::do_sync(
                 &project,
                 &venv,
@@ -473,8 +473,6 @@ pub(crate) async fn run(
             .into_interpreter()
         };
 
-        // STOPSHIP(charlie): We should show a spinner here, and perhaps use `CachedEnvironment`?
-
         Some(match spec.filter(|spec| !spec.is_empty()) {
             None => {
                 // Create a virtual environment
@@ -496,6 +494,11 @@ pub(crate) async fn run(
                     interpreter,
                     &settings,
                     &state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
                     } else {

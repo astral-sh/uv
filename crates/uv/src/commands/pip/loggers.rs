@@ -50,7 +50,7 @@ impl InstallLogger for DefaultInstallLogger {
             "{}",
             format!(
                 "Audited {} {}",
-                format!("{} package{}", count, s).bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -64,7 +64,7 @@ impl InstallLogger for DefaultInstallLogger {
             "{}",
             format!(
                 "Prepared {} {}",
-                format!("{} package{}", count, s).bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -83,7 +83,7 @@ impl InstallLogger for DefaultInstallLogger {
             "{}",
             format!(
                 "Uninstalled {} {}",
-                format!("{} package{}", count, s).bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -97,7 +97,7 @@ impl InstallLogger for DefaultInstallLogger {
             "{}",
             format!(
                 "Installed {} {}",
-                format!("{} package{}", count, s).bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -161,11 +161,21 @@ impl InstallLogger for DefaultInstallLogger {
 pub(crate) struct SummaryInstallLogger;
 
 impl InstallLogger for SummaryInstallLogger {
-    fn on_audit(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
+    fn on_audit(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
         Ok(())
     }
 
-    fn on_prepare(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
+    fn on_prepare(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
         Ok(())
     }
 
@@ -181,7 +191,7 @@ impl InstallLogger for SummaryInstallLogger {
             "{}",
             format!(
                 "Uninstalled {} {}",
-                format!("{} package{}", count, s).bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -195,7 +205,7 @@ impl InstallLogger for SummaryInstallLogger {
             "{}",
             format!(
                 "Installed {} {}",
-                format!("{} package{}", count, s).bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -204,10 +214,57 @@ impl InstallLogger for SummaryInstallLogger {
 
     fn on_complete(
         &self,
-        installed: Vec<CachedDist>,
-        reinstalled: Vec<InstalledDist>,
-        uninstalled: Vec<InstalledDist>,
+        _installed: Vec<CachedDist>,
+        _reinstalled: Vec<InstalledDist>,
+        _uninstalled: Vec<InstalledDist>,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+}
+
+/// A trait to handle logging during resolve operations.
+pub(crate) trait ResolveLogger {
+    /// Log the completion of the operation.
+    fn on_complete(&self, count: usize, start: std::time::Instant, printer: Printer)
+        -> fmt::Result;
+}
+
+/// The default logger for resolve operations.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct DefaultResolveLogger;
+
+impl ResolveLogger for DefaultResolveLogger {
+    fn on_complete(
+        &self,
+        count: usize,
+        start: std::time::Instant,
         printer: Printer,
+    ) -> fmt::Result {
+        let s = if count == 1 { "" } else { "s" };
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Resolved {} {}",
+                format!("{count} package{s}").bold(),
+                format!("in {}", elapsed(start.elapsed())).dimmed()
+            )
+            .dimmed()
+        )
+    }
+}
+
+/// A logger that doesn't show any output.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct SummaryResolveLogger;
+
+impl ResolveLogger for SummaryResolveLogger {
+    fn on_complete(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
     ) -> fmt::Result {
         Ok(())
     }

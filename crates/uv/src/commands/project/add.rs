@@ -24,7 +24,7 @@ use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::{ArrayEdit, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
-use crate::commands::pip::loggers::DefaultInstallLogger;
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::project::ProjectError;
@@ -268,6 +268,7 @@ pub(crate) async fn add(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,

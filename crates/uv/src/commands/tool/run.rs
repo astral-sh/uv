@@ -29,7 +29,9 @@ use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::reporters::PythonDownloadReporter;
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, SummaryInstallLogger};
+use crate::commands::pip::loggers::{
+    DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
+};
 use crate::commands::project::resolve_names;
 use crate::commands::{
     project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
@@ -151,7 +153,7 @@ pub(crate) async fn run(
         &executable.to_string_lossy(),
         &from.name,
         &site_packages,
-        &invocation_source,
+        invocation_source,
     );
 
     let mut handle = match process.spawn() {
@@ -236,7 +238,7 @@ fn warn_executable_not_provided_by_package(
     executable: &str,
     from_package: &PackageName,
     site_packages: &SitePackages,
-    invocation_source: &ToolRunCommand,
+    invocation_source: ToolRunCommand,
 ) {
     let packages = matching_packages(executable, site_packages);
     if !packages
@@ -417,20 +419,21 @@ async fn get_or_create_environment(
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
-    // STOPSHIP(charlie): Same deal here with respect to spinners.
-
-    let install_logger: Box<dyn InstallLogger> = if show_resolution {
-        Box::new(DefaultInstallLogger)
-    } else {
-        Box::new(SummaryInstallLogger)
-    };
-
     let environment = CachedEnvironment::get_or_create(
         spec,
         interpreter,
         settings,
         &state,
-        install_logger,
+        if show_resolution {
+            Box::new(DefaultResolveLogger)
+        } else {
+            Box::new(SummaryResolveLogger)
+        },
+        if show_resolution {
+            Box::new(DefaultInstallLogger)
+        } else {
+            Box::new(SummaryInstallLogger)
+        },
         preview,
         connectivity,
         concurrency,

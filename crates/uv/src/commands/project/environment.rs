@@ -1,6 +1,6 @@
 use tracing::debug;
 
-use crate::commands::pip::loggers::InstallLogger;
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::project::{resolve_environment, sync_environment};
 use crate::commands::SharedState;
 use crate::printer::Printer;
@@ -31,6 +31,7 @@ impl CachedEnvironment {
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
         state: &SharedState,
+        resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
         preview: PreviewMode,
         connectivity: Connectivity,
@@ -56,13 +57,12 @@ impl CachedEnvironment {
         };
 
         // Resolve the requirements with the interpreter.
-        // STOPSHIP(charlie): We should suppress all output here, but show progress (so we show
-        // builds).
         let graph = resolve_environment(
             &interpreter,
             spec,
             settings.as_ref().into(),
             state,
+            resolve,
             preview,
             connectivity,
             concurrency,
@@ -107,8 +107,6 @@ impl CachedEnvironment {
             true,
         )?;
 
-        // STOPSHIP(charlie): We should suppress all output here, but show progress (so we show
-        // downloads and builds), and show a summary at the end.
         sync_environment(
             venv,
             &resolution,
