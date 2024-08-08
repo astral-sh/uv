@@ -10,8 +10,7 @@ mod common;
 
 /// Create a `pip compile` command, overwriting defaults for any settings that vary based on machine
 /// and operating system.
-fn command(context: &TestContext) -> Command {
-    let mut command = context.pip_compile();
+fn add_shared_args(mut command: Command) -> Command {
     command
         .env("UV_LINK_MODE", "clone")
         .env("UV_CONCURRENT_DOWNLOADS", "50")
@@ -42,7 +41,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -177,7 +176,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     );
 
     // Resolution should use the highest version, and generate hashes.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=highest"), @r###"
@@ -313,7 +312,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     );
 
     // Resolution should use the highest version, and omit hashes.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=highest")
@@ -484,7 +483,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -622,7 +621,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     fs_err::remove_file(config.path())?;
 
     // Resolution should use the highest version, and omit hashes.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -746,7 +745,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -907,7 +906,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1066,7 +1065,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
 
     // Providing an additional index URL on the command-line should be merged with the
     // configuration file.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--extra-index-url")
@@ -1274,7 +1273,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
 
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1434,7 +1433,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1564,7 +1563,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1721,7 +1720,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     );
 
     // But the command-line should take precedence over both.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=lowest-direct"), @r###"
@@ -1903,7 +1902,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env("XDG_CONFIG_HOME", xdg.path()), @r###"
@@ -2023,7 +2022,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "})?;
 
     // Resolution should use the lowest direct version and generate hashes.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env("XDG_CONFIG_HOME", xdg.path()), @r###"
@@ -2143,7 +2142,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the highest version.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env("XDG_CONFIG_HOME", xdg.path()), @r###"
@@ -2265,7 +2264,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the highest version.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
         .env("XDG_CONFIG_HOME", xdg.path()), @r###"
@@ -2380,6 +2379,113 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// When running a user-level command (like `uv tool install`), we should read user configuration,
+/// but ignore project-local configuration.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_tool() -> anyhow::Result<()> {
+    // Create a temporary directory to store the user configuration.
+    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
+    let uv = xdg.child("uv");
+    let config = uv.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        resolution = "lowest-direct"
+    "#})?;
+
+    let context = TestContext::new("3.12");
+
+    // Add a local configuration to disable build isolation.
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r"
+        no-build-isolation = true
+    "})?;
+
+    // If we're running a user-level command, like `uv tool install`, we should use lowest direct,
+    // but retain build isolation (since we ignore the local configuration).
+    uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    ToolInstallSettings {
+        package: "requirements.in",
+        from: None,
+        with: [],
+        with_requirements: [],
+        python: None,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            index_locations: IndexLocations {
+                index: None,
+                extra_index: [],
+                flat_index: [],
+                no_index: false,
+            },
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            resolution: LowestDirect,
+            prerelease: IfNecessaryOrExplicit,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            upgrade: None,
+            reinstall: None,
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+        },
+        force: false,
+        editable: false,
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
 /// Read from a `pyproject.toml` file in the current directory. In this case, the `pyproject.toml`
 /// file uses the Poetry schema.
 #[test]
@@ -2413,7 +2519,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -2561,7 +2667,7 @@ fn resolve_both() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -2722,7 +2828,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
@@ -2871,7 +2977,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
@@ -2906,7 +3012,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     })?;
 
     // The file should be rejected for violating the schema, with a custom warning.
-    uv_snapshot!(context.filters(), command(&context)
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())

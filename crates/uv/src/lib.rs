@@ -119,6 +119,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.no_config {
         None
+    } else if matches!(&*cli.command, Commands::Tool(_)) {
+        // For commands that operate at the user-level, ignore local configuration.
+        FilesystemOptions::user()?
     } else if let Ok(project) = Workspace::discover(&CWD, &DiscoveryOptions::default()).await {
         let project = FilesystemOptions::from_directory(project.install_path())?;
         let user = FilesystemOptions::user()?;
