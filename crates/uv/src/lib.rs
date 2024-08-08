@@ -1108,7 +1108,7 @@ async fn run_project(
                 args.locked,
                 args.frozen,
                 args.no_sync,
-                args.requirements,
+                args.packages,
                 args.dependency_type,
                 args.package,
                 args.python,
