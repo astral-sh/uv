@@ -1,22 +1,22 @@
 use std::{collections::BTreeSet, fmt::Write};
 
 use anyhow::Result;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::project::update_environment;
+use crate::commands::tool::common::{remove_entrypoints, InstallAction};
+use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode, Upgrade};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
 use uv_tool::InstalledTools;
-use uv_warnings::{warn_user, warn_user_once};
-
-use crate::commands::{ExitStatus, SharedState, tool::common::install_executables};
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::project::update_environment;
-use crate::commands::tool::common::{InstallAction, remove_entrypoints};
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use uv_warnings::warn_user_once;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
@@ -45,18 +45,16 @@ pub(crate) async fn upgrade(
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.acquire_lock()?;
 
-    let names: BTreeSet<PackageName> = name
-        .map(|name| {
-            BTreeSet::from_iter([name])
-        })
-        .unwrap_or_else(|| {
-            installed_tools
-                .tools()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(name, _)| name)
-                .collect()
-        });
+    let names: BTreeSet<PackageName> =
+        name.map(|name| BTreeSet::from_iter([name]))
+            .unwrap_or_else(|| {
+                installed_tools
+                    .tools()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(name, _)| name)
+                    .collect()
+            });
 
     if names.is_empty() {
         writeln!(printer.stderr(), "Nothing to upgrade")?;
@@ -66,20 +64,53 @@ pub(crate) async fn upgrade(
     for name in names {
         debug!("Upgrading tool: `{name}`");
 
-        let Some(existing_tool_receipt) = installed_tools.get_tool_receipt(&name)? else {
-            warn_user!(
-                "Ignoring malformed tool `{name}` (run `{}` to remove)",
-                format!("uv tool uninstall {name}").green()
-            );
-            continue;
+        // Ensure the tool is installed.
+        let existing_tool_receipt = match installed_tools.get_tool_receipt(&name) {
+            Ok(Some(receipt)) => receipt,
+            Ok(None) => {
+                let install_command = format!("uv tool install {name}");
+                writeln!(
+                    printer.stderr(),
+                    "`{}` is not installed; run `{}` to install",
+                    name.cyan(),
+                    install_command.green()
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
+            Err(_) => {
+                let install_command = format!("uv tool install --force {name}");
+                writeln!(
+                    printer.stderr(),
+                    "`{}` is missing a valid receipt; run `{}` to reinstall",
+                    name.cyan(),
+                    install_command.green()
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
         };
 
-        let Some(existing_environment) = installed_tools.get_environment(&name, cache)? else {
-            warn_user!(
-                "Ignoring malformed tool `{name}` (run `{}` to remove)",
-                format!("uv tool uninstall {name}").green()
-            );
-            continue;
+        let existing_environment = match installed_tools.get_environment(&name, cache) {
+            Ok(Some(environment)) => environment,
+            Ok(None) => {
+                let install_command = format!("uv tool install {name}");
+                writeln!(
+                    printer.stderr(),
+                    "`{}` is not installed; run `{}` to install",
+                    name.cyan(),
+                    install_command.green()
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
+            Err(_) => {
+                let install_command = format!("uv tool install --force {name}");
+                writeln!(
+                    printer.stderr(),
+                    "`{}` is missing a valid environment; run `{}` to reinstall",
+                    name.cyan(),
+                    install_command.green()
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
         };
 
         // Resolve the requirements.
