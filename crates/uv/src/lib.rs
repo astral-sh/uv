@@ -770,6 +770,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 args.python,
                 args.force,
+                args.options,
                 args.settings,
                 globals.preview,
                 globals.python_preference,
@@ -802,12 +803,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
+            // TODO(charlie): Refresh for every package based on its saved `--reinstall` setting.
             let cache = cache.init()?.with_refresh(args.refresh);
 
             commands::tool_upgrade(
                 args.name,
                 globals.connectivity,
-                args.settings,
+                args.args,
+                args.filesystem,
                 Concurrency::default(),
                 globals.native_tls,
                 &cache,
