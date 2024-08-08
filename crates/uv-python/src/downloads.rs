@@ -70,8 +70,10 @@ pub enum Error {
     InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
-    #[error("A mirror was provided via `UV_PYTHON_INSTALL_MIRROR`, but the URL does not match the expected format: {0}")]
-    Mirror(&'static str),
+    #[error(
+        "A mirror was provided via `{0}`, but the URL does not match the expected format: {0}"
+    )]
+    Mirror(&'static str, &'static str),
 }
 
 #[derive(Debug, PartialEq)]
@@ -412,18 +414,7 @@ impl ManagedPythonDownload {
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        // Parse the provided URL. If a mirror is set, use it instead.
-        let url = if let Ok(mirror) = std::env::var("UV_PYTHON_INSTALL_MIRROR") {
-            let Some(suffix) = self.url.strip_prefix(
-                "https://github.com/indygreg/python-build-standalone/releases/download/",
-            ) else {
-                return Err(Error::Mirror(self.url));
-            };
-            Url::parse(format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str())?
-        } else {
-            Url::parse(self.url)?
-        };
-
+        let url = self.download_url()?;
         let path = parent_path.join(self.key().to_string());
 
         // If it already exists, return it
@@ -537,6 +528,41 @@ impl ManagedPythonDownload {
 
     pub fn python_version(&self) -> PythonVersion {
         self.key.version()
+    }
+
+    /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the
+    /// appropriate environment variable, use it instead.
+    fn download_url(&self) -> Result<Url, Error> {
+        match self.key.implementation {
+            LenientImplementationName::Known(ImplementationName::CPython) => {
+                if let Ok(mirror) = std::env::var("UV_PYTHON_INSTALL_MIRROR") {
+                    let Some(suffix) = self.url.strip_prefix(
+                        "https://github.com/indygreg/python-build-standalone/releases/download/",
+                    ) else {
+                        return Err(Error::Mirror("UV_PYTHON_INSTALL_MIRROR", self.url));
+                    };
+                    return Ok(Url::parse(
+                        format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
+                    )?);
+                }
+            }
+
+            LenientImplementationName::Known(ImplementationName::PyPy) => {
+                if let Ok(mirror) = std::env::var("UV_PYPY_INSTALL_MIRROR") {
+                    let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
+                    else {
+                        return Err(Error::Mirror("UV_PYPY_INSTALL_MIRROR", self.url));
+                    };
+                    return Ok(Url::parse(
+                        format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
+                    )?);
+                }
+            }
+
+            _ => {}
+        }
+
+        Ok(Url::parse(self.url)?)
     }
 }
 
