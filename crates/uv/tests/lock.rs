@@ -5308,7 +5308,7 @@ fn lock_migrate() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[distribution-term-we-dont-know]]
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
@@ -5321,7 +5321,7 @@ fn lock_migrate() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
         ]
 
-        [[distribution]]
+        [[distribution-term-we-dont-know]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
@@ -5330,7 +5330,7 @@ fn lock_migrate() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
         ]
 
-        [[distribution]]
+        [[distribution-term-we-dont-know]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -5338,7 +5338,7 @@ fn lock_migrate() -> Result<()> {
         { name = "anyio" },
         ]
 
-        [[distribution]]
+        [[distribution-term-we-dont-know]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
