@@ -3999,6 +3999,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
 /// Reject Git dependencies when `--require-hashes` is provided.
 #[test]
+#[cfg(feature = "git")]
 fn require_hashes_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
