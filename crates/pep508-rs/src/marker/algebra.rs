@@ -82,7 +82,8 @@ struct InternerState {
     /// into [`InternerShared`].
     unique: FxHashMap<Node, NodeId>,
 
-    /// A cache for operations between two nodes.
+    /// A cache for `AND` operations between two nodes.
+    /// Note that that `OR` is implemented in terms of `AND`.
     cache: FxHashMap<(NodeId, NodeId), NodeId>,
 }
 
