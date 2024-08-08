@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use smallvec::SmallVec;
 use thiserror::Error;
 use url::Url;
 
@@ -18,9 +19,9 @@ pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
     pub build_tag: Option<BuildTag>,
-    pub python_tag: Vec<String>,
-    pub abi_tag: Vec<String>,
-    pub platform_tag: Vec<String>,
+    pub python_tag: SmallVec<[String; 3]>,
+    pub abi_tag: SmallVec<[String; 3]>,
+    pub platform_tag: SmallVec<[String; 3]>,
 }
 
 impl FromStr for WheelFilename {
