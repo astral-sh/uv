@@ -1,7 +1,6 @@
 use std::{collections::BTreeSet, fmt::Write};
 
 use anyhow::Result;
-use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -10,7 +9,7 @@ use uv_configuration::{Concurrency, PreviewMode, Upgrade};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
 use uv_tool::InstalledTools;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::{ExitStatus, SharedState, tool::common::install_executables};
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
@@ -48,9 +47,7 @@ pub(crate) async fn upgrade(
 
     let names: BTreeSet<PackageName> = name
         .map(|name| {
-            let mut set = BTreeSet::new();
-            set.insert(name);
-            set
+            BTreeSet::from_iter([name])
         })
         .unwrap_or_else(|| {
             installed_tools
@@ -67,26 +64,22 @@ pub(crate) async fn upgrade(
     }
 
     for name in names {
-        debug!("Upgrading tool {name}");
+        debug!("Upgrading tool: `{name}`");
 
         let Some(existing_tool_receipt) = installed_tools.get_tool_receipt(&name)? else {
-            let install_command = format!("uv tool install {name}");
-            writeln!(
-                printer.stderr(),
-                "`{name}` is not installed; install `{name}` via `{}`",
-                install_command.cyan()
-            )?;
-            return Ok(ExitStatus::Failure);
+            warn_user!(
+                "Ignoring malformed tool `{name}` (run `{}` to remove)",
+                format!("uv tool uninstall {name}").green()
+            );
+            continue;
         };
 
         let Some(existing_environment) = installed_tools.get_environment(&name, cache)? else {
-            let install_command = format!("uv tool install {name}");
-            writeln!(
-                printer.stderr(),
-                "`{name}` is not installed; install `{name}` via `{}`",
-                install_command.cyan()
-            )?;
-            return Ok(ExitStatus::Failure);
+            warn_user!(
+                "Ignoring malformed tool `{name}` (run `{}` to remove)",
+                format!("uv tool uninstall {name}").green()
+            );
+            continue;
         };
 
         // Resolve the requirements.
