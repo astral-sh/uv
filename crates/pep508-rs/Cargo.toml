@@ -20,6 +20,7 @@ crate-type = ["cdylib", "rlib"]
 workspace = true
 
 [dependencies]
+boxcar = { workspace = true }
 derivative = { workspace = true }
 itertools = { workspace = true }
 indexmap = { workspace = true }
@@ -32,6 +33,7 @@ regex = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true, optional = true }
+smallvec = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
@@ -39,8 +41,6 @@ url = { workspace = true, features = ["serde"] }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pubgrub = { workspace = true }
-boxcar = "0.2.5"
-smallvec = "1.13.2"
 
 [dev-dependencies]
 insta = { version = "1.36.1" }
