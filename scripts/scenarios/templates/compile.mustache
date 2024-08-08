@@ -39,9 +39,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
 
 {{#scenarios}}
 
-{{#description_lines}}
-/// {{.}}
-{{/description_lines}}
+/// {{description}}
 ///
 /// ```text
 /// {{name}}
@@ -66,9 +64,9 @@ fn {{module_name}}() -> Result<()> {
     requirements_in.write_str("{{requirement}}")?;
     {{/root.requires}}
 
-    {{#expected.explanation_lines}}
-    // {{.}}
-    {{/expected.explanation_lines}}
+    {{#expected.explanation}}
+    // {{expected.explanation}}
+    {{/expected.explanation}}
     let output = uv_snapshot!(filters, command(&context, python_versions)
         {{#resolver_options.prereleases}}
         .arg("--prerelease=allow")

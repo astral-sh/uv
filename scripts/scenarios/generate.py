@@ -124,18 +124,26 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         if not scenario["name"].startswith("example")
     ]
 
-    # Wrap the description onto multiple lines
+    # We have a mixture of long singe-line descriptions (json scenarios) we need to
+    # wrap and manually formatted markdown in toml and yaml scenarios we want to
+    # preserve.
     for scenario in data["scenarios"]:
-        scenario["description_lines"] = textwrap.wrap(scenario["description"], width=80)
+        if scenario["_textwrap"]:
+            scenario["description"] = textwrap.wrap(scenario["description"], width=80)
+        else:
+            scenario["description"] = scenario["description"].splitlines()
+        # Don't drop empty lines like chevron would.
+        scenario["description"] = "\n/// ".join(scenario["description"])
 
-    # Wrap the expected explanation onto multiple lines
+    # Apply the same wrapping to the expected explanation
     for scenario in data["scenarios"]:
         expected = scenario["expected"]
-        expected["explanation_lines"] = (
-            textwrap.wrap(expected["explanation"], width=80)
-            if expected["explanation"]
-            else []
-        )
+        if explanation := expected["explanation"]:
+            if scenario["_textwrap"]:
+                expected["explanation"] = textwrap.wrap(explanation, width=80)
+            else:
+                expected["explanation"] = explanation.splitlines()
+            expected["explanation"] = "\n// ".join(expected["explanation"])
 
     # Hack to track which scenarios require a specific Python patch version
     for scenario in data["scenarios"]:
@@ -155,9 +163,6 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             "local-used-without-sdist",
         ):
             expected["satisfiable"] = False
-            expected["explanation"] = (
-                "We do not have correct behavior for local version identifiers yet"
-            )
 
     # Split scenarios into `install`, `compile` and `lock` cases
     install_scenarios = []
@@ -224,20 +229,21 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         if snapshot_update:
             logging.info("Updating snapshots...")
             env = os.environ.copy()
-            env["UV_TEST_PYTHON_PATH"] = str(PROJECT_ROOT / "bin")
+            command = [
+                "cargo",
+                "insta",
+                "test",
+                "--features",
+                "pypi,python,python-patch",
+                "--accept",
+                "--test-runner",
+                "nextest",
+                "--test",
+                tests.with_suffix("").name,
+            ]
+            logging.debug(f"Running {" ".join(command)}")
             subprocess.call(
-                [
-                    "cargo",
-                    "insta",
-                    "test",
-                    "--features",
-                    "pypi,python,python-patch",
-                    "--accept",
-                    "--test-runner",
-                    "nextest",
-                    "--test",
-                    tests.with_suffix("").name,
-                ],
+                command,
                 cwd=PROJECT_ROOT,
                 stderr=subprocess.STDOUT,
                 stdout=sys.stderr if debug else subprocess.DEVNULL,
