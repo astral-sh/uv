@@ -472,7 +472,8 @@ pub(crate) enum Edges {
     String {
         edges: SmallVec<(Range<String>, NodeId)>,
     },
-    // The edges of a boolean variable, representing `true` or `false` values.
+    // The edges of a boolean variable, representing the values `true` (the `high` child)
+    // and `false` (the `low` child).
     Boolean {
         high: NodeId,
         low: NodeId,
@@ -496,6 +497,9 @@ impl Edges {
     }
 
     /// Returns the [`Edges`] for a string expression.
+    ///
+    /// This function will panic for the `In` and `Contains` marker operators, which
+    /// should be represented as separate boolean variables.
     fn from_string(operator: MarkerOperator, value: String) -> Edges {
         let range: Range<String> = match operator {
             MarkerOperator::Equal => Range::singleton(value),
@@ -558,6 +562,8 @@ impl Edges {
     }
 
     /// Merge two [`Edges`], applying the given function to all disjoint, intersecting edges.
+    ///
+    /// Note `self` and `map2` must be of the same [`Edges`] variant.
     fn apply(
         &self,
         parent: NodeId,
