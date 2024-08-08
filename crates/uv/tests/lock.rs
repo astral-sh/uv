@@ -2399,7 +2399,7 @@ fn lock_git_sha() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -2407,7 +2407,7 @@ fn lock_git_sha() -> Result<()> {
             { name = "uv-public-pypackage" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
@@ -5503,7 +5503,7 @@ fn lock_upgrade_package() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[package]]
         name = "anyio"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
@@ -5516,7 +5516,7 @@ fn lock_upgrade_package() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/8a/19/10fe682e962efd1610aa41376399fc3f3e002425449b02d0fb04749bb712/anyio-2.0.0-py3-none-any.whl", hash = "sha256:0b8375c8fc665236cb4d143ea13e849eb9e074d727b1b5c27d88aba44ca8c547", size = 62675 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "idna"
         version = "3.0"
         source = { registry = "https://pypi.org/simple" }
@@ -5525,7 +5525,7 @@ fn lock_upgrade_package() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/0f/6b/3a878f15ef3324754bf4780f8f047d692d9860be894ff8fb3135cef8bed8/idna-3.0-py2.py3-none-any.whl", hash = "sha256:320229aadbdfc597bc28876748cc0c9d04d476e0fe6caacaaddea146365d9f63", size = 58618 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -5534,7 +5534,7 @@ fn lock_upgrade_package() -> Result<()> {
             { name = "idna" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
@@ -5594,7 +5594,7 @@ fn lock_upgrade_package() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[package]]
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
@@ -5607,7 +5607,7 @@ fn lock_upgrade_package() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "idna"
         version = "3.0"
         source = { registry = "https://pypi.org/simple" }
@@ -5616,7 +5616,7 @@ fn lock_upgrade_package() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/0f/6b/3a878f15ef3324754bf4780f8f047d692d9860be894ff8fb3135cef8bed8/idna-3.0-py2.py3-none-any.whl", hash = "sha256:320229aadbdfc597bc28876748cc0c9d04d476e0fe6caacaaddea146365d9f63", size = 58618 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -5625,7 +5625,7 @@ fn lock_upgrade_package() -> Result<()> {
             { name = "idna" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
@@ -5673,7 +5673,7 @@ fn lock_upgrade_package() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[package]]
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
@@ -5686,7 +5686,7 @@ fn lock_upgrade_package() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
@@ -5695,7 +5695,7 @@ fn lock_upgrade_package() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -5704,7 +5704,7 @@ fn lock_upgrade_package() -> Result<()> {
             { name = "idna" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
