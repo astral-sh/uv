@@ -27,6 +27,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
+use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
@@ -84,6 +85,7 @@ pub(crate) async fn lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,
@@ -117,6 +119,7 @@ pub(super) async fn do_safe_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
+    logger: Box<dyn ResolveLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -157,6 +160,7 @@ pub(super) async fn do_safe_lock(
             Some(&existing),
             settings,
             &state,
+            logger,
             preview,
             connectivity,
             concurrency,
@@ -186,6 +190,7 @@ pub(super) async fn do_safe_lock(
             existing.as_ref(),
             settings,
             &state,
+            logger,
             preview,
             connectivity,
             concurrency,
@@ -213,6 +218,7 @@ async fn do_lock(
     existing_lock: Option<&Lock>,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn ResolveLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -477,9 +483,9 @@ async fn do_lock(
                 &build_dispatch,
                 concurrency,
                 options,
+                Box::new(SummaryResolveLogger),
                 printer,
                 preview,
-                true,
             )
             .await
             .inspect_err(|err| debug!("Resolution with `uv.lock` failed: {err}"))
@@ -555,16 +561,16 @@ async fn do_lock(
                 &build_dispatch,
                 concurrency,
                 options,
+                Box::new(SummaryResolveLogger),
                 printer,
                 preview,
-                true,
             )
             .await?
         }
     };
 
     // Print the success message after completing resolution.
-    pip::operations::resolution_success(&resolution, start, printer)?;
+    logger.on_complete(resolution.len(), start, printer)?;
 
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;

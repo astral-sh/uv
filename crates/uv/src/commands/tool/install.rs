@@ -28,6 +28,7 @@ use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::reporters::PythonDownloadReporter;
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::{
     project::{resolve_environment, resolve_names, sync_environment, update_environment},
     tool::common::matching_packages,
@@ -275,6 +276,8 @@ pub(crate) async fn install(
             spec,
             &settings,
             &state,
+            Box::new(DefaultResolveLogger),
+            Box::new(DefaultInstallLogger),
             preview,
             connectivity,
             concurrency,
@@ -299,6 +302,7 @@ pub(crate) async fn install(
             spec,
             settings.as_ref().into(),
             &state,
+            Box::new(DefaultResolveLogger),
             preview,
             connectivity,
             concurrency,
@@ -322,6 +326,7 @@ pub(crate) async fn install(
             &resolution.into(),
             settings.as_ref().into(),
             &state,
+            Box::new(DefaultInstallLogger),
             preview,
             connectivity,
             concurrency,

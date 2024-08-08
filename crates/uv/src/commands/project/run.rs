@@ -25,6 +25,9 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
+use crate::commands::pip::loggers::{
+    DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
+};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{ProjectError, WorkspacePython};
@@ -89,7 +92,8 @@ pub(crate) async fn run(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    let reporter = PythonDownloadReporter::single(printer.filter(show_resolution));
+    // Initialize any output reporters.
+    let download_reporter = PythonDownloadReporter::single(printer);
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -125,7 +129,7 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
-                Some(&reporter),
+                Some(&download_reporter),
             )
             .await?
             .into_interpreter();
@@ -139,18 +143,28 @@ pub(crate) async fn run(
                     interpreter,
                     &settings,
                     &state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
                     preview,
                     connectivity,
                     concurrency,
                     native_tls,
                     cache,
-                    printer.filter(show_resolution),
+                    printer,
                 )
                 .await?;
 
                 Some(environment.into_interpreter())
             } else {
-                // Create a virtual environment
+                // Create a virtual environment.
                 temp_dir = cache.environment()?;
                 let environment = uv_virtualenv::create_venv(
                     temp_dir.path(),
@@ -233,7 +247,7 @@ pub(crate) async fn run(
                         python_fetch,
                         &client_builder,
                         cache,
-                        Some(&reporter),
+                        Some(&download_reporter),
                     )
                     .await?
                     .into_interpreter()
@@ -260,7 +274,7 @@ pub(crate) async fn run(
                     connectivity,
                     native_tls,
                     cache,
-                    printer.filter(show_resolution),
+                    printer,
                 )
                 .await?
             };
@@ -271,12 +285,17 @@ pub(crate) async fn run(
                 project.workspace(),
                 venv.interpreter(),
                 settings.as_ref().into(),
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
                 preview,
                 connectivity,
                 concurrency,
                 native_tls,
                 cache,
-                printer.filter(show_resolution),
+                printer,
             )
             .await
             {
@@ -300,12 +319,17 @@ pub(crate) async fn run(
                 Modifications::Sufficient,
                 settings.as_ref().into(),
                 &state,
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
                 preview,
                 connectivity,
                 concurrency,
                 native_tls,
                 cache,
-                printer.filter(show_resolution),
+                printer,
             )
             .await?;
 
@@ -326,7 +350,7 @@ pub(crate) async fn run(
                     python_fetch,
                     &client_builder,
                     cache,
-                    Some(&reporter),
+                    Some(&download_reporter),
                 )
                 .await?;
 
@@ -443,15 +467,11 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
-                Some(&reporter),
+                Some(&download_reporter),
             )
             .await?
             .into_interpreter()
         };
-
-        // TODO(charlie): Pass the already-installed versions as preferences, or even as the
-        // "installed" packages, so that we can skip re-installing them in the ephemeral
-        // environment.
 
         Some(match spec.filter(|spec| !spec.is_empty()) {
             None => {
@@ -474,12 +494,22 @@ pub(crate) async fn run(
                     interpreter,
                     &settings,
                     &state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
                     preview,
                     connectivity,
                     concurrency,
                     native_tls,
                     cache,
-                    printer.filter(show_resolution),
+                    printer,
                 )
                 .await?
                 .into()

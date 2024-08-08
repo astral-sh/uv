@@ -31,6 +31,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::Workspace;
 
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, SharedState};
@@ -492,6 +493,7 @@ pub(crate) async fn resolve_environment<'a>(
     spec: RequirementsSpecification,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn ResolveLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -634,9 +636,9 @@ pub(crate) async fn resolve_environment<'a>(
         &resolve_dispatch,
         concurrency,
         options,
+        logger,
         printer,
         preview,
-        false,
     )
     .await?)
 }
@@ -647,6 +649,7 @@ pub(crate) async fn sync_environment(
     resolution: &Resolution,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn InstallLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -753,6 +756,7 @@ pub(crate) async fn sync_environment(
         &build_dispatch,
         cache,
         &venv,
+        logger,
         dry_run,
         printer,
         preview,
@@ -771,6 +775,8 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
+    resolve: Box<dyn ResolveLogger>,
+    install: Box<dyn InstallLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -933,9 +939,9 @@ pub(crate) async fn update_environment(
         &build_dispatch,
         concurrency,
         options,
+        resolve,
         printer,
         preview,
-        false,
     )
     .await
     {
@@ -961,6 +967,7 @@ pub(crate) async fn update_environment(
         &build_dispatch,
         cache,
         &venv,
+        install,
         dry_run,
         printer,
         preview,
