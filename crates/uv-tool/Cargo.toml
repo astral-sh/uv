@@ -19,10 +19,11 @@ pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-fs = { workspace = true }
-uv-state = { workspace = true }
-uv-python = { workspace = true }
-uv-virtualenv = { workspace = true }
 uv-installer = { workspace = true }
+uv-python = { workspace = true }
+uv-settings = { workspace = true }
+uv-state = { workspace = true }
+uv-virtualenv = { workspace = true }
 
 dirs-sys = { workspace = true }
 fs-err = { workspace = true }

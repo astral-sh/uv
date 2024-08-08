@@ -197,6 +197,27 @@ impl From<Url> for VerbatimUrl {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for VerbatimUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.url.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for VerbatimUrl {
+    fn deserialize<D>(deserializer: D) -> Result<VerbatimUrl, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let url = Url::deserialize(deserializer)?;
+        Ok(VerbatimUrl::from_url(url))
+    }
+}
+
 impl Pep508Url for VerbatimUrl {
     type Err = VerbatimUrlError;
 

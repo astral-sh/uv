@@ -80,7 +80,7 @@ impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
 /// list of strings.
 ///
 /// See: <https://peps.python.org/pep-0517/#config-settings>
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ConfigSettings(BTreeMap<String, ConfigSettingValue>);
 

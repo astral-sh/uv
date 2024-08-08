@@ -15,6 +15,7 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
+use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
@@ -22,7 +23,8 @@ use uv_warnings::warn_user_once;
 pub(crate) async fn upgrade(
     name: Option<PackageName>,
     connectivity: Connectivity,
-    settings: ResolverInstallerSettings,
+    args: ResolverInstallerOptions,
+    filesystem: ResolverInstallerOptions,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
@@ -107,6 +109,20 @@ pub(crate) async fn upgrade(
             }
         };
 
+        // Resolve the appropriate settings, preferring: CLI > receipt > user.
+        let options = args.clone().combine(
+            existing_tool_receipt
+                .options()
+                .clone()
+                .combine(filesystem.clone()),
+        );
+
+        // Force-enable upgrades.
+        let settings = ResolverInstallerSettings {
+            upgrade: Upgrade::All,
+            ..ResolverInstallerSettings::from(options.clone())
+        };
+
         // Resolve the requirements.
         let requirements = existing_tool_receipt.requirements();
         let spec = RequirementsSpecification::from_requirements(requirements.to_vec());
@@ -139,11 +155,12 @@ pub(crate) async fn upgrade(
             &environment,
             &name,
             &installed_tools,
-            printer,
+            &options,
             true,
             existing_tool_receipt.python().to_owned(),
             requirements.to_vec(),
             InstallAction::Update,
+            printer,
         )?;
     }
 

@@ -306,9 +306,17 @@ pub fn resolver_installer_options(
         },
         find_links: index_args.find_links,
         upgrade: flag(upgrade, no_upgrade),
-        upgrade_package: Some(upgrade_package),
+        upgrade_package: if upgrade_package.is_empty() {
+            None
+        } else {
+            Some(upgrade_package)
+        },
         reinstall: flag(reinstall, no_reinstall),
-        reinstall_package: Some(reinstall_package),
+        reinstall_package: if reinstall_package.is_empty() {
+            None
+        } else {
+            Some(reinstall_package)
+        },
         index_strategy,
         keyring_provider,
         resolution,
@@ -320,14 +328,26 @@ pub fn resolver_installer_options(
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
         no_build_isolation: flag(no_build_isolation, build_isolation),
-        no_build_isolation_package: Some(no_build_isolation_package),
+        no_build_isolation_package: if no_build_isolation_package.is_empty() {
+            None
+        } else {
+            Some(no_build_isolation_package)
+        },
         exclude_newer,
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
         no_build: flag(no_build, build),
-        no_build_package: Some(no_build_package),
+        no_build_package: if no_build_package.is_empty() {
+            None
+        } else {
+            Some(no_build_package)
+        },
         no_binary: flag(no_binary, binary),
-        no_binary_package: Some(no_binary_package),
+        no_binary_package: if no_binary_package.is_empty() {
+            None
+        } else {
+            Some(no_binary_package)
+        },
         no_sources: if no_sources { Some(true) } else { None },
     }
 }

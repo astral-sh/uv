@@ -5179,6 +5179,7 @@ dependencies = [
  "uv-fs",
  "uv-installer",
  "uv-python",
+ "uv-settings",
  "uv-state",
  "uv-virtualenv",
 ]

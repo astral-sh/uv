@@ -2,16 +2,17 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 use toml_edit::value;
-use toml_edit::Array;
 use toml_edit::Table;
 use toml_edit::Value;
+use toml_edit::{Array, Item};
 
 use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_fs::PortablePath;
+use uv_settings::ResolverInstallerOptions;
 
 /// A tool entry.
 #[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
@@ -20,18 +21,22 @@ pub struct Tool {
     python: Option<String>,
     /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
+    /// The resolver options used to install this tool.
+    #[serde(default)]
+    options: ResolverInstallerOptions,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct ToolWire {
-    pub requirements: Vec<RequirementWire>,
-    pub python: Option<String>,
-    pub entrypoints: Vec<ToolEntrypoint>,
+struct ToolWire {
+    requirements: Vec<RequirementWire>,
+    python: Option<String>,
+    entrypoints: Vec<ToolEntrypoint>,
+    options: ResolverInstallerOptions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(untagged)]
-pub enum RequirementWire {
+enum RequirementWire {
     /// A [`Requirement`] following our uv-specific schema.
     Requirement(Requirement),
     /// A PEP 508-compatible requirement. We no longer write these, but there might be receipts out
@@ -49,6 +54,7 @@ impl From<Tool> for ToolWire {
                 .collect(),
             python: tool.python,
             entrypoints: tool.entrypoints,
+            options: tool.options,
         }
     }
 }
@@ -68,6 +74,7 @@ impl TryFrom<ToolWire> for Tool {
                 .collect(),
             python: tool.python,
             entrypoints: tool.entrypoints,
+            options: tool.options,
         })
     }
 }
@@ -112,6 +119,7 @@ impl Tool {
         requirements: Vec<Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
+        options: ResolverInstallerOptions,
     ) -> Self {
         let mut entrypoints: Vec<_> = entrypoints.collect();
         entrypoints.sort();
@@ -119,7 +127,14 @@ impl Tool {
             requirements,
             python,
             entrypoints,
+            options,
         }
+    }
+
+    /// Create a new [`Tool`] with the given [`ResolverInstallerOptions`].
+    #[must_use]
+    pub fn with_options(self, options: ResolverInstallerOptions) -> Self {
+        Self { options, ..self }
     }
 
     /// Returns the TOML table for this tool.
@@ -160,6 +175,17 @@ impl Tool {
             value(entrypoints)
         });
 
+        if self.options != ResolverInstallerOptions::default() {
+            let serialized =
+                serde::Serialize::serialize(&self.options, toml_edit::ser::ValueSerializer::new())?;
+            let Value::InlineTable(serialized) = serialized else {
+                return Err(toml_edit::ser::Error::Custom(
+                    "Expected an inline table".to_string(),
+                ));
+            };
+            table.insert("options", Item::Table(serialized.into_table()));
+        }
+
         Ok(table)
     }
 
@@ -173,6 +199,10 @@ impl Tool {
 
     pub fn python(&self) -> &Option<String> {
         &self.python
+    }
+
+    pub fn options(&self) -> &ResolverInstallerOptions {
+        &self.options
     }
 }
 
