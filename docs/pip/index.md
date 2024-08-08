@@ -17,3 +17,9 @@ The following sections discuss the basics of using `uv pip`:
 Please note these commands do not _exactly_ implement the interfaces and behavior of the tools they
 are based on. The further you stray from common workflows, the more likely you are to encounter
 differences. Consult the [pip-compatibility guide](./compatibility.md) for details.
+
+!!! important
+
+    uv does not rely on or invoke pip. The pip interface is named as such to highlight its dedicated
+    purpose of providing low-level commands that match pip's interface and to separate it from the
+    rest of uv's commands which operate at a higher level of abstraction.
