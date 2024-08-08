@@ -124,7 +124,7 @@ uv run [OPTIONS] <COMMAND>
 
 </dd><dt><code>--frozen</code></dt><dd><p>Run without updating the <code>uv.lock</code> file.</p>
 
-<p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes new dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
+<p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
@@ -981,7 +981,15 @@ uv remove [OPTIONS] <PACKAGES>...
 
 ## uv sync
 
-Update the project's environment (experimental)
+Update the project's environment (experimental).
+
+Syncing ensures that all dependencies of the project are installed and up to date with the lockfile. Syncing also removes packages that are not declared as dependencies of the project.
+
+If the project virtual environment (`.venv`) does not exist, it will be created.
+
+The project is re-locked before syncing unless the `--locked` or `--frozen` flag is provided.
+
+uv will search for a project in the current directory or any parent directory. If a project cannot be found, uv will exit with an error.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -991,9 +999,7 @@ uv sync [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
-
-<p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
+<dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -1027,9 +1033,9 @@ uv sync [OPTIONS]
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and UTC dates in the same format (e.g., <code>2006-12-02</code>).</p>
 
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name; may be provided more than once.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name.</p>
 
-<p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
+<p>May be provided more than once.</p>
 
 </dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
@@ -1043,7 +1049,9 @@ uv sync [OPTIONS]
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
-</dd><dt><code>--frozen</code></dt><dd><p>Install without updating the <code>uv.lock</code> file</p>
+</dd><dt><code>--frozen</code></dt><dd><p>Sync without updating the <code>uv.lock</code> file.</p>
+
+<p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
@@ -1094,7 +1102,9 @@ uv sync [OPTIONS]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
-</dd><dt><code>--locked</code></dt><dd><p>Assert that the <code>uv.lock</code> will remain unchanged</p>
+</dd><dt><code>--locked</code></dt><dd><p>Assert that the <code>uv.lock</code> will remain unchanged.</p>
+
+<p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -1124,9 +1134,11 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
-</dd><dt><code>--no-clean</code></dt><dd><p>When syncing, make the minimum necessary changes to satisfy the requirements.</p>
+</dd><dt><code>--no-clean</code></dt><dd><p>Do not remove extraneous packages.</p>
 
-<p>By default, <code>uv sync</code> will remove any extraneous packages from the environment, unless <code>--no-build-isolation</code> is enabled.</p>
+<p>When enabled, uv will make the minimum necessary changes to satisfy the requirements.</p>
+
+<p>By default, syncing will remove any extraneous packages from the environment, unless <code>--no-build-isolation</code> is enabled, in which case extra packages are considered necessary for builds.</p>
 
 </dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 
@@ -1148,7 +1160,11 @@ uv sync [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--package</code> <i>package</i></dt><dd><p>Sync a specific package in the workspace</p>
+</dd><dt><code>--package</code> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
+
+<p>The workspace&#8217;s environment (<code>.venv</code>) is updated to reflect the subset of dependencies declared by the specified workspace member package.</p>
+
+<p>If not in a workspace, or if the workspace member does not exist, uv will exit with an error.</p>
 
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
