@@ -1038,4 +1038,40 @@ impl Refresh {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None(_))
     }
+
+    /// Combine two [`Refresh`] policies, taking the "max" of the two policies.
+    pub fn combine(self, other: Refresh) -> Self {
+        /// Return the maximum of two timestamps.
+        fn max(a: Timestamp, b: Timestamp) -> Timestamp {
+            if a > b {
+                a
+            } else {
+                b
+            }
+        }
+
+        match (self, other) {
+            // If the policy is `None`, return the existing refresh policy.
+            // Take the `max` of the two timestamps.
+            (Self::None(t1), Refresh::None(t2)) => Refresh::None(max(t1, t2)),
+            (Self::None(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
+            (Self::None(t1), Refresh::Packages(packages, t2)) => {
+                Refresh::Packages(packages, max(t1, t2))
+            }
+
+            // If the policy is `All`, refresh all packages.
+            (Self::All(t1), Refresh::None(t2)) => Refresh::All(max(t1, t2)),
+            (Self::All(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
+            (Self::All(t1), Refresh::Packages(_packages, t2)) => Refresh::All(max(t1, t2)),
+
+            // If the policy is `Packages`, take the "max" of the two policies.
+            (Self::Packages(packages, t1), Refresh::None(t2)) => {
+                Refresh::Packages(packages, max(t1, t2))
+            }
+            (Self::Packages(_packages, t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
+            (Self::Packages(packages1, t1), Refresh::Packages(packages2, t2)) => {
+                Refresh::Packages(packages1.into_iter().chain(packages2).collect(), max(t1, t2))
+            }
+        }
+    }
 }

@@ -12,7 +12,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 
 use settings::PipTreeSettings;
-use uv_cache::Cache;
+use uv_cache::{Cache, Refresh};
 use uv_cli::{
     compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand,
@@ -226,7 +226,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             let requirements = args
                 .src_file
@@ -319,7 +319,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             let requirements = args
                 .src_file
@@ -391,7 +391,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             let requirements = args
                 .package
@@ -707,7 +707,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             let requirements = args
                 .with
@@ -750,7 +750,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             let requirements = args
                 .with
@@ -998,7 +998,7 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             let requirements = args
                 .with
@@ -1043,7 +1043,7 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             commands::sync(
                 args.locked,
@@ -1097,7 +1097,7 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             commands::add(
                 args.locked,
@@ -1133,7 +1133,7 @@ async fn run_project(
             // Initialize the cache.
             let cache = cache
                 .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+                .with_refresh(Refresh::from(args.settings.reinstall.clone()).combine(args.refresh));
 
             commands::remove(
                 args.locked,
