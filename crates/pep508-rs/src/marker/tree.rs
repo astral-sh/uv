@@ -2047,6 +2047,36 @@ mod test {
 
     #[test]
     fn test_complex_marker_simplification() {
+        // This expression should simplify to:
+        // `(implementation_name == 'pypy' and sys_platform != 'win32')
+        //   or (sys_platform == 'win32' or os_name != 'nt')
+        //   or (implementation != 'pypy' or os_name == 'nt')`
+        //
+        // However, simplifying this expression is NP-complete and requires an exponential
+        // algorithm such as Quine-McCluskey, which is not currently implemented.
+        assert_simplifies(
+            "(implementation_name == 'pypy' and sys_platform != 'win32')
+                or (implementation_name != 'pypy' and sys_platform == 'win32')
+                or (sys_platform == 'win32' and os_name != 'nt')
+                or (sys_platform != 'win32' and os_name == 'nt')",
+            "(os_name != 'nt' and sys_platform == 'win32') \
+                or (implementation_name != 'pypy' and os_name == 'nt') \
+                or (implementation_name == 'pypy' and os_name != 'nt') \
+                or (os_name == 'nt' and sys_platform != 'win32')",
+        );
+
+        // This is another case we cannot simplify fully, depending on the variable order.
+        // The expression is equivalent to `sys_platform == 'x' or (os_name == 'Linux' and platform_system == 'win32')`.
+        assert_simplifies(
+            "(os_name == 'Linux' and platform_system == 'win32')
+                or (os_name == 'Linux' and platform_system == 'win32' and sys_platform == 'a')
+                or (os_name == 'Linux' and platform_system == 'win32' and sys_platform == 'x')
+                or (os_name != 'Linux' and platform_system == 'win32' and sys_platform == 'x')
+                or (os_name == 'Linux' and platform_system != 'win32' and sys_platform == 'x')
+                or (os_name != 'Linux' and platform_system != 'win32' and sys_platform == 'x')",
+            "(os_name != 'Linux' and sys_platform == 'x') or (platform_system != 'win32' and sys_platform == 'x') or (os_name == 'Linux' and platform_system == 'win32')"
+        );
+
         assert_simplifies("python_version > '3.7'", "python_version > '3.7'");
 
         assert_simplifies(
@@ -2061,16 +2091,6 @@ mod test {
             "(os_name == 'Linux' and sys_platform == 'win32') \
                 or (python_version == '3.7' and sys_platform == 'win32') \
                 or (python_version == '3.8' and sys_platform == 'win32')",
-        );
-
-        assert_simplifies(
-            "(os_name == 'Linux' and platform_system == 'win32')
-                or (os_name == 'Linux' and platform_system == 'win32' and sys_platform == 'a')
-                or (os_name == 'Linux' and platform_system == 'win32' and sys_platform == 'x')
-                or (os_name != 'Linux' and platform_system == 'win32' and sys_platform == 'x')
-                or (os_name == 'Linux' and platform_system != 'win32' and sys_platform == 'x')
-                or (os_name != 'Linux' and platform_system != 'win32' and sys_platform == 'x')",
-            "sys_platform == 'x' or (os_name == 'Linux' and platform_system == 'win32')",
         );
 
         assert_simplifies(

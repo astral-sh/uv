@@ -193,13 +193,23 @@ fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
                 // For example, `A or (not A and B)` can be simplified to `A or B`,
                 // eliminating the `not A` term.
                 if other_clause.iter().all(|term| {
+                    // For the term to be redundant in this clause, the other clause can
+                    // contain the negation of the term but not the term itself.
                     if term == skipped_term {
                         return false;
+                    }
+                    if is_negation(term, skipped_term) {
+                        return true;
                     }
 
                     // TODO(ibraheem): if we intern variables we could reduce this
                     // from a linear search to an integer `HashSet` lookup
-                    clause.contains(term) || is_negated(term, skipped_term)
+                    clause
+                        .iter()
+                        .position(|x| x == term)
+                        // If the term was already removed from this one, we cannot
+                        // depend on it for further simplification.
+                        .is_some_and(|i| !redundant_terms.contains(&i))
                 }) {
                     redundant_terms.push(skipped);
                     continue 'term;
@@ -308,7 +318,7 @@ where
 }
 
 /// Returns `true` if the LHS is the negation of the RHS, or vice versa.
-fn is_negated(left: &MarkerExpression, right: &MarkerExpression) -> bool {
+fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
     match left {
         MarkerExpression::Version { key, specifier } => {
             let MarkerExpression::Version {
