@@ -417,13 +417,10 @@ async fn do_lock(
     let resolver_markers =
         ResolverMarkers::universal(existing_lock.and_then(|lock| lock.fork_markers().clone()));
 
-    let resolution = match existing_lock {
+    let resolution = match existing_lock.filter(|_| upgrade.is_none()) {
         None => None,
 
-        // If we are ignoring pinned versions in the lockfile, we need to do a full resolution.
-        Some(_) if upgrade.is_all() => None,
-
-        // Otherwise, we can try to resolve using metadata in the lockfile.
+        // Try to resolve using metadata in the lockfile.
         //
         // When resolving from the lockfile we can still download and install new distributions,
         // but we rely on the lockfile for the metadata of any existing distributions. If we have
@@ -495,7 +492,7 @@ async fn do_lock(
 
                 debug!("Resolution with `uv.lock` failed due to diagnostics:");
                 for diagnostic in resolution.diagnostics() {
-                    debug!("{}", diagnostic.message());
+                    debug!("- {}", diagnostic.message());
                 }
 
                 false
