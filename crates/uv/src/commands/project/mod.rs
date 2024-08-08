@@ -406,6 +406,7 @@ pub(crate) async fn resolve_names(
         prerelease: _,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode: _,
@@ -436,8 +437,11 @@ pub(crate) async fn resolve_names(
     let build_isolation = if *no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -505,6 +509,7 @@ pub(crate) async fn resolve_environment<'a>(
         prerelease,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         upgrade: _,
@@ -548,8 +553,11 @@ pub(crate) async fn resolve_environment<'a>(
     let build_isolation = if no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
     };
 
     let options = OptionsBuilder::new()
@@ -780,6 +788,7 @@ pub(crate) async fn update_environment(
         prerelease,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -848,8 +857,10 @@ pub(crate) async fn update_environment(
     // Determine whether to enable build isolation.
     let build_isolation = if *no_build_isolation {
         BuildIsolation::Shared(&venv)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
     };
 
     let options = OptionsBuilder::new()

@@ -3,6 +3,7 @@ use std::fmt::Write;
 use anstream::eprint;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use pep508_rs::PackageName;
 use tracing::{debug, enabled, Level};
 
 use distribution_types::{IndexLocations, Resolution, UnresolvedRequirementSpecification};
@@ -59,6 +60,7 @@ pub(crate) async fn pip_install(
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
+    no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
@@ -289,8 +291,10 @@ pub(crate) async fn pip_install(
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(&environment)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
     // Initialize any shared state.

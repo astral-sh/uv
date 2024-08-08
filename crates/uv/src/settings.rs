@@ -1531,6 +1531,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
+    pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: Upgrade,
@@ -1547,6 +1548,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
+    pub(crate) no_build_isolation_package: &'a [PackageName],
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) upgrade: &'a Upgrade,
@@ -1568,6 +1570,7 @@ impl ResolverSettings {
             prerelease,
             config_settings,
             no_build_isolation,
+            no_build_isolation_package,
             exclude_newer,
             link_mode,
             compile_bytecode: _,
@@ -1612,6 +1615,10 @@ impl ResolverSettings {
                 .no_build_isolation
                 .combine(no_build_isolation)
                 .unwrap_or_default(),
+            no_build_isolation_package: args
+                .no_build_isolation_package
+                .combine(no_build_isolation_package)
+                .unwrap_or_default(),
             exclude_newer: args.exclude_newer.combine(exclude_newer),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
             upgrade: Upgrade::from_args(
@@ -1652,6 +1659,7 @@ impl ResolverSettings {
             prerelease: self.prerelease,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
+            no_build_isolation_package: &self.no_build_isolation_package,
             exclude_newer: self.exclude_newer,
             link_mode: self.link_mode,
             upgrade: &self.upgrade,
@@ -1676,6 +1684,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
+    pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -1694,6 +1703,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
+    pub(crate) no_build_isolation_package: &'a [PackageName],
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -1720,6 +1730,7 @@ impl ResolverInstallerSettings {
             prerelease,
             config_settings,
             no_build_isolation,
+            no_build_isolation_package,
             exclude_newer,
             link_mode,
             compile_bytecode,
@@ -1763,6 +1774,10 @@ impl ResolverInstallerSettings {
             no_build_isolation: args
                 .no_build_isolation
                 .combine(no_build_isolation)
+                .unwrap_or_default(),
+            no_build_isolation_package: args
+                .no_build_isolation_package
+                .combine(no_build_isolation_package)
                 .unwrap_or_default(),
             exclude_newer: args.exclude_newer.combine(exclude_newer),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
@@ -1814,6 +1829,7 @@ impl ResolverInstallerSettings {
             prerelease: self.prerelease,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
+            no_build_isolation_package: &self.no_build_isolation_package,
             exclude_newer: self.exclude_newer,
             link_mode: self.link_mode,
             compile_bytecode: self.compile_bytecode,
@@ -1842,6 +1858,7 @@ pub(crate) struct PipSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) no_build_isolation: bool,
+    pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) build_options: BuildOptions,
     pub(crate) allow_empty_requirements: bool,
     pub(crate) strict: bool,
@@ -1900,6 +1917,7 @@ impl PipSettings {
             no_binary,
             only_binary,
             no_build_isolation,
+            no_build_isolation_package,
             strict,
             extra,
             all_extras,
@@ -1952,6 +1970,7 @@ impl PipSettings {
             prerelease: top_level_prerelease,
             config_settings: top_level_config_settings,
             no_build_isolation: top_level_no_build_isolation,
+            no_build_isolation_package: top_level_no_build_isolation_package,
             exclude_newer: top_level_exclude_newer,
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
@@ -1980,6 +1999,8 @@ impl PipSettings {
         let prerelease = prerelease.combine(top_level_prerelease);
         let config_settings = config_settings.combine(top_level_config_settings);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
+        let no_build_isolation_package =
+            no_build_isolation_package.combine(top_level_no_build_isolation_package);
         let exclude_newer = exclude_newer.combine(top_level_exclude_newer);
         let link_mode = link_mode.combine(top_level_link_mode);
         let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
@@ -2053,6 +2074,10 @@ impl PipSettings {
             no_build_isolation: args
                 .no_build_isolation
                 .combine(no_build_isolation)
+                .unwrap_or_default(),
+            no_build_isolation_package: args
+                .no_build_isolation_package
+                .combine(no_build_isolation_package)
                 .unwrap_or_default(),
             config_setting: args
                 .config_settings
@@ -2172,6 +2197,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             prerelease: settings.prerelease,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
+            no_build_isolation_package: settings.no_build_isolation_package,
             exclude_newer: settings.exclude_newer,
             link_mode: settings.link_mode,
             upgrade: settings.upgrade,

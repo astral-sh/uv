@@ -122,6 +122,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -257,6 +258,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -393,6 +395,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -561,6 +564,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -675,6 +679,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -821,6 +826,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1004,6 +1010,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1186,6 +1193,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1346,6 +1354,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1482,6 +1491,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1656,6 +1666,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1813,6 +1824,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1949,6 +1961,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2068,6 +2081,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2187,6 +2201,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2308,6 +2323,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2454,6 +2470,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2624,6 +2641,7 @@ fn resolve_both() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2786,6 +2804,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             no_build_isolation: false,
+            no_build_isolation_package: [],
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,

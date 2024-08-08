@@ -168,6 +168,16 @@
         "null"
       ]
     },
+    "no-build-isolation-package": {
+      "description": "Disable isolation when building source distributions for a specific package.\n\nAssumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
     "no-build-package": {
       "description": "Don't build source distributions for a specific package.",
       "type": [
@@ -749,6 +759,16 @@
             "boolean",
             "null"
           ]
+        },
+        "no-build-isolation-package": {
+          "description": "Disable isolation when building source distributions for a specific package.\n\nAssumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
         },
         "no-deps": {
           "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file.",

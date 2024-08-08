@@ -3106,6 +3106,12 @@ pub struct ResolverArgs {
     )]
     pub no_build_isolation: bool,
 
+    /// Disable isolation when building source distributions for a specific package.
+    ///
+    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
+    #[arg(long, help_heading = "Build options")]
+    pub no_build_isolation_package: Vec<PackageName>,
+
     #[arg(
         long,
         overrides_with("no_build_isolation"),
@@ -3270,6 +3276,12 @@ pub struct ResolverInstallerArgs {
         value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub no_build_isolation: bool,
+
+    /// Disable isolation when building source distributions for a specific package.
+    ///
+    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
+    #[arg(long, help_heading = "Build options")]
+    pub no_build_isolation_package: Vec<PackageName>,
 
     #[arg(
         long,

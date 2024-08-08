@@ -229,6 +229,7 @@ async fn do_lock(
         prerelease,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         upgrade,
@@ -298,8 +299,11 @@ async fn do_lock(
     let build_isolation = if no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
     };
 
     let options = OptionsBuilder::new()

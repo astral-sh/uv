@@ -43,6 +43,7 @@ impl From<ResolverArgs> for PipOptions {
             pre,
             config_setting,
             no_build_isolation,
+            no_build_isolation_package,
             build_isolation,
             exclude_newer,
             link_mode,
@@ -63,6 +64,7 @@ impl From<ResolverArgs> for PipOptions {
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             no_build_isolation: flag(no_build_isolation, build_isolation),
+            no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
@@ -124,6 +126,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             pre,
             config_setting,
             no_build_isolation,
+            no_build_isolation_package,
             build_isolation,
             exclude_newer,
             link_mode,
@@ -148,6 +151,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             no_build_isolation: flag(no_build_isolation, build_isolation),
+            no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
@@ -195,6 +199,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         pre,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         build_isolation,
         exclude_newer,
         link_mode,
@@ -237,6 +242,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
         no_build_isolation: flag(no_build_isolation, build_isolation),
+        no_build_isolation_package: Some(no_build_isolation_package),
         exclude_newer,
         link_mode,
         no_build: flag(no_build, build),
@@ -267,6 +273,7 @@ pub fn resolver_installer_options(
         pre,
         config_setting,
         no_build_isolation,
+        no_build_isolation_package,
         build_isolation,
         exclude_newer,
         link_mode,
@@ -313,6 +320,7 @@ pub fn resolver_installer_options(
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
         no_build_isolation: flag(no_build_isolation, build_isolation),
+        no_build_isolation_package: Some(no_build_isolation_package),
         exclude_newer,
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
