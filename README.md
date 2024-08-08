@@ -618,6 +618,16 @@ uv accepts the following command-line arguments as environment variables:
   packages.
 - `UV_EXCLUDE_NEWER`: Equivalent to the `--exclude-newer` command-line argument. If set, uv will
   exclude distributions published after the specified date.
+- `UV_PYTHON_INSTALL_MIRROR`: Managed Python installations are downloaded from
+  [`python-build-standalone`](https://github.com/indygreg/python-build-standalone). This variable
+  can be set to a mirror URL to use a different source for Python installations. The provided URL
+  will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
+  `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+- `UV_PYPY_INSTALL_MIRROR`: Managed PyPy installations are downloaded from
+  [python.org](https://downloads.python.org/). This variable can be set to a mirror URL to use a
+  different source for PyPy installations. The provided URL will replace
+  `https://downloads.python.org/pypy` in, e.g.,
+  `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
