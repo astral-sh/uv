@@ -131,6 +131,7 @@ fn add_registry() -> Result<()> {
 
 /// Add a Git requirement.
 #[test]
+#[cfg(feature = "git")]
 fn add_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -291,6 +292,7 @@ fn add_git() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn add_git_error() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -350,6 +352,7 @@ fn add_git_error() -> Result<()> {
 
 /// Add a Git requirement using the `--raw-sources` API.
 #[test]
+#[cfg(feature = "git")]
 fn add_git_raw() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -499,6 +502,7 @@ fn add_git_raw() -> Result<()> {
 
 /// Add a Git requirement without the `git+` prefix.
 #[test]
+#[cfg(feature = "git")]
 fn add_git_implicit() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -557,6 +561,7 @@ fn add_git_implicit() -> Result<()> {
 
 /// `--raw-sources` should be considered conflicting with sources-specific arguments, like `--tag`.
 #[test]
+#[cfg(feature = "git")]
 fn add_raw_error() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -588,6 +593,7 @@ fn add_raw_error() -> Result<()> {
 
 /// Add an unnamed requirement.
 #[test]
+#[cfg(feature = "git")]
 fn add_unnamed() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1412,6 +1418,7 @@ fn add_workspace_editable() -> Result<()> {
 
 /// Update a requirement, modifying the source and extras.
 #[test]
+#[cfg(feature = "git")]
 fn update() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1691,6 +1698,7 @@ fn update() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn update_source_replace_url() -> Result<()> {
     let context = TestContext::new("3.12");
 

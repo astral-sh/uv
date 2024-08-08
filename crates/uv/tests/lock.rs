@@ -228,6 +228,7 @@ fn lock_sdist_registry() -> Result<()> {
 
 /// Lock a Git requirement using `tool.uv.sources`.
 #[test]
+#[cfg(feature = "git")]
 fn lock_sdist_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -501,6 +502,7 @@ fn lock_sdist_git() -> Result<()> {
 
 /// Lock a Git requirement using PEP 508.
 #[test]
+#[cfg(feature = "git")]
 fn lock_sdist_git_pep508() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2327,6 +2329,7 @@ fn lock_preference() -> Result<()> {
 
 /// Respect locked versions with `uv lock`, unless `--upgrade` is passed.
 #[test]
+#[cfg(feature = "git")]
 fn lock_git_sha() -> Result<()> {
     let context = TestContext::new("3.12");
 

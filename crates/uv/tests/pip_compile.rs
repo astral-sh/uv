@@ -1894,6 +1894,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 }
 
 /// Request `uv-public-pypackage` via two different URLs which resolve to the same canonical version.
+#[cfg(feature = "git")]
 #[test]
 fn compatible_repeated_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1923,6 +1924,7 @@ fn compatible_repeated_url_dependency() -> Result<()> {
 
 /// Request `uv-public-pypackage` via two different URLs which resolve to the same repository, but
 /// different commits.
+#[cfg(feature = "git")]
 #[test]
 fn conflicting_repeated_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1950,6 +1952,7 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
 
 /// Request `uv-public-pypackage` via three different URLs: `0.0.2`, a short SHA, and a precise SHA.
 /// All three are compatible, since they resolve to the same canonical version.
+#[cfg(feature = "git")]
 #[test]
 fn compatible_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1980,6 +1983,7 @@ fn compatible_narrowed_url_dependency() -> Result<()> {
 
 /// Request `uv-public-pypackage` via three different URLs: a precise SHA, a short SHA, and `4.3.0`.
 /// All three are compatible, since they resolve to the same canonical version.
+#[cfg(feature = "git")]
 #[test]
 fn compatible_broader_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2043,6 +2047,7 @@ fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
 ///
 /// Although `0.0.2` and the precise SHA resolve to the same canonical version, `test-branch`
 /// resolves to a different version, so there should be a conflict.
+#[cfg(feature = "git")]
 #[test]
 fn incompatible_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3890,6 +3895,7 @@ fn recursive_extras_direct_url() -> Result<()> {
 
 /// Compile an editable package with a direct URL requirement.
 #[test]
+#[cfg(feature = "git")]
 fn compile_editable_url_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -11454,6 +11460,7 @@ fn dont_warn_missing_constraint_without_sources() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn tool_uv_sources() -> Result<()> {
     let context = TestContext::new("3.12");
     // Use a subdir to test path normalization.
