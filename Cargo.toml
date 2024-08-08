@@ -206,6 +206,7 @@ rest_pat_in_fully_bound_structs = "warn"
 [profile.release]
 strip = true
 lto = true
+opt-level = "z"
 
 [profile.profiling]
 inherits = "release"
