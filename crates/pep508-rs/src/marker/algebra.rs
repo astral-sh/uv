@@ -561,52 +561,86 @@ impl Edges {
         edges
     }
 
-    /// Merge two [`Edges`], applying the given function to all disjoint, intersecting edges.
+    /// Merge two [`Edges`], applying the given operation (e.g., `AND` or `OR`) to all intersecting edges.
     ///
-    /// Note `self` and `map2` must be of the same [`Edges`] variant.
+    /// For example, given two nodes corresponding to the same boolean variable:
+    /// ```text
+    /// left  (extra == 'foo'): { true: A, false: B }
+    /// right (extra == 'foo'): { true: C, false: D }
+    /// ```
+    ///
+    /// We merge them into a single node by applying the given operation to the matching edges.
+    /// ```text
+    /// (extra == 'foo'): { true: (A and C), false: (B and D) }
+    /// ```
+    /// For non-boolean variables, this is more complex. See `apply_ranges` for details.
+    ///
+    /// Note that the LHS and RHS must be of the same [`Edges`] variant.
     fn apply(
         &self,
         parent: NodeId,
-        map2: &Edges,
-        parent2: NodeId,
+        right_edges: &Edges,
+        right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
     ) -> Edges {
-        match (self, map2) {
-            // Version or string variables, merge the ranges.
-            (Edges::Version { edges: map }, Edges::Version { edges: map2 }) => Edges::Version {
-                edges: Edges::apply_ranges(map, parent, map2, parent2, apply),
+        match (self, right_edges) {
+            // For version or string variables, we have to split and merge the overlapping ranges.
+            (Edges::Version { edges }, Edges::Version { edges: right_edges }) => Edges::Version {
+                edges: Edges::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
-            (Edges::String { edges: map }, Edges::String { edges: map2 }) => Edges::String {
-                edges: Edges::apply_ranges(map, parent, map2, parent2, apply),
+            (Edges::String { edges }, Edges::String { edges: right_edges }) => Edges::String {
+                edges: Edges::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
-            // Boolean variables, simply merge the low and high nodes.
+            // For boolean variables, we simply merge the low and high edges.
             (
                 Edges::Boolean { high, low },
                 Edges::Boolean {
-                    high: high2,
-                    low: low2,
+                    high: right_high,
+                    low: right_low,
                 },
             ) => Edges::Boolean {
-                high: apply(high.negate(parent), high2.negate(parent)),
-                low: apply(low.negate(parent), low2.negate(parent)),
+                high: apply(high.negate(parent), right_high.negate(parent)),
+                low: apply(low.negate(parent), right_low.negate(parent)),
             },
-            _ => unreachable!(),
+            _ => unreachable!("cannot apply two `Edges` of different types"),
         }
     }
 
-    /// Merge two range maps, applying the given function to all disjoint, intersecting ranges.
+    /// Merge two range maps, applying the given operation to all disjoint, intersecting ranges.
+    ///
+    /// For example, two nodes might have the following edges:
+    /// ```text
+    /// left  (python_version): { [0, 3.4): A,   [3.4, 3.4]: B,   (3.4, inf): C }
+    /// right (python_version): { [0, 3.6): D,   [3.6, 3.6]: E,   (3.6, inf): F }
+    /// ```
+    ///
+    /// Unlike with boolean variables, we can't simply apply the operation the static `true`
+    /// and `false` edges. Instead, we have to split and merge overlapping ranges:
+    /// ```text
+    /// python_version: {
+    ///     [0, 3.4):   (A and D),
+    ///     [3.4, 3.4]: (B and D),
+    ///     (3.4, 3.6): (C and D),
+    ///     [3.6, 3.6]: (C and E),
+    ///     (3.6, inf): (C and F)
+    /// }
+    /// ```
+    ///
+    /// The left and right edges may also have a restricted range from calls to `restrict_versions`.
+    /// In that case, we drop any ranges that do not exist in the domain of both edges. Note that
+    /// this should not occur in practice because `requires-python` bounds are global.
     fn apply_ranges<T>(
-        map: &SmallVec<(Range<T>, NodeId)>,
-        parent: NodeId,
-        map2: &SmallVec<(Range<T>, NodeId)>,
-        parent2: NodeId,
+        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_parent: NodeId,
+        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
     ) -> SmallVec<(Range<T>, NodeId)>
     where
         T: Clone + Ord,
     {
         let mut combined = SmallVec::new();
-        for (range, node) in map {
+        for (left_range, left_child) in left_edges {
             // Split the two maps into a set of disjoint and overlapping ranges, merging the
             // intersections.
             //
@@ -614,15 +648,19 @@ impl Edges {
             // a bit more complicated despite the ranges being sorted. We cannot simply zip both
             // sets, as they may contain arbitrary gaps. Instead, we use a quadratic search for
             // simplicity as the set of ranges for a given variable is typically very small.
-            for (range2, node2) in map2 {
-                let intersection = range2.intersection(range);
+            for (right_range, right_child) in right_edges {
+                let intersection = right_range.intersection(left_range);
                 if intersection.is_empty() {
                     // TODO(ibraheem): take advantage of the sorted ranges to `break` early
                     continue;
                 }
 
                 // Merge the intersection.
-                let node = apply(node.negate(parent), node2.negate(parent2));
+                let node = apply(
+                    left_child.negate(left_parent),
+                    right_child.negate(right_parent),
+                );
+
                 match combined.last_mut() {
                     // Combine ranges if possible.
                     Some((range, prev)) if *prev == node && can_conjoin(range, &intersection) => {
