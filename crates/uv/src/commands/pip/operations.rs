@@ -1,11 +1,10 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use std::fmt::{self, Write};
-use std::path::PathBuf;
-
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::fmt::{self, Write};
+use std::path::PathBuf;
 use tracing::debug;
 
 use distribution_types::{
@@ -40,6 +39,7 @@ use uv_resolver::{
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::loggers::InstallLogger;
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, DryRunEvent};
 use crate::printer::Printer;
@@ -322,6 +322,7 @@ pub(crate) async fn install(
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
+    logger: Box<dyn InstallLogger>,
     dry_run: bool,
     printer: Printer,
     preview: PreviewMode,
@@ -365,17 +366,7 @@ pub(crate) async fn install(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        let s = if resolution.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Audited {} {}",
-                format!("{} package{}", resolution.len(), s).bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )?;
+        logger.on_audit(resolution.len(), start, printer)?;
         return Ok(());
     }
 
@@ -410,17 +401,7 @@ pub(crate) async fn install(
             .await
             .context("Failed to prepare distributions")?;
 
-        let s = if wheels.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Prepared {} {}",
-                format!("{} package{}", wheels.len(), s).bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )?;
+        logger.on_prepare(wheels.len(), start, printer)?;
 
         wheels
     };
@@ -453,21 +434,7 @@ pub(crate) async fn install(
             }
         }
 
-        let s = if extraneous.len() + reinstalls.len() == 1 {
-            ""
-        } else {
-            "s"
-        };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Uninstalled {} {}",
-                format!("{} package{}", extraneous.len() + reinstalls.len(), s).bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )?;
+        logger.on_uninstall(extraneous.len() + reinstalls.len(), start, printer)?;
     }
 
     // Install the resolved distributions.
@@ -483,17 +450,7 @@ pub(crate) async fn install(
             // task.
             .install_blocking(wheels)?;
 
-        let s = if wheels.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Installed {} {}",
-                format!("{} package{}", wheels.len(), s).bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )?;
+        logger.on_install(wheels.len(), start, printer)?;
     }
 
     if compile {
@@ -501,7 +458,7 @@ pub(crate) async fn install(
     }
 
     // Notify the user of any environment modifications.
-    report_modifications(wheels, reinstalls, extraneous, printer)?;
+    logger.on_complete(wheels, reinstalls, extraneous, printer)?;
 
     Ok(())
 }

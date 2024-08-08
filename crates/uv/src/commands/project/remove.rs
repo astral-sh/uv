@@ -11,6 +11,7 @@ use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace};
 
+use crate::commands::pip::loggers::DefaultInstallLogger;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -143,6 +144,7 @@ pub(crate) async fn remove(
         Modifications::Exact,
         settings.as_ref().into(),
         &state,
+        Box::new(DefaultInstallLogger),
         preview,
         connectivity,
         concurrency,

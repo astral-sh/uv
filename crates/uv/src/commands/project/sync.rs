@@ -16,6 +16,7 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::do_safe_lock;
 use crate::commands::project::{ProjectError, SharedState};
@@ -111,6 +112,7 @@ pub(crate) async fn sync(
         modifications,
         settings.as_ref().into(),
         &state,
+        Box::new(DefaultInstallLogger),
         preview,
         connectivity,
         concurrency,
@@ -133,6 +135,7 @@ pub(super) async fn do_sync(
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn InstallLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -260,6 +263,7 @@ pub(super) async fn do_sync(
         &build_dispatch,
         cache,
         venv,
+        logger,
         dry_run,
         printer,
         preview,

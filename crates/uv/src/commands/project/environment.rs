@@ -1,5 +1,10 @@
 use tracing::debug;
 
+use crate::commands::pip::loggers::InstallLogger;
+use crate::commands::project::{resolve_environment, sync_environment};
+use crate::commands::SharedState;
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 use cache_key::{cache_digest, hash_digest};
 use distribution_types::Resolution;
 use uv_cache::{Cache, CacheBucket};
@@ -7,11 +12,6 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::RequirementsSpecification;
-
-use crate::commands::project::{resolve_environment, sync_environment};
-use crate::commands::SharedState;
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -31,6 +31,7 @@ impl CachedEnvironment {
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
         state: &SharedState,
+        install: Box<dyn InstallLogger>,
         preview: PreviewMode,
         connectivity: Connectivity,
         concurrency: Concurrency,
@@ -55,6 +56,8 @@ impl CachedEnvironment {
         };
 
         // Resolve the requirements with the interpreter.
+        // STOPSHIP(charlie): We should suppress all output here, but show progress (so we show
+        // builds).
         let graph = resolve_environment(
             &interpreter,
             spec,
@@ -103,11 +106,15 @@ impl CachedEnvironment {
             false,
             true,
         )?;
+
+        // STOPSHIP(charlie): We should suppress all output here, but show progress (so we show
+        // downloads and builds), and show a summary at the end.
         sync_environment(
             venv,
             &resolution,
             settings.as_ref().into(),
             state,
+            install,
             preview,
             connectivity,
             concurrency,

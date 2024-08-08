@@ -31,6 +31,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::Workspace;
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, SharedState};
@@ -639,6 +640,7 @@ pub(crate) async fn sync_environment(
     resolution: &Resolution,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn InstallLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -745,6 +747,7 @@ pub(crate) async fn sync_environment(
         &build_dispatch,
         cache,
         &venv,
+        logger,
         dry_run,
         printer,
         preview,
@@ -950,6 +953,7 @@ pub(crate) async fn update_environment(
         &build_dispatch,
         cache,
         &venv,
+        Box::new(DefaultInstallLogger),
         dry_run,
         printer,
         preview,

@@ -29,6 +29,7 @@ use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::reporters::PythonDownloadReporter;
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, SummaryInstallLogger};
 use crate::commands::project::resolve_names;
 use crate::commands::{
     project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
@@ -98,6 +99,7 @@ pub(crate) async fn run(
     let (from, environment) = get_or_create_environment(
         &from,
         with,
+        show_resolution,
         python.as_deref(),
         &settings,
         isolated,
@@ -108,7 +110,7 @@ pub(crate) async fn run(
         concurrency,
         native_tls,
         cache,
-        printer.filter(show_resolution),
+        printer,
     )
     .await?;
 
@@ -283,6 +285,7 @@ fn warn_executable_not_provided_by_package(
 async fn get_or_create_environment(
     from: &str,
     with: &[RequirementsSource],
+    show_resolution: bool,
     python: Option<&str>,
     settings: &ResolverInstallerSettings,
     isolated: bool,
@@ -416,11 +419,18 @@ async fn get_or_create_environment(
 
     // STOPSHIP(charlie): Same deal here with respect to spinners.
 
+    let install_logger: Box<dyn InstallLogger> = if show_resolution {
+        Box::new(DefaultInstallLogger)
+    } else {
+        Box::new(SummaryInstallLogger)
+    };
+
     let environment = CachedEnvironment::get_or_create(
         spec,
         interpreter,
         settings,
         &state,
+        install_logger,
         preview,
         connectivity,
         concurrency,

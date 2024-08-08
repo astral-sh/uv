@@ -25,6 +25,7 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, SummaryInstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{ProjectError, WorkspacePython};
@@ -89,7 +90,8 @@ pub(crate) async fn run(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    let reporter = PythonDownloadReporter::single(printer);
+    // Initialize any output reporters.
+    let download_reporter = PythonDownloadReporter::single(printer);
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -125,7 +127,7 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
-                Some(&reporter),
+                Some(&download_reporter),
             )
             .await?
             .into_interpreter();
@@ -140,12 +142,17 @@ pub(crate) async fn run(
                     interpreter,
                     &settings,
                     &state,
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
                     preview,
                     connectivity,
                     concurrency,
                     native_tls,
                     cache,
-                    printer.filter(show_resolution),
+                    printer,
                 )
                 .await?;
 
@@ -234,7 +241,7 @@ pub(crate) async fn run(
                         python_fetch,
                         &client_builder,
                         cache,
-                        Some(&reporter),
+                        Some(&download_reporter),
                     )
                     .await?
                     .into_interpreter()
@@ -261,7 +268,8 @@ pub(crate) async fn run(
                     connectivity,
                     native_tls,
                     cache,
-                    printer.filter(show_resolution),
+                    // printer.filter(show_resolution),
+                    printer,
                 )
                 .await?
             };
@@ -272,6 +280,8 @@ pub(crate) async fn run(
             //
             // If we _do_ have work to do, we should show a single spinner for the whole operation,
             // and then a summary of the changes. Maybe just the `in Xms` messages with the counts.
+            //
+            // Ok, let's do the same as with CachedEnvironment? Only show spinners for the lock.
             let lock = match project::lock::do_safe_lock(
                 locked,
                 frozen,
@@ -283,7 +293,8 @@ pub(crate) async fn run(
                 concurrency,
                 native_tls,
                 cache,
-                printer.filter(show_resolution),
+                // printer.filter(show_resolution),
+                printer,
             )
             .await
             {
@@ -298,6 +309,7 @@ pub(crate) async fn run(
                 Err(err) => return Err(err.into()),
             };
 
+            // STOPSHIP(charlie): Only show the output summary and spinners.
             project::sync::do_sync(
                 &project,
                 &venv,
@@ -307,12 +319,17 @@ pub(crate) async fn run(
                 Modifications::Sufficient,
                 settings.as_ref().into(),
                 &state,
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
                 preview,
                 connectivity,
                 concurrency,
                 native_tls,
                 cache,
-                printer.filter(show_resolution),
+                printer,
             )
             .await?;
 
@@ -333,7 +350,7 @@ pub(crate) async fn run(
                     python_fetch,
                     &client_builder,
                     cache,
-                    Some(&reporter),
+                    Some(&download_reporter),
                 )
                 .await?;
 
@@ -450,7 +467,7 @@ pub(crate) async fn run(
                 python_fetch,
                 &client_builder,
                 cache,
-                Some(&reporter),
+                Some(&download_reporter),
             )
             .await?
             .into_interpreter()
@@ -479,12 +496,17 @@ pub(crate) async fn run(
                     interpreter,
                     &settings,
                     &state,
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
                     preview,
                     connectivity,
                     concurrency,
                     native_tls,
                     cache,
-                    printer.filter(show_resolution),
+                    printer,
                 )
                 .await?
                 .into()
