@@ -10,6 +10,7 @@ use std::sync::Arc;
 use either::Either;
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
+use pubgrub::Range;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
@@ -77,6 +78,53 @@ pub struct Lock {
 }
 
 impl Lock {
+    /// Deserialize the [`Lock`] from a TOML string.
+    pub fn from_toml(s: &str) -> Result<Lock, toml::de::Error> {
+        let mut lock: Lock = toml::from_str(s)?;
+
+        // Simplify all marker expressions based on the requires-python bound.
+        //
+        // This is necessary to ensure the a `Lock` deserialized from a lockfile compares
+        // equally to a newly created `Lock`.
+        // TODO(ibraheem): we should only simplify python versions when serializing or ensure
+        // the requires-python bound is enforced on construction to avoid this step.
+        if let Some(requires_python) = &lock.requires_python {
+            let python_version = Range::from(requires_python.bound_major_minor().clone());
+            let python_full_version = Range::from(requires_python.bound().clone());
+
+            for package in &mut lock.packages {
+                for dep in &mut package.dependencies {
+                    if let Some(marker) = &mut dep.marker {
+                        *marker = marker.clone().simplify_python_versions(
+                            python_version.clone(),
+                            python_full_version.clone(),
+                        );
+                    }
+                }
+
+                for dep in package.optional_dependencies.values_mut().flatten() {
+                    if let Some(marker) = &mut dep.marker {
+                        *marker = marker.clone().simplify_python_versions(
+                            python_version.clone(),
+                            python_full_version.clone(),
+                        );
+                    }
+                }
+
+                for dep in package.dev_dependencies.values_mut().flatten() {
+                    if let Some(marker) = &mut dep.marker {
+                        *marker = marker.clone().simplify_python_versions(
+                            python_version.clone(),
+                            python_full_version.clone(),
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(lock)
+    }
+
     /// Initialize a [`Lock`] from a [`ResolutionGraph`].
     pub fn from_resolution_graph(graph: &ResolutionGraph) -> Result<Self, LockError> {
         let mut locked_dists = BTreeMap::new();
