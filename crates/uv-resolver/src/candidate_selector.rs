@@ -1,18 +1,18 @@
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 use std::fmt::{Display, Formatter};
-use tracing::debug;
+use tracing::{debug, trace};
 
 use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, MarkerTree};
 use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::Preferences;
-use crate::prerelease_mode::{AllowPreRelease, PreReleaseStrategy};
+use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverMarkers};
@@ -21,7 +21,7 @@ use crate::{Exclusions, Manifest, Options, ResolverMarkers};
 #[allow(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
-    prerelease_strategy: PreReleaseStrategy,
+    prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
 }
 
@@ -39,7 +39,7 @@ impl CandidateSelector {
                 markers,
                 options.dependency_mode,
             ),
-            prerelease_strategy: PreReleaseStrategy::from_mode(
+            prerelease_strategy: PrereleaseStrategy::from_mode(
                 options.prerelease_mode,
                 manifest,
                 markers,
@@ -57,7 +57,7 @@ impl CandidateSelector {
 
     #[inline]
     #[allow(dead_code)]
-    pub(crate) fn prerelease_strategy(&self) -> &PreReleaseStrategy {
+    pub(crate) fn prerelease_strategy(&self) -> &PrereleaseStrategy {
         &self.prerelease_strategy
     }
 
@@ -66,9 +66,7 @@ impl CandidateSelector {
     pub(crate) fn index_strategy(&self) -> &IndexStrategy {
         &self.index_strategy
     }
-}
 
-impl CandidateSelector {
     /// Select a [`Candidate`] from a set of candidate versions and files.
     ///
     /// Unless present in the provided [`Exclusions`], local distributions from the
@@ -84,6 +82,8 @@ impl CandidateSelector {
         exclusions: &'a Exclusions,
         markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
+        // Check for a preference from a lockfile or a previous fork  that satisfies the range and
+        // is allowed.
         if let Some(preferred) = self.get_preferred(
             package_name,
             range,
@@ -93,120 +93,218 @@ impl CandidateSelector {
             exclusions,
             markers,
         ) {
+            trace!("Using preference {} {}", preferred.name, preferred.version,);
             return Some(preferred);
+        }
+
+        // Check for a locally installed distribution that satisfies the range and is allowed.
+        if !exclusions.contains(package_name) {
+            if let Some(installed) = Self::get_installed(package_name, range, installed_packages) {
+                trace!(
+                    "Using preference {} {} from installed package",
+                    installed.name,
+                    installed.version,
+                );
+                return Some(installed);
+            }
         }
 
         self.select_no_preference(package_name, range, version_maps, markers)
     }
 
-    /// Get a preferred version if one exists. This is the preference from a lockfile or a locally
-    /// installed version.
+    /// If the package has a preference, an existing version from an existing lockfile or a version
+    /// from a sibling fork, and the preference satisfies the current range, use that.
+    ///
+    /// We try to find a resolution that, depending on the input, does not diverge from the
+    /// lockfile or matches a sibling fork. We try an exact match for the current markers (fork
+    /// or specific) first, to ensure stability with repeated locking. If that doesn't work, we
+    /// fall back to preferences that don't match in hopes of still resolving different forks into
+    /// the same version; A solution with less different versions is more desirable than one where
+    /// we may have more recent version in some cases, but overall more versions.
     fn get_preferred<'a, InstalledPackages: InstalledPackagesProvider>(
-        &self,
+        &'a self,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
-        exclusions: &'a Exclusions,
-        markers: &ResolverMarkers,
+        exclusions: &Exclusions,
+        resolver_markers: &ResolverMarkers,
+    ) -> Option<Candidate> {
+        // In the branches, we "sort" the preferences by marker-matching through an iterator that
+        // first has the matching half and then the mismatching half.
+        match resolver_markers {
+            ResolverMarkers::SpecificEnvironment(env) => {
+                // We may hit a combination of fork markers preferences with specific environment
+                // output in the future when adding support for the PEP 665 successor.
+                let preferences_match =
+                    preferences.get(package_name).filter(|(marker, _version)| {
+                        // `.unwrap_or(true)` because the universal marker is considered matching.
+                        marker
+                            .map(|marker| marker.evaluate(env, &[]))
+                            .unwrap_or(true)
+                    });
+                let preferences_mismatch =
+                    preferences.get(package_name).filter(|(marker, _version)| {
+                        marker
+                            .map(|marker| !marker.evaluate(env, &[]))
+                            .unwrap_or(false)
+                    });
+                self.get_preferred_from_iter(
+                    preferences_match.chain(preferences_mismatch),
+                    package_name,
+                    range,
+                    version_maps,
+                    installed_packages,
+                    exclusions,
+                    resolver_markers,
+                )
+            }
+            ResolverMarkers::Universal { .. } => {
+                // In universal mode, all preferences are matching.
+                self.get_preferred_from_iter(
+                    preferences.get(package_name),
+                    package_name,
+                    range,
+                    version_maps,
+                    installed_packages,
+                    exclusions,
+                    resolver_markers,
+                )
+            }
+            ResolverMarkers::Fork(fork_markers) => {
+                let preferences_match =
+                    preferences.get(package_name).filter(|(marker, _version)| {
+                        // `.unwrap_or(true)` because the universal marker is considered matching.
+                        marker.map(|marker| marker == fork_markers).unwrap_or(true)
+                    });
+                let preferences_mismatch =
+                    preferences.get(package_name).filter(|(marker, _version)| {
+                        marker.map(|marker| marker != fork_markers).unwrap_or(false)
+                    });
+                self.get_preferred_from_iter(
+                    preferences_match.chain(preferences_mismatch),
+                    package_name,
+                    range,
+                    version_maps,
+                    installed_packages,
+                    exclusions,
+                    resolver_markers,
+                )
+            }
+        }
+    }
+
+    /// Return the first preference that satisfies the current range and is allowed.
+    fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
+        &'a self,
+        preferences: impl Iterator<Item = (Option<&'a MarkerTree>, &'a Version)>,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        version_maps: &'a [VersionMap],
+        installed_packages: &'a InstalledPackages,
+        exclusions: &Exclusions,
+        resolver_markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
-        // If the package has a preference (e.g., an existing version from an existing lockfile),
-        // and the preference satisfies the current range, use that.
-        if let Some(version) = preferences.version(package_name) {
-            'preference: {
+        for (marker, version) in preferences {
+            // Respect the version range for this requirement.
+            if !range.contains(version) {
+                continue;
+            }
+
+            // Check for a locally installed distribution that matches the preferred version.
+            if !exclusions.contains(package_name) {
+                let installed_dists = installed_packages.get_packages(package_name);
+                match installed_dists.as_slice() {
+                    [] => {}
+                    [dist] => {
+                        if dist.version() == version {
+                            debug!("Found installed version of {dist} that satisfies preference in {range}");
+
+                            return Some(Candidate {
+                                name: package_name,
+                                version,
+                                dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
+                                    dist,
+                                )),
+                                choice_kind: VersionChoiceKind::Preference,
+                            });
+                        }
+                    }
+                    // We do not consider installed distributions with multiple versions because
+                    // during installation these must be reinstalled from the remote
+                    _ => {
+                        debug!("Ignoring installed versions of {package_name}: multiple distributions found");
+                    }
+                }
+            }
+
+            // Respect the pre-release strategy for this fork.
+            if version.any_prerelease() {
+                let allow = match self
+                    .prerelease_strategy
+                    .allows(package_name, resolver_markers)
+                {
+                    AllowPrerelease::Yes => true,
+                    AllowPrerelease::No => false,
+                    // If the pre-release is "global" (i.e., provided via a lockfile, rather than
+                    // a fork), accept it unless pre-releases are completely banned.
+                    AllowPrerelease::IfNecessary => marker.is_none(),
+                };
+                if !allow {
+                    continue;
+                }
+            }
+
+            // Check for a remote distribution that matches the preferred version
+            if let Some(file) = version_maps
+                .iter()
+                .find_map(|version_map| version_map.get(version))
+            {
+                return Some(Candidate::new(
+                    package_name,
+                    version,
+                    file,
+                    VersionChoiceKind::Preference,
+                ));
+            }
+        }
+        None
+    }
+
+    /// Check for an installed distribution that satisfies the current range and is allowed.
+    fn get_installed<'a, InstalledPackages: InstalledPackagesProvider>(
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        installed_packages: &'a InstalledPackages,
+    ) -> Option<Candidate<'a>> {
+        let installed_dists = installed_packages.get_packages(package_name);
+        match installed_dists.as_slice() {
+            [] => {}
+            [dist] => {
+                let version = dist.version();
+
                 // Respect the version range for this requirement.
                 if !range.contains(version) {
-                    break 'preference;
+                    return None;
                 }
 
-                // Respect the pre-release strategy for this fork.
-                if version.any_prerelease()
-                    && self.prerelease_strategy.allows(package_name, markers)
-                        != AllowPreRelease::Yes
-                {
-                    break 'preference;
-                }
-
-                // Check for a locally installed distribution that matches the preferred version
-                if !exclusions.contains(package_name) {
-                    let installed_dists = installed_packages.get_packages(package_name);
-                    match installed_dists.as_slice() {
-                        [] => {}
-                        [dist] => {
-                            if dist.version() == version {
-                                debug!("Found installed version of {dist} that satisfies preference in {range}");
-
-                                return Some(Candidate {
-                                    name: package_name,
-                                    version,
-                                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
-                                        dist,
-                                    )),
-                                    choice_kind: VersionChoiceKind::Preference,
-                                });
-                            }
-                        }
-                        // We do not consider installed distributions with multiple versions because
-                        // during installation these must be reinstalled from the remote
-                        _ => {
-                            debug!("Ignoring installed versions of {package_name}: multiple distributions found");
-                        }
-                    }
-                }
-
-                // Check for a remote distribution that matches the preferred version
-                if let Some(file) = version_maps
-                    .iter()
-                    .find_map(|version_map| version_map.get(version))
-                {
-                    return Some(Candidate::new(
-                        package_name,
-                        version,
-                        file,
-                        VersionChoiceKind::Preference,
-                    ));
-                }
+                debug!("Found installed version of {dist} that satisfies {range}");
+                return Some(Candidate {
+                    name: package_name,
+                    version,
+                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
+                    choice_kind: VersionChoiceKind::Installed,
+                });
+            }
+            // We do not consider installed distributions with multiple versions because
+            // during installation these must be reinstalled from the remote
+            _ => {
+                debug!(
+                    "Ignoring installed versions of {package_name}: multiple distributions found"
+                );
             }
         }
-
-        // Check for a locally installed distribution that satisfies the range
-        if !exclusions.contains(package_name) {
-            let installed_dists = installed_packages.get_packages(package_name);
-            match installed_dists.as_slice() {
-                [] => {}
-                [dist] => {
-                    let version = dist.version();
-
-                    // Respect the version range for this requirement.
-                    if !range.contains(version) {
-                        return None;
-                    }
-
-                    // Respect the pre-release strategy for this fork.
-                    if version.any_prerelease()
-                        && self.prerelease_strategy.allows(package_name, markers)
-                            != AllowPreRelease::Yes
-                    {
-                        return None;
-                    }
-
-                    debug!("Found installed version of {dist} that satisfies {range}");
-                    return Some(Candidate {
-                        name: package_name,
-                        version,
-                        dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
-                        choice_kind: VersionChoiceKind::Installed,
-                    });
-                }
-                // We do not consider installed distributions with multiple versions because
-                // during installation these must be reinstalled from the remote
-                _ => {
-                    debug!("Ignoring installed versions of {package_name}: multiple distributions found");
-                }
-            }
-        }
-
         None
     }
 
@@ -219,8 +317,8 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         markers: &ResolverMarkers,
     ) -> Option<Candidate> {
-        tracing::trace!(
-            "selecting candidate for package {package_name} with range {range:?} with {} remote versions",
+        trace!(
+            "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name);
@@ -313,10 +411,10 @@ impl CandidateSelector {
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
-        allow_prerelease: AllowPreRelease,
+        allow_prerelease: AllowPrerelease,
     ) -> Option<Candidate<'a>> {
         #[derive(Debug)]
-        enum PreReleaseCandidate<'a> {
+        enum PrereleaseCandidate<'a> {
             NotNecessary,
             IfNecessary(&'a Version, &'a PrioritizedDist),
         }
@@ -328,7 +426,7 @@ impl CandidateSelector {
             let candidate = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
-                        AllowPreRelease::Yes => {
+                        AllowPrerelease::Yes => {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
@@ -349,18 +447,18 @@ impl CandidateSelector {
                                 VersionChoiceKind::Compatible,
                             )
                         }
-                        AllowPreRelease::IfNecessary => {
+                        AllowPrerelease::IfNecessary => {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
                             // If pre-releases are allowed as a fallback, store the
                             // first-matching prerelease.
                             if prerelease.is_none() {
-                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, dist));
+                                prerelease = Some(PrereleaseCandidate::IfNecessary(version, dist));
                             }
                             continue;
                         }
-                        AllowPreRelease::No => {
+                        AllowPrerelease::No => {
                             continue;
                         }
                     }
@@ -371,7 +469,7 @@ impl CandidateSelector {
                 // If we have at least one stable release, we shouldn't allow the "if-necessary"
                 // pre-release strategy, regardless of whether that stable release satisfies the
                 // current range.
-                prerelease = Some(PreReleaseCandidate::NotNecessary);
+                prerelease = Some(PrereleaseCandidate::NotNecessary);
 
                 // Return the first-matching stable distribution.
                 if range.contains(version) {
@@ -410,17 +508,14 @@ impl CandidateSelector {
 
             return Some(candidate);
         }
-        tracing::trace!(
-            "exhausted all candidates for package {:?} with range {:?} \
-             after {} steps",
-            package_name,
-            range,
-            steps,
+        trace!(
+            "Exhausted all candidates for package {package_name} with range {range} \
+             after {steps} steps",
         );
         match prerelease {
             None => None,
-            Some(PreReleaseCandidate::NotNecessary) => None,
-            Some(PreReleaseCandidate::IfNecessary(version, dist)) => Some(Candidate::new(
+            Some(PrereleaseCandidate::NotNecessary) => None,
+            Some(PrereleaseCandidate::IfNecessary(version, dist)) => Some(Candidate::new(
                 package_name,
                 version,
                 dist,

@@ -7,6 +7,7 @@ use directories::ProjectDirs;
 use crate::Cache;
 
 #[derive(Parser, Debug, Clone)]
+#[command(next_help_heading = "Cache options")]
 pub struct CacheArgs {
     /// Avoid reading from or writing to the cache, instead using a temporary directory for the
     /// duration of the operation.

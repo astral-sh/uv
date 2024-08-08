@@ -177,7 +177,7 @@ impl PythonVersion {
 mod tests {
     use std::str::FromStr;
 
-    use pep440_rs::{PreRelease, PreReleaseKind, Version};
+    use pep440_rs::{Prerelease, PrereleaseKind, Version};
 
     use crate::PythonVersion;
 
@@ -200,8 +200,8 @@ mod tests {
         assert_eq!(version.python_version().to_string(), "3.11");
         assert_eq!(
             version.python_full_version(),
-            Version::new([3, 11, 8]).with_pre(Some(PreRelease {
-                kind: PreReleaseKind::Alpha,
+            Version::new([3, 11, 8]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
                 number: 1
             }))
         );

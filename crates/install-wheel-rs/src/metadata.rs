@@ -11,36 +11,6 @@ use uv_normalize::PackageName;
 
 use crate::Error;
 
-/// Returns `true` if the file is a `METADATA` file in a `.dist-info` directory that matches the
-/// wheel filename.
-pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> bool {
-    let Some((dist_info_dir, file)) = path.split_once('/') else {
-        return false;
-    };
-    if file != "METADATA" {
-        return false;
-    }
-    let Some(dir_stem) = dist_info_dir.strip_suffix(".dist-info") else {
-        return false;
-    };
-    let Some((name, version)) = dir_stem.rsplit_once('-') else {
-        return false;
-    };
-    let Ok(name) = PackageName::from_str(name) else {
-        return false;
-    };
-    if name != filename.name {
-        return false;
-    }
-    let Ok(version) = Version::from_str(version) else {
-        return false;
-    };
-    if version != filename.version {
-        return false;
-    }
-    true
-}
-
 /// Find the `.dist-info` directory in a zipped wheel.
 ///
 /// Returns the dist info dir prefix without the `.dist-info` extension.

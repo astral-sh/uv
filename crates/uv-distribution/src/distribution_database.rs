@@ -145,14 +145,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        if self
-            .build_context
-            .build_options()
-            .no_binary_package(dist.name())
-        {
-            return Err(Error::NoBinary);
-        }
-
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
@@ -428,14 +420,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // For hash _validation_, callers are expected to enforce the policy when retrieving the
         // wheel.
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
-        if hashes.is_generate() && matches!(dist, BuiltDist::DirectUrl(_) | BuiltDist::Path(_)) {
-            let wheel = self.get_wheel(dist, hashes).await?;
-            let metadata = wheel.metadata()?;
-            let hashes = wheel.hashes;
-            return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata),
-                hashes,
-            });
+        if hashes.is_generate() {
+            if dist.file().map_or(true, |file| file.hashes.is_empty()) {
+                let wheel = self.get_wheel(dist, hashes).await?;
+                let metadata = wheel.metadata()?;
+                let hashes = wheel.hashes;
+                return Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(metadata),
+                    hashes,
+                });
+            }
         }
 
         let result = self

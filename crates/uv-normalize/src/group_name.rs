@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -11,7 +12,7 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// See:
 /// - <https://peps.python.org/pep-0735/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct GroupName(String);
 
@@ -51,3 +52,10 @@ impl AsRef<str> for GroupName {
         &self.0
     }
 }
+
+/// The name of the global `dev-dependencies` group.
+///
+/// Internally, we model dependency groups as a generic concept; but externally, we only expose the
+/// `dev-dependencies` group.
+pub static DEV_DEPENDENCIES: LazyLock<GroupName> =
+    LazyLock::new(|| GroupName::new("dev".to_string()).unwrap());

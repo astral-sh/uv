@@ -42,7 +42,10 @@ pub(crate) struct Args {
 pub(crate) fn main(args: &Args) -> Result<()> {
     let reference_string = generate();
     let filename = "settings.md";
-    let reference_path = PathBuf::from(ROOT_DIR).join("docs").join(filename);
+    let reference_path = PathBuf::from(ROOT_DIR)
+        .join("docs")
+        .join("reference")
+        .join(filename);
 
     match args.mode {
         Mode::DryRun => {

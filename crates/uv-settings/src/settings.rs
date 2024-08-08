@@ -12,7 +12,7 @@ use uv_configuration::{
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonFetch, PythonPreference, PythonVersion};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -31,7 +31,7 @@ pub(crate) struct Tools {
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
     #[serde(flatten)]
@@ -49,6 +49,24 @@ pub struct Options {
     )]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`.
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    workspace: serde::de::IgnoredAny,
+
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    sources: serde::de::IgnoredAny,
+
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    dev_dependencies: serde::de::IgnoredAny,
+
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    managed: serde::de::IgnoredAny,
 }
 
 /// Global settings, relevant to all invocations.
@@ -117,7 +135,7 @@ pub struct GlobalOptions {
     /// Whether to prefer using Python installations that are already present on the system, or
     /// those that are downloaded and installed by uv.
     #[option(
-        default = "\"installed\"",
+        default = "\"only-system\" (stable) or \"managed\" (preview)",
         value_type = "str",
         example = r#"
             python-preference = "managed"
@@ -159,6 +177,8 @@ pub struct InstallerOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub no_build_isolation: Option<bool>,
+    pub no_sources: Option<bool>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -174,7 +194,7 @@ pub struct ResolverOptions {
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
-    pub prerelease: Option<PreReleaseMode>,
+    pub prerelease: Option<PrereleaseMode>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -184,6 +204,9 @@ pub struct ResolverOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub no_build_isolation: Option<bool>,
+    pub no_build_isolation_package: Option<Vec<PackageName>>,
+    pub no_sources: Option<bool>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -305,17 +328,41 @@ pub struct ResolverInstallerOptions {
         "#,
         possible_values = true
     )]
-    pub prerelease: Option<PreReleaseMode>,
+    pub prerelease: Option<PrereleaseMode>,
     /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
     /// specified as `KEY=VALUE` pairs.
     #[option(
         default = "{}",
         value_type = "dict",
         example = r#"
-            config-settings = { "editable_mode": "compat" }
+            config-settings = { editable_mode = "compat" }
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// are already installed.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-build-isolation = true
+        "#
+    )]
+    pub no_build_isolation: Option<bool>,
+    /// Disable isolation when building source distributions for a specific package.
+    ///
+    /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// are already installed.
+    #[option(
+        default = "[]",
+        value_type = "Vec<PackageName>",
+        example = r#"
+        no-build-isolation-package = ["package1", "package2"]
+    "#
+    )]
+    pub no_build_isolation_package: Option<Vec<PackageName>>,
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
@@ -359,6 +406,17 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub compile_bytecode: Option<bool>,
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-sources = true
+        "#
+    )]
+    pub no_sources: Option<bool>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -380,7 +438,7 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    /// Reinstall all packages, regardless of whether they're already installed.
+    /// Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
     #[option(
         default = "false",
         value_type = "bool",
@@ -389,7 +447,8 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub reinstall: Option<bool>,
-    /// Reinstall a specific package, regardless of whether it's already installed.
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `refresh-package`.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -671,6 +730,18 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+    /// Disable isolation when building source distributions for a specific package.
+    ///
+    /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// are already installed.
+    #[option(
+        default = "[]",
+        value_type = "Vec<PackageName>",
+        example = r#"
+            no-build-isolation-package = ["package1", "package2"]
+        "#
+    )]
+    pub no_build_isolation_package: Option<Vec<PackageName>>,
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[option(
@@ -749,7 +820,7 @@ pub struct PipOptions {
         "#,
         possible_values = true
     )]
-    pub prerelease: Option<PreReleaseMode>,
+    pub prerelease: Option<PrereleaseMode>,
     /// Write the requirements generated by `uv pip compile` to the given `requirements.txt` file.
     ///
     /// If the file already exists, the existing versions will be preferred when resolving
@@ -842,7 +913,7 @@ pub struct PipOptions {
         default = "{}",
         value_type = "dict",
         example = r#"
-            config-settings = { "editable_mode": "compat" }
+            config-settings = { editable_mode = "compat" }
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
@@ -1035,6 +1106,17 @@ pub struct PipOptions {
         "#
     )]
     pub verify_hashes: Option<bool>,
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-sources = true
+        "#
+    )]
+    pub no_sources: Option<bool>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -1056,7 +1138,7 @@ pub struct PipOptions {
         "#
     )]
     pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    /// Reinstall all packages, regardless of whether they're already installed.
+    /// Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.
     #[option(
         default = "false",
         value_type = "bool",
@@ -1065,7 +1147,8 @@ pub struct PipOptions {
         "#
     )]
     pub reinstall: Option<bool>,
-    /// Reinstall a specific package, regardless of whether it's already installed.
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `refresh-package`.
     #[option(
         default = "[]",
         value_type = "list[str]",

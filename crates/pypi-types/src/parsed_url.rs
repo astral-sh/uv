@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
-
 use thiserror::Error;
 use url::{ParseError, Url};
 
@@ -138,37 +137,6 @@ impl Display for VerbatimParsedUrl {
     }
 }
 
-impl TryFrom<VerbatimUrl> for VerbatimParsedUrl {
-    type Error = ParsedUrlError;
-
-    fn try_from(verbatim_url: VerbatimUrl) -> Result<Self, Self::Error> {
-        let parsed_url = ParsedUrl::try_from(verbatim_url.to_url())?;
-        Ok(Self {
-            parsed_url,
-            verbatim: verbatim_url,
-        })
-    }
-}
-
-impl serde::ser::Serialize for VerbatimParsedUrl {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        self.verbatim.serialize(serializer)
-    }
-}
-
-impl<'de> serde::de::Deserialize<'de> for VerbatimParsedUrl {
-    fn deserialize<D>(deserializer: D) -> Result<VerbatimParsedUrl, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        let verbatim_url = VerbatimUrl::deserialize(deserializer)?;
-        Self::try_from(verbatim_url).map_err(serde::de::Error::custom)
-    }
-}
-
 /// We support three types of URLs for distributions:
 /// * The path to a file or directory (`file://`)
 /// * A Git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
@@ -278,10 +246,11 @@ impl ParsedGitUrl {
         precise: Option<GitSha>,
         subdirectory: Option<PathBuf>,
     ) -> Self {
-        let mut url = GitUrl::new(repository, reference);
-        if let Some(precise) = precise {
-            url = url.with_precise(precise);
-        }
+        let url = if let Some(precise) = precise {
+            GitUrl::from_commit(repository, reference, precise)
+        } else {
+            GitUrl::from_reference(repository, reference)
+        };
         Self { url, subdirectory }
     }
 }
@@ -378,6 +347,11 @@ impl TryFrom<Url> for ParsedUrl {
                     message: "Unknown scheme",
                 }),
             }
+        } else if Path::new(url.path())
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("git"))
+        {
+            Ok(Self::Git(ParsedGitUrl::try_from(url)?))
         } else if url.scheme().eq_ignore_ascii_case("file") {
             let path = url
                 .to_file_path()

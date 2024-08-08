@@ -1,14 +1,14 @@
+use std::fmt::Write;
 use std::{collections::BTreeSet, ffi::OsString};
 
 use anyhow::{bail, Context};
-use distribution_types::{InstalledDist, Name};
-
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tracing::{debug, warn};
+
+use distribution_types::{InstalledDist, Name};
 use pep508_rs::PackageName;
 use pypi_types::Requirement;
-use std::fmt::Write;
-use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
@@ -65,15 +65,11 @@ pub(super) async fn resolve_requirements(
 }
 
 /// Return all packages which contain an executable with the given name.
-pub(super) fn matching_packages(
-    name: &str,
-    environment: &PythonEnvironment,
-) -> anyhow::Result<Vec<InstalledDist>> {
-    let site_packages = SitePackages::from_environment(environment)?;
-    let packages = site_packages
+pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
+    site_packages
         .iter()
         .filter_map(|package| {
-            entrypoint_paths(environment, package.name(), package.version())
+            entrypoint_paths(site_packages, package.name(), package.version())
                 .ok()
                 .and_then(|entrypoints| {
                     entrypoints
@@ -87,9 +83,24 @@ pub(super) fn matching_packages(
                         .then(|| package.clone())
                 })
         })
-        .collect();
+        .collect()
+}
 
-    Ok(packages)
+/// Remove any entrypoints attached to the [`Tool`].
+pub(crate) fn remove_entrypoints(tool: &Tool) {
+    for executable in tool
+        .entrypoints()
+        .iter()
+        .map(|entrypoint| &entrypoint.install_path)
+    {
+        debug!("Removing executable: `{}`", executable.simplified_display());
+        if let Err(err) = fs_err::remove_file(executable) {
+            warn!(
+                "Failed to remove executable: `{}`: {err}",
+                executable.simplified_display()
+            );
+        }
+    }
 }
 
 /// Represents the action to be performed on executables: update or install.
@@ -105,7 +116,6 @@ pub(crate) fn install_executables(
     installed_tools: &InstalledTools,
     printer: Printer,
     force: bool,
-    reinstall_entry_points: bool,
     python: Option<String>,
     requirements: Vec<Requirement>,
     action: &InstallAction,
@@ -126,8 +136,11 @@ pub(crate) fn install_executables(
         executable_directory.user_display()
     );
 
-    let entry_points =
-        entrypoint_paths(environment, installed_dist.name(), installed_dist.version())?;
+    let entry_points = entrypoint_paths(
+        &site_packages,
+        installed_dist.name(),
+        installed_dist.version(),
+    )?;
 
     // Determine the entry points targets
     // Use a sorted collection for deterministic output
@@ -151,10 +164,11 @@ pub(crate) fn install_executables(
             from = name.cyan()
         )?;
 
-        hint_executable_from_dependency(name, environment, printer)?;
+        hint_executable_from_dependency(name, &site_packages, printer)?;
 
-        // Clean up the environment we just created
+        // Clean up the environment we just created.
         installed_tools.remove_environment(name)?;
+
         return Ok(ExitStatus::Failure);
     }
 
@@ -164,9 +178,9 @@ pub(crate) fn install_executables(
         .filter(|(_, _, target_path)| target_path.exists())
         .peekable();
 
-    // Note we use `reinstall_entry_points` here instead of `reinstall`; requesting reinstall
-    // will _not_ remove existing entry points when they are not managed by uv.
-    if force || reinstall_entry_points {
+    // Ignore any existing entrypoints if the user passed `--force`, or the existing recept was
+    // broken.
+    if force {
         for (name, _, target) in existing_entry_points {
             debug!("Removing existing executable: `{name}`");
             fs_err::remove_file(target)?;
@@ -222,10 +236,7 @@ pub(crate) fn install_executables(
 
     debug!("Adding receipt for tool `{}`", name);
     let tool = Tool::new(
-        requirements
-            .into_iter()
-            .map(pep508_rs::Requirement::from)
-            .collect(),
+        requirements.into_iter().collect(),
         python,
         target_entry_points
             .into_iter()
@@ -270,40 +281,36 @@ pub(crate) fn install_executables(
 /// Displays a hint if an executable matching the package name can be found in a dependency of the package.
 fn hint_executable_from_dependency(
     name: &PackageName,
-    environment: &PythonEnvironment,
+    site_packages: &SitePackages,
     printer: Printer,
 ) -> anyhow::Result<()> {
-    match matching_packages(name.as_ref(), environment) {
-        Ok(packages) => match packages.as_slice() {
-            [] => {}
-            [package] => {
-                let command = format!("uv tool install {}", package.name());
-                writeln!(
-                        printer.stdout(),
-                        "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
-                        name.green(),
-                        package.name().green(),
-                        command.bold(),
-                    )?;
-            }
-            packages => {
-                writeln!(
-                    printer.stdout(),
-                    "However, an executable with the name `{}` is available via the following dependencies::",
-                    name.green(),
-                )?;
+    let packages = matching_packages(name.as_ref(), site_packages);
+    match packages.as_slice() {
+        [] => {}
+        [package] => {
+            let command = format!("uv tool install {}", package.name());
+            writeln!(
+                printer.stdout(),
+                "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
+                name.cyan(),
+                package.name().cyan(),
+                command.bold(),
+            )?;
+        }
+        packages => {
+            writeln!(
+                printer.stdout(),
+                "However, an executable with the name `{}` is available via the following dependencies::",
+                name.cyan(),
+            )?;
 
-                for package in packages {
-                    writeln!(printer.stdout(), "- {}", package.name().cyan())?;
-                }
-                writeln!(
-                    printer.stdout(),
-                    "Did you mean to install one of them instead?"
-                )?;
+            for package in packages {
+                writeln!(printer.stdout(), "- {}", package.name().cyan())?;
             }
-        },
-        Err(err) => {
-            warn!("Failed to determine executables for packages: {err}");
+            writeln!(
+                printer.stdout(),
+                "Did you mean to install one of them instead?"
+            )?;
         }
     }
 

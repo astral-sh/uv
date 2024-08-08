@@ -1,4 +1,5 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -6,14 +7,16 @@ use uv_configuration::{
     Concurrency, ExtrasSpecification, HashCheckingMode, PreviewMode, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DEV_DEPENDENCIES;
+use uv_fs::CWD;
 use uv_installer::SitePackages;
+use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
-use uv_workspace::{DiscoveryOptions, VirtualProject};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::do_safe_lock;
 use crate::commands::project::{ProjectError, SharedState};
@@ -26,6 +29,7 @@ use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 pub(crate) async fn sync(
     locked: bool,
     frozen: bool,
+    package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: bool,
     modifications: Modifications,
@@ -44,9 +48,17 @@ pub(crate) async fn sync(
         warn_user_once!("`uv sync` is experimental and may change without warning");
     }
 
-    // Identify the project
-    let project =
-        VirtualProject::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?;
+    // Identify the project.
+    let project = if let Some(package) = package {
+        VirtualProject::Project(
+            Workspace::discover(&CWD, &DiscoveryOptions::default())
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+        )
+    } else {
+        VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+    };
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
@@ -61,16 +73,13 @@ pub(crate) async fn sync(
     )
     .await?;
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-
     let lock = match do_safe_lock(
         locked,
         frozen,
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
-        &state,
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,
@@ -91,16 +100,20 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     };
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Perform the sync operation.
     do_sync(
         &project,
         &venv,
-        &lock,
+        &lock.lock,
         &extras,
         dev,
         modifications,
         settings.as_ref().into(),
         &state,
+        Box::new(DefaultInstallLogger),
         preview,
         connectivity,
         concurrency,
@@ -123,6 +136,7 @@ pub(super) async fn do_sync(
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn InstallLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -136,11 +150,13 @@ pub(super) async fn do_sync(
         index_strategy,
         keyring_provider,
         config_setting,
+        no_build_isolation,
         exclude_newer,
         link_mode,
         compile_bytecode,
         reinstall,
         build_options,
+        sources,
     } = settings;
 
     // Validate that the Python version is supported by the lockfile.
@@ -182,9 +198,16 @@ pub(super) async fn do_sync(
         .platform(venv.interpreter().platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
     let dry_run = false;
     let setup_py = SetupPyStrategy::default();
 
@@ -202,6 +225,7 @@ pub(super) async fn do_sync(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         venv.interpreter(),
         index_locations,
         &flat_index,
@@ -215,6 +239,7 @@ pub(super) async fn do_sync(
         link_mode,
         build_options,
         exclude_newer,
+        sources,
         concurrency,
         preview,
     );
@@ -239,6 +264,7 @@ pub(super) async fn do_sync(
         &build_dispatch,
         cache,
         venv,
+        logger,
         dry_run,
         printer,
         preview,

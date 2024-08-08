@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 
-use pubgrub::range::Range;
+use pubgrub::Range;
 use rustc_hash::FxHashMap;
 
 use crate::fork_urls::ForkUrls;

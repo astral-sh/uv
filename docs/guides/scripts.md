@@ -1,7 +1,15 @@
 # Running scripts
 
-A Python script is a file intended for standalone execution, e.g., with `python <script>.py`. Using uv to execute scripts will ensure that
-script dependencies are properly managed inside and outside of projects.
+A Python script is a file intended for standalone execution, e.g., with `python <script>.py`. Using
+uv to execute scripts ensures that script dependencies are managed without manually managing
+environments.
+
+!!! note
+
+    If you are not familiar with Python environments: every Python installation has an environment
+    that packages can be installed in. Typically, creating [_virtual_ environments](https://docs.python.org/3/library/venv.html) is recommended to
+    isolate packages required by each script. uv automatically manages virtual environments for you
+    and prefers a [declarative](#declaring-script-dependencies) approach to dependencies.
 
 ## Running a script without dependencies
 
@@ -20,7 +28,7 @@ Hello world
 
 Similarly, if your script depends on a module in the standard library, there's nothing more to do:
 
-```python
+```python title="example.py"
 import os
 
 print(os.path.expanduser("~"))
@@ -47,19 +55,25 @@ $ uv run example.py hello world!
 hello world!
 ```
 
-Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will install the current project before running the script. If your script does not depend on the project, use the `--isolated` flag to skip this:
+Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will
+install the current project before running the script. If your script does not depend on the
+project, use the `--no-project` flag to skip this:
 
 ```console
-# Note, it is important that the flag comes _before_ the script
-$ uv run --isolated example.py
+$ # Note, it is important that the flag comes _before_ the script
+$ uv run --no-project example.py
 ```
 
 See the [projects guide](./projects.md) for more details on working in projects.
 
 ## Running a script with dependencies
 
-When your script requires other packages, they must be installed into the environment that the script runs in. uv prefers to create these environments on-demand instead of using a long-lived virtual environment with manually managed dependencies. This requires explicit declaration
-of dependencies that are required for the script. Generally, it's recommended to use a [project](./projects.md) or [inline metadata](#declaring-script-dependencies) to declare dependencies, but uv supports requesting dependencies per invocation as well.
+When your script requires other packages, they must be installed into the environment that the
+script runs in. uv prefers to create these environments on-demand instead of using a long-lived
+virtual environment with manually managed dependencies. This requires explicit declaration of
+dependencies that are required for the script. Generally, it's recommended to use a
+[project](./projects.md) or [inline metadata](#declaring-script-dependencies) to declare
+dependencies, but uv supports requesting dependencies per invocation as well.
 
 For example, the following script requires `rich`.
 
@@ -74,7 +88,7 @@ for i in track(range(20), description="For example:"):
 If executed without specifying a dependency, this script will fail:
 
 ```console
-$ uv run --isolated example.py
+$ uv run --no-project example.py
 Traceback (most recent call last):
   File "/Users/astral/example.py", line 2, in <module>
     from rich.progress import track
@@ -90,19 +104,23 @@ For example: ━━━━━━━━━━━━━━━━━━━━━━�
 
 Constraints can be added to the requested dependency if specific versions are needed:
 
-```consoleq
+```console
 $ uv run --with 'rich>12,<13' example.py
 ```
 
 Multiple dependencies can be requested by repeating with `--with` option.
 
-Note that if `uv run` is used in a _project_, these dependencies will be included _in addition_ to the project's dependencies. To opt-out of this behavior, use the `--isolated` flag.
+Note that if `uv run` is used in a _project_, these dependencies will be included _in addition_ to
+the project's dependencies. To opt-out of this behavior, use the `--no-project` flag.
 
 ## Declaring script dependencies
 
-Python recently added a standard format for [inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata). This allows the dependencies for a script to be declared in the script itself.
+Python recently added a standard format for
+[inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
+This allows the dependencies for a script to be declared in the script itself.
 
-To use inline script metadata, include a `script` section at the top of the script:
+To use inline script metadata, include a `script` section at the top of the script and declare the
+dependencies using TOML:
 
 ```python title="example.py"
 # /// script
@@ -138,7 +156,11 @@ $ uv run example.py
 ]
 ```
 
-uv also supports Python version requirements:
+!!! important
+
+    When using inline script metadata, even if `uv run` is [used in a _project_](../concepts/projects.md#running-scripts), the project's dependencies will be ignored. The `--no-project` flag is not required.
+
+uv also respects Python version requirements:
 
 ```python title="example.py"
 # /// script
@@ -151,9 +173,13 @@ type Point = tuple[float, float]
 print(Point)
 ```
 
-uv will fetch the required Python version if it is not installed — see the documentation on [Python versions](../python-versions.md) for more details. Note that the `dependencies` field must be provided even if empty.
+!!! note
 
-Note that when using inline script metadata, even if `uv run` is used in a _project_, the project's dependencies will be ignored. The `--isolated` flag is not required.
+    The `dependencies` field must be provided even if empty.
+
+`uv run` will search for and use the required Python version. The Python version will download if it
+is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
+more details.
 
 ## Using different Python versions
 
@@ -166,15 +192,22 @@ print(".".join(map(str, sys.version_info[:3])))
 ```
 
 ```console
-# Use the default Python version, may differ on your machine
+$ # Use the default Python version, may differ on your machine
 $ uv run example.py
 3.12.1
 ```
 
 ```console
-# Use a specific Python version
+$ # Use a specific Python version
 $ uv run --python 3.10 example.py
 3.10.13
 ```
 
-See the [Python version request](../python-versions.md#requesting-a-version) documentation for more details on requesting Python versions.
+See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation
+for more details on requesting Python versions.
+
+## Next steps
+
+To learn more about `uv run`, see the [command reference](../reference/cli.md#uv-run).
+
+Or, read on to learn how to [run and install tools](./tools.md) with uv.

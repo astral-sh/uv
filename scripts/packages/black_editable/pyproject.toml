@@ -9,6 +9,9 @@ dependencies = []
 requires-python = ">=3.11,<3.13"
 license = {text = "MIT"}
 
+[project.scripts]
+black = "black:main"
+
 [project.optional-dependencies]
 colorama = ["colorama>=0.4.3"]
 uvloop = ["uvloop>=0.15.2"]

@@ -25,7 +25,7 @@ fn clean_all() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @r###"
+    uv_snapshot!(context.with_filtered_counts().filters(), context.clean().arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -33,7 +33,7 @@ fn clean_all() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Clearing cache at: [CACHE_DIR]/
-    Removed 28 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###);
 
     Ok(())
@@ -57,7 +57,7 @@ fn clean_package_pypi() -> Result<()> {
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
         .cache_dir
-        .child("simple-v10")
+        .child("simple-v11")
         .child("pypi")
         .child("iniconfig.rkyv");
     assert!(
@@ -104,7 +104,7 @@ fn clean_package_index() -> Result<()> {
     // Assert that the `.rkyv` file is created for `iniconfig`.
     let rkyv = context
         .cache_dir
-        .child("simple-v10")
+        .child("simple-v11")
         .child("index")
         .child("e8208120cae3ba69")
         .child("iniconfig.rkyv");

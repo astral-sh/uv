@@ -13,7 +13,9 @@ use uv_normalize::PackageName;
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{marker, ResolutionGraph, ResolverMarkers};
 
-static UNIVERSAL_MARKERS: ResolverMarkers = ResolverMarkers::Universal;
+static UNIVERSAL_MARKERS: ResolverMarkers = ResolverMarkers::Universal {
+    fork_preferences: None,
+};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]

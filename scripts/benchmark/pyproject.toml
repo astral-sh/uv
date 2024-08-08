@@ -1,0 +1,22 @@
+[project]
+name = "benchmark"
+version = "0.0.1"
+description = "Benchmark package resolution tools"
+requires-python = ">=3.11"
+dependencies = [
+  "pdm",
+  "pip-tools",
+  "poetry",
+  "tomli",
+  "tomli_w",
+  "virtualenv",
+  "pipx",
+]
+
+[project.scripts]
+resolver = "benchmark.resolver:main"
+tools = "benchmark.tools:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

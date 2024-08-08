@@ -52,6 +52,7 @@ pub fn create_venv(
     prompt: Prompt,
     system_site_packages: bool,
     allow_existing: bool,
+    relocatable: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
@@ -60,6 +61,7 @@ pub fn create_venv(
         prompt,
         system_site_packages,
         allow_existing,
+        relocatable,
     )?;
 
     // Create the corresponding `PythonEnvironment`.

@@ -1,24 +1,24 @@
 #![allow(clippy::single_match_else)]
 
 use std::collections::BTreeSet;
-use std::{fmt::Write, path::Path};
+use std::fmt::Write;
 
 use anstream::eprint;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification, VersionId};
+use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DEV_DEPENDENCIES;
+use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
-use uv_normalize::PackageName;
-use uv_python::{Interpreter, PythonFetch, PythonPreference, PythonRequest};
+use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_python::{Interpreter, PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverMarkers,
@@ -27,10 +27,20 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
+use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
+
+/// The result of running a lock operation.
+#[derive(Debug, Clone)]
+pub(crate) struct LockResult {
+    /// The previous lock, if any.
+    pub(crate) previous: Option<Lock>,
+    /// The updated lock.
+    pub(crate) lock: Lock,
+}
 
 /// Resolve the project requirements into a lockfile.
 pub(crate) async fn lock(
@@ -52,8 +62,7 @@ pub(crate) async fn lock(
     }
 
     // Find the project requirements.
-    let workspace =
-        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?;
+    let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
     let interpreter = FoundInterpreter::discover(
@@ -76,7 +85,7 @@ pub(crate) async fn lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
-        &SharedState::default(),
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,
@@ -86,7 +95,12 @@ pub(crate) async fn lock(
     )
     .await
     {
-        Ok(_) => Ok(ExitStatus::Success),
+        Ok(lock) => {
+            if let Some(previous) = lock.previous.as_ref() {
+                report_upgrades(previous, &lock.lock, printer)?;
+            }
+            Ok(ExitStatus::Success)
+        }
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -105,19 +119,34 @@ pub(super) async fn do_safe_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
-    state: &SharedState,
+    logger: Box<dyn ResolveLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Lock, ProjectError> {
+) -> Result<LockResult, ProjectError> {
+    // Use isolate state for universal resolution. When resolving, we don't enforce that the
+    // prioritized distributions match the current platform. So if we lock here, then try to
+    // install from the same state, and we end up performing a resolution during the sync (i.e.,
+    // for the build dependencies of a source distribution), we may try to use incompatible
+    // distributions.
+    // TODO(charlie): In universal resolution, we should still track version compatibility! We
+    // just need to accept versions that are platform-incompatible. That would also make us more
+    // likely to (e.g.) download a wheel that we'll end up using when installing. This would
+    // make it safe to share the state.
+    let state = SharedState::default();
+
     if frozen {
         // Read the existing lockfile, but don't attempt to lock the project.
-        read(workspace)
+        let existing = read(workspace)
             .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)
+            .ok_or_else(|| ProjectError::MissingLockfile)?;
+        Ok(LockResult {
+            previous: None,
+            lock: existing,
+        })
     } else if locked {
         // Read the existing lockfile.
         let existing = read(workspace)
@@ -130,7 +159,8 @@ pub(super) async fn do_safe_lock(
             interpreter,
             Some(&existing),
             settings,
-            state,
+            &state,
+            logger,
             preview,
             connectivity,
             concurrency,
@@ -145,7 +175,10 @@ pub(super) async fn do_safe_lock(
             return Err(ProjectError::LockMismatch);
         }
 
-        Ok(lock)
+        Ok(LockResult {
+            previous: Some(existing),
+            lock,
+        })
     } else {
         // Read the existing lockfile.
         let existing = read(workspace).await?;
@@ -156,7 +189,8 @@ pub(super) async fn do_safe_lock(
             interpreter,
             existing.as_ref(),
             settings,
-            state,
+            &state,
+            logger,
             preview,
             connectivity,
             concurrency,
@@ -166,21 +200,25 @@ pub(super) async fn do_safe_lock(
         )
         .await?;
 
-        if !existing.is_some_and(|existing| existing == lock) {
+        if !existing.as_ref().is_some_and(|existing| *existing == lock) {
             commit(&lock, workspace).await?;
         }
 
-        Ok(lock)
+        Ok(LockResult {
+            previous: existing,
+            lock,
+        })
     }
 }
 
 /// Lock the project requirements into a lockfile.
-pub(super) async fn do_lock(
+async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     existing_lock: Option<&Lock>,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn ResolveLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -196,16 +234,19 @@ pub(super) async fn do_lock(
         resolution,
         prerelease,
         config_setting,
+        no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         upgrade,
         build_options,
+        sources,
     } = settings;
 
     // When locking, include the project itself (as editable).
     let requirements = workspace
-        .members_as_requirements()
-        .into_iter()
+        .members_requirements()
+        .chain(workspace.root_requirements())
         .map(UnresolvedRequirementSpecification::from)
         .collect::<Vec<_>>();
     let overrides = workspace
@@ -231,7 +272,13 @@ pub(super) async fn do_lock(
     } else {
         let default =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-        warn_user!("No `requires-python` value found in the workspace. Defaulting to `{default}`.");
+        if workspace.only_virtual() {
+            debug!("No `requires-python` in virtual-only workspace. Defaulting to `{default}`.");
+        } else {
+            warn_user!(
+                "No `requires-python` value found in the workspace. Defaulting to `{default}`."
+            );
+        }
         default
     };
 
@@ -253,6 +300,18 @@ pub(super) async fn do_lock(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&environment)
+    } else if no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    };
+
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
@@ -263,7 +322,7 @@ pub(super) async fn do_lock(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
     let extras = ExtrasSpecification::default();
     let setup_py = SetupPyStrategy::default();
 
@@ -288,7 +347,7 @@ pub(super) async fn do_lock(
         if lock.prerelease_mode() != options.prerelease_mode {
             let _ = writeln!(
                 printer.stderr(),
-                "Ignoring existing lockfile due to change in prerelease mode: `{}` vs. `{}`",
+                "Ignoring existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
                 lock.prerelease_mode().cyan(),
                 options.prerelease_mode.cyan()
             );
@@ -334,6 +393,7 @@ pub(super) async fn do_lock(
 
     // Populate the Git resolver.
     for ResolvedRepositoryReference { reference, sha } in git {
+        debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
         state.git.insert(reference, sha);
     }
 
@@ -355,13 +415,18 @@ pub(super) async fn do_lock(
         }
     });
 
-    let resolution = match existing_lock {
+    // When we run the same resolution from the lockfile again, we could get a different result the
+    // second time due to the preferences causing us to skip a fork point (see
+    // "preferences-dependent-forking" packse scenario). To avoid this, we store the forks in the
+    // lockfile. We read those after all the lockfile filters, to allow the forks to change when
+    // the environment changed, e.g. the python bound check above can lead to different forking.
+    let resolver_markers =
+        ResolverMarkers::universal(existing_lock.and_then(|lock| lock.fork_markers().clone()));
+
+    let resolution = match existing_lock.filter(|_| upgrade.is_none()) {
         None => None,
 
-        // If we are ignoring pinned versions in the lockfile, we need to do a full resolution.
-        Some(_) if upgrade.is_all() => None,
-
-        // Otherwise, we can try to resolve using metadata in the lockfile.
+        // Try to resolve using metadata in the lockfile.
         //
         // When resolving from the lockfile we can still download and install new distributions,
         // but we rely on the lockfile for the metadata of any existing distributions. If we have
@@ -376,6 +441,7 @@ pub(super) async fn do_lock(
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
+                &build_constraints,
                 interpreter,
                 index_locations,
                 &flat_index,
@@ -389,6 +455,7 @@ pub(super) async fn do_lock(
                 link_mode,
                 build_options,
                 exclude_newer,
+                sources,
                 concurrency,
                 preview,
             );
@@ -408,7 +475,7 @@ pub(super) async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                ResolverMarkers::Universal,
+                resolver_markers.clone(),
                 python_requirement.clone(),
                 &client,
                 &flat_index,
@@ -416,9 +483,9 @@ pub(super) async fn do_lock(
                 &build_dispatch,
                 concurrency,
                 options,
+                Box::new(SummaryResolveLogger),
                 printer,
                 preview,
-                true,
             )
             .await
             .inspect_err(|err| debug!("Resolution with `uv.lock` failed: {err}"))
@@ -431,7 +498,7 @@ pub(super) async fn do_lock(
 
                 debug!("Resolution with `uv.lock` failed due to diagnostics:");
                 for diagnostic in resolution.diagnostics() {
-                    debug!("{}", diagnostic.message());
+                    debug!("- {}", diagnostic.message());
                 }
 
                 false
@@ -452,6 +519,7 @@ pub(super) async fn do_lock(
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
+                &build_constraints,
                 interpreter,
                 index_locations,
                 &flat_index,
@@ -465,6 +533,7 @@ pub(super) async fn do_lock(
                 link_mode,
                 build_options,
                 exclude_newer,
+                sources,
                 concurrency,
                 preview,
             );
@@ -484,7 +553,7 @@ pub(super) async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                ResolverMarkers::Universal,
+                resolver_markers,
                 python_requirement,
                 &client,
                 &flat_index,
@@ -492,30 +561,21 @@ pub(super) async fn do_lock(
                 &build_dispatch,
                 concurrency,
                 options,
+                Box::new(SummaryResolveLogger),
                 printer,
                 preview,
-                true,
             )
             .await?
         }
     };
 
     // Print the success message after completing resolution.
-    pip::operations::resolution_success(&resolution, start, printer)?;
+    logger.on_complete(resolution.len(), start, printer)?;
 
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    let new_lock = Lock::from_resolution_graph(&resolution)?;
-
-    // Notify the user of any dependency updates
-    if !upgrade.is_none() {
-        if let Some(existing_lock) = existing_lock {
-            report_upgrades(existing_lock, &new_lock, workspace.install_path(), printer)?;
-        }
-    }
-
-    Ok(new_lock)
+    Ok(Lock::from_resolution_graph(&resolution)?)
 }
 
 /// Write the lockfile to disk.
@@ -543,56 +603,80 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
 }
 
 /// Reports on the versions that were upgraded in the new lockfile.
-fn report_upgrades(
-    existing_lock: &Lock,
-    new_lock: &Lock,
-    workspace_root: &Path,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    let existing_distributions: FxHashMap<PackageName, BTreeSet<Version>> =
-        existing_lock.distributions().iter().fold(
-            FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
-            |mut acc, distribution| {
-                if let Ok(VersionId::NameVersion(name, version)) =
-                    distribution.version_id(workspace_root)
-                {
-                    acc.entry(name).or_default().insert(version);
-                }
+fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> anyhow::Result<()> {
+    let existing_packages: FxHashMap<&PackageName, BTreeSet<&Version>> =
+        existing_lock.packages().iter().fold(
+            FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
+            |mut acc, package| {
+                acc.entry(package.name())
+                    .or_default()
+                    .insert(package.version());
                 acc
             },
         );
 
-    let new_distribution_names: FxHashMap<PackageName, BTreeSet<Version>> =
-        new_lock.distributions().iter().fold(
-            FxHashMap::with_capacity_and_hasher(new_lock.distributions().len(), FxBuildHasher),
-            |mut acc, distribution| {
-                if let Ok(VersionId::NameVersion(name, version)) =
-                    distribution.version_id(workspace_root)
-                {
-                    acc.entry(name).or_default().insert(version);
-                }
+    let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
+        new_lock.packages().iter().fold(
+            FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
+            |mut acc, package| {
+                acc.entry(package.name())
+                    .or_default()
+                    .insert(package.version());
                 acc
             },
         );
 
-    for (name, new_versions) in new_distribution_names {
-        if let Some(existing_versions) = existing_distributions.get(&name) {
-            if new_versions != *existing_versions {
+    for name in existing_packages
+        .keys()
+        .chain(new_distributions.keys())
+        .collect::<BTreeSet<_>>()
+    {
+        match (existing_packages.get(name), new_distributions.get(name)) {
+            (Some(existing_versions), Some(new_versions)) => {
+                if existing_versions != new_versions {
+                    let existing_versions = existing_versions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let new_versions = new_versions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    writeln!(
+                        printer.stderr(),
+                        "{} {name} {existing_versions} -> {new_versions}",
+                        "Updated".green().bold()
+                    )?;
+                }
+            }
+            (Some(existing_versions), None) => {
                 let existing_versions = existing_versions
                     .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let new_versions = new_versions
-                    .iter()
-                    .map(ToString::to_string)
+                    .map(|version| format!("v{version}"))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
                     printer.stderr(),
-                    "{} {name} v{existing_versions} -> v{new_versions}",
-                    "Updating".green().bold()
+                    "{} {name} {existing_versions}",
+                    "Removed".red().bold()
                 )?;
+            }
+            (None, Some(new_versions)) => {
+                let new_versions = new_versions
+                    .iter()
+                    .map(|version| format!("v{version}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {name} {new_versions}",
+                    "Added".green().bold()
+                )?;
+            }
+            (None, None) => {
+                unreachable!("The key `{name}` should exist in at least one of the maps");
             }
         }
     }

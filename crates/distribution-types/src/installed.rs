@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
-use distribution_filename::EggInfoFilename;
 use fs_err as fs;
 use tracing::warn;
 use url::Url;
 
+use distribution_filename::EggInfoFilename;
 use pep440_rs::Version;
 use pypi_types::DirectUrl;
 use uv_fs::Simplified;
@@ -16,7 +16,7 @@ use uv_normalize::PackageName;
 use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
 
 /// A built distribution (wheel) that is installed in a virtual environment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub enum InstalledDist {
     /// The distribution was derived from a registry, like `PyPI`.
     Registry(InstalledRegistryDist),
@@ -30,14 +30,14 @@ pub enum InstalledDist {
     LegacyEditable(InstalledLegacyEditable),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
@@ -47,21 +47,21 @@ pub struct InstalledDirectUrlDist {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct InstalledEggInfoFile {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct InstalledLegacyEditable {
     pub name: PackageName,
     pub version: Version,

@@ -9,6 +9,7 @@ pub use name_specifiers::*;
 pub use overrides::*;
 pub use package_options::*;
 pub use preview::*;
+pub use sources::*;
 pub use target_triple::*;
 
 mod authentication;
@@ -22,4 +23,5 @@ mod name_specifiers;
 mod overrides;
 mod package_options;
 mod preview;
+mod sources;
 mod target_triple;

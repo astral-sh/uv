@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::io::{BufRead, BufReader, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::{env, io};
 
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
-use mailparse::MailHeaderMap;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{instrument, warn};
@@ -16,6 +15,7 @@ use zip::ZipWriter;
 
 use pypi_types::DirectUrl;
 use uv_fs::{relative_to, Simplified};
+use uv_normalize::PackageName;
 
 use crate::record::RecordEntry;
 use crate::script::Script;
@@ -128,7 +128,7 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
 /// executable.
 ///
 /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
-fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
+fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool) -> String {
     // Convert the executable to a simplified path.
     let executable = executable.as_ref().simplified_display().to_string();
 
@@ -139,11 +139,18 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
         let shebang_length = 2 + executable.len() + 1;
 
         // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
-        if shebang_length > 127 || executable.contains(' ') {
+        // Same applies for relocatable scripts (executable is relative to script dir, hence `dirname` trick)
+        // (note: the Windows trampoline binaries natively support relative paths to executable)
+        if shebang_length > 127 || executable.contains(' ') || relocatable {
+            let prefix = if relocatable {
+                r#""$(CDPATH= cd -- "$(dirname -- "$0")" && echo "$PWD")"/"#
+            } else {
+                ""
+            };
             // Like Python's `shlex.quote`:
             // > Use single quotes, and put single quotes into double quotes
             // > The string $'b is then quoted as '$'"'"'b'
-            let executable = format!("'{}'", executable.replace('\'', r#"'"'"'"#));
+            let executable = format!("{}'{}'", prefix, executable.replace('\'', r#"'"'"'"#));
             return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
         }
     }
@@ -272,6 +279,7 @@ fn entrypoint_path(entrypoint: &Script, layout: &Layout) -> PathBuf {
 /// Create the wrapper scripts in the bin folder of the venv for launching console scripts.
 pub(crate) fn write_script_entrypoints(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
@@ -293,9 +301,11 @@ pub(crate) fn write_script_entrypoints(
 
         // Generate the launcher script.
         let launcher_executable = get_script_executable(&layout.sys_executable, is_gui);
+        let launcher_executable =
+            get_relocatable_executable(launcher_executable, layout, relocatable)?;
         let launcher_python_script = get_script_launcher(
             entrypoint,
-            &format_shebang(&launcher_executable, &layout.os_name),
+            &format_shebang(&launcher_executable, &layout.os_name, relocatable),
         );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
@@ -317,11 +327,14 @@ pub(crate) fn write_script_entrypoints(
             // Make the launcher executable.
             #[cfg(unix)]
             {
+                use std::fs::Permissions;
                 use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(
-                    site_packages.join(entrypoint_relative),
-                    std::fs::Permissions::from_mode(0o755),
-                )?;
+
+                let path = site_packages.join(entrypoint_relative);
+                let permissions = fs::metadata(&path)?.permissions();
+                if permissions.mode() & 0o111 != 0o111 {
+                    fs::set_permissions(path, Permissions::from_mode(permissions.mode() | 0o111))?;
+                }
             }
         }
     }
@@ -432,11 +445,12 @@ pub(crate) fn move_folder_recorded(
     Ok(())
 }
 
-/// Installs a single script (not an entrypoint)
+/// Installs a single script (not an entrypoint).
 ///
-/// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable)
+/// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable).
 fn install_script(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
@@ -494,11 +508,23 @@ fn install_script(
     let mut start = vec![0; placeholder_python.len()];
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
-        let start = format_shebang(&layout.sys_executable, &layout.os_name)
+        let is_gui = {
+            let mut buf = vec![0; 1];
+            script.read_exact(&mut buf)?;
+            if buf == b"w" {
+                true
+            } else {
+                script.seek_relative(-1)?;
+                false
+            }
+        };
+        let executable = get_script_executable(&layout.sys_executable, is_gui);
+        let executable = get_relocatable_executable(executable, layout, relocatable)?;
+        let start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
 
-        let mut target = tempfile::NamedTempFile::new_in(&layout.scheme.scripts)?;
+        let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
         target.persist(&script_absolute).map_err(|err| {
             io::Error::new(
@@ -511,20 +537,64 @@ fn install_script(
             )
         })?;
         fs::remove_file(&path)?;
+
+        // Make the script executable. We just created the file, so we can set permissions directly.
+        #[cfg(unix)]
+        {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+
+            let permissions = fs::metadata(&script_absolute)?.permissions();
+            if permissions.mode() & 0o111 != 0o111 {
+                fs::set_permissions(
+                    script_absolute,
+                    Permissions::from_mode(permissions.mode() | 0o111),
+                )?;
+            }
+        }
+
         Some(size_and_encoded_hash)
     } else {
-        // reading and writing is slow especially for large binaries, so we move them instead
+        // Reading and writing is slow (especially for large binaries), so we move them instead, if
+        // we can. This also retains the file permissions. We _can't_ move (and must copy) if the
+        // file permissions need to be changed, since we might not own the file.
         drop(script);
-        fs::rename(&path, &script_absolute)?;
+
+        #[cfg(unix)]
+        {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+
+            let permissions = fs::metadata(&path)?.permissions();
+
+            if permissions.mode() & 0o111 == 0o111 {
+                // If the permissions are already executable, we don't need to change them.
+                fs::rename(&path, &script_absolute)?;
+            } else {
+                // If we have to modify the permissions, copy the file, since we might not own it.
+                warn!(
+                    "Copying script from {} to {} (permissions: {:o})",
+                    path.simplified_display(),
+                    script_absolute.simplified_display(),
+                    permissions.mode()
+                );
+
+                uv_fs::copy_atomic_sync(&path, &script_absolute)?;
+
+                fs::set_permissions(
+                    script_absolute,
+                    Permissions::from_mode(permissions.mode() | 0o111),
+                )?;
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            fs::rename(&path, &script_absolute)?;
+        }
+
         None
     };
-    #[cfg(unix)]
-    {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-
-        fs::set_permissions(&script_absolute, Permissions::from_mode(0o755))?;
-    }
 
     // Find the existing entry in the `RECORD`.
     let relative_to_site_packages = path
@@ -555,9 +625,10 @@ fn install_script(
 #[instrument(skip_all)]
 pub(crate) fn install_data(
     layout: &Layout,
+    relocatable: bool,
     site_packages: &Path,
     data_dir: &Path,
-    dist_name: &str,
+    dist_name: &PackageName,
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
@@ -598,11 +669,11 @@ pub(crate) fn install_data(
                         initialized = true;
                     }
 
-                    install_script(layout, site_packages, record, &file)?;
+                    install_script(layout, relocatable, site_packages, record, &file)?;
                 }
             }
             Some("headers") => {
-                let target_path = layout.scheme.include.join(dist_name);
+                let target_path = layout.scheme.include.join(dist_name.as_str());
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
@@ -682,6 +753,31 @@ pub(crate) fn extra_dist_info(
     Ok(())
 }
 
+/// Get the path to the Python executable for the [`Layout`], based on whether the wheel should
+/// be relocatable.
+///
+/// Returns `sys.executable` if the wheel is not relocatable; otherwise, returns a path relative
+/// to the scripts directory.
+pub(crate) fn get_relocatable_executable(
+    executable: PathBuf,
+    layout: &Layout,
+    relocatable: bool,
+) -> Result<PathBuf, Error> {
+    Ok(if relocatable {
+        pathdiff::diff_paths(&executable, &layout.scheme.scripts).ok_or_else(|| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Could not find relative path for: {}",
+                    executable.simplified_display()
+                ),
+            ))
+        })?
+    } else {
+        executable
+    })
+}
+
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
 pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
@@ -725,49 +821,6 @@ fn parse_key_value_file(
             .push(value.trim().to_string());
     }
     Ok(data)
-}
-
-/// Parse the distribution name and version from a wheel's `dist-info` metadata.
-///
-/// See: <https://github.com/PyO3/python-pkginfo-rs>
-pub(crate) fn parse_metadata(
-    dist_info_prefix: &str,
-    content: &[u8],
-) -> Result<(String, String), Error> {
-    // HACK: trick mailparse to parse as UTF-8 instead of ASCII
-    let mut mail = b"Content-Type: text/plain; charset=utf-8\n".to_vec();
-    mail.extend_from_slice(content);
-    let msg = mailparse::parse_mail(&mail).map_err(|err| {
-        Error::InvalidWheel(format!(
-            "Invalid metadata in {dist_info_prefix}.dist-info/METADATA: {err}"
-        ))
-    })?;
-    let headers = msg.get_headers();
-    let metadata_version =
-        headers
-            .get_first_value("Metadata-Version")
-            .ok_or(Error::InvalidWheel(format!(
-                "No `Metadata-Version` field in: {dist_info_prefix}.dist-info/METADATA"
-            )))?;
-    // Crude but it should do https://packaging.python.org/en/latest/specifications/core-metadata/#metadata-version
-    // At time of writing:
-    // > Version of the file format; legal values are “1.0”, “1.1”, “1.2”, “2.1”, “2.2”, and “2.3”.
-    if !(metadata_version.starts_with("1.") || metadata_version.starts_with("2.")) {
-        return Err(Error::InvalidWheel(format!(
-            "`Metadata-Version` field has unsupported value {metadata_version} in: {dist_info_prefix}.dist-info/METADATA"
-        )));
-    }
-    let name = headers
-        .get_first_value("Name")
-        .ok_or(Error::InvalidWheel(format!(
-            "No `Name` field in: {dist_info_prefix}.dist-info/METADATA"
-        )))?;
-    let version = headers
-        .get_first_value("Version")
-        .ok_or(Error::InvalidWheel(format!(
-            "No `Version` field in: {dist_info_prefix}.dist-info/METADATA"
-        )))?;
-    Ok((name, version))
 }
 
 #[cfg(test)]
@@ -888,33 +941,47 @@ mod test {
         // By default, use a simple shebang.
         let executable = Path::new("/usr/bin/python3");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/python3");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/usr/bin/python3"
+        );
 
         // If the path contains spaces, we should use the `exec` trick.
         let executable = Path::new("/usr/bin/path to python3");
         let os_name = "posix";
         assert_eq!(
-            format_shebang(executable, os_name),
+            format_shebang(executable, os_name, false),
             "#!/bin/sh\n'''exec' '/usr/bin/path to python3' \"$0\" \"$@\"\n' '''"
+        );
+
+        // And if we want a relocatable script, we should use the `exec` trick with `dirname`.
+        let executable = Path::new("python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name, true),
+            "#!/bin/sh\n'''exec' \"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && echo \"$PWD\")\"/'python3' \"$0\" \"$@\"\n' '''"
         );
 
         // Except on Windows...
         let executable = Path::new("/usr/bin/path to python3");
         let os_name = "nt";
         assert_eq!(
-            format_shebang(executable, os_name),
+            format_shebang(executable, os_name, false),
             "#!/usr/bin/path to python3"
         );
 
         // Quotes, however, are ok.
         let executable = Path::new("/usr/bin/'python3'");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/'python3'");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/usr/bin/'python3'"
+        );
 
         // If the path is too long, we should not use the `exec` trick.
         let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+        assert_eq!(format_shebang(executable, os_name, false), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
     }
 
     #[test]
@@ -951,14 +1018,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are 17408 bytes.
+        // At time of writing, they are 45kb~ bytes.
         assert!(
-            super::LAUNCHER_I686_GUI.len() < 25 * 1024,
+            super::LAUNCHER_I686_GUI.len() < 45 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_I686_GUI.len()
         );
         assert!(
-            super::LAUNCHER_I686_CONSOLE.len() < 25 * 1024,
+            super::LAUNCHER_I686_CONSOLE.len() < 45 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_I686_CONSOLE.len()
         );
@@ -967,14 +1034,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86_64"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are 21504 and 20480 bytes.
+        // At time of writing, they are 45kb~ bytes.
         assert!(
-            super::LAUNCHER_X86_64_GUI.len() < 25 * 1024,
+            super::LAUNCHER_X86_64_GUI.len() < 45 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_X86_64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_X86_64_CONSOLE.len() < 25 * 1024,
+            super::LAUNCHER_X86_64_CONSOLE.len() < 45 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_X86_64_CONSOLE.len()
         );
@@ -983,14 +1050,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "aarch64"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are 20480 and 19456 bytes.
+        // At time of writing, they are 45kb~ bytes.
         assert!(
-            super::LAUNCHER_AARCH64_GUI.len() < 25 * 1024,
+            super::LAUNCHER_AARCH64_GUI.len() < 45 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_AARCH64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_AARCH64_CONSOLE.len() < 25 * 1024,
+            super::LAUNCHER_AARCH64_CONSOLE.len() < 45 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_AARCH64_CONSOLE.len()
         );

@@ -15,7 +15,7 @@ pub struct Timestamp(std::time::SystemTime);
 impl Timestamp {
     /// Return the [`Timestamp`] for the given path.
     pub fn from_path(path: impl AsRef<Path>) -> std::io::Result<Self> {
-        let metadata = path.as_ref().metadata()?;
+        let metadata = fs_err::metadata(path.as_ref())?;
         Ok(Self::from_metadata(&metadata))
     }
 

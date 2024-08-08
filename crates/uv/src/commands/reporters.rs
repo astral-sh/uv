@@ -446,7 +446,6 @@ impl uv_installer::InstallReporter for InstallReporter {
 #[derive(Debug)]
 pub(crate) struct PythonDownloadReporter {
     reporter: ProgressReporter,
-    multiple: bool,
 }
 
 impl PythonDownloadReporter {
@@ -462,40 +461,17 @@ impl PythonDownloadReporter {
             Some(length),
             printer.target(),
         ));
-        root.set_style(
-            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
-        );
-
         let reporter = ProgressReporter::new(root, multi_progress, printer);
-
-        Self {
-            reporter,
-            multiple: length > 1,
-        }
+        Self { reporter }
     }
 }
 
 impl uv_python::downloads::Reporter for PythonDownloadReporter {
     fn on_progress(&self, _name: &PythonInstallationKey, id: usize) {
         self.reporter.on_download_complete(id);
-
-        if self.multiple {
-            self.reporter.root.inc(1);
-            if self
-                .reporter
-                .root
-                .length()
-                .is_some_and(|len| self.reporter.root.position() == len)
-            {
-                self.reporter.root.finish_and_clear();
-            }
-        }
     }
 
     fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize {
-        if self.multiple {
-            self.reporter.root.set_message("Downloading Python...");
-        }
         self.reporter.on_download_start(name.to_string(), size)
     }
 

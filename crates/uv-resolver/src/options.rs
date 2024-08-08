@@ -1,12 +1,12 @@
 use uv_configuration::IndexStrategy;
 
-use crate::{DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 pub struct Options {
     pub resolution_mode: ResolutionMode,
-    pub prerelease_mode: PreReleaseMode,
+    pub prerelease_mode: PrereleaseMode,
     pub dependency_mode: DependencyMode,
     pub exclude_newer: Option<ExcludeNewer>,
     pub index_strategy: IndexStrategy,
@@ -16,7 +16,7 @@ pub struct Options {
 #[derive(Debug, Default, Clone)]
 pub struct OptionsBuilder {
     resolution_mode: ResolutionMode,
-    prerelease_mode: PreReleaseMode,
+    prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     exclude_newer: Option<ExcludeNewer>,
     index_strategy: IndexStrategy,
@@ -35,9 +35,9 @@ impl OptionsBuilder {
         self
     }
 
-    /// Sets the [`PreReleaseMode`].
+    /// Sets the [`PrereleaseMode`].
     #[must_use]
-    pub fn prerelease_mode(mut self, prerelease_mode: PreReleaseMode) -> Self {
+    pub fn prerelease_mode(mut self, prerelease_mode: PrereleaseMode) -> Self {
         self.prerelease_mode = prerelease_mode;
         self
     }

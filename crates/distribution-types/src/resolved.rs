@@ -12,7 +12,8 @@ use crate::{
 /// A distribution that can be used for resolution and installation.
 ///
 /// Either an already-installed distribution or a distribution that can be installed.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
+#[allow(clippy::large_enum_variant)]
 pub enum ResolvedDist {
     Installed(InstalledDist),
     Installable(Dist),

@@ -55,10 +55,13 @@
       description: "Weekly update of Rust development dependencies",
     },
     {
+      // We don't really use PyO3 in this project; it's pulled in as an optional feature
+      // of the PEP 440 and PEP 508 crates, which we vendored and forked.
       groupName: "pyo3",
       matchManagers: ["cargo"],
       matchPackagePatterns: ["pyo3"],
       description: "Weekly update of pyo3 dependencies",
+      enabled: false,
     },
   ],
   vulnerabilityAlerts: {

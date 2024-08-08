@@ -92,6 +92,7 @@ impl CoreMetadata {
     Clone,
     PartialEq,
     Eq,
+    Hash,
     Serialize,
     Deserialize,
     rkyv::Archive,

@@ -141,7 +141,7 @@ impl<'a> FlatIndexClient<'a> {
         let cache_entry = self.cache.entry(
             CacheBucket::FlatIndex,
             "html",
-            format!("{}.msgpack", cache_key::digest(&url.to_string())),
+            format!("{}.msgpack", cache_key::cache_digest(&url.to_string())),
         );
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(

@@ -6,10 +6,7 @@ use std::ops::Bound;
 use derivative::Derivative;
 use indexmap::IndexSet;
 use owo_colors::OwoColorize;
-use pubgrub::range::Range;
-use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
-use pubgrub::term::Term;
-use pubgrub::type_aliases::Map;
+use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
 use distribution_types::IndexLocations;
@@ -17,8 +14,9 @@ use pep440_rs::Version;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::error::ErrorTree;
 use crate::fork_urls::ForkUrls;
-use crate::prerelease_mode::AllowPreRelease;
+use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonTarget};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 use crate::{RequiresPython, ResolverMarkers};
@@ -402,7 +400,7 @@ impl PubGrubReportFormatter<'_> {
     /// their requirements.
     pub(crate) fn hints(
         &self,
-        derivation_tree: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+        derivation_tree: &ErrorTree,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
@@ -594,8 +592,8 @@ impl PubGrubReportFormatter<'_> {
 
         if any_prerelease {
             // A pre-release marker appeared in the version requirements.
-            if selector.prerelease_strategy().allows(name, markers) != AllowPreRelease::Yes {
-                hints.insert(PubGrubHint::PreReleaseRequested {
+            if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
+                hints.insert(PubGrubHint::PrereleaseRequested {
                     package: package.clone(),
                     range: self.simplify_set(set, package).into_owned(),
                 });
@@ -608,8 +606,8 @@ impl PubGrubReportFormatter<'_> {
                 .find(|version| set.contains(version))
         }) {
             // There are pre-release versions available for the package.
-            if selector.prerelease_strategy().allows(name, markers) != AllowPreRelease::Yes {
-                hints.insert(PubGrubHint::PreReleaseAvailable {
+            if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
+                hints.insert(PubGrubHint::PrereleaseAvailable {
                     package: package.clone(),
                     version: version.clone(),
                 });
@@ -624,14 +622,14 @@ pub(crate) enum PubGrubHint {
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
     ///
-    PreReleaseAvailable {
+    PrereleaseAvailable {
         package: PubGrubPackage,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         version: Version,
     },
     /// A requirement included a pre-release marker, but pre-releases weren't enabled for that
     /// package.
-    PreReleaseRequested {
+    PrereleaseRequested {
         package: PubGrubPackage,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         range: Range<Version>,
@@ -701,7 +699,7 @@ pub(crate) enum PubGrubHint {
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PreReleaseAvailable { package, version } => {
+            Self::PrereleaseAvailable { package, version } => {
                 write!(
                     f,
                     "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
@@ -711,7 +709,7 @@ impl std::fmt::Display for PubGrubHint {
                     version.bold()
                 )
             }
-            Self::PreReleaseRequested { package, range } => {
+            Self::PrereleaseRequested { package, range } => {
                 write!(
                     f,
                     "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",

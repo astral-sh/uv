@@ -13,7 +13,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
-use common::{python_path_with_versions, get_bin, uv_snapshot, TestContext};
+use common::{build_vendor_links_url, packse_index_url, python_path_with_versions, get_bin, uv_snapshot, TestContext};
 
 mod common;
 
@@ -27,9 +27,9 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("compile")
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("{{index_url}}")
+        .arg(packse_index_url())
         .arg("--find-links")
-        .arg("{{vendor_links}}");
+        .arg(build_vendor_links_url());
     context.add_shared_args(&mut command);
     command.env_remove("UV_EXCLUDE_NEWER");
     command.env("UV_TEST_PYTHON_PATH", python_path);
@@ -39,9 +39,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
 
 {{#scenarios}}
 
-{{#description_lines}}
-/// {{.}}
-{{/description_lines}}
+/// {{description}}
 ///
 /// ```text
 /// {{name}}
@@ -66,9 +64,9 @@ fn {{module_name}}() -> Result<()> {
     requirements_in.write_str("{{requirement}}")?;
     {{/root.requires}}
 
-    {{#expected.explanation_lines}}
-    // {{.}}
-    {{/expected.explanation_lines}}
+    {{#expected.explanation}}
+    // {{expected.explanation}}
+    {{/expected.explanation}}
     let output = uv_snapshot!(filters, command(&context, python_versions)
         {{#resolver_options.prereleases}}
         .arg("--prerelease=allow")

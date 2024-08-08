@@ -1,8 +1,9 @@
 # Using tools
 
-Many Python packages provide command-line interfaces which are useful as standalone tools. uv has specialized support for easily invoking and installing tools.
+Many Python packages provide applications that can be used as tools. uv has specialized support for
+easily invoking and installing tools.
 
-## Using `uvx`
+## Running tools
 
 The `uvx` command invokes a tool without installing it.
 
@@ -20,7 +21,7 @@ $ uvx ruff
     $ uv tool run ruff
     ```
 
-    `uvx` is provided as a short alias since the operation is very common.
+    `uvx` is provided as an alias for convenience.
 
 Arguments can be provided after the tool name:
 
@@ -38,11 +39,15 @@ $ uvx pycowsay hello from uv
 
 ```
 
+Tools are installed into temporary, isolated environmnets when using `uvx`.
+
 ## Commands with different package names
 
-When you invoke `uvx ruff`, uv installs the `ruff` package which provides the `ruff` command. However, sometimes the package and command names differ.
+When `uvx ruff` is invoked, uv installs the `ruff` package which provides the `ruff` command.
+However, sometimes the package and command names differ.
 
-The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is provided by `httpie`:
+The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is
+provided by `httpie`:
 
 ```console
 $ uvx --from httpie http
@@ -74,7 +79,7 @@ Note the `@` syntax cannot be used for anything other than an exact version.
 
 The `--from` option can also be used to install from alternative sources.
 
-To pull from git:
+For example, to pull from git:
 
 ```console
 $ uvx --from git+https://github.com/httpie/cli httpie
@@ -90,7 +95,8 @@ $ uvx --with mkdocs-material mkdocs --help
 
 ## Installing tools
 
-If a tool is used often, it can be useful to install it to a persistent environment instead of invoking `uvx` repeatedly.
+If a tool is used often, it is useful to install it to a persistent environment and add it to the
+`PATH` instead of invoking `uvx` repeatedly.
 
 To install `ruff`:
 
@@ -98,7 +104,9 @@ To install `ruff`:
 $ uv tool install ruff
 ```
 
-When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and `uv tool update-shell` can be used to add it to the `PATH`.
+When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows
+the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and
+`uv tool update-shell` can be used to add it to the `PATH`.
 
 After installing `ruff`, it should be available:
 
@@ -106,15 +114,18 @@ After installing `ruff`, it should be available:
 $ ruff --version
 ```
 
-Unlike `uv pip install`, installing a tool does not make its modules available in the current environment. For example, the following command will fail:
+Unlike `uv pip install`, installing a tool does not make its modules available in the current
+environment. For example, the following command will fail:
 
 ```console
 $ python -c "import ruff"
 ```
 
-This isolation is important for reducing interactions and conflicts between dependencies of tools, scripts, and projects.
+This isolation is important for reducing interactions and conflicts between dependencies of tools,
+scripts, and projects.
 
-Unlike `uvx`, `uv tool install` operates on a _package_ and will install all executables provided by the tool.
+Unlike `uvx`, `uv tool install` operates on a _package_ and will install all executables provided by
+the tool.
 
 For example, the following will install the `http`, `https`, and `httpie` executables:
 
@@ -142,4 +153,7 @@ $ uv tool install mkdocs --with mkdocs-material
 
 ## Next steps
 
-See the [tools concept](../tools.md) documentation for more details on how tools are managed.
+To learn more about managing tools with uv, see the [Tools concept](../concepts/tools.md) page and
+the [command reference](../reference/cli.md#uv-tool).
+
+Or, read on to learn how to to [work on projects](./projects.md).

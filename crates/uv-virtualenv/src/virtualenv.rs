@@ -1,6 +1,5 @@
 //! Create a virtual environment.
 
-use std::env;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
@@ -12,7 +11,7 @@ use itertools::Itertools;
 use tracing::info;
 
 use pypi_types::Scheme;
-use uv_fs::{cachedir, Simplified};
+use uv_fs::{cachedir, Simplified, CWD};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_version::version;
 
@@ -50,6 +49,7 @@ pub(crate) fn create(
     prompt: Prompt,
     system_site_packages: bool,
     allow_existing: bool,
+    relocatable: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
@@ -76,7 +76,7 @@ pub(crate) fn create(
                 interpreter.sys_base_prefix().join("python.exe")
             }
         } else {
-            uv_fs::canonicalize_executable(interpreter.sys_executable())?
+            interpreter.sys_executable().to_path_buf()
         }
     } else {
         unimplemented!("Only Windows and Unix are supported")
@@ -130,7 +130,7 @@ pub(crate) fn create(
     };
     let scripts = location.join(&interpreter.virtualenv().scripts);
     let prompt = match prompt {
-        Prompt::CurrentDirectoryName => env::current_dir()?
+        Prompt::CurrentDirectoryName => CWD
             .file_name()
             .map(|name| name.to_string_lossy().to_string()),
         Prompt::Static(value) => Some(value),
@@ -294,12 +294,27 @@ pub(crate) fn create(
         .map(|path| path.simplified().to_str().unwrap().replace('\\', "\\\\"))
         .join(path_sep);
 
-        let activator = template
-            .replace(
-                "{{ VIRTUAL_ENV_DIR }}",
+        let virtual_env_dir = match (relocatable, name.to_owned()) {
+            (true, "activate") => {
+                // Extremely verbose, but should cover all major POSIX shells,
+                // as well as platforms where `readlink` does not implement `-f`.
+                r#"'"$(dirname -- "$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" > /dev/null && echo "$PWD")")"'"#
+            }
+            (true, "activate.bat") => r"%~dp0..",
+            (true, "activate.fish") => {
+                r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#
+            }
+            // Note:
+            // * relocatable activate scripts appear not to be possible in csh and nu shell
+            // * `activate.ps1` is already relocatable by default.
+            _ => {
                 // SAFETY: `unwrap` is guaranteed to succeed because `location` is an `Utf8PathBuf`.
-                location.simplified().to_str().unwrap(),
-            )
+                location.simplified().to_str().unwrap()
+            }
+        };
+
+        let activator = template
+            .replace("{{ VIRTUAL_ENV_DIR }}", virtual_env_dir)
             .replace("{{ BIN_NAME }}", bin_name)
             .replace(
                 "{{ VIRTUAL_PROMPT }}",
@@ -330,6 +345,14 @@ pub(crate) fn create(
         (
             "include-system-site-packages".to_string(),
             if system_site_packages {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            },
+        ),
+        (
+            "relocatable".to_string(),
+            if relocatable {
                 "true".to_string()
             } else {
                 "false".to_string()

@@ -7,18 +7,17 @@
 #![allow(clippy::needless_raw_string_hashes)]
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use common::{uv_snapshot, TestContext};
+use common::{packse_index_url, TestContext, uv_snapshot};
 
 mod common;
 
 {{#scenarios}}
 
-{{#description_lines}}
-/// {{.}}
-{{/description_lines}}
+/// {{description}}
 ///
 /// ```text
 /// {{name}}
@@ -53,10 +52,10 @@ fn {{module_name}}() -> Result<()> {
 
     let mut cmd = context.lock();
     cmd.env_remove("UV_EXCLUDE_NEWER");
-    cmd.arg("--index-url").arg("{{index_url}}");
-    {{#expected.explanation_lines}}
-    // {{.}}
-    {{/expected.explanation_lines}}
+    cmd.arg("--index-url").arg(packse_index_url());
+    {{#expected.explanation}}
+    // {{expected.explanation}}
+    {{/expected.explanation}}
     uv_snapshot!(filters, cmd, @r###"<snapshot>
     "###
     );
@@ -71,6 +70,17 @@ fn {{module_name}}() -> Result<()> {
             "###
         );
     });
+
+    // Assert the idempotence of `uv lock`
+    context
+        .lock()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .assert()
+        .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
     {{/expected.satisfiable}}
 
     Ok(())

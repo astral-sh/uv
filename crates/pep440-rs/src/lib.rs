@@ -16,16 +16,16 @@
 //!
 //! * An epoch that you can prefix the version which, e.g. `1!1.2.3`. Lower epoch always means lower
 //!   version (`1.0 <=2!0.1`)
-//! * post versions, which can be attached to both stable releases and prereleases
-//! * dev versions, which can be attached to sbpth table releases and prereleases. When attached to a
-//!   prerelease the dev version is ordered just below the normal prerelease, however when attached
-//!   to a stable version, the dev version is sorted before a prereleases
-//! * prerelease handling is a mess: "Pre-releases of any kind, including developmental releases,
+//! * post versions, which can be attached to both stable releases and pre-releases
+//! * dev versions, which can be attached to both table releases and pre-releases. When attached to a
+//!   pre-release the dev version is ordered just below the normal pre-release, however when attached
+//!   to a stable version, the dev version is sorted before a pre-releases
+//! * pre-release handling is a mess: "Pre-releases of any kind, including developmental releases,
 //!   are implicitly excluded from all version specifiers, unless they are already present on the
 //!   system, explicitly requested by the user, or if the only available version that satisfies
 //!   the version specifier is a pre-release.". This means that we can't say whether a specifier
 //!   matches without also looking at the environment
-//! * prelease vs. prerelease incl. dev is fuzzy
+//! * pre-release vs. pre-release incl. dev is fuzzy
 //! * local versions on top of all the others, which are added with a + and have implicitly typed
 //!   string and number segments
 //! * no semver-caret (`^`), but a pseudo-semver tilde (`~=`)
@@ -38,7 +38,7 @@
 pub use version::PyVersion;
 pub use {
     version::{
-        LocalSegment, Operator, OperatorParseError, PreRelease, PreReleaseKind, Version,
+        LocalSegment, Operator, OperatorParseError, Prerelease, PrereleaseKind, Version,
         VersionParseError, VersionPattern, VersionPatternParseError, MIN_VERSION,
     },
     version_specifier::{

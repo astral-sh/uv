@@ -19,6 +19,8 @@ use uv_requirements::RequirementsSpecification;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
 
@@ -64,11 +66,14 @@ pub(crate) async fn upgrade(
 
     for name in names {
         debug!("Upgrading tool {name}");
+
         let existing_tool_receipt = installed_tools.get_tool_receipt(&name)?;
         let existing_environment = installed_tools.get_environment(&name, cache)?;
+
         if existing_tool_receipt.is_none() {
             debug!("Unable to find tool receipt for {name}");
         }
+
         if existing_environment.is_none() {
             debug!("Unable to find environment for {name}");
         }
@@ -105,6 +110,8 @@ pub(crate) async fn upgrade(
                 spec,
                 &settings,
                 &state,
+                Box::new(DefaultResolveLogger),
+                Box::new(DefaultInstallLogger),
                 preview,
                 connectivity,
                 concurrency,
@@ -113,12 +120,16 @@ pub(crate) async fn upgrade(
                 printer,
             )
             .await?;
+
+            // At this point, we updated the existing environment, so we should remove any of its
+            // existing executables.
+            remove_entrypoints(&tool_receipt);
+
             install_executables(
                 &environment,
                 &name,
                 &installed_tools,
                 printer,
-                true,
                 true,
                 tool_receipt.python().to_owned(),
                 requirements,
@@ -134,5 +145,6 @@ pub(crate) async fn upgrade(
             return Ok(ExitStatus::Failure);
         }
     }
+
     Ok(ExitStatus::Success)
 }

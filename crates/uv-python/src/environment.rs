@@ -162,6 +162,11 @@ impl PythonEnvironment {
         Ok(PyVenvConfiguration::parse(self.0.root.join("pyvenv.cfg"))?)
     }
 
+    /// Returns `true` if the environment is "relocatable".
+    pub fn relocatable(&self) -> bool {
+        self.cfg().is_ok_and(|cfg| cfg.is_relocatable())
+    }
+
     /// Returns the location of the Python executable.
     pub fn python_executable(&self) -> &Path {
         self.0.interpreter.sys_executable()
@@ -186,18 +191,18 @@ impl PythonEnvironment {
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
         if let Some(target) = self.0.interpreter.target() {
-            // If we're installing into a `--target`, use a target-specific lock file.
+            // If we're installing into a `--target`, use a target-specific lockfile.
             LockedFile::acquire(target.root().join(".lock"), target.root().user_display())
         } else if let Some(prefix) = self.0.interpreter.prefix() {
-            // Likewise, if we're installing into a `--prefix`, use a prefix-specific lock file.
+            // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
             LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display())
         } else if self.0.interpreter.is_virtualenv() {
-            // If the environment a virtualenv, use a virtualenv-specific lock file.
+            // If the environment a virtualenv, use a virtualenv-specific lockfile.
             LockedFile::acquire(self.0.root.join(".lock"), self.0.root.user_display())
         } else {
-            // Otherwise, use a global lock file.
+            // Otherwise, use a global lockfile.
             LockedFile::acquire(
-                env::temp_dir().join(format!("uv-{}.lock", cache_key::digest(&self.0.root))),
+                env::temp_dir().join(format!("uv-{}.lock", cache_key::cache_digest(&self.0.root))),
                 self.0.root.user_display(),
             )
         }

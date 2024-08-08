@@ -1,7 +1,7 @@
 use std::iter;
 
 use itertools::Itertools;
-use pubgrub::range::Range;
+use pubgrub::Range;
 use tracing::warn;
 
 use pep440_rs::{Version, VersionSpecifiers};
@@ -14,7 +14,7 @@ use uv_normalize::{ExtraName, PackageName};
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::{PubGrubSpecifier, ResolveError};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Range<Version>,
@@ -74,7 +74,7 @@ impl PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
                             specifier,
-                            url: None,
+                            url,
                         })
                     }
                     _ => None,

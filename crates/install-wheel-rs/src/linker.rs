@@ -2,28 +2,25 @@
 //! reading from a zip file.
 
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use distribution_filename::WheelFilename;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
-use pep440_rs::Version;
-use pypi_types::DirectUrl;
+use pypi_types::{DirectUrl, Metadata12};
 use reflink_copy as reflink;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
-use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
 use crate::script::{scripts_from_ini, Script};
 use crate::wheel::{
-    extra_dist_info, install_data, parse_metadata, parse_wheel_file, read_record_file,
-    write_script_entrypoints, LibKind,
+    extra_dist_info, install_data, parse_wheel_file, read_record_file, write_script_entrypoints,
+    LibKind,
 };
 use crate::{Error, Layout};
 
@@ -40,6 +37,7 @@ pub struct Locks(Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>);
 #[instrument(skip_all, fields(wheel = %filename))]
 pub fn install_wheel(
     layout: &Layout,
+    relocatable: bool,
     wheel: impl AsRef<Path>,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
@@ -49,16 +47,15 @@ pub fn install_wheel(
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
-    let (name, version) = parse_metadata(&dist_info_prefix, &metadata)?;
+    let Metadata12 { name, version, .. } = Metadata12::parse_metadata(&metadata)
+        .map_err(|err| Error::InvalidWheel(err.to_string()))?;
 
     // Validate the wheel name and version.
     {
-        let name = PackageName::from_str(&name)?;
         if name != filename.name {
             return Err(Error::MismatchedName(name, filename.name.clone()));
         }
 
-        let version = Version::from_str(&version)?;
         if version != filename.version && version != filename.version.clone().without_local() {
             return Err(Error::MismatchedVersion(version, filename.version.clone()));
         }
@@ -76,13 +73,13 @@ pub fn install_wheel(
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
-    debug!(name, "Extracting file");
+    debug!(?name, "Extracting file");
     let site_packages = match lib_kind {
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
     let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks)?;
-    debug!(name, "Extracted {num_unpacked} files");
+    debug!(?name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
     let mut record_file = File::open(
@@ -96,22 +93,37 @@ pub fn install_wheel(
         parse_scripts(&wheel, &dist_info_prefix, None, layout.python_version.1)?;
 
     if console_scripts.is_empty() && gui_scripts.is_empty() {
-        debug!(name, "No entrypoints");
+        debug!(?name, "No entrypoints");
     } else {
-        debug!(name, "Writing entrypoints");
+        debug!(?name, "Writing entrypoints");
 
         fs_err::create_dir_all(&layout.scheme.scripts)?;
-        write_script_entrypoints(layout, site_packages, &console_scripts, &mut record, false)?;
-        write_script_entrypoints(layout, site_packages, &gui_scripts, &mut record, true)?;
+        write_script_entrypoints(
+            layout,
+            relocatable,
+            site_packages,
+            &console_scripts,
+            &mut record,
+            false,
+        )?;
+        write_script_entrypoints(
+            layout,
+            relocatable,
+            site_packages,
+            &gui_scripts,
+            &mut record,
+            true,
+        )?;
     }
 
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
     let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
     if data_dir.is_dir() {
-        debug!(name, "Installing data");
+        debug!(?name, "Installing data");
         install_data(
             layout,
+            relocatable,
             site_packages,
             &data_dir,
             &name,
@@ -124,10 +136,10 @@ pub fn install_wheel(
         // 2.e Remove empty distribution-1.0.data directory.
         fs::remove_dir_all(data_dir)?;
     } else {
-        debug!(name, "No data");
+        debug!(?name, "No data");
     }
 
-    debug!(name, "Writing extra metadata");
+    debug!(?name, "Writing extra metadata");
     extra_dist_info(
         site_packages,
         &dist_info_prefix,
@@ -137,7 +149,7 @@ pub fn install_wheel(
         &mut record,
     )?;
 
-    debug!(name, "Writing record");
+    debug!(?name, "Writing record");
     let mut record_writer = csv::WriterBuilder::new()
         .has_headers(false)
         .escape(b'"')
@@ -261,6 +273,11 @@ impl LinkMode {
             Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks),
             Self::Symlink => symlink_wheel_files(site_packages, wheel, locks),
         }
+    }
+
+    /// Returns `true` if the link mode is [`LinkMode::Symlink`].
+    pub fn is_symlink(&self) -> bool {
+        matches!(self, Self::Symlink)
     }
 }
 
@@ -580,7 +597,7 @@ fn symlink_wheel_files(
 
         // The `RECORD` file is modified during installation, so we copy it instead of symlinking.
         if path.ends_with("RECORD") {
-            fs::copy(path, &out_path)?;
+            synchronized_copy(path, &out_path, locks)?;
             count += 1;
             continue;
         }

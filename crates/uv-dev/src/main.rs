@@ -20,6 +20,7 @@ use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
 use crate::generate_all::Args as GenerateAllArgs;
+use crate::generate_cli_reference::Args as GenerateCliReferenceArgs;
 use crate::generate_json_schema::Args as GenerateJsonSchemaArgs;
 use crate::generate_options_reference::Args as GenerateOptionsReferenceArgs;
 #[cfg(feature = "render")]
@@ -46,6 +47,7 @@ mod build;
 mod clear_compile;
 mod compile;
 mod generate_all;
+mod generate_cli_reference;
 mod generate_json_schema;
 mod generate_options_reference;
 mod render_benchmarks;
@@ -69,6 +71,8 @@ enum Cli {
     GenerateJSONSchema(GenerateJsonSchemaArgs),
     /// Generate the options reference for the documentation.
     GenerateOptionsReference(GenerateOptionsReferenceArgs),
+    /// Generate the CLI reference for the documentation.
+    GenerateCliReference(GenerateCliReferenceArgs),
     #[cfg(feature = "render")]
     /// Render the benchmarks.
     RenderBenchmarks(RenderBenchmarksArgs),
@@ -88,6 +92,7 @@ async fn run() -> Result<()> {
         Cli::GenerateAll(args) => generate_all::main(&args)?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
         Cli::GenerateOptionsReference(args) => generate_options_reference::main(&args)?,
+        Cli::GenerateCliReference(args) => generate_cli_reference::main(&args)?,
         #[cfg(feature = "render")]
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
     }

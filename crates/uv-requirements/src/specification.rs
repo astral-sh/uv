@@ -43,7 +43,7 @@ use pypi_types::VerbatimParsedUrl;
 use requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_normalize::{ExtraName, PackageName};
 use uv_workspace::pyproject::PyProjectToml;
 
@@ -86,18 +86,16 @@ impl RequirementsSpecification {
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
-                let requirement =
-                    RequirementsTxtRequirement::parse(name, std::env::current_dir()?, false)
-                        .with_context(|| format!("Failed to parse: `{name}`"))?;
+                let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
+                    .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
                     requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
                     ..Self::default()
                 }
             }
             RequirementsSource::Editable(name) => {
-                let requirement =
-                    RequirementsTxtRequirement::parse(name, std::env::current_dir()?, true)
-                        .with_context(|| format!("Failed to parse: `{name}`"))?;
+                let requirement = RequirementsTxtRequirement::parse(name, &*CWD, true)
+                    .with_context(|| format!("Failed to parse: `{name}`"))?;
                 Self {
                     requirements: vec![UnresolvedRequirementSpecification::from(
                         requirement.into_editable()?,
@@ -114,8 +112,7 @@ impl RequirementsSpecification {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
-                let requirements_txt =
-                    RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
+                let requirements_txt = RequirementsTxt::parse(path, &*CWD, client_builder).await?;
                 Self {
                     requirements: requirements_txt
                         .requirements
@@ -313,7 +310,7 @@ impl RequirementsSpecification {
 
     /// Parse an individual package requirement.
     pub fn parse_package(name: &str) -> Result<UnresolvedRequirementSpecification> {
-        let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?, false)
+        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
             .with_context(|| format!("Failed to parse: `{name}`"))?;
         Ok(UnresolvedRequirementSpecification::from(requirement))
     }

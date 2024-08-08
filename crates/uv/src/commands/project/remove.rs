@@ -4,22 +4,26 @@ use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
+use uv_fs::CWD;
 use uv_python::{PythonFetch, PythonPreference, PythonRequest};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Remove one or more packages from the project requirements.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
     locked: bool,
     frozen: bool,
-    requirements: Vec<PackageName>,
+    no_sync: bool,
+    packages: Vec<PackageName>,
     dependency_type: DependencyType,
     package: Option<PackageName>,
     python: Option<String>,
@@ -39,39 +43,41 @@ pub(crate) async fn remove(
 
     // Find the project in the workspace.
     let project = if let Some(package) = package {
-        Workspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default())
+        Workspace::discover(&CWD, &DiscoveryOptions::default())
             .await?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?
     } else {
-        ProjectWorkspace::discover(&std::env::current_dir()?, &DiscoveryOptions::default()).await?
+        ProjectWorkspace::discover(&CWD, &DiscoveryOptions::default()).await?
     };
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
-    for req in requirements {
+    for package in packages {
         match dependency_type {
             DependencyType::Production => {
-                let deps = pyproject.remove_dependency(&req)?;
+                let deps = pyproject.remove_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&req, &pyproject);
-                    anyhow::bail!("The dependency `{req}` could not be found in `dependencies`");
+                    warn_if_present(&package, &pyproject);
+                    anyhow::bail!(
+                        "The dependency `{package}` could not be found in `dependencies`"
+                    );
                 }
             }
             DependencyType::Dev => {
-                let deps = pyproject.remove_dev_dependency(&req)?;
+                let deps = pyproject.remove_dev_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&req, &pyproject);
+                    warn_if_present(&package, &pyproject);
                     anyhow::bail!(
-                        "The dependency `{req}` could not be found in `dev-dependencies`"
+                        "The dependency `{package}` could not be found in `dev-dependencies`"
                     );
                 }
             }
             DependencyType::Optional(ref group) => {
-                let deps = pyproject.remove_optional_dependency(&req, group)?;
+                let deps = pyproject.remove_optional_dependency(&package, group)?;
                 if deps.is_empty() {
-                    warn_if_present(&req, &pyproject);
+                    warn_if_present(&package, &pyproject);
                     anyhow::bail!(
-                        "The dependency `{req}` could not be found in `optional-dependencies`"
+                        "The dependency `{package}` could not be found in `optional-dependencies`"
                     );
                 }
             }
@@ -103,9 +109,6 @@ pub(crate) async fn remove(
     )
     .await?;
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-
     // Lock and sync the environment, if necessary.
     let lock = project::lock::do_safe_lock(
         locked,
@@ -113,7 +116,7 @@ pub(crate) async fn remove(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
-        &state,
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,
@@ -123,20 +126,28 @@ pub(crate) async fn remove(
     )
     .await?;
 
+    if no_sync {
+        return Ok(ExitStatus::Success);
+    }
+
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let extras = ExtrasSpecification::All;
     let dev = true;
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     project::sync::do_sync(
         &VirtualProject::Project(project),
         &venv,
-        &lock,
+        &lock.lock,
         &extras,
         dev,
         Modifications::Exact,
         settings.as_ref().into(),
         &state,
+        Box::new(DefaultInstallLogger),
         preview,
         connectivity,
         concurrency,

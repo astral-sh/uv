@@ -261,10 +261,11 @@ fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, distribution
             subdirectory,
             url,
         } => {
-            let mut git_url = GitUrl::new(repository.clone(), reference.clone());
-            if let Some(precise) = precise {
-                git_url = git_url.with_precise(*precise);
-            }
+            let git_url = if let Some(precise) = precise {
+                GitUrl::from_commit(repository.clone(), reference.clone(), *precise)
+            } else {
+                GitUrl::from_reference(repository.clone(), reference.clone())
+            };
             Dist::Source(SourceDist::Git(GitSourceDist {
                 name: requirement.name.clone(),
                 git: Box::new(git_url),

@@ -2,16 +2,16 @@ use std::borrow::Cow;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::sync::OnceLock;
 
 use configparser::ini::Ini;
 use fs_err as fs;
-use once_cell::sync::OnceCell;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{trace, warn};
 
-use cache_key::digest;
+use cache_key::cache_digest;
 use install_wheel_rs::Layout;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
@@ -40,7 +40,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
-    tags: OnceCell<Tags>,
+    tags: OnceLock<Tags>,
     target: Option<Target>,
     prefix: Option<Prefix>,
     pointer_size: PointerSize,
@@ -72,44 +72,10 @@ impl Interpreter {
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
             stdlib: info.stdlib,
-            tags: OnceCell::new(),
+            tags: OnceLock::new(),
             target: None,
             prefix: None,
         })
-    }
-
-    // TODO(konstin): Find a better way mocking the fields
-    pub fn artificial(platform: Platform, markers: MarkerEnvironment) -> Self {
-        Self {
-            platform,
-            markers: Box::new(markers),
-            scheme: Scheme {
-                purelib: PathBuf::from("/dev/null"),
-                platlib: PathBuf::from("/dev/null"),
-                include: PathBuf::from("/dev/null"),
-                scripts: PathBuf::from("/dev/null"),
-                data: PathBuf::from("/dev/null"),
-            },
-            virtualenv: Scheme {
-                purelib: PathBuf::from("/dev/null"),
-                platlib: PathBuf::from("/dev/null"),
-                include: PathBuf::from("/dev/null"),
-                scripts: PathBuf::from("/dev/null"),
-                data: PathBuf::from("/dev/null"),
-            },
-            sys_prefix: PathBuf::from("/dev/null"),
-            sys_base_exec_prefix: PathBuf::from("/dev/null"),
-            sys_base_prefix: PathBuf::from("/dev/null"),
-            sys_base_executable: None,
-            sys_executable: PathBuf::from("/dev/null"),
-            sys_path: vec![],
-            stdlib: PathBuf::from("/dev/null"),
-            tags: OnceCell::new(),
-            target: None,
-            prefix: None,
-            pointer_size: PointerSize::_64,
-            gil_disabled: false,
-        }
     }
 
     /// Return a new [`Interpreter`] with the given virtual environment root.
@@ -204,15 +170,17 @@ impl Interpreter {
 
     /// Returns the [`Tags`] for this Python executable.
     pub fn tags(&self) -> Result<&Tags, TagsError> {
-        self.tags.get_or_try_init(|| {
-            Tags::from_env(
+        if self.tags.get().is_none() {
+            let tags = Tags::from_env(
                 self.platform(),
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),
                 self.gil_disabled,
-            )
-        })
+            )?;
+            self.tags.set(tags).expect("tags should not be set");
+        }
+        Ok(self.tags.get().expect("tags should be set"))
     }
 
     /// Returns `true` if the environment is a PEP 405-compliant virtual environment.
@@ -709,24 +677,27 @@ impl InterpreterInfo {
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+        let absolute = uv_fs::absolutize_path(executable)?;
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             "",
-            // We use the absolute path for the cache entry to avoid cache collisions for relative paths
-            // but we do not want to query the executable with symbolic links resolved
-            format!("{}.msgpack", digest(&uv_fs::absolutize_path(executable)?)),
+            // We use the absolute path for the cache entry to avoid cache collisions for relative
+            // paths. But we don't to query the executable with symbolic links resolved.
+            format!("{}.msgpack", cache_digest(&absolute)),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
-        // interpreter has been modified
-        let modified =
-            Timestamp::from_path(uv_fs::canonicalize_executable(executable).map_err(|err| {
+        // interpreter has been modified.
+        let modified = uv_fs::canonicalize_executable(&absolute)
+            .and_then(Timestamp::from_path)
+            .map_err(|err| {
                 if err.kind() == io::ErrorKind::NotFound {
                     Error::NotFound(executable.to_path_buf())
                 } else {
                     err.into()
                 }
-            })?)?;
+            })?;
 
         // Read from the cache.
         if cache

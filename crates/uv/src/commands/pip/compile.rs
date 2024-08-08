@@ -16,7 +16,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, IndexStrategy, NoBinary,
-    NoBuild, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+    NoBuild, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -32,12 +32,13 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
-    InMemoryIndex, OptionsBuilder, PreReleaseMode, PythonRequirement, RequiresPython,
+    InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -48,12 +49,13 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
-    prerelease_mode: PreReleaseMode,
+    prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
@@ -75,11 +77,13 @@ pub(crate) async fn pip_compile(
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
+    no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
     exclude_newer: Option<ExcludeNewer>,
+    sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
     python: Option<String>,
@@ -142,6 +146,10 @@ pub(crate) async fn pip_compile(
                 .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
+
+    // Read build constraints.
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -237,7 +245,7 @@ pub(crate) async fn pip_compile(
 
     // Determine the environment for the resolution.
     let (tags, markers) = if universal {
-        (None, ResolverMarkers::Universal)
+        (None, ResolverMarkers::universal(None))
     } else {
         let (tags, markers) =
             resolution_environment(python_version, python_platform, &interpreter)?;
@@ -297,13 +305,17 @@ pub(crate) async fn pip_compile(
     let build_isolation = if no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
+        &build_constraints,
         &interpreter,
         &index_locations,
         &flat_index,
@@ -317,6 +329,7 @@ pub(crate) async fn pip_compile(
         link_mode,
         &build_options,
         exclude_newer,
+        sources,
         concurrency,
         preview,
     );
@@ -352,9 +365,9 @@ pub(crate) async fn pip_compile(
         &build_dispatch,
         concurrency,
         options,
+        Box::new(DefaultResolveLogger),
         printer,
         preview,
-        false,
     )
     .await
     {

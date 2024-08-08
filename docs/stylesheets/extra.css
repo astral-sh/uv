@@ -112,6 +112,20 @@ This is a consequence of the reduced nav spacing below. */
   box-shadow: none;
 }
 
+/* Omits the nav title "uv" entirely unless on a small screen, in which case
+the nav title is needed for backwards navigation in the collapsible
+nav variant.
+
+See https://github.com/astral-sh/uv/issues/5130 */
+.md-nav__title {
+  display: none;
+}
+@media screen and (max-width: 1219px) {
+  .md-nav__title {
+    display: flex ;
+  }
+}
+
 /* Reducing spacing between nav items to fit more content */
 .md-nav__link {
   margin-top: 0.25em;
@@ -123,4 +137,30 @@ This is a consequence of the reduced nav spacing below. */
 /* Retain larger spacing for the right-side table-of-contents nav */
 .md-nav--secondary .md-nav__link {
   margin-top: 0.5em;
+}
+/* See: https://mkdocstrings.github.io/recipes/#prevent-selection-of-prompts-and-output-in-python-code-blocks */
+.highlight .gp, .highlight .go { /* Generic.Prompt, Generic.Output */
+    user-select: none;
+}
+
+/* Bold the active nav link for accessibility */
+.md-nav__link--active {
+  font-weight: bold;
+}
+
+/* Styling for the generated CLI reference page */
+.cli-reference dd {
+  margin-top: 0.1em;
+  margin-bottom: 0.5em;
+}
+.cli-reference dd p {
+  margin-block-start: 0.2em;
+  margin-block-end: 0.3em;
+}
+.cli-reference ul {
+  margin-bottom: 0.1em;
+}
+h3.cli-reference {
+  font-size: 1.1em;
+  margin: 0 0 0 0;
 }

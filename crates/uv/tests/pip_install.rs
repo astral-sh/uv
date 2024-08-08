@@ -6,14 +6,16 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
+use fs_err as fs;
 use indoc::indoc;
 use itertools::Itertools;
+use predicates::prelude::predicate;
 use url::Url;
 
 use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
-use crate::common::{get_bin, venv_bin_path, BUILD_VENDOR_LINKS_URL};
+use crate::common::{build_vendor_links_url, get_bin, venv_bin_path};
 
 mod common;
 
@@ -585,6 +587,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - flask==3.0.2
@@ -1354,6 +1357,31 @@ fn install_git_public_https() {
     context.assert_installed("uv_public_pypackage", "0.1.0");
 }
 
+/// Install a package from a public GitHub repository, omitting the `git+` prefix
+#[test]
+#[cfg(feature = "git")]
+fn install_implicit_git_public_https() {
+    let context = TestContext::new("3.8");
+
+    uv_snapshot!(
+        context
+        .pip_install()
+        .arg("uv-public-pypackage @ https://github.com/astral-test/uv-public-pypackage.git"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    "###);
+
+    context.assert_installed("uv_public_pypackage", "0.1.0");
+}
+
 /// Install and update a package from a public GitHub repository
 #[test]
 #[cfg(feature = "git")]
@@ -1816,6 +1844,7 @@ fn reinstall_no_binary() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - anyio==4.3.0
@@ -4427,7 +4456,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(BUILD_VENDOR_LINKS_URL), @r###"
+        .arg(build_vendor_links_url()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4464,7 +4493,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(BUILD_VENDOR_LINKS_URL), @r###"
+        .arg(build_vendor_links_url()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4528,7 +4557,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(BUILD_VENDOR_LINKS_URL), @r###"
+        .arg(build_vendor_links_url()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4563,7 +4592,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(BUILD_VENDOR_LINKS_URL), @r###"
+        .arg(build_vendor_links_url()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4605,7 +4634,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(BUILD_VENDOR_LINKS_URL), @r###"
+        .arg(build_vendor_links_url()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4627,7 +4656,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(BUILD_VENDOR_LINKS_URL), @r###"
+        .arg(build_vendor_links_url()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4673,6 +4702,7 @@ fn already_installed_local_version_of_remote_package() {
     );
 
     // Request install with a different version
+    //
     // We should attempt to pull from the index since the installed version does not match
     // but we disable it here to preserve this dependency for future tests
     uv_snapshot!(context.filters(), context.pip_install()
@@ -4705,8 +4735,8 @@ fn already_installed_local_version_of_remote_package() {
     "###
     );
 
-    // Request reinstall with the full path, this should reinstall from the path
-    // and not pull from the index
+    // Request reinstall with the full path, this should reinstall from the path and not pull from
+    // the index (or rebuild).
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("anyio_local"))
         .arg("--reinstall")
@@ -4755,7 +4785,6 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
@@ -4975,6 +5004,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
@@ -6102,6 +6132,288 @@ fn local_index_fallback() -> Result<()> {
      + iniconfig==2.0.0
     "###
     );
+
+    Ok(())
+}
+
+#[test]
+fn accept_existing_prerelease() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask==2.0.0rc1")?;
+
+    // Install a pre-release version of `flask`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("Flask==2.0.0rc1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + click==8.1.7
+     + flask==2.0.0rc1
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    // Install `flask-login`, without enabling pre-releases. The existing version of `flask` should
+    // still be accepted.
+    uv_snapshot!(context.filters(), context.pip_install().arg("flask-login==0.6.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + flask-login==0.6.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow `pip install` of an unmanaged project.
+#[test]
+fn unmanaged() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+    name = "example"
+    version = "0.0.0"
+    dependencies = [
+      "anyio==3.7.0"
+    ]
+
+    [tool.uv]
+    managed = false
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + example==0.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_relocatable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Remake the venv as relocatable
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    // Install a package with a hello-world console script entrypoint.
+    // (we use black_editable because it's convenient, but we don't actually install it as editable)
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts/packages/black_editable"),
+        )
+        .assert()
+        .success();
+
+    // Script should run correctly in-situ.
+    let script_path = if cfg!(windows) {
+        context.venv.child(r"Scripts\black.exe")
+    } else {
+        context.venv.child("bin/black")
+    };
+    Command::new(script_path.as_os_str())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello world!"));
+
+    // Relocate the venv, and see if it still works.
+    let new_venv_path = context.venv.with_file_name("relocated");
+    fs::rename(context.venv, new_venv_path.clone())?;
+
+    let script_path = if cfg!(windows) {
+        new_venv_path.join(r"Scripts\black.exe")
+    } else {
+        new_venv_path.join("bin/black")
+    };
+    Command::new(script_path.as_os_str())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello world!"));
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with an incompatible constraint.
+#[test]
+fn incompatible_build_constraint() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==1")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to build: `requests==1.2.0`
+      Caused by: Failed to install requirements from setup.py build (resolve)
+      Caused by: No solution found when resolving: setuptools>=40.8.0
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with a compatible constraint.
+#[test]
+fn compatible_build_constraint() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_build_isolation_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an package.
+    let package = context.temp_dir.child("project");
+    package.create_dir_all()?;
+    let pyproject_toml = package.child("pyproject.toml");
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
+        ]
+        [build-system]
+        requires = [
+          "setuptools >= 40.9.0",
+        ]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Running `uv pip install` should fail for iniconfig.
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.pip_install()
+        .arg("--no-build-isolation-package")
+        .arg("iniconfig")
+        .arg(package.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      Caused by: Failed to build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 8, in <module>
+    ModuleNotFoundError: No module named 'hatchling'
+    ---
+    "###
+    );
+
+    // Install `hatchinling`, `hatch-vs` for iniconfig
+    uv_snapshot!(context.filters(), context.pip_install().arg("hatchling").arg("hatch-vcs"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 9 packages in [TIME]
+    Installed 9 packages in [TIME]
+     + hatch-vcs==0.4.0
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     + setuptools==69.2.0
+     + setuptools-scm==8.0.4
+     + trove-classifiers==2024.3.3
+     + typing-extensions==4.10.0
+    "###);
+
+    // Running `uv pip install` should succeed.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-build-isolation-package")
+        .arg("iniconfig")
+        .arg(package.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    "###);
 
     Ok(())
 }

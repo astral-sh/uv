@@ -4,14 +4,13 @@ mod keyring;
 mod middleware;
 mod realm;
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use cache::CredentialsCache;
 use credentials::Credentials;
 
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
-use once_cell::sync::Lazy;
 use realm::Realm;
 use tracing::trace;
 use url::Url;
@@ -21,7 +20,8 @@ use url::Url;
 /// Global authentication cache for a uv invocation
 ///
 /// This is used to share credentials across uv clients.
-pub(crate) static CREDENTIALS_CACHE: Lazy<CredentialsCache> = Lazy::new(CredentialsCache::default);
+pub(crate) static CREDENTIALS_CACHE: LazyLock<CredentialsCache> =
+    LazyLock::new(CredentialsCache::default);
 
 /// Populate the global authentication store with credentials on a URL, if there are any.
 ///

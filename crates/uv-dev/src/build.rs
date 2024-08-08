@@ -12,13 +12,13 @@ use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
     BuildKind, BuildOptions, Concurrency, ConfigSettings, IndexStrategy, PreviewMode,
-    SetupPyStrategy,
+    SetupPyStrategy, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 use uv_resolver::{FlatIndex, InMemoryIndex};
-use uv_types::{BuildContext, BuildIsolation, InFlight};
+use uv_types::{BuildIsolation, InFlight};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -68,16 +68,19 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let index_urls = IndexLocations::default();
     let index_strategy = IndexStrategy::default();
     let setup_py = SetupPyStrategy::default();
+    let sources = SourceStrategy::default();
     let python = PythonEnvironment::find(
         &PythonRequest::default(),
         EnvironmentPreference::OnlyVirtual,
         &cache,
     )?;
     let build_options = BuildOptions::default();
+    let build_constraints = [];
 
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
+        &build_constraints,
         python.interpreter(),
         &index_urls,
         &flat_index,
@@ -91,6 +94,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         install_wheel_rs::linker::LinkMode::default(),
         &build_options,
         exclude_newer,
+        sources,
         concurrency,
         PreviewMode::Enabled,
     );
@@ -98,7 +102,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let builder = SourceBuild::setup(
         &args.sdist,
         args.subdirectory.as_deref(),
-        build_dispatch.interpreter(),
+        python.interpreter(),
         &build_dispatch,
         SourceBuildContext::default(),
         args.sdist.display().to_string(),

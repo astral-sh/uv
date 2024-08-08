@@ -5,29 +5,24 @@ expression: result
 Ok(
     Lock {
         version: 1,
-        distributions: [
-            Distribution {
-                id: DistributionId {
+        fork_markers: None,
+        requires_python: None,
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            exclude_newer: None,
+        },
+        packages: [
+            Package {
+                id: PackageId {
                     name: PackageName(
                         "anyio",
                     ),
                     version: "4.3.0",
                     source: Registry(
-                        Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "pypi.org",
-                                ),
-                            ),
-                            port: None,
-                            path: "/simple",
-                            query: None,
-                            fragment: None,
-                        },
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
                     ),
                 },
                 sdist: None,
@@ -56,37 +51,22 @@ Ok(
                         },
                     },
                 ],
+                fork_markers: None,
                 dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
             },
         ],
-        requires_python: None,
-        resolution_mode: Highest,
-        prerelease_mode: IfNecessaryOrExplicit,
-        exclude_newer: None,
         by_id: {
-            DistributionId {
+            PackageId {
                 name: PackageName(
                     "anyio",
                 ),
                 version: "4.3.0",
                 source: Registry(
-                    Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "pypi.org",
-                            ),
-                        ),
-                        port: None,
-                        path: "/simple",
-                        query: None,
-                        fragment: None,
-                    },
+                    UrlString(
+                        "https://pypi.org/simple",
+                    ),
                 ),
             }: 0,
         },

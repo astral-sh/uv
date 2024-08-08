@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
+use clap::builder::styling::Style;
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
@@ -15,7 +16,7 @@ use uv_configuration::{
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_python::{PythonFetch, PythonPreference, PythonVersion};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 pub mod compat;
 pub mod options;
@@ -51,14 +52,15 @@ fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
 }
 
 #[derive(Parser)]
-#[command(name = "uv", author, version = uv_version::version(), long_version = crate::version::version())]
+#[command(name = "uv", author, long_version = crate::version::version())]
 #[command(about = "An extremely fast Python package manager.")]
 #[command(propagate_version = true)]
 #[command(
     after_help = "Use `uv help` for more details.",
     after_long_help = "",
     disable_help_flag = true,
-    disable_help_subcommand = true
+    disable_help_subcommand = true,
+    disable_version_flag = true
 )]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
@@ -66,23 +68,61 @@ pub struct Cli {
     pub command: Box<Commands>,
 
     #[command(flatten)]
-    pub global_args: Box<GlobalArgs>,
-
-    #[command(flatten)]
     pub cache_args: Box<CacheArgs>,
 
+    #[command(flatten)]
+    pub global_args: Box<GlobalArgs>,
+
     /// The path to a `uv.toml` file to use for configuration.
-    #[arg(global = true, long, env = "UV_CONFIG_FILE")]
+    ///
+    /// While uv configuration can be included in a `pyproject.toml` file, it is
+    /// not allowed in this context.
+    #[arg(
+        global = true,
+        long,
+        env = "UV_CONFIG_FILE",
+        help_heading = "Global options"
+    )]
     pub config_file: Option<PathBuf>,
 
-    /// Print help.
-    #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]
+    /// Avoid discovering configuration files (`pyproject.toml`, `uv.toml`).
+    ///
+    /// Normally, configuration files are discovered in the current directory,
+    /// parent directories, or user configuration directories.
+    #[arg(global = true, long, env = "UV_NO_CONFIG", value_parser = clap::builder::BoolishValueParser::new(), help_heading = "Global options")]
+    pub no_config: bool,
+
+    /// Display the concise help for this command.
+    #[arg(global = true, short, long, action = clap::ArgAction::HelpShort, help_heading = "Global options")]
     help: Option<bool>,
+
+    /// Display the uv version.
+    #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version, help_heading = "Global options")]
+    version: Option<bool>,
 }
 
 #[derive(Parser, Debug, Clone)]
+#[command(next_help_heading = "Global options", next_display_order = 1000)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
+    /// Whether to prefer uv-managed or system Python installations.
+    ///
+    /// By default, uv prefers using Python versions it manages. However, it
+    /// will use system Python installations if a uv-managed Python is not
+    /// installed. This option allows prioritizing or ignoring system Python
+    /// installations.
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        display_order = 700
+    )]
+    pub python_preference: Option<PythonPreference>,
+
+    /// Whether to automatically download Python when required.
+    #[arg(global = true, long, help_heading = "Python options")]
+    pub python_fetch: Option<PythonFetch>,
+
     /// Do not print any output.
     #[arg(global = true, long, short, conflicts_with = "verbose")]
     pub quiet: bool,
@@ -94,7 +134,9 @@ pub struct GlobalArgs {
     #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "quiet")]
     pub verbose: u8,
 
-    /// Disable colors; provided for compatibility with `pip`.
+    /// Disable colors.
+    ///
+    /// Provided for compatibility with `pip`, use `--color` instead.
     #[arg(global = true, long, hide = true, conflicts_with = "color")]
     pub no_color: bool,
 
@@ -124,41 +166,48 @@ pub struct GlobalArgs {
     #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
     pub no_native_tls: bool,
 
-    /// Disable network access, relying only on locally cached data and locally available files.
+    /// Disable network access.
+    ///
+    /// When disabled, uv will only use locally cached data and locally available files.
     #[arg(global = true, long, overrides_with("no_offline"))]
     pub offline: bool,
 
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
 
-    /// Whether to prefer using Python installations that are already present on the system, or
-    /// those that are downloaded and installed by uv.
-    #[arg(global = true, long)]
-    pub python_preference: Option<PythonPreference>,
-
-    /// Whether to automatically download Python when required.
-    #[arg(global = true, long)]
-    pub python_fetch: Option<PythonFetch>,
-
     /// Whether to enable experimental, preview features.
+    ///
+    /// Preview features may change without warning.
     #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
     pub preview: bool,
 
     #[arg(global = true, long, overrides_with("preview"), hide = true)]
     pub no_preview: bool,
 
-    /// Avoid discovering a `pyproject.toml` or `uv.toml` file in the current directory or any
-    /// parent directories.
-    #[arg(global = true, long)]
+    /// Avoid discovering a `pyproject.toml` or `uv.toml` file.
+    ///
+    /// Normally, configuration files are discovered in the current directory,
+    /// parent directories, or user configuration directories.
+    ///
+    /// This option is deprecated in favor of `--no-config`.
+    #[arg(global = true, long, hide = true)]
     pub isolated: bool,
 
     /// Show the resolved settings for the current command.
+    ///
+    /// This option is used for debugging and development purposes.
     #[arg(global = true, long, hide = true)]
     pub show_settings: bool,
 
-    /// Hides all progress outputs when set
+    /// Hide all progress outputs.
+    ///
+    /// For example, spinners or progress bars.
     #[arg(global = true, long)]
     pub no_progress: bool,
+
+    /// Change to the given directory prior to running the command.
+    #[arg(global = true, long, hide = true)]
+    pub directory: Option<PathBuf>,
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
@@ -186,27 +235,68 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
-    /// Resolve and install Python packages.
-    #[command(
-        after_help = "Use `uv help pip`` for more details.",
-        after_long_help = ""
-    )]
-    Pip(PipNamespace),
-    /// Run and manage executable Python packages.
+    /// Manage Python projects.
+    #[command(flatten)]
+    Project(Box<ProjectCommand>),
+    /// Run and manage tools provided by Python packages (experimental).
     #[command(
         after_help = "Use `uv help tool` for more details.",
         after_long_help = ""
     )]
     Tool(ToolNamespace),
-    /// Manage Python installations.
+
+    /// Manage Python versions and installations (experimental)
+    ///
+    /// Generally, uv first searches for Python in a virtual environment, either
+    /// active or in a `.venv` directory  in the current working directory or
+    /// any parent directory. If a virtual environment is not required, uv will
+    /// then search for a Python interpreter. Python interpreters are found by
+    /// searching for Python executables in the `PATH` environment variable.
+    ///
+    /// On Windows, the `py` launcher is also invoked to find Python
+    /// executables.
+    ///
+    /// When preview is enabled, i.e., via `--preview` or by using a preview
+    /// command, uv will download Python if a version cannot be found. This
+    /// behavior can be disabled with the `--python-fetch` option.
+    ///
+    /// The `--python` option allows requesting a different interpreter.
+    ///
+    /// The following Python version request formats are supported:
+    ///
+    /// - `<version>` e.g. `3`, `3.12`, `3.12.3`
+    /// - `<version-specifier>` e.g. `>=3.12,<3.13`
+    /// - `<implementation>` e.g. `cpython` or `cp`
+    /// - `<implementation>@<version>` e.g. `cpython@3.12`
+    /// - `<implementation><version>` e.g. `cpython3.12` or `cp312`
+    /// - `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
+    /// - `<implementation>-<version>-<os>-<arch>-<libc>` e.g.
+    ///   `cpython-3.12.3-macos-aarch64-none`
+    ///
+    /// Additionally, a specific system Python interpreter can often be
+    /// requested with:
+    ///
+    /// - `<executable-path>` e.g. `/opt/homebrew/bin/python3`
+    /// - `<executable-name>` e.g. `mypython3`
+    /// - `<install-dir>` e.g. `/some/environment/`
+    ///
+    /// When the `--python` option is used, normal discovery rules apply but
+    /// discovered interpreters are checked for compatibility with the request,
+    /// e.g., if `pypy` is requested, uv will first check if the virtual
+    /// environment contains a PyPy interpreter then check if each executable in
+    /// the path is a PyPy interpreter.
+    #[clap(verbatim_doc_comment)]
     #[command(
         after_help = "Use `uv help python` for more details.",
         after_long_help = ""
     )]
     Python(PythonNamespace),
-    /// Manage Python projects.
-    #[command(flatten)]
-    Project(Box<ProjectCommand>),
+    /// Manage Python packages with a pip-compatible interface.
+    #[command(
+        after_help = "Use `uv help pip`` for more details.",
+        after_long_help = ""
+    )]
+    Pip(PipNamespace),
     /// Create a virtual environment.
     #[command(
         alias = "virtualenv",
@@ -215,7 +305,7 @@ pub enum Commands {
         after_long_help = ""
     )]
     Venv(VenvArgs),
-    /// Manage the cache.
+    /// Manage uv's cache.
     #[command(
         after_help = "Use `uv help cache` for more details.",
         after_long_help = ""
@@ -237,10 +327,20 @@ pub enum Commands {
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion { shell: clap_complete_command::Shell },
     /// Display documentation for a command.
+    // To avoid showing the global options when displaying help for the help command, we are
+    // responsible for maintaining the options using the `after_help`.
     #[command(help_template = "\
 {about-with-newline}
-{usage-heading} {usage}
-")]
+{usage-heading} {usage}{after-help}
+",
+        after_help = format!("\
+{heading}Options:{heading:#}
+  {option}--no-pager{option:#}  Disable pager when printing help
+",
+            heading = Style::new().bold().underline(),
+            option = Style::new().bold(),
+        ),
+    )]
     Help(HelpArgs),
 }
 
@@ -279,7 +379,7 @@ pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
     Clean(CleanArgs),
     /// Prune all unreachable objects from the cache.
-    Prune,
+    Prune(PruneArgs),
     /// Show the cache directory.
     Dir,
 }
@@ -289,6 +389,26 @@ pub enum CacheCommand {
 pub struct CleanArgs {
     /// The packages to remove from the cache.
     pub package: Vec<PackageName>,
+}
+
+#[derive(Args, Debug)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PruneArgs {
+    /// Optimize the cache for persistence in a continuous integration environment, like GitHub
+    /// Actions.
+    ///
+    /// By default, uv caches both the wheels that it builds from source and the pre-built wheels
+    /// that it downloads directly, to enable high-performance package installation. In some
+    /// scenarios, though, persisting pre-built wheels may be undesirable. For example, in GitHub
+    /// Actions, it's faster to omit pre-built wheels from the cache and instead have re-download
+    /// them on each run. However, it typically _is_ faster to cache wheels that are built from
+    /// source, since the wheel building process can be expensive, especially for extension
+    /// modules.
+    ///
+    /// In `--ci` mode, uv will prune any pre-built wheels from the cache, but retain any wheels
+    /// that were built from source.
+    #[arg(long)]
+    pub ci: bool,
 }
 
 #[derive(Args)]
@@ -358,46 +478,107 @@ pub enum PipCommand {
 
 #[derive(Subcommand)]
 pub enum ProjectCommand {
-    /// Initialize a project.
-    #[clap(hide = true)]
-    Init(InitArgs),
-    /// Run a command in the project environment.
-    #[clap(hide = true)]
+    /// Run a command or script (experimental).
+    ///
+    /// Ensures that the command runs in a Python environment.
+    ///
+    /// When used with a file ending in `.py`, the file will be treated as a
+    /// script and run with a Python interpreter, i.e., `uv run file.py` is
+    /// equivalent to `uv run python file.py`. If the script contains inline
+    /// dependency metadata, it will be installed into an isolated, ephemeral
+    /// environment.
+    ///
+    /// When used in a project, the project environment will be created and
+    /// updated before invoking the command.
+    ///
+    /// When used outside a project, if a virtual environment can be found in
+    /// the current directory or a parent directory, the command will be run in
+    /// that environment. Otherwise, the command will be run in the environment
+    /// of the discovered interpreter.
+    ///
+    /// Arguments following the command (or script) are not interpreted as
+    /// arguments to uv. All options to uv must be provided before the command,
+    /// e.g., `uv run --verbose foo`. A `--` can be used to separate the command
+    /// from uv options for clarity, e.g., `uv run --python 3.12 -- python`.
     #[command(
         after_help = "Use `uv help run` for more details.",
         after_long_help = ""
     )]
     Run(RunArgs),
-    /// Sync the project's dependencies with the environment.
-    #[clap(hide = true)]
-    #[command(
-        after_help = "Use `uv help sync` for more details.",
-        after_long_help = ""
-    )]
-    Sync(SyncArgs),
-    /// Resolve the project requirements into a lockfile.
-    #[clap(hide = true)]
-    #[command(
-        after_help = "Use `uv help lock` for more details.",
-        after_long_help = ""
-    )]
-    Lock(LockArgs),
-    /// Add one or more packages to the project requirements.
-    #[clap(hide = true)]
+    /// Create a new project (experimental).
+    ///
+    /// Follows the `pyproject.toml` specification.
+    ///
+    /// If a `pyproject.toml` already exists at the target, uv will exit with an
+    /// error.
+    ///
+    /// If a `pyproject.toml` is found in any of the parent directories of the
+    /// target path, the project will be added as a workspace member of
+    /// the parent.
+    ///
+    /// Some project state is not created until needed, e.g., the project
+    /// virtual environment (`.venv`) and lockfile (`uv.lock`) are lazily
+    /// created during the first sync.
+    Init(InitArgs),
+    /// Add dependencies to the project (experimental).
+    ///
+    /// Dependencies are added to the project's `pyproject.toml` file.
+    ///
+    /// If no constraint or URL is provided for a dependency, a lower bound is
+    /// added equal to the latest compatible version of the package, e.g.,
+    /// `>=1.2.3`, unless `--frozen` is provided, in which case no resolution is
+    /// performed.
+    ///
+    /// The lockfile and project environment will be updated to reflect the
+    /// added dependencies. To skip updating the lockfile, use `--frozen`. To
+    /// skip updating the environment, use `--no-sync`.
+    ///
+    /// If any of the requested dependencies cannot be found, uv will exit with
+    /// an error, unless the `--frozen` flag is provided, in which case uv will
+    /// add the dependencies verbatim without checking that they exist or are
+    /// compatible with the project.
+    ///
+    /// uv will search for a project in the current directory or any parent
+    /// directory. If a project cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help add` for more details.",
         after_long_help = ""
     )]
     Add(AddArgs),
-    /// Remove one or more packages from the project requirements.
-    #[clap(hide = true)]
+    /// Remove dependencies from the project (experimental).
+    ///
+    /// Dependencies are removed from the project's `pyproject.toml` file.
+    ///
+    /// The lockfile and project environment will be updated to reflect the
+    /// removed dependencies. To skip updating the lockfile, use `--frozen`. To
+    /// skip updating the environment, use `--no-sync`.
+    ///
+    /// If any of the requested dependencies are not present in the project, uv
+    /// will exit with an error.
+    ///
+    /// If a package has been manually installed in the environment, i.e., with
+    /// `uv pip install`, it will not be removed by `uv remove`.
+    ///
+    /// uv will search for a project in the current directory or any parent
+    /// directory. If a project cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help remove` for more details.",
         after_long_help = ""
     )]
     Remove(RemoveArgs),
-    /// Display the dependency tree for the project.
-    #[clap(hide = true)]
+    /// Update the project's environment (experimental).
+    #[command(
+        after_help = "Use `uv help sync` for more details.",
+        after_long_help = ""
+    )]
+    Sync(SyncArgs),
+    /// Update the project's lockfile (experimental).
+    #[command(
+        after_help = "Use `uv help lock` for more details.",
+        after_long_help = ""
+    )]
+    Lock(LockArgs),
+    /// Display the project's dependency tree (experimental).
     Tree(TreeArgs),
 }
 
@@ -491,6 +672,15 @@ pub struct PipCompileArgs {
     #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub r#override: Vec<Maybe<PathBuf>>,
 
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
+
     /// Include optional dependencies from the extra group name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -575,18 +765,17 @@ pub struct PipCompileArgs {
     #[arg(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     pub custom_compile_command: Option<String>,
 
-    /// The Python interpreter against which to compile the requirements.
+    /// The Python interpreter to use during resolution.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
+    /// A Python interpreter is required for building source distributions to
+    /// determine package metadata when there are not wheels.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, verbatim_doc_comment)]
+    /// The interpreter is also used to determine the default minimum Python
+    /// version, unless `--python-version` is provided.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(long, verbatim_doc_comment, help_heading = "Python options")]
     pub python: Option<String>,
 
     /// Install packages into the system Python environment.
@@ -620,20 +809,6 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
     pub no_legacy_setup_py: bool,
-
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        env = "UV_NO_BUILD_ISOLATION",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("build_isolation")
-    )]
-    pub no_build_isolation: bool,
-
-    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
-    pub build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -680,12 +855,18 @@ pub struct PipCompileArgs {
     #[arg(long, conflicts_with = "no_build")]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
-    /// The minimum Python version that should be supported by the resolved requirements (e.g.,
-    /// `3.8` or `3.8.17`).
+    /// The Python version to use for resolution.
     ///
-    /// If a patch version is omitted, the minimum patch version is assumed. For example, `3.8` is
-    /// mapped to `3.8.0`.
-    #[arg(long, short)]
+    /// For example, `3.8` or `3.8.17`.
+    ///
+    /// Defaults to the version of the Python interpreter used for resolution.
+    ///
+    /// Defines the minimum Python version that must be supported by the
+    /// resolved requirements.
+    ///
+    /// If a patch version is omitted, the minimum patch version is assumed. For
+    /// example, `3.8` is mapped to `3.8.0`.
+    #[arg(long, short, help_heading = "Python options")]
     pub python_version: Option<PythonVersion>,
 
     /// The platform for which requirements should be resolved.
@@ -788,6 +969,15 @@ pub struct PipSyncArgs {
     #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub constraint: Vec<Maybe<PathBuf>>,
 
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
+
     #[command(flatten)]
     pub installer: InstallerArgs,
 
@@ -835,17 +1025,20 @@ pub struct PipSyncArgs {
 
     /// The Python interpreter into which packages should be installed.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
+    /// By default, syncing requires a virtual environment. An path to an
+    /// alternative Python can be provided, but it is only recommended in
+    /// continuous integration (CI) environments and should be used with
+    /// caution, as it can modify the system Python installation.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Install packages into the system Python environment.
@@ -906,20 +1099,6 @@ pub struct PipSyncArgs {
 
     #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
     pub no_legacy_setup_py: bool,
-
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        env = "UV_NO_BUILD_ISOLATION",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("build_isolation")
-    )]
-    pub no_build_isolation: bool,
-
-    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
-    pub build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -1055,6 +1234,15 @@ pub struct PipInstallArgs {
     #[arg(long, env = "UV_OVERRIDE", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub r#override: Vec<Maybe<PathBuf>>,
 
+    /// Constrain build dependencies using the given requirements files when building source
+    /// distributions.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    #[arg(long, short, env = "UV_BUILD_CONSTRAINT", value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraint: Vec<Maybe<PathBuf>>,
+
     /// Include optional dependencies from the extra group name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
@@ -1125,17 +1313,20 @@ pub struct PipInstallArgs {
 
     /// The Python interpreter into which packages should be installed.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
+    /// By default, installation requires a virtual environment. An path to an
+    /// alternative Python can be provided, but it is only recommended in
+    /// continuous integration (CI) environments and should be used with
+    /// caution, as it can modify the system Python installation.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Install packages into the system Python environment.
@@ -1196,20 +1387,6 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
     pub no_legacy_setup_py: bool,
-
-    /// Disable isolation when building source distributions.
-    ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(
-        long,
-        env = "UV_NO_BUILD_ISOLATION",
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("build_isolation")
-    )]
-    pub no_build_isolation: bool,
-
-    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
-    pub build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -1309,17 +1486,20 @@ pub struct PipUninstallArgs {
 
     /// The Python interpreter from which packages should be uninstalled.
     ///
-    /// By default, uv uninstalls from the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
+    /// By default, uninstallation requires a virtual environment. An path to an
+    /// alternative Python can be provided, but it is only recommended in
+    /// continuous integration (CI) environments and should be used with
+    /// caution, as it can modify the system Python installation.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
@@ -1396,27 +1576,26 @@ pub struct PipFreezeArgs {
 
     /// The Python interpreter for which packages should be listed.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv lists packages in a virtual environment but will show
+    /// packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// List packages in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1440,7 +1619,7 @@ pub struct PipListArgs {
     pub editable: bool,
 
     /// Exclude any editable packages from output.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "editable")]
     pub exclude_editable: bool,
 
     /// Exclude the specified package(s) from the output.
@@ -1461,27 +1640,26 @@ pub struct PipListArgs {
 
     /// The Python interpreter for which packages should be listed.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv lists packages in a virtual environment but will show
+    /// packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// List packages in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1500,29 +1678,28 @@ pub struct PipListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipCheckArgs {
-    /// The Python interpreter for which packages should be listed.
+    /// The Python interpreter for which packages should be checked.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv checks packages in a virtual environment but will check
+    /// packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// Check packages in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1549,29 +1726,28 @@ pub struct PipShowArgs {
     #[arg(long, overrides_with("strict"), hide = true)]
     pub no_strict: bool,
 
-    /// The Python interpreter for which packages should be listed.
+    /// The Python interpreter to find the package in.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv looks for packages in a virtual environment but will look
+    /// for packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// Show a package in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1590,6 +1766,10 @@ pub struct PipShowArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipTreeArgs {
+    /// Show the version constraint(s) imposed on each package.
+    #[arg(long)]
+    pub show_version_specifiers: bool,
+
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
@@ -1603,27 +1783,26 @@ pub struct PipTreeArgs {
 
     /// The Python interpreter for which packages should be listed.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found.
+    /// By default, uv lists packages in a virtual environment but will show
+    /// packages in a system Python environment if no virtual environment is
+    /// found.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
-    /// List packages for the system Python.
+    /// List packages in the system Python environment.
     ///
-    /// By default, uv lists packages in the currently activated virtual environment, or a virtual
-    /// environment (`.venv`) located in the current working directory or any parent directory,
-    /// falling back to the system Python if no virtual environment is found. The `--system` option
-    /// instructs uv to use the first Python found in the system `PATH`.
+    /// Disables discovery of virtual environments.
     ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution.
+    /// See `uv help python` for details on Python discovery.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1644,25 +1823,21 @@ pub struct PipTreeArgs {
 pub struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    /// During virtual environment creation, uv will not look for Python
+    /// interpreters in virtual environments.
     ///
-    /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
-    /// doesn't look for a Python interpreter on disk.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv python help` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 
-    /// Use the system Python to uninstall packages.
-    ///
-    /// By default, uv uninstalls from the virtual environment in the current working directory or
-    /// any parent directory. The `--system` option instructs uv to use the first Python found in
-    /// the system `PATH`.
-    ///
-    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
-    /// should be used with caution, as it can modify the system Python installation.
+    // TODO(zanieb): Hide me, I do nothing.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
@@ -1717,6 +1892,22 @@ pub struct VenvArgs {
     /// behavior of uv commands.
     #[arg(long)]
     pub system_site_packages: bool,
+
+    /// Make the virtual environment relocatable.
+    ///
+    /// A relocatable virtual environment can be moved around and redistributed without
+    /// invalidating its associated entrypoint and activation scripts.
+    ///
+    /// Note that this can only be guaranteed for standard `console_scripts` and `gui_scripts`.
+    /// Other scripts may be adjusted if they ship with a generic `#!python[w]` shebang,
+    /// and binaries are left as-is.
+    ///
+    /// As a result of making the environment relocatable (by way of writing relative, rather than
+    /// absolute paths), the entrypoints and scripts themselves will _not_ be relocatable. In other
+    /// words, copying those entrypoints and scripts to a location outside the environment will not
+    /// work, as they reference paths relative to the environment itself.
+    #[arg(long)]
+    pub relocatable: bool,
 
     #[command(flatten)]
     pub index_args: IndexArgs,
@@ -1787,44 +1978,76 @@ impl ExternalCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
-    /// The path of the project.
+    /// The path to use for the project.
+    ///
+    /// Defaults to the current working directory. Accepts relative and absolute
+    /// paths.
+    ///
+    /// If a `pyproject.toml` is found in any of the parent directories of the
+    /// target path, the project will be added as a workspace member of the
+    /// parent, unless `--no-workspace` is provided.
     pub path: Option<String>,
 
-    /// The name of the project, defaults to the name of the directory.
+    /// The name of the project.
+    ///
+    /// Defaults to the name of the directory.
     #[arg(long)]
     pub name: Option<PackageName>,
 
-    /// Do not create a readme file.
+    /// Create a virtual workspace instead of a project.
+    ///
+    /// A virtual workspace does not define project dependencies and cannot be
+    /// published. Instead, workspace members declare project dependencies.
+    /// Development dependencies may still be declared.
+    #[arg(long)]
+    pub r#virtual: bool,
+
+    /// Do not create a `README.md` file.
     #[arg(long)]
     pub no_readme: bool,
 
+    /// Avoid discovering a workspace.
+    ///
+    /// Instead, create a standalone project.
+    ///
+    /// By default, uv searches for workspaces in the current directory or any
+    /// parent directory.
+    #[arg(long, alias = "no_project")]
+    pub no_workspace: bool,
+
     /// The Python interpreter to use to determine the minimum supported Python version.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` to view supported request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// May be provided more than once.
+    ///
+    /// Optional dependencies are defined via `project.optional-dependencies` in
+    /// a `pyproject.toml`.
+    ///
+    /// This option is only available when running in a project.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Optional dependencies are defined via `project.optional-dependencies` in
+    /// a `pyproject.toml`.
+    ///
+    /// This option is only available when running in a project.
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
@@ -1832,32 +2055,70 @@ pub struct RunArgs {
     pub no_all_extras: bool,
 
     /// Include development dependencies.
+    ///
+    /// Development dependencies are defined via `tool.uv.dev-dependencies` in a
+    /// `pyproject.toml`.
+    ///
+    /// This option is only available when running in a project.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
     /// Omit development dependencies.
+    ///
+    /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
     /// The command to run.
+    ///
+    /// If the path to a Python script (i.e., ending in `.py`), it will be
+    /// executed with the Python interpreter.
     #[command(subcommand)]
     pub command: ExternalCommand,
 
     /// Run with the given packages installed.
+    ///
+    /// When used in a project, these dependencies will be layered on top of
+    /// the project environment in a separate, ephemeral environment. These
+    /// dependencies are allowed to conflict with those specified by the project.
     #[arg(long)]
     pub with: Vec<String>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     ///
+    /// The same environment semantics as `--with` apply.
+    ///
     /// Using `pyproject.toml`, `setup.py`, or `setup.cfg` files is not allowed.
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
+    /// Run the tool in an isolated virtual environment.
+    ///
+    /// Usually, the project environment is reused for performance. This option
+    /// forces a fresh environment to be used for the project, enforcing strict
+    /// isolation between dependencies and declaration of requirements.
+    ///
+    /// An editable installation is still used for the project.
+    ///
+    /// When used with `--with` or `--with-requirements`, the additional
+    /// dependencies will still be layered in a second environment.
+    #[arg(long)]
+    pub isolated: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Install without updating the `uv.lock` file.
+    /// Run without updating the `uv.lock` file.
+    ///
+    /// Instead of checking if the lockfile is up-to-date, uses the versions in
+    /// the lockfile as the source of truth. If the lockfile is missing, uv will
+    /// exit with an error. If the `pyproject.toml` includes new dependencies
+    /// that have not been included in the lockfile yet, they will not be
+    /// present in the environment.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -1871,22 +2132,43 @@ pub struct RunArgs {
     pub refresh: RefreshArgs,
 
     /// Run the command in a specific package in the workspace.
-    #[arg(long, conflicts_with = "isolated")]
+    ///
+    /// If not in a workspace, or if the workspace member does not exist, uv
+    /// will exit with an error.
+    #[arg(long)]
     pub package: Option<PackageName>,
 
-    /// The Python interpreter to use to build the run environment.
+    /// Avoid discovering the project or workspace.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
+    /// Instead of searching for projects in the current directory and parent
+    /// directories, run in an isolated, ephemeral environment populated by the
+    /// `--with` requirements.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// If a virtual environment is active or found in a current or parent
+    /// directory, it will be used as if there was no project or workspace.
+    #[arg(long, alias = "no_workspace", conflicts_with = "package")]
+    pub no_project: bool,
+
+    /// The Python interpreter to use for the run environment.
+    ///
+    /// If the interpreter request is satisfied by a discovered environment, the
+    /// environment will be used.
+    ///
+    /// See `uv help python` to view supported request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
+
+    /// Whether to show resolver and installer output from any environment modifications.
+    ///
+    /// By default, environment modifications are omitted, but enabled under `--verbose`.
+    #[arg(long, env = "UV_SHOW_RESOLUTION", value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
+    pub show_resolution: bool,
 }
 
 #[derive(Args)]
@@ -1915,9 +2197,10 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Does not clean the environment.
+    /// When syncing, make the minimum necessary changes to satisfy the requirements.
     ///
-    /// When omitted, any extraneous installations will be removed.
+    /// By default, `uv sync` will remove any extraneous packages from the environment, unless
+    /// `--no-build-isolation` is enabled.
     #[arg(long)]
     pub no_clean: bool,
 
@@ -1938,18 +2221,28 @@ pub struct SyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// The Python interpreter to use to build the run environment.
+    /// Sync a specific package in the workspace.
+    #[arg(long)]
+    pub package: Option<PackageName>,
+
+    /// The Python interpreter to use for the project environment.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
+    /// By default, the first interpreter that meets the project's
+    /// `requires-python` constraint is used.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// If a Python interpreter in a virtual environment is provided, the
+    /// packages will not be synced to the given environment. The interpreter
+    /// will be used to create a virtual environment in the project.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -1973,18 +2266,23 @@ pub struct LockArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// The Python interpreter to use to build the run environment.
+    /// The Python interpreter to use during resolution.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
+    /// A Python interpreter is required for building source distributions to
+    /// determine package metadata when there are not wheels.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// The interpreter is also used as the fallback value for the minimum
+    /// Python version if `requires-python` is not set.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -2000,6 +2298,12 @@ pub struct AddArgs {
     pub dev: bool,
 
     /// Add the requirements to the specified optional dependency group.
+    ///
+    /// The group may then be activated when installing the project with the
+    /// `--extra` flag.
+    ///
+    /// To enable an optional dependency group for this requirement instead, see
+    /// `--extra`.
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
@@ -2024,27 +2328,43 @@ pub struct AddArgs {
     )]
     pub raw_sources: bool,
 
-    /// Specific commit to use when adding from Git.
-    #[arg(long)]
+    /// Commit to use when adding a dependency from Git.
+    ///
+    ///
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub rev: Option<String>,
 
-    /// Tag to use when adding from git.
-    #[arg(long)]
+    /// Tag to use when adding a dependency from Git.
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub tag: Option<String>,
 
-    /// Branch to use when adding from git.
-    #[arg(long)]
+    /// Branch to use when adding a dependency from Git.
+    #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub branch: Option<String>,
 
-    /// Extras to activate for the dependency; may be provided more than once.
+    /// Extras to enable for the dependency.
+    ///
+    /// May be provided more than once.
+    ///
+    /// To add this dependency to an optional group in the current project
+    /// instead, see `--optional`.
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
+    /// Avoid syncing the virtual environment after re-locking the project.
+    #[arg(long, conflicts_with = "frozen")]
+    pub no_sync: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Add the requirements without updating the `uv.lock` file.
+    /// Add dependencies without re-locking the project.
+    ///
+    /// The project environment will not be synced.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2061,42 +2381,49 @@ pub struct AddArgs {
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
-    /// The Python interpreter into which packages should be installed.
+    /// The Python interpreter to use for resolving and syncing.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RemoveArgs {
-    /// The names of the packages to remove (e.g., `ruff`).
+    /// The names of the dependencies to remove (e.g., `ruff`).
     #[arg(required = true)]
-    pub requirements: Vec<PackageName>,
+    pub packages: Vec<PackageName>,
 
-    /// Remove the requirements from development dependencies.
+    /// Remove the packages from the development dependencies.
     #[arg(long, conflicts_with("optional"))]
     pub dev: bool,
 
-    /// Remove the requirements from the specified optional dependency group.
+    /// Remove the packages from the specified optional dependency group.
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
+    /// Avoid syncing the virtual environment after re-locking the project.
+    #[arg(long, conflicts_with = "frozen")]
+    pub no_sync: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Remove the requirements without updating the `uv.lock` file.
+    /// Remove dependencies without re-locking the project.
+    ///
+    /// The project environment will not be synced.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2109,37 +2436,50 @@ pub struct RemoveArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Remove the dependency from a specific package in the workspace.
+    /// Remove the dependencies from a specific package in the workspace.
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
-    /// The Python interpreter into which packages should be installed.
+    /// The Python interpreter to use for resolving and syncing.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct TreeArgs {
+    /// Show a platform-independent dependency tree.
+    ///
+    /// Shows resolved package versions for all Python versions and platforms,
+    /// rather than filtering to those that are relevant for the current
+    /// environment.
+    ///
+    /// Multiple versions may be shown for a each package.
+    #[arg(long)]
+    pub universal: bool,
+
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Display the requirements without updating the `uv.lock` file.
+    /// Display the requirements without locking the project.
+    ///
+    /// If the lockfile is missing, uv will exit with an error.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2149,19 +2489,42 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
-    /// The Python interpreter for which packages should be listed.
+    /// The Python version to use when filtering the tree.
     ///
-    /// By default, uv installs into the virtual environment in the current working directory or
-    /// any parent directory. The `--python` option allows you to specify a different interpreter,
-    /// which is intended for use in continuous integration (CI) environments or other automated
-    /// workflows.
+    /// For example, pass `--python-version 3.10` to display the dependencies
+    /// that would be included when installing on Python 3.10.
     ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// Defaults to the version of the discovered Python interpreter.
+    #[arg(long, conflicts_with = "universal")]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform to use when filtering the tree.
+    ///
+    /// For example, pass `--platform windows` to display the dependencies that
+    /// would be included when installing on Windows.
+    ///
+    /// Represented as a "target triple", a string that describes the target
+    /// platform in terms of its CPU, vendor, and operating system name, like
+    /// `x86_64-unknown-linux-gnu` or `aaarch64-apple-darwin`.
+    #[arg(long, conflicts_with = "universal")]
+    pub python_platform: Option<TargetTriple>,
+
+    /// The Python interpreter to use for locking and filtering.
+    ///
+    /// By default, the tree is filtered to match the platform as reported by
+    /// the Python interpreter. Use `--universal` to display the tree for all
+    /// platforms, or use `--python-version` or `--python-platform` to override
+    /// a subset of markers.
+    ///
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -2209,8 +2572,10 @@ pub struct ToolRunArgs {
     ///
     /// If more complex version specification is desired or if the command is provided by a different
     /// package, use `--from`.
+    ///
+    /// If omitted, lists the available tools.
     #[command(subcommand)]
-    pub command: ExternalCommand,
+    pub command: Option<ExternalCommand>,
 
     /// Use the given package to provide the command.
     ///
@@ -2226,6 +2591,10 @@ pub struct ToolRunArgs {
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
+    /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
+    #[arg(long)]
+    pub isolated: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -2237,17 +2606,22 @@ pub struct ToolRunArgs {
 
     /// The Python interpreter to use to build the run environment.
     ///
-    /// By default, uv uses the virtual environment in the current working directory or any parent
-    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
-    /// option allows you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
+
+    /// Whether to show resolver and installer output from any environment modifications.
+    ///
+    /// By default, environment modifications are omitted, but enabled under `--verbose`.
+    #[arg(long, env = "UV_SHOW_RESOLUTION", value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
+    pub show_resolution: bool,
 }
 
 #[derive(Args)]
@@ -2255,6 +2629,9 @@ pub struct ToolRunArgs {
 pub struct ToolInstallArgs {
     /// The package to install commands from.
     pub package: String,
+
+    #[arg(short, long)]
+    pub editable: bool,
 
     /// The package to install commands from.
     ///
@@ -2287,16 +2664,15 @@ pub struct ToolInstallArgs {
 
     /// The Python interpreter to use to build the tool environment.
     ///
-    /// By default, uv will search for a Python executable in the `PATH`. uv ignores virtual
-    /// environments while looking for interpreter for tools. The `--python` option allows
-    /// you to specify a different interpreter.
-    ///
-    /// Supported formats:
-    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS.
-    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, env = "UV_PYTHON", verbatim_doc_comment)]
+    /// See `uv help python` for details on Python discovery and supported
+    /// request formats.
+    #[arg(
+        long,
+        short,
+        env = "UV_PYTHON",
+        verbatim_doc_comment,
+        help_heading = "Python options"
+    )]
     pub python: Option<String>,
 }
 
@@ -2401,9 +2777,12 @@ pub struct PythonListArgs {
 pub struct PythonInstallArgs {
     /// The Python version(s) to install.
     ///
-    /// If not provided, the requested Python version(s) will be read from the `.python-versions`
-    /// or `.python-version` files. If neither file is present, uv will check if it has
-    /// installed any Python versions. If not, it will install the latest stable version of Python.
+    /// If not provided, the requested Python version(s) will be read from the
+    /// `.python-versions` or `.python-version` files. If neither file is
+    /// present, uv will check if it has installed any Python versions. If not,
+    /// it will install the latest stable version of Python.
+    ///
+    /// See `uv help python` to view supported request formats.
     pub targets: Vec<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
@@ -2415,6 +2794,8 @@ pub struct PythonInstallArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
     /// The Python version(s) to uninstall.
+    ///
+    /// See `uv help python` to view supported request formats.
     #[arg(required = true)]
     pub targets: Vec<String>,
 
@@ -2427,13 +2808,21 @@ pub struct PythonUninstallArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonFindArgs {
     /// The Python request.
+    ///
+    /// See `uv help python` to view supported request formats.
     pub request: Option<String>,
 }
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonPinArgs {
-    /// The Python version.
+    /// The Python version request.
+    ///
+    /// uv supports more formats than other tools that read `.python-version`
+    /// files, i.e., `pyenv`. If compatibility with those tools is needed, only
+    /// use version numbers instead of complex requests such as `cpython@3.10`.
+    ///
+    /// See `uv help python` to view supported request formats.
     pub request: Option<String>,
 
     /// Write the resolved Python interpreter path instead of the request.
@@ -2444,6 +2833,11 @@ pub struct PythonPinArgs {
 
     #[arg(long, overrides_with("no_resolved"), hide = true)]
     pub no_resolved: bool,
+
+    /// Avoid validating the Python pin against the workspace in the current directory or any parent
+    /// directory.
+    #[arg(long)]
+    pub no_workspace: bool,
 }
 
 #[derive(Args)]
@@ -2456,7 +2850,7 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other
     /// indexes specified via the `--extra-index-url` flag.
-    #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    #[arg(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url, help_heading = "Index options")]
     pub index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -2467,7 +2861,7 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by
     /// `--index-url` (which defaults to PyPI). When multiple `--extra-index-url` flags are
     /// provided, earlier values take priority.
-    #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url, help_heading = "Index options")]
     pub extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Locations to search for candidate distributions, in addition to those found in the registry
@@ -2478,12 +2872,12 @@ pub struct IndexArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files adhering to the
     /// formats described above.
-    #[arg(long, short)]
+    #[arg(long, short, help_heading = "Index options")]
     pub find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// provided via `--find-links`.
-    #[arg(long)]
+    #[arg(long, help_heading = "Index options")]
     pub no_index: bool,
 }
 
@@ -2491,19 +2885,25 @@ pub struct IndexArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
-    #[arg(long, conflicts_with("offline"), overrides_with("no_refresh"))]
+    #[arg(
+        long,
+        conflicts_with("offline"),
+        overrides_with("no_refresh"),
+        help_heading = "Cache options"
+    )]
     pub refresh: bool,
 
     #[arg(
         long,
         conflicts_with("offline"),
         overrides_with("refresh"),
-        hide = true
+        hide = true,
+        help_heading = "Cache options"
     )]
     pub no_refresh: bool,
 
     /// Refresh cached data for a specific package.
-    #[arg(long)]
+    #[arg(long, help_heading = "Cache options")]
     pub refresh_package: Vec<PackageName>,
 }
 
@@ -2515,28 +2915,38 @@ pub struct BuildArgs {
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
     /// already-built source distributions will be reused, but operations that require building
     /// distributions will exit with an error.
-    #[arg(long, overrides_with("build"))]
+    #[arg(long, overrides_with("build"), help_heading = "Build options")]
     pub no_build: bool,
 
-    #[arg(long, overrides_with("no_build"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("no_build"),
+        hide = true,
+        help_heading = "Build options"
+    )]
     pub build: bool,
 
     /// Don't build source distributions for a specific package.
-    #[arg(long)]
+    #[arg(long, help_heading = "Build options")]
     pub no_build_package: Vec<PackageName>,
 
     /// Don't install pre-built wheels.
     ///
     /// The given packages will be built and installed from source. The resolver will still use
     /// pre-built wheels to extract package metadata, if available.
-    #[arg(long, overrides_with("binary"))]
+    #[arg(long, overrides_with("binary"), help_heading = "Build options")]
     pub no_binary: bool,
 
-    #[arg(long, overrides_with("no_binary"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("no_binary"),
+        hide = true,
+        help_heading = "Build options"
+    )]
     pub binary: bool,
 
     /// Don't install pre-built wheels for a specific package.
-    #[arg(long)]
+    #[arg(long, help_heading = "Build options")]
     pub no_binary_package: Vec<PackageName>,
 }
 
@@ -2547,15 +2957,27 @@ pub struct InstallerArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Reinstall all packages, regardless of whether they're already installed.
-    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
+    /// Reinstall all packages, regardless of whether they're already installed. Implies
+    /// `--refresh`.
+    #[arg(
+        long,
+        alias = "force-reinstall",
+        overrides_with("no_reinstall"),
+        help_heading = "Installer options"
+    )]
     pub reinstall: bool,
 
-    #[arg(long, overrides_with("reinstall"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("reinstall"),
+        hide = true,
+        help_heading = "Installer options"
+    )]
     pub no_reinstall: bool,
 
-    /// Reinstall a specific package, regardless of whether it's already installed.
-    #[arg(long)]
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `--refresh-package`.
+    #[arg(long, help_heading = "Installer options")]
     pub reinstall_package: Vec<PackageName>,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -2564,7 +2986,12 @@ pub struct InstallerArgs {
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
     /// same name to a secondary.
-    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_INDEX_STRATEGY",
+        help_heading = "Index options"
+    )]
     pub index_strategy: Option<IndexStrategy>,
 
     /// Attempt to use `keyring` for authentication for index URLs.
@@ -2573,25 +3000,60 @@ pub struct InstallerArgs {
     /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_KEYRING_PROVIDER",
+        help_heading = "Index options"
+    )]
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(long, short = 'C', alias = "config-settings")]
+    #[arg(
+        long,
+        short = 'C',
+        alias = "config-settings",
+        help_heading = "Build options"
+    )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[arg(
+        long,
+        overrides_with("build_isolation"),
+        help_heading = "Build options",
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub no_build_isolation: bool,
+
+    #[arg(
+        long,
+        overrides_with("no_build_isolation"),
+        hide = true,
+        help_heading = "Build options"
+    )]
+    pub build_isolation: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, env = "UV_LINK_MODE")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_LINK_MODE",
+        help_heading = "Installer options"
+    )]
     pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
@@ -2604,16 +3066,28 @@ pub struct InstallerArgs {
     /// When enabled, uv will process the entire site-packages directory (including packages that
     /// are not being modified by the current operation) for consistency. Like pip, it will also
     /// ignore errors.
-    #[arg(long, alias = "compile", overrides_with("no_compile_bytecode"))]
+    #[arg(
+        long,
+        alias = "compile",
+        overrides_with("no_compile_bytecode"),
+        help_heading = "Installer options"
+    )]
     pub compile_bytecode: bool,
 
     #[arg(
         long,
         alias = "no-compile",
         overrides_with("compile_bytecode"),
-        hide = true
+        hide = true,
+        help_heading = "Installer options"
     )]
     pub no_compile_bytecode: bool,
+
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[arg(long, help_heading = "Resolver options")]
+    pub no_sources: bool,
 }
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
@@ -2624,15 +3098,25 @@ pub struct ResolverArgs {
     pub index_args: IndexArgs,
 
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
-    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    #[arg(
+        long,
+        short = 'U',
+        overrides_with("no_upgrade"),
+        help_heading = "Resolver options"
+    )]
     pub upgrade: bool,
 
-    #[arg(long, overrides_with("upgrade"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("upgrade"),
+        hide = true,
+        help_heading = "Resolver options"
+    )]
     pub no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file.
-    #[arg(long, short = 'P')]
+    #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -2641,7 +3125,12 @@ pub struct ResolverArgs {
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
     /// same name to a secondary.
-    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_INDEX_STRATEGY",
+        help_heading = "Index options"
+    )]
     pub index_strategy: Option<IndexStrategy>,
 
     /// Attempt to use `keyring` for authentication for index URLs.
@@ -2650,14 +3139,24 @@ pub struct ResolverArgs {
     /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_KEYRING_PROVIDER",
+        help_heading = "Index options"
+    )]
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
     /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(long, value_enum, env = "UV_RESOLUTION")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_RESOLUTION",
+        help_heading = "Resolver options"
+    )]
     pub resolution: Option<ResolutionMode>,
 
     /// The strategy to use when considering pre-release versions.
@@ -2665,21 +3164,57 @@ pub struct ResolverArgs {
     /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
-    #[arg(long, value_enum, env = "UV_PRERELEASE")]
-    pub prerelease: Option<PreReleaseMode>,
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_PRERELEASE",
+        help_heading = "Resolver options"
+    )]
+    pub prerelease: Option<PrereleaseMode>,
 
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, help_heading = "Resolver options")]
     pub pre: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(long, short = 'C', alias = "config-settings")]
+    #[arg(
+        long,
+        short = 'C',
+        alias = "config-settings",
+        help_heading = "Build options"
+    )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[arg(
+        long,
+        overrides_with("build_isolation"),
+        help_heading = "Build options",
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub no_build_isolation: bool,
+
+    /// Disable isolation when building source distributions for a specific package.
+    ///
+    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
+    #[arg(long, help_heading = "Build options")]
+    pub no_build_isolation_package: Vec<PackageName>,
+
+    #[arg(
+        long,
+        overrides_with("no_build_isolation"),
+        hide = true,
+        help_heading = "Build options"
+    )]
+    pub build_isolation: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
@@ -2688,8 +3223,19 @@ pub struct ResolverArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, env = "UV_LINK_MODE")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_LINK_MODE",
+        help_heading = "Installer options"
+    )]
     pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[arg(long, help_heading = "Resolver options")]
+    pub no_sources: bool,
 }
 
 /// Arguments that are used by commands that need to resolve and install packages.
@@ -2700,26 +3246,48 @@ pub struct ResolverInstallerArgs {
     pub index_args: IndexArgs,
 
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
-    #[arg(long, short = 'U', overrides_with("no_upgrade"))]
+    #[arg(
+        long,
+        short = 'U',
+        overrides_with("no_upgrade"),
+        help_heading = "Resolver options"
+    )]
     pub upgrade: bool,
 
-    #[arg(long, overrides_with("upgrade"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("upgrade"),
+        hide = true,
+        help_heading = "Resolver options"
+    )]
     pub no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
     /// file.
-    #[arg(long, short = 'P')]
+    #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
-    /// Reinstall all packages, regardless of whether they're already installed.
-    #[arg(long, alias = "force-reinstall", overrides_with("no_reinstall"))]
+    /// Reinstall all packages, regardless of whether they're already installed. Implies
+    /// `--refresh`.
+    #[arg(
+        long,
+        alias = "force-reinstall",
+        overrides_with("no_reinstall"),
+        help_heading = "Installer options"
+    )]
     pub reinstall: bool,
 
-    #[arg(long, overrides_with("reinstall"), hide = true)]
+    #[arg(
+        long,
+        overrides_with("reinstall"),
+        hide = true,
+        help_heading = "Installer options"
+    )]
     pub no_reinstall: bool,
 
-    /// Reinstall a specific package, regardless of whether it's already installed.
-    #[arg(long)]
+    /// Reinstall a specific package, regardless of whether it's already installed. Implies
+    /// `--refresh-package`.
+    #[arg(long, help_heading = "Installer options")]
     pub reinstall_package: Vec<PackageName>,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -2728,7 +3296,12 @@ pub struct ResolverInstallerArgs {
     /// limit resolutions to those present on that first index (`first-match`). This prevents
     /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
     /// same name to a secondary.
-    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_INDEX_STRATEGY",
+        help_heading = "Index options"
+    )]
     pub index_strategy: Option<IndexStrategy>,
 
     /// Attempt to use `keyring` for authentication for index URLs.
@@ -2737,14 +3310,24 @@ pub struct ResolverInstallerArgs {
     /// use the `keyring` CLI to handle authentication.
     ///
     /// Defaults to `disabled`.
-    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_KEYRING_PROVIDER",
+        help_heading = "Index options"
+    )]
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
     /// By default, uv will use the latest compatible version of each package (`highest`).
-    #[arg(long, value_enum, env = "UV_RESOLUTION")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_RESOLUTION",
+        help_heading = "Resolver options"
+    )]
     pub resolution: Option<ResolutionMode>,
 
     /// The strategy to use when considering pre-release versions.
@@ -2752,28 +3335,69 @@ pub struct ResolverInstallerArgs {
     /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
     /// along with first-party requirements that contain an explicit pre-release marker in the
     /// declared specifiers (`if-necessary-or-explicit`).
-    #[arg(long, value_enum, env = "UV_PRERELEASE")]
-    pub prerelease: Option<PreReleaseMode>,
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_PRERELEASE",
+        help_heading = "Resolver options"
+    )]
+    pub prerelease: Option<PrereleaseMode>,
 
     #[arg(long, hide = true)]
     pub pre: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(long, short = 'C', alias = "config-settings")]
+    #[arg(
+        long,
+        short = 'C',
+        alias = "config-settings",
+        help_heading = "Build options"
+    )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[arg(
+        long,
+        overrides_with("build_isolation"),
+        help_heading = "Build options",
+        env = "UV_NO_BUILD_ISOLATION",
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub no_build_isolation: bool,
+
+    /// Disable isolation when building source distributions for a specific package.
+    ///
+    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
+    #[arg(long, help_heading = "Build options")]
+    pub no_build_isolation_package: Vec<PackageName>,
+
+    #[arg(
+        long,
+        overrides_with("no_build_isolation"),
+        hide = true,
+        help_heading = "Build options"
+    )]
+    pub build_isolation: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, env = "UV_EXCLUDE_NEWER")]
+    #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, env = "UV_LINK_MODE")]
+    #[arg(
+        long,
+        value_enum,
+        env = "UV_LINK_MODE",
+        help_heading = "Installer options"
+    )]
     pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// Compile Python files to bytecode after installation.
@@ -2786,16 +3410,28 @@ pub struct ResolverInstallerArgs {
     /// When enabled, uv will process the entire site-packages directory (including packages that
     /// are not being modified by the current operation) for consistency. Like pip, it will also
     /// ignore errors.
-    #[arg(long, alias = "compile", overrides_with("no_compile_bytecode"))]
+    #[arg(
+        long,
+        alias = "compile",
+        overrides_with("no_compile_bytecode"),
+        help_heading = "Installer options"
+    )]
     pub compile_bytecode: bool,
 
     #[arg(
         long,
         alias = "no-compile",
         overrides_with("compile_bytecode"),
-        hide = true
+        hide = true,
+        help_heading = "Installer options"
     )]
     pub no_compile_bytecode: bool,
+
+    /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
+    /// standards-compliant, publishable package metadata, as opposed to using any local or Git
+    /// sources.
+    #[arg(long, help_heading = "Resolver options")]
+    pub no_sources: bool,
 }
 
 #[derive(Args)]
@@ -2823,8 +3459,4 @@ pub struct DisplayTreeArgs {
     /// Show the reverse dependencies for the given package. This flag will invert the tree and display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
-
-    /// Show the version constraint(s) imposed on each package.
-    #[arg(long)]
-    pub show_version_specifiers: bool,
 }

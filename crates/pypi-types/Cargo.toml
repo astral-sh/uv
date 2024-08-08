@@ -15,14 +15,14 @@ workspace = true
 [dependencies]
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
-uv-normalize = { workspace = true }
+uv-fs = { workspace = true, features = ["serde"] }
 uv-git = { workspace = true }
+uv-normalize = { workspace = true }
 
 chrono = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 mailparse = { workspace = true }
-once_cell = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true }
 serde = { workspace = true }

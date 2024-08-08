@@ -26,7 +26,7 @@ impl From<GitOid> for GitSha {
     }
 }
 
-impl std::fmt::Display for GitSha {
+impl Display for GitSha {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -37,6 +37,25 @@ impl FromStr for GitSha {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Ok(Self(GitOid::from_str(value)?))
+    }
+}
+
+impl serde::Serialize for GitSha {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for GitSha {
+    fn deserialize<D>(deserializer: D) -> Result<GitSha, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        GitSha::from_str(&value).map_err(serde::de::Error::custom)
     }
 }
 

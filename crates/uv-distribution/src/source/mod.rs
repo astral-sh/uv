@@ -22,8 +22,7 @@ use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata23, ParsedArchiveUrl};
 use uv_cache::{
-    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, Timestamp,
-    WheelCache,
+    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Timestamp, WheelCache,
 };
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -47,8 +46,8 @@ mod revision;
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
-    reporter: Option<Arc<dyn Reporter>>,
     preview_mode: PreviewMode,
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
@@ -65,8 +64,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     pub(crate) fn new(build_context: &'a T, preview_mode: PreviewMode) -> Self {
         Self {
             build_context,
-            reporter: None,
             preview_mode,
+            reporter: None,
         }
     }
 
@@ -427,6 +426,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             requires_dist,
             project_root,
             project_root,
+            self.build_context.sources(),
             self.preview_mode,
         )
         .await?;
@@ -903,7 +903,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self.source_tree_revision(resource, &cache_shard).await?;
+        let revision = self
+            .source_tree_revision(source, resource, &cache_shard)
+            .await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -972,7 +974,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = lock_shard(&cache_shard).await?;
 
         // Fetch the revision for the source distribution.
-        let revision = self.source_tree_revision(resource, &cache_shard).await?;
+        let revision = self
+            .source_tree_revision(source, resource, &cache_shard)
+            .await?;
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -987,6 +991,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
+                    self.build_context.sources(),
                     self.preview_mode,
                 )
                 .await?,
@@ -1012,6 +1017,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     metadata,
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
+                    self.build_context.sources(),
                     self.preview_mode,
                 )
                 .await?,
@@ -1044,6 +1050,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 metadata,
                 resource.install_path.as_ref(),
                 resource.lock_path.as_ref(),
+                self.build_context.sources(),
                 self.preview_mode,
             )
             .await?,
@@ -1053,6 +1060,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`Revision`] for a local source tree, refreshing it if necessary.
     async fn source_tree_revision(
         &self,
+        source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         cache_shard: &CacheShard,
     ) -> Result<Revision, Error> {
@@ -1070,17 +1078,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             ));
         };
 
-        // Read the existing metadata from the cache. We treat source trees as if `--refresh` is
-        // always set, since they're mutable.
+        // Read the existing metadata from the cache.
         let entry = cache_shard.entry(LOCAL_REVISION);
-        let is_fresh = self
-            .build_context
-            .cache()
-            .is_fresh(&entry)
-            .map_err(Error::CacheRead)?;
 
         // If the revision is fresh, return it.
-        if is_fresh {
+        if self
+            .build_context
+            .cache()
+            .freshness(&entry, source.name())
+            .map_err(Error::CacheRead)?
+            .is_fresh()
+        {
             if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
                 if pointer.timestamp == modified.timestamp() {
                     return Ok(pointer.into_revision());
@@ -1113,29 +1121,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // Resolve to a precise Git SHA.
-        let url = if let Some(url) = self
-            .build_context
-            .git()
-            .resolve(
-                resource.git,
-                client.unmanaged.uncached_client().client(),
-                self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
-            )
-            .await?
-        {
-            Cow::Owned(url)
-        } else {
-            Cow::Borrowed(resource.git)
-        };
-
         // Fetch the Git repository.
         let fetch = self
             .build_context
             .git()
             .fetch(
-                &url,
+                resource.git,
                 client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
@@ -1200,29 +1191,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // Resolve to a precise Git SHA.
-        let url = if let Some(url) = self
-            .build_context
-            .git()
-            .resolve(
-                resource.git,
-                client.unmanaged.uncached_client().client(),
-                self.build_context.cache().bucket(CacheBucket::Git),
-                self.reporter.clone().map(Facade::from),
-            )
-            .await?
-        {
-            Cow::Owned(url)
-        } else {
-            Cow::Borrowed(resource.git)
-        };
-
         // Fetch the Git repository.
         let fetch = self
             .build_context
             .git()
             .fetch(
-                &url,
+                resource.git,
                 client.unmanaged.uncached_client().client(),
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter.clone().map(Facade::from),
@@ -1243,7 +1217,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .build_context
             .cache()
             .freshness(&metadata_entry, source.name())
-            .is_ok_and(Freshness::is_fresh)
+            .map_err(Error::CacheRead)?
+            .is_fresh()
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for: {source}");
@@ -1252,6 +1227,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         metadata,
                         fetch.path(),
                         fetch.path(),
+                        self.build_context.sources(),
                         self.preview_mode,
                     )
                     .await?,
@@ -1274,8 +1250,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, fetch.path(), fetch.path(), self.preview_mode)
-                    .await?,
+                Metadata::from_workspace(
+                    metadata,
+                    fetch.path(),
+                    fetch.path(),
+                    self.build_context.sources(),
+                    self.preview_mode,
+                )
+                .await?,
             ));
         }
 
@@ -1301,8 +1283,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(metadata, fetch.path(), fetch.path(), self.preview_mode)
-                .await?,
+            Metadata::from_workspace(
+                metadata,
+                fetch.path(),
+                fetch.path(),
+                self.build_context.sources(),
+                self.preview_mode,
+            )
+            .await?,
         ))
     }
 

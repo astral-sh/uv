@@ -41,11 +41,11 @@ impl AllowedYanks {
         }
 
         // Allow yanks for any packages that are already pinned in the lockfile.
-        for (name, version) in manifest.preferences.iter() {
+        for (name, preferences) in manifest.preferences.iter() {
             allowed_yanks
                 .entry(name.clone())
                 .or_default()
-                .insert(version.clone());
+                .extend(preferences.map(|(_markers, version)| version.clone()));
         }
 
         Self(Arc::new(allowed_yanks))
@@ -56,11 +56,5 @@ impl AllowedYanks {
         self.0
             .get(package_name)
             .map_or(false, |versions| versions.contains(version))
-    }
-
-    /// Returns versions for the given package which are allowed even if marked as yanked by the
-    /// relevant index.
-    pub fn allowed_versions(&self, package_name: &PackageName) -> Option<&FxHashSet<Version>> {
-        self.0.get(package_name)
     }
 }

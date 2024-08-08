@@ -22,10 +22,18 @@
 # This file must be used with "source bin/activate" *from bash*
 # you cannot run it directly
 
-
-if [ "${BASH_SOURCE-}" = "$0" ]; then
-    echo "You must source this script: \$ source $0" >&2
-    exit 33
+# Get script path (only used if environment is relocatable).
+if [ -n "${BASH_VERSION:+x}" ] ; then
+    SCRIPT_PATH="${BASH_SOURCE[0]}"
+    if [ "$SCRIPT_PATH" = "$0" ]; then
+        # Only bash has a reasonably robust check for source'dness.
+        echo "You must source this script: \$ source $0" >&2
+        exit 33
+    fi
+elif [ -n "${ZSH_VERSION:+x}" ] ; then
+    SCRIPT_PATH="${(%):-%x}"
+elif [ -n "${KSH_VERSION:+x}" ] ; then
+    SCRIPT_PATH="${.sh.file}"
 fi
 
 deactivate () {

@@ -2,8 +2,7 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
 use fs_err as fs;
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use tracing::debug;
 use uv_fs::write_atomic_sync;
 
@@ -219,7 +218,7 @@ fn normcase(s: &str) -> String {
     }
 }
 
-static EASY_INSTALL_PTH: Lazy<Mutex<i32>> = Lazy::new(Mutex::default);
+static EASY_INSTALL_PTH: LazyLock<Mutex<i32>> = LazyLock::new(Mutex::default);
 
 /// Uninstall the legacy editable represented by the `.egg-link` file.
 ///

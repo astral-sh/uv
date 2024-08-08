@@ -71,7 +71,7 @@ impl Resolution {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub enum ResolutionDiagnostic {
     MissingExtra {
         /// The distribution that was requested with a non-existent extra. For example,

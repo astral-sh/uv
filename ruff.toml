@@ -1,7 +1,13 @@
+target-version = "py37"
 exclude = [
-    "crates/uv-virtualenv/src/activator/activate_this.py",
-    "crates/uv-virtualenv/src/_virtualenv.py",
-    "scripts/workspaces"
+  "crates/uv-virtualenv/src/activator/activate_this.py",
+  "crates/uv-virtualenv/src/_virtualenv.py",
+  "crates/uv-python/python",
+  "scripts/workspaces",
 ]
+
+[lint]
+extend-select = ["I", "B"]
+
 [lint.per-file-ignores]
 "__init__.py" = ["F403", "F405"]

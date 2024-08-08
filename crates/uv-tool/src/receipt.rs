@@ -32,13 +32,13 @@ impl ToolReceipt {
     }
 
     /// Returns the TOML representation of this receipt.
-    pub(crate) fn to_toml(&self) -> String {
+    pub(crate) fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();
-        doc.insert("tool", toml_edit::Item::Table(self.tool.to_toml()));
+        doc.insert("tool", toml_edit::Item::Table(self.tool.to_toml()?));
 
-        doc.to_string()
+        Ok(doc.to_string())
     }
 }
 

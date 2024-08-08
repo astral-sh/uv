@@ -12,9 +12,11 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::InstalledPackagesProvider;
+use uv_warnings::warn_user;
 
 use crate::satisfies::RequirementSatisfaction;
 
@@ -82,10 +84,26 @@ impl SitePackages {
 
             // Index all installed packages by name.
             for path in site_packages {
-                let Some(dist_info) = InstalledDist::try_from_path(&path)
-                    .with_context(|| format!("Failed to read metadata: from {}", path.display()))?
-                else {
-                    continue;
+                let dist_info = match InstalledDist::try_from_path(&path) {
+                    Ok(Some(dist_info)) => dist_info,
+                    Ok(None) => continue,
+                    Err(_)
+                        if path.file_name().is_some_and(|name| {
+                            name.to_str().is_some_and(|name| name.starts_with('~'))
+                        }) =>
+                    {
+                        warn_user!(
+                            "Ignoring dangling temporary directory: `{}`",
+                            path.simplified_display().cyan()
+                        );
+                        continue;
+                    }
+                    Err(err) => {
+                        return Err(err).context(format!(
+                            "Failed to read metadata from: `{}`",
+                            path.simplified_display()
+                        ));
+                    }
                 };
 
                 let idx = distributions.len();
@@ -114,6 +132,11 @@ impl SitePackages {
         })
     }
 
+    /// Returns the [`Interpreter`] used to install the packages.
+    pub fn interpreter(&self) -> &Interpreter {
+        &self.interpreter
+    }
+
     /// Returns an iterator over the installed distributions.
     pub fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         self.distributions.iter().flatten()
@@ -128,13 +151,6 @@ impl SitePackages {
             .iter()
             .flat_map(|&index| &self.distributions[index])
             .collect()
-    }
-
-    /// Returns `true` if there are any installed distributions with the given package name.
-    pub fn contains_package(&self, name: &PackageName) -> bool {
-        self.by_name
-            .get(name)
-            .is_some_and(|packages| !packages.is_empty())
     }
 
     /// Remove the given packages from the index, returning all installed versions, if any.

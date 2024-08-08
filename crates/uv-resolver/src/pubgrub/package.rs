@@ -42,6 +42,9 @@ pub enum PubGrubPackageInner {
     /// A Python version.
     Python(PubGrubPython),
     /// A Python package.
+    ///
+    /// Note that it is guaranteed that `extra` and `dev` are never both
+    /// `Some`. That is, if one is `Some` then the other must be `None`.
     Package {
         name: PackageName,
         extra: Option<ExtraName>,
@@ -155,6 +158,16 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Dev { marker, .. } => marker.as_ref(),
             PubGrubPackageInner::Marker { marker, .. } => Some(marker),
         }
+    }
+
+    /// Returns `true` if this PubGrub package is a proxy package.
+    pub fn is_proxy(&self) -> bool {
+        matches!(
+            &**self,
+            PubGrubPackageInner::Extra { .. }
+                | PubGrubPackageInner::Dev { .. }
+                | PubGrubPackageInner::Marker { .. }
+        )
     }
 }
 

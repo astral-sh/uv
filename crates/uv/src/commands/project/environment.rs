@@ -1,19 +1,17 @@
-use itertools::Itertools;
 use tracing::debug;
 
-use cache_key::digest;
-use distribution_types::Resolution;
-use uv_cache::{Cache, CacheBucket};
-use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode};
-use uv_fs::{LockedFile, Simplified};
-use uv_python::{Interpreter, PythonEnvironment};
-use uv_requirements::RequirementsSpecification;
-
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::project::{resolve_environment, sync_environment};
 use crate::commands::SharedState;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
+use cache_key::{cache_digest, hash_digest};
+use distribution_types::Resolution;
+use uv_cache::{Cache, CacheBucket};
+use uv_client::Connectivity;
+use uv_configuration::{Concurrency, PreviewMode};
+use uv_python::{Interpreter, PythonEnvironment};
+use uv_requirements::RequirementsSpecification;
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -33,6 +31,8 @@ impl CachedEnvironment {
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
         state: &SharedState,
+        resolve: Box<dyn ResolveLogger>,
+        install: Box<dyn InstallLogger>,
         preview: PreviewMode,
         connectivity: Connectivity,
         concurrency: Concurrency,
@@ -62,6 +62,7 @@ impl CachedEnvironment {
             spec,
             settings.as_ref().into(),
             state,
+            resolve,
             preview,
             connectivity,
             concurrency,
@@ -75,62 +76,43 @@ impl CachedEnvironment {
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.
-        // TODO(charlie): Consider implementing `CacheKey` for `Resolution`.
-        let resolution_hash = digest(
-            &resolution
-                .distributions()
-                .map(std::string::ToString::to_string)
-                .join("\n")
-                .as_bytes(),
-        );
+        let resolution_hash = {
+            let distributions = resolution.distributions().collect::<Vec<_>>();
+            hash_digest(&distributions)
+        };
 
         // Hash the interpreter based on its path.
         // TODO(charlie): Come up with a robust hash for the interpreter.
-        let interpreter_hash = digest(&interpreter.sys_executable());
+        let interpreter_hash = cache_digest(&interpreter.sys_executable());
 
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
-        // Lock the interpreter, to avoid concurrent modification across processes.
-        fs_err::tokio::create_dir_all(cache_entry.dir()).await?;
-        let _lock = LockedFile::acquire(
-            cache_entry.dir().join(".lock"),
-            cache_entry.dir().user_display(),
-        )?;
-
-        // If the receipt exists, return the environment.
-        let ok = cache_entry.path().join(".ok");
-        if ok.is_file() {
-            debug!(
-                "Found existing cached environment at: `{}`",
-                cache_entry.path().display()
-            );
-            return Ok(Self(PythonEnvironment::from_root(
-                cache_entry.path(),
-                cache,
-            )?));
+        if settings.reinstall.is_none() {
+            if let Ok(root) = fs_err::read_link(cache_entry.path()) {
+                if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
+                    return Ok(Self(environment));
+                }
+            }
         }
 
-        debug!(
-            "Creating cached environment at: `{}`",
-            cache_entry.path().display()
-        );
-
+        // Create the environment in the cache, then relocate it to its content-addressed location.
+        let temp_dir = cache.environment()?;
         let venv = uv_virtualenv::create_venv(
-            cache_entry.path(),
+            temp_dir.path(),
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
             false,
+            true,
         )?;
 
-        // TODO(charlie): Rather than passing all the arguments to `sync_environment`, return a
-        // struct that lets us "continue" from `resolve_environment`.
-        let venv = sync_environment(
+        sync_environment(
             venv,
             &resolution,
             settings.as_ref().into(),
             state,
+            install,
             preview,
             connectivity,
             concurrency,
@@ -140,10 +122,13 @@ impl CachedEnvironment {
         )
         .await?;
 
-        // Create the receipt, to indicate to future readers that the environment is complete.
-        fs_err::tokio::File::create(ok).await?;
+        // Now that the environment is complete, sync it to its content-addressed location.
+        let id = cache
+            .persist(temp_dir.into_path(), cache_entry.path())
+            .await?;
+        let root = cache.archive(&id);
 
-        Ok(Self(venv))
+        Ok(Self(PythonEnvironment::from_root(root, cache)?))
     }
 
     /// Convert the [`CachedEnvironment`] into an [`Interpreter`].

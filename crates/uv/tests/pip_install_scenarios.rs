@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.30/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.32/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -13,7 +13,7 @@ use assert_cmd::prelude::*;
 
 use common::venv_to_interpreter;
 
-use crate::common::{get_bin, uv_snapshot, TestContext};
+use crate::common::{build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, TestContext};
 
 mod common;
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.30/simple-html/")
+        .arg(packse_index_url())
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.30/vendor/links.html");
+        .arg(build_vendor_links_url());
     context.add_shared_args(&mut command);
     command.env_remove("UV_EXCLUDE_NEWER");
     command

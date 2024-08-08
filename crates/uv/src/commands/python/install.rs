@@ -11,6 +11,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
+use uv_fs::CWD;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{
@@ -30,8 +31,8 @@ pub(crate) async fn install(
     native_tls: bool,
     connectivity: Connectivity,
     preview: PreviewMode,
-    isolated: bool,
-    _cache: &Cache,
+    no_config: bool,
+    cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
@@ -46,16 +47,16 @@ pub(crate) async fn install(
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
-        // Read from the version file, unless `isolated` was requested
-        let version_file_requests = if isolated {
+        // Read from the version file, unless `--no-config` was requested
+        let version_file_requests = if no_config {
             if PathBuf::from(PYTHON_VERSION_FILENAME).exists() {
-                debug!("Ignoring `.python-version` file due to isolated mode");
+                debug!("Ignoring `.python-version` file due to `--no-config`");
             } else if PathBuf::from(PYTHON_VERSIONS_FILENAME).exists() {
-                debug!("Ignoring `.python-versions` file due to isolated mode");
+                debug!("Ignoring `.python-versions` file due to `--no-config`");
             }
             None
         } else {
-            requests_from_version_file().await?
+            requests_from_version_file(&CWD).await?
         };
         version_file_requests.unwrap_or_else(|| vec![PythonRequest::Any])
     } else {
@@ -150,7 +151,7 @@ pub(crate) async fn install(
             (
                 download.key(),
                 download
-                    .fetch(&client, installations_dir, Some(&reporter))
+                    .fetch(&client, installations_dir, cache, Some(&reporter))
                     .await,
             )
         });
@@ -234,9 +235,9 @@ pub(crate) async fn install(
         for (key, err) in errors {
             writeln!(
                 printer.stderr(),
-                "Failed to install {}: {}",
+                "{}: Failed to install {}: {err}",
+                "error".red().bold(),
                 key.green(),
-                err
             )?;
         }
         return Ok(ExitStatus::Failure);

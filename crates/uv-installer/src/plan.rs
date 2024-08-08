@@ -241,10 +241,11 @@ impl<'a> Planner<'a> {
                     subdirectory,
                     url,
                 } => {
-                    let mut git = GitUrl::new(repository.clone(), reference.clone());
-                    if let Some(precise) = precise {
-                        git = git.with_precise(*precise);
-                    }
+                    let git = if let Some(precise) = precise {
+                        GitUrl::from_commit(repository.clone(), reference.clone(), *precise)
+                    } else {
+                        GitUrl::from_reference(repository.clone(), reference.clone())
+                    };
                     let sdist = GitSourceDist {
                         name: requirement.name.clone(),
                         git: Box::new(git),
@@ -287,7 +288,11 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.directory(&sdist)? {
-                        let cached_dist = wheel.into_url_dist(url.clone());
+                        let cached_dist = if *editable {
+                            wheel.into_editable(url.clone())
+                        } else {
+                            wheel.into_url_dist(url.clone())
+                        };
                         debug!("Directory source requirement already cached: {cached_dist}");
                         cached.push(CachedDist::Url(cached_dist));
                         continue;

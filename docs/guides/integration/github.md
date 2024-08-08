@@ -4,7 +4,7 @@
 
 uv installation differs depending on the platform.
 
-### on Unix
+### Unix
 
 ```yaml title="example.yml"
 name: Example on Unix
@@ -22,7 +22,7 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### on Windows
+### Windows
 
 ```yaml title="example.yml"
 name: Example on Windows
@@ -109,7 +109,8 @@ steps:
     run: uv python install ${{ matrix.python-version }}
 ```
 
-Alternatively, the official GitHub `setup-python` action can be used. This is generally faster, but will not respect the project's pinned Python version.
+Alternatively, the official GitHub `setup-python` action can be used. This is generally faster, but
+will not respect the project's pinned Python version.
 
 ```yaml title="example.yml"
 steps:
@@ -121,7 +122,8 @@ steps:
 
 ## Syncing and running
 
-Once uv and Python are installed, the project can be installed with `uv sync` and commands can be run in the environment with `uv run`:
+Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
+run in the environment with `uv run`:
 
 ```yaml title="example.yml"
 steps:
@@ -132,28 +134,82 @@ steps:
 
   - name: Run tests
     # For example, using `pytest`
-    run: uv run -- pytest tests
+    run: uv run pytest tests
 ```
+
+## Caching
+
+It may improve CI times to store uv's cache across workflow runs.
+
+The cache can be saved and restored with the official GitHub `cache` action:
+
+```yaml title="example.yml"
+jobs:
+  install_job:
+    env:
+      # Configure a constant location for the uv cache
+      UV_CACHE_DIR: /tmp/.uv-cache
+
+    steps:
+      # ... setup up Python and uv ...
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+            uv-${{ runner.os }}
+
+      # ... install packages, run tests, etc ...
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
+```
+
+The `uv cache prune --ci` command is used to reduce the size of the cache and is optimized for CI.
+Its effect on performance is dependent on the packages being installed.
+
+!!! tip
+
+    If using `uv pip`, use `requirements.txt` instead of `uv.lock` in the cache key.
 
 ## Using `uv pip`
 
-If using the `uv pip` interface instead of the uv project interface, uv requires a virtual environment by default. To allow installing packages into the system environment, use the `--system` flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable, e.g.:
+If using the `uv pip` interface instead of the uv project interface, uv requires a virtual
+environment by default. To allow installing packages into the system environment, use the `--system`
+flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
+
+The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes.
+
+Opt-in for the entire workflow by defining it at the top level:
 
 ```yaml title="example.yml"
-steps:
-  - name: Allow uv to use the system Python by default
-    run: echo "UV_SYSTEM_PYTHON=1" >> $GITHUB_ENV
+env:
+  UV_SYSTEM_PYTHON: 1
+
+jobs: ...
 ```
 
-Now, `uv pip` can modify the system environment without creating and activating a virtual environment.
+Or, opt-in for a specific job in the workflow:
+
+```yaml title="example.yml"
+jobs:
+  install_job:
+    env:
+      UV_SYSTEM_PYTHON: 1
+    ...
+```
+
+Or, opt-in for a specific step in a job:
 
 ```yaml title="example.yml"
 steps:
-  # ... setup up Python and uv ...
-
   - name: Install requirements
     run: uv pip install -r requirements.txt
-
-  - name: Run tests
-    run: pytest tests
+    env:
+      UV_SYSTEM_PYTHON: 1
 ```
+
+To opt-out again, the `--no-system` flag can be used in any uv invocation.

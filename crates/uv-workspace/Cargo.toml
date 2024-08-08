@@ -26,7 +26,6 @@ uv-options-metadata = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 glob = { workspace = true }
-path-slash = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }

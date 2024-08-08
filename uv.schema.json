@@ -161,6 +161,23 @@
         "null"
       ]
     },
+    "no-build-isolation": {
+      "description": "Disable isolation when building source distributions.\n\nAssumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-build-isolation-package": {
+      "description": "Disable isolation when building source distributions for a specific package.\n\nAssumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
     "no-build-package": {
       "description": "Don't build source distributions for a specific package.",
       "type": [
@@ -180,6 +197,13 @@
     },
     "no-index": {
       "description": "Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and those provided via `--find-links`.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-sources": {
+      "description": "Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources.",
       "type": [
         "boolean",
         "null"
@@ -216,7 +240,7 @@
       "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (`if-necessary-or-explicit`).",
       "anyOf": [
         {
-          "$ref": "#/definitions/PreReleaseMode"
+          "$ref": "#/definitions/PrereleaseMode"
         },
         {
           "type": "null"
@@ -253,14 +277,14 @@
       ]
     },
     "reinstall": {
-      "description": "Reinstall all packages, regardless of whether they're already installed.",
+      "description": "Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.",
       "type": [
         "boolean",
         "null"
       ]
     },
     "reinstall-package": {
-      "description": "Reinstall a specific package, regardless of whether it's already installed.",
+      "description": "Reinstall a specific package, regardless of whether it's already installed. Implies `refresh-package`.",
       "type": [
         "array",
         "null"
@@ -281,6 +305,7 @@
       ]
     },
     "sources": {
+      "description": "The sources to use (e.g., workspace members, Git repositories, local paths) when resolving dependencies.",
       "type": [
         "object",
         "null"
@@ -735,6 +760,16 @@
             "null"
           ]
         },
+        "no-build-isolation-package": {
+          "description": "Disable isolation when building source distributions for a specific package.\n\nAssumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
+        },
         "no-deps": {
           "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file.",
           "type": [
@@ -761,6 +796,13 @@
         },
         "no-index": {
           "description": "Ignore all registry indexes (e.g., PyPI), instead relying on direct URL dependencies and those provided via `--find-links`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no-sources": {
+          "description": "Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources.",
           "type": [
             "boolean",
             "null"
@@ -808,7 +850,7 @@
           "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (`if-necessary-or-explicit`).",
           "anyOf": [
             {
-              "$ref": "#/definitions/PreReleaseMode"
+              "$ref": "#/definitions/PrereleaseMode"
             },
             {
               "type": "null"
@@ -845,14 +887,14 @@
           ]
         },
         "reinstall": {
-          "description": "Reinstall all packages, regardless of whether they're already installed.",
+          "description": "Reinstall all packages, regardless of whether they're already installed. Implies `refresh`.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "reinstall-package": {
-          "description": "Reinstall a specific package, regardless of whether it's already installed.",
+          "description": "Reinstall a specific package, regardless of whether it's already installed. Implies `refresh-package`.",
           "type": [
             "array",
             "null"
@@ -934,7 +976,7 @@
       },
       "additionalProperties": false
     },
-    "PreReleaseMode": {
+    "PrereleaseMode": {
       "oneOf": [
         {
           "description": "Disallow all pre-release versions.",
@@ -1001,14 +1043,7 @@
           ]
         },
         {
-          "description": "Prefer installed Python installations, only download managed Python installations if no system Python installation is found.\n\nInstalled managed Python installations are still preferred over system Python installations.",
-          "type": "string",
-          "enum": [
-            "installed"
-          ]
-        },
-        {
-          "description": "Prefer managed Python installations over system Python installations, even if fetching is required.",
+          "description": "Prefer managed Python installations over system Python installations.\n\nSystem Python installations are still preferred over downloading managed Python versions. Use `only-managed` to always fetch a managed Python version.",
           "type": "string",
           "enum": [
             "managed"

@@ -120,7 +120,7 @@ pub struct Cache {
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
     /// is dropped at the end as appropriate.
-    _temp_dir_drop: Option<Arc<tempfile::TempDir>>,
+    temp_dir: Option<Arc<tempfile::TempDir>>,
 }
 
 impl Cache {
@@ -129,7 +129,7 @@ impl Cache {
         Self {
             root: root.into(),
             refresh: Refresh::None(Timestamp::now()),
-            _temp_dir_drop: None,
+            temp_dir: None,
         }
     }
 
@@ -139,7 +139,7 @@ impl Cache {
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
-            _temp_dir_drop: Some(Arc::new(temp_dir)),
+            temp_dir: Some(Arc::new(temp_dir)),
         })
     }
 
@@ -271,7 +271,12 @@ impl Cache {
         Ok(id)
     }
 
-    /// Initialize the cache.
+    /// Returns `true` if the [`Cache`] is temporary.
+    pub fn is_temporary(&self) -> bool {
+        self.temp_dir.is_some()
+    }
+
+    /// Initialize the [`Cache`].
     pub fn init(self) -> Result<Self, io::Error> {
         let root = &self.root;
 
@@ -340,7 +345,7 @@ impl Cache {
     }
 
     /// Run the garbage collector on the cache, removing any dangling entries.
-    pub fn prune(&self) -> Result<Removal, io::Error> {
+    pub fn prune(&self, ci: bool) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
 
         // First, remove any top-level directories that are unused. These typically represent
@@ -384,6 +389,34 @@ impl Cache {
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
             Err(err) => return Err(err),
+        }
+
+        // Third, if enabled, remove all unzipped wheels, leaving only the wheel archives.
+        if ci {
+            // Remove the entire pre-built wheel cache, since every entry is an unzipped wheel.
+            match fs::read_dir(self.bucket(CacheBucket::Wheels)) {
+                Ok(entries) => {
+                    for entry in entries {
+                        let entry = entry?;
+                        let path = fs_err::canonicalize(entry.path())?;
+                        if path.is_dir() {
+                            debug!("Removing unzipped wheel entry: {}", path.display());
+                            summary += rm_rf(path)?;
+                        }
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                Err(err) => return Err(err),
+            }
+
+            // Remove any unzipped wheels (i.e., symlinks) from the built wheels cache.
+            for entry in walkdir::WalkDir::new(self.bucket(CacheBucket::SourceDistributions)) {
+                let entry = entry?;
+                if entry.file_type().is_symlink() {
+                    debug!("Removing unzipped wheel entry: {}", entry.path().display());
+                    summary += rm_rf(entry.path())?;
+                }
+            }
         }
 
         // Third, remove any unused archives (by searching for archives that are not symlinked).
@@ -676,7 +709,9 @@ impl CacheBucket {
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v2",
-            Self::Simple => "simple-v10",
+            // Note that when bumping this, you'll also need to bump it
+            // in crates/uv/tests/cache_clean.rs.
+            Self::Simple => "simple-v11",
             Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",

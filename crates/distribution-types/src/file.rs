@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
+use pep508_rs::VerbatimUrl;
 use pypi_types::{CoreMetadata, HashDigest, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
@@ -19,7 +20,7 @@ pub enum FileConversionError {
 
 /// Internal analog to [`pypi_types::File`].
 #[derive(
-    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+    Debug, Clone, Hash, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
@@ -67,7 +68,7 @@ impl File {
 
 /// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
 #[derive(
-    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+    Debug, Clone, Hash, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
@@ -147,13 +148,16 @@ impl Display for FileLocation {
 #[derive(
     Debug,
     Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
     Serialize,
     Deserialize,
     rkyv::Archive,
     rkyv::Deserialize,
     rkyv::Serialize,
-    PartialEq,
-    Eq,
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
@@ -164,6 +168,14 @@ impl UrlString {
     pub fn to_url(&self) -> Url {
         // This conversion can never fail as the only way to construct a `UrlString` is from a `Url`.
         Url::from_str(&self.0).unwrap()
+    }
+
+    /// Return the [`UrlString`] with any query parameters and fragments removed.
+    pub fn base(&self) -> &str {
+        self.as_ref()
+            .split_once(['#', '?'])
+            .map(|(path, _)| path)
+            .unwrap_or(self.as_ref())
     }
 }
 
@@ -179,13 +191,31 @@ impl From<Url> for UrlString {
     }
 }
 
+impl From<&Url> for UrlString {
+    fn from(value: &Url) -> Self {
+        UrlString(value.to_string())
+    }
+}
+
+impl From<VerbatimUrl> for UrlString {
+    fn from(value: VerbatimUrl) -> Self {
+        UrlString(value.raw().to_string())
+    }
+}
+
+impl From<&VerbatimUrl> for UrlString {
+    fn from(value: &VerbatimUrl) -> Self {
+        UrlString(value.raw().to_string())
+    }
+}
+
 impl From<UrlString> for String {
     fn from(value: UrlString) -> Self {
         value.0
     }
 }
 
-impl fmt::Display for UrlString {
+impl Display for UrlString {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
     }

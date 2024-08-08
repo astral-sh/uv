@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use uv_normalize::PackageName;
 
 /// The origin of a dependency, e.g., a `-r requirements.txt` file.
-#[derive(Hash, Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(
+    Hash, Debug, Clone, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 pub enum RequirementOrigin {
     /// The requirement was provided via a standalone file (e.g., a `requirements.txt` file).
     File(PathBuf),

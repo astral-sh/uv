@@ -10,7 +10,7 @@ use common::{uv_snapshot, TestContext};
 
 mod common;
 
-// Wraps a group of snapshots and runs them multiple times in sequence.
+/// Wraps a group of snapshots and runs them multiple times in sequence.
 ///
 /// This is useful to ensure that resolution runs independent of an existing lockfile
 /// and does not change across repeated calls to `uv lock`.
@@ -66,9 +66,11 @@ fn lock_wheel_registry() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "anyio"
             version = "3.7.0"
             source = { registry = "https://pypi.org/simple" }
@@ -81,7 +83,7 @@ fn lock_wheel_registry() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "idna"
             version = "3.6"
             source = { registry = "https://pypi.org/simple" }
@@ -90,7 +92,7 @@ fn lock_wheel_registry() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -98,7 +100,7 @@ fn lock_wheel_registry() -> Result<()> {
                 { name = "anyio" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "sniffio"
             version = "1.3.1"
             source = { registry = "https://pypi.org/simple" }
@@ -110,6 +112,17 @@ fn lock_wheel_registry() -> Result<()> {
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -167,7 +180,7 @@ fn lock_sdist_registry() -> Result<()> {
             version = 1
             requires-python = ">=3.12"
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -175,7 +188,7 @@ fn lock_sdist_registry() -> Result<()> {
                 { name = "source-distribution" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "source-distribution"
             version = "0.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -184,6 +197,17 @@ fn lock_sdist_registry() -> Result<()> {
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove("UV_EXCLUDE_NEWER"), @r###"
@@ -202,8 +226,9 @@ fn lock_sdist_registry() -> Result<()> {
     Ok(())
 }
 
-/// Lock a Git requirement.
+/// Lock a Git requirement using `tool.uv.sources`.
 #[test]
+#[cfg(feature = "git")]
 fn lock_sdist_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -214,20 +239,24 @@ fn lock_sdist_git() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"]
+        dependencies = ["uv-public-pypackage"]
+
+        [tool.uv.sources]
+        uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
         "#,
     )?;
 
     deterministic! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+            success: true
+            exit_code: 0
+            ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+            warning: `uv.sources` is experimental and may change without warning
+            Resolved 2 packages in [TIME]
+            "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -236,26 +265,52 @@ fn lock_sdist_git() -> Result<()> {
         }, {
             assert_snapshot!(
                 lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+                version = 1
+                requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "uv-public-pypackage" },
-            ]
+                [options]
+                exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "uv-public-pypackage"
-            version = "0.1.0"
-            source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-            "###
+                [[package]]
+                name = "project"
+                version = "0.1.0"
+                source = { editable = "." }
+                dependencies = [
+                    { name = "uv-public-pypackage" },
+                ]
+
+                [[package]]
+                name = "uv-public-pypackage"
+                version = "0.1.0"
+                source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+                "###
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning
+        warning: `uv.sources` is experimental and may change without warning
+        Resolved 2 packages in [TIME]
+        "###);
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        warning: `uv lock` is experimental and may change without warning
+        warning: `uv.sources` is experimental and may change without warning
+        Resolved 2 packages in [TIME]
+        "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -270,6 +325,408 @@ fn lock_sdist_git() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
+
+    // Re-lock with a precise commit that maps to the same tag.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage"]
+
+        [tool.uv.sources]
+        uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", rev = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+            warning: `uv.sources` is experimental and may change without warning
+            Resolved 2 packages in [TIME]
+            "###);
+
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "uv-public-pypackage" },
+            ]
+
+            [[package]]
+            name = "uv-public-pypackage"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+            "###
+            );
+        });
+    }
+
+    // Re-lock with a different commit.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage"]
+
+        [tool.uv.sources]
+        uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", rev = "b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+            warning: `uv.sources` is experimental and may change without warning
+            Resolved 2 packages in [TIME]
+            "###);
+
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "uv-public-pypackage" },
+            ]
+
+            [[package]]
+            name = "uv-public-pypackage"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+            "###
+            );
+        });
+    }
+
+    // Re-lock with a different tag (which matches the new commit).
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage"]
+
+        [tool.uv.sources]
+        uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.2" }
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+
+            ----- stderr -----
+            warning: `uv lock` is experimental and may change without warning
+            warning: `uv.sources` is experimental and may change without warning
+            Resolved 2 packages in [TIME]
+            "###);
+
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "uv-public-pypackage" },
+            ]
+
+            [[package]]
+            name = "uv-public-pypackage"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+            "###
+            );
+        });
+    }
+
+    Ok(())
+}
+
+/// Lock a Git requirement using PEP 508.
+#[test]
+#[cfg(feature = "git")]
+fn lock_sdist_git_pep508() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1"]
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
+
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
+
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "uv-public-pypackage" },
+            ]
+
+            [[package]]
+            name = "uv-public-pypackage"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+            "###
+            );
+        });
+    }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Re-lock with a precise commit that maps to the same tag.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979"]
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
+
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
+
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "uv-public-pypackage" },
+            ]
+
+            [[package]]
+            name = "uv-public-pypackage"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+            "###
+            );
+        });
+    }
+
+    // Re-lock with a different commit.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389"]
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
+
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
+
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "uv-public-pypackage" },
+            ]
+
+            [[package]]
+            name = "uv-public-pypackage"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=b270df1a2fb5d012294e9aaf05e7e0bab1e6a389#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+            "###
+            );
+        });
+    }
+
+    // Re-lock with a different tag (which matches the new commit).
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0.0.2"]
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
+
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
+
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "uv-public-pypackage" },
+            ]
+
+            [[package]]
+            name = "uv-public-pypackage"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-test/uv-public-pypackage.git?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+            "###
+            );
+        });
+    }
 
     Ok(())
 }
@@ -310,9 +767,11 @@ fn lock_wheel_url() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "anyio"
             version = "4.3.0"
             source = { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }
@@ -324,7 +783,7 @@ fn lock_wheel_url() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "idna"
             version = "3.6"
             source = { registry = "https://pypi.org/simple" }
@@ -333,7 +792,7 @@ fn lock_wheel_url() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -341,7 +800,7 @@ fn lock_wheel_url() -> Result<()> {
                 { name = "anyio" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "sniffio"
             version = "1.3.1"
             source = { registry = "https://pypi.org/simple" }
@@ -353,6 +812,17 @@ fn lock_wheel_url() -> Result<()> {
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -409,9 +879,11 @@ fn lock_sdist_url() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "anyio"
             version = "4.3.0"
             source = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz" }
@@ -421,7 +893,7 @@ fn lock_sdist_url() -> Result<()> {
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" }
 
-            [[distribution]]
+            [[package]]
             name = "idna"
             version = "3.6"
             source = { registry = "https://pypi.org/simple" }
@@ -430,7 +902,7 @@ fn lock_sdist_url() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -438,7 +910,7 @@ fn lock_sdist_url() -> Result<()> {
                 { name = "anyio" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "sniffio"
             version = "1.3.1"
             source = { registry = "https://pypi.org/simple" }
@@ -450,6 +922,17 @@ fn lock_sdist_url() -> Result<()> {
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -509,9 +992,11 @@ fn lock_project_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "anyio"
             version = "3.7.0"
             source = { registry = "https://pypi.org/simple" }
@@ -524,7 +1009,7 @@ fn lock_project_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "idna"
             version = "3.6"
             source = { registry = "https://pypi.org/simple" }
@@ -533,7 +1018,7 @@ fn lock_project_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "iniconfig"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -542,7 +1027,7 @@ fn lock_project_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -550,12 +1035,12 @@ fn lock_project_extra() -> Result<()> {
                 { name = "anyio" },
             ]
 
-            [distribution.optional-dependencies]
+            [package.optional-dependencies]
             test = [
                 { name = "iniconfig" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "sniffio"
             version = "1.3.1"
             source = { registry = "https://pypi.org/simple" }
@@ -735,9 +1220,11 @@ fn lock_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "blinker"
             version = "1.7.0"
             source = { registry = "https://pypi.org/simple" }
@@ -746,7 +1233,7 @@ fn lock_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "click"
             version = "8.1.7"
             source = { registry = "https://pypi.org/simple" }
@@ -758,7 +1245,7 @@ fn lock_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "colorama"
             version = "0.4.6"
             source = { registry = "https://pypi.org/simple" }
@@ -767,7 +1254,7 @@ fn lock_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "flask"
             version = "3.0.2"
             source = { registry = "https://pypi.org/simple" }
@@ -783,12 +1270,12 @@ fn lock_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/93/a6/aa98bfe0eb9b8b15d36cdfd03c8ca86a03968a87f27ce224fb4f766acb23/flask-3.0.2-py3-none-any.whl", hash = "sha256:3232e0e9c850d781933cf0207523d1ece087eb8d87b23777ae38456e2fbe7c6e", size = 101300 },
             ]
 
-            [distribution.optional-dependencies]
+            [package.optional-dependencies]
             dotenv = [
                 { name = "python-dotenv" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "itsdangerous"
             version = "2.1.2"
             source = { registry = "https://pypi.org/simple" }
@@ -797,7 +1284,7 @@ fn lock_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "jinja2"
             version = "3.1.3"
             source = { registry = "https://pypi.org/simple" }
@@ -809,7 +1296,7 @@ fn lock_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "markupsafe"
             version = "2.1.5"
             source = { registry = "https://pypi.org/simple" }
@@ -827,7 +1314,7 @@ fn lock_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -835,7 +1322,7 @@ fn lock_dependency_extra() -> Result<()> {
                 { name = "flask", extra = ["dotenv"] },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "python-dotenv"
             version = "1.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -844,7 +1331,7 @@ fn lock_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl", hash = "sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a", size = 19863 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "werkzeug"
             version = "3.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -859,6 +1346,17 @@ fn lock_dependency_extra() -> Result<()> {
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 10 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -922,9 +1420,11 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "certifi"
             version = "2024.2.2"
             source = { registry = "https://pypi.org/simple" }
@@ -933,7 +1433,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl", hash = "sha256:dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1", size = 163774 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "charset-normalizer"
             version = "3.3.2"
             source = { registry = "https://pypi.org/simple" }
@@ -1030,7 +1530,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/28/76/e6222113b83e3622caa4bb41032d0b1bf785250607392e1b778aca0b8a7d/charset_normalizer-3.3.2-py3-none-any.whl", hash = "sha256:3e4d1f6587322d2788836a99c69062fbb091331ec940e02d12d179c1d53e25fc", size = 48543 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "idna"
             version = "3.6"
             source = { registry = "https://pypi.org/simple" }
@@ -1039,7 +1539,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -1048,7 +1548,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 { name = "requests", extra = ["socks"], marker = "python_version < '3.10'" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "pysocks"
             version = "1.7.1"
             source = { registry = "https://pypi.org/simple" }
@@ -1057,7 +1557,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "requests"
             version = "2.31.0"
             source = { registry = "https://pypi.org/simple" }
@@ -1072,12 +1572,12 @@ fn lock_conditional_dependency_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", hash = "sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f", size = 62574 },
             ]
 
-            [distribution.optional-dependencies]
+            [package.optional-dependencies]
             socks = [
                 { name = "pysocks" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "urllib3"
             version = "2.0.7"
             source = { registry = "https://pypi.org/simple" }
@@ -1089,6 +1589,17 @@ fn lock_conditional_dependency_extra() -> Result<()> {
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 7 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -1113,6 +1624,17 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
     fs_err::copy(pyproject_toml, context_38.temp_dir.join("pyproject.toml"))?;
     fs_err::copy(lockfile, context_38.temp_dir.join("uv.lock"))?;
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 7 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context_38.filters(), context_38.sync().arg("--frozen"), @r###"
@@ -1173,9 +1695,11 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "blinker"
             version = "1.7.0"
             source = { registry = "https://pypi.org/simple" }
@@ -1184,7 +1708,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "click"
             version = "8.1.7"
             source = { registry = "https://pypi.org/simple" }
@@ -1196,7 +1720,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "colorama"
             version = "0.4.6"
             source = { registry = "https://pypi.org/simple" }
@@ -1205,7 +1729,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "flask"
             version = "3.0.2"
             source = { registry = "https://pypi.org/simple" }
@@ -1221,7 +1745,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/93/a6/aa98bfe0eb9b8b15d36cdfd03c8ca86a03968a87f27ce224fb4f766acb23/flask-3.0.2-py3-none-any.whl", hash = "sha256:3232e0e9c850d781933cf0207523d1ece087eb8d87b23777ae38456e2fbe7c6e", size = 101300 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "itsdangerous"
             version = "2.1.2"
             source = { registry = "https://pypi.org/simple" }
@@ -1230,7 +1754,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "jinja2"
             version = "3.1.3"
             source = { registry = "https://pypi.org/simple" }
@@ -1242,7 +1766,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "markupsafe"
             version = "2.1.5"
             source = { registry = "https://pypi.org/simple" }
@@ -1260,7 +1784,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -1268,7 +1792,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
                 { name = "flask" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "werkzeug"
             version = "3.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -1283,6 +1807,18 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 9 packages in [TIME]
+    warning: The package `flask==3.0.2` does not have an extra named `foo`
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -1319,7 +1855,7 @@ fn lock_upgrade_log() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask<3"]
+        dependencies = ["markupsafe<2", "iniconfig"]
         "#,
     )?;
 
@@ -1331,7 +1867,7 @@ fn lock_upgrade_log() -> Result<()> {
 
         ----- stderr -----
         warning: `uv lock` is experimental and may change without warning
-        Resolved 9 packages in [TIME]
+        Resolved 3 packages in [TIME]
         "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1343,111 +1879,32 @@ fn lock_upgrade_log() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "blinker"
-            version = "1.7.0"
+            [[package]]
+            name = "iniconfig"
+            version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
+            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
             wheels = [
-                { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
+                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
             ]
 
-            [[distribution]]
-            name = "click"
-            version = "8.1.7"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "colorama", marker = "platform_system == 'Windows'" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
-            ]
-
-            [[distribution]]
-            name = "colorama"
-            version = "0.4.6"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
-            ]
-
-            [[distribution]]
-            name = "flask"
-            version = "2.3.3"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "blinker" },
-                { name = "click" },
-                { name = "itsdangerous" },
-                { name = "jinja2" },
-                { name = "werkzeug" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/46/b7/4ace17e37abd9c21715dea5ee11774a25e404c486a7893fa18e764326ead/flask-2.3.3.tar.gz", hash = "sha256:09c347a92aa7ff4a8e7f3206795f30d826654baf38b873d0744cd571ca609efc", size = 672756 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/fd/56/26f0be8adc2b4257df20c1c4260ddd0aa396cf8e75d90ab2f7ff99bc34f9/flask-2.3.3-py3-none-any.whl", hash = "sha256:f69fcd559dc907ed196ab9df0e48471709175e696d6e698dd4dbe940f96ce66b", size = 96112 },
-            ]
-
-            [[distribution]]
-            name = "itsdangerous"
-            version = "2.1.2"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
-            ]
-
-            [[distribution]]
-            name = "jinja2"
-            version = "3.1.3"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "markupsafe" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
-            ]
-
-            [[distribution]]
+            [[package]]
             name = "markupsafe"
-            version = "2.1.5"
+            version = "1.1.1"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/53/bd/583bf3e4c8d6a321938c13f49d44024dbe5ed63e0a7ba127e454a66da974/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1", size = 18215 },
-                { url = "https://files.pythonhosted.org/packages/48/d6/e7cd795fc710292c3af3a06d80868ce4b02bfbbf370b7cee11d282815a2a/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4", size = 14069 },
-                { url = "https://files.pythonhosted.org/packages/51/b5/5d8ec796e2a08fc814a2c7d2584b55f889a55cf17dd1a90f2beb70744e5c/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee", size = 29452 },
-                { url = "https://files.pythonhosted.org/packages/0a/0d/2454f072fae3b5a137c119abf15465d1771319dfe9e4acbb31722a0fff91/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5", size = 28462 },
-                { url = "https://files.pythonhosted.org/packages/2d/75/fd6cb2e68780f72d47e6671840ca517bda5ef663d30ada7616b0462ad1e3/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b", size = 27869 },
-                { url = "https://files.pythonhosted.org/packages/b0/81/147c477391c2750e8fc7705829f7351cf1cd3be64406edcf900dc633feb2/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:d050b3361367a06d752db6ead6e7edeb0009be66bc3bae0ee9d97fb326badc2a", size = 33906 },
-                { url = "https://files.pythonhosted.org/packages/8b/ff/9a52b71839d7a256b563e85d11050e307121000dcebc97df120176b3ad93/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:bec0a414d016ac1a18862a519e54b2fd0fc8bbfd6890376898a6c0891dd82e9f", size = 32296 },
-                { url = "https://files.pythonhosted.org/packages/88/07/2dc76aa51b481eb96a4c3198894f38b480490e834479611a4053fbf08623/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:58c98fee265677f63a4385256a6d7683ab1832f3ddd1e66fe948d5880c21a169", size = 33038 },
-                { url = "https://files.pythonhosted.org/packages/96/0c/620c1fb3661858c0e37eb3cbffd8c6f732a67cd97296f725789679801b31/MarkupSafe-2.1.5-cp312-cp312-win32.whl", hash = "sha256:8590b4ae07a35970728874632fed7bd57b26b0102df2d2b233b6d9d82f6c62ad", size = 16572 },
-                { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
-            ]
+            sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "flask" },
-            ]
-
-            [[distribution]]
-            name = "werkzeug"
-            version = "3.0.1"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
+                { name = "iniconfig" },
                 { name = "markupsafe" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
             ]
             "###
             );
@@ -1462,21 +1919,22 @@ fn lock_upgrade_log() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Resolved 9 packages in [TIME]
+    Resolved 3 packages in [TIME]
     "###);
 
-    // Modify the `pyproject.toml` to loosen the requirement.
+    // Modify the `pyproject.toml` to loosen a requirement, drop a requirement, and add a
+    // requirement.
     pyproject_toml.write_str(
         r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask"]
+        dependencies = ["markupsafe", "typing-extensions"]
         "#,
     )?;
 
-    // Run with `--upgrade`; ensure that `flask` is upgraded.
+    // Run with `--upgrade`; ensure that the updates are reported.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
     success: true
     exit_code: 0
@@ -1484,8 +1942,10 @@ fn lock_upgrade_log() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Resolved 9 packages in [TIME]
-    Updating flask v2.3.3 -> v3.0.2
+    Resolved 3 packages in [TIME]
+    Removed iniconfig v2.0.0
+    Updated markupsafe v1.1.1 -> v2.1.5
+    Added typing-extensions v4.10.0
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1497,76 +1957,11 @@ fn lock_upgrade_log() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
-        name = "blinker"
-        version = "1.7.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
-        ]
-
-        [[distribution]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
-        ]
-
-        [[distribution]]
-        name = "colorama"
-        version = "0.4.6"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
-        ]
-
-        [[distribution]]
-        name = "flask"
-        version = "3.0.2"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "blinker" },
-            { name = "click" },
-            { name = "itsdangerous" },
-            { name = "jinja2" },
-            { name = "werkzeug" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/3f/e0/a89e8120faea1edbfca1a9b171cff7f2bf62ec860bbafcb2c2387c0317be/flask-3.0.2.tar.gz", hash = "sha256:822c03f4b799204250a7ee84b1eddc40665395333973dfb9deebfe425fefcb7d", size = 675248 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/93/a6/aa98bfe0eb9b8b15d36cdfd03c8ca86a03968a87f27ce224fb4f766acb23/flask-3.0.2-py3-none-any.whl", hash = "sha256:3232e0e9c850d781933cf0207523d1ece087eb8d87b23777ae38456e2fbe7c6e", size = 101300 },
-        ]
-
-        [[distribution]]
-        name = "itsdangerous"
-        version = "2.1.2"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
-        ]
-
-        [[distribution]]
-        name = "jinja2"
-        version = "3.1.3"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "markupsafe" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
-        ]
-
-        [[distribution]]
+        [[package]]
         name = "markupsafe"
         version = "2.1.5"
         source = { registry = "https://pypi.org/simple" }
@@ -1584,24 +1979,22 @@ fn lock_upgrade_log() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "flask" },
+            { name = "markupsafe" },
+            { name = "typing-extensions" },
         ]
 
-        [[distribution]]
-        name = "werkzeug"
-        version = "3.0.1"
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "markupsafe" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
         "###
         );
@@ -1623,7 +2016,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask<3 ; sys_platform != 'win32'", "flask==3.0.0 ; sys_platform == 'win32'"]
+        dependencies = ["markupsafe<2 ; sys_platform != 'win32'", "markupsafe==2.0.0 ; sys_platform == 'win32'"]
         "#,
     )?;
 
@@ -1635,7 +2028,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
 
         ----- stderr -----
         warning: `uv lock` is experimental and may change without warning
-        Resolved 10 packages in [TIME]
+        Resolved 3 packages in [TIME]
         "###);
 
         let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1647,128 +2040,39 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+            environment-markers = [
+                "sys_platform == 'win32'",
+                "sys_platform != 'win32'",
+            ]
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "blinker"
-            version = "1.7.0"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
-            ]
-
-            [[distribution]]
-            name = "click"
-            version = "8.1.7"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "colorama", marker = "platform_system == 'Windows'" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
-            ]
-
-            [[distribution]]
-            name = "colorama"
-            version = "0.4.6"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
-            ]
-
-            [[distribution]]
-            name = "flask"
-            version = "2.3.3"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "blinker" },
-                { name = "click" },
-                { name = "itsdangerous" },
-                { name = "jinja2" },
-                { name = "werkzeug" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/46/b7/4ace17e37abd9c21715dea5ee11774a25e404c486a7893fa18e764326ead/flask-2.3.3.tar.gz", hash = "sha256:09c347a92aa7ff4a8e7f3206795f30d826654baf38b873d0744cd571ca609efc", size = 672756 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/fd/56/26f0be8adc2b4257df20c1c4260ddd0aa396cf8e75d90ab2f7ff99bc34f9/flask-2.3.3-py3-none-any.whl", hash = "sha256:f69fcd559dc907ed196ab9df0e48471709175e696d6e698dd4dbe940f96ce66b", size = 96112 },
-            ]
-
-            [[distribution]]
-            name = "flask"
-            version = "3.0.0"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "blinker" },
-                { name = "click" },
-                { name = "itsdangerous" },
-                { name = "jinja2" },
-                { name = "werkzeug" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz", hash = "sha256:cfadcdb638b609361d29ec22360d6070a77d7463dcb3ab08d2c2f2f168845f58", size = 674171 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl", hash = "sha256:21128f47e4e3b9d597a3e8521a329bf56909b690fcc3fa3e477725aa81367638", size = 99724 },
-            ]
-
-            [[distribution]]
-            name = "itsdangerous"
-            version = "2.1.2"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
-            ]
-
-            [[distribution]]
-            name = "jinja2"
-            version = "3.1.3"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "markupsafe" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
-            ]
-
-            [[distribution]]
+            [[package]]
             name = "markupsafe"
-            version = "2.1.5"
+            version = "1.1.1"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/87/5b/aae44c6655f3801e81aa3eef09dbbf012431987ba564d7231722f68df02d/MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b", size = 19384 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/53/bd/583bf3e4c8d6a321938c13f49d44024dbe5ed63e0a7ba127e454a66da974/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:8dec4936e9c3100156f8a2dc89c4b88d5c435175ff03413b443469c7c8c5f4d1", size = 18215 },
-                { url = "https://files.pythonhosted.org/packages/48/d6/e7cd795fc710292c3af3a06d80868ce4b02bfbbf370b7cee11d282815a2a/MarkupSafe-2.1.5-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3c6b973f22eb18a789b1460b4b91bf04ae3f0c4234a0a6aa6b0a92f6f7b951d4", size = 14069 },
-                { url = "https://files.pythonhosted.org/packages/51/b5/5d8ec796e2a08fc814a2c7d2584b55f889a55cf17dd1a90f2beb70744e5c/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee", size = 29452 },
-                { url = "https://files.pythonhosted.org/packages/0a/0d/2454f072fae3b5a137c119abf15465d1771319dfe9e4acbb31722a0fff91/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5", size = 28462 },
-                { url = "https://files.pythonhosted.org/packages/2d/75/fd6cb2e68780f72d47e6671840ca517bda5ef663d30ada7616b0462ad1e3/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b", size = 27869 },
-                { url = "https://files.pythonhosted.org/packages/b0/81/147c477391c2750e8fc7705829f7351cf1cd3be64406edcf900dc633feb2/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:d050b3361367a06d752db6ead6e7edeb0009be66bc3bae0ee9d97fb326badc2a", size = 33906 },
-                { url = "https://files.pythonhosted.org/packages/8b/ff/9a52b71839d7a256b563e85d11050e307121000dcebc97df120176b3ad93/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:bec0a414d016ac1a18862a519e54b2fd0fc8bbfd6890376898a6c0891dd82e9f", size = 32296 },
-                { url = "https://files.pythonhosted.org/packages/88/07/2dc76aa51b481eb96a4c3198894f38b480490e834479611a4053fbf08623/MarkupSafe-2.1.5-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:58c98fee265677f63a4385256a6d7683ab1832f3ddd1e66fe948d5880c21a169", size = 33038 },
-                { url = "https://files.pythonhosted.org/packages/96/0c/620c1fb3661858c0e37eb3cbffd8c6f732a67cd97296f725789679801b31/MarkupSafe-2.1.5-cp312-cp312-win32.whl", hash = "sha256:8590b4ae07a35970728874632fed7bd57b26b0102df2d2b233b6d9d82f6c62ad", size = 16572 },
-                { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
+            environment-markers = [
+                "sys_platform != 'win32'",
             ]
+            sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/64db92e53b86efccfaea71321f597fa2e1b2bd3853d8ce658568f7a13094/MarkupSafe-1.1.1.tar.gz", hash = "sha256:29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b", size = 19151 }
 
-            [[distribution]]
+            [[package]]
+            name = "markupsafe"
+            version = "2.0.0"
+            source = { registry = "https://pypi.org/simple" }
+            environment-markers = [
+                "sys_platform == 'win32'",
+            ]
+            sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466 }
+
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
             dependencies = [
-                { name = "flask", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
-                { name = "flask", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
-            ]
-
-            [[distribution]]
-            name = "werkzeug"
-            version = "3.0.1"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "markupsafe" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
+                { name = "markupsafe", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+                { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
             ]
             "###
             );
@@ -1783,7 +2087,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Resolved 10 packages in [TIME]
+    Resolved 3 packages in [TIME]
     "###);
 
     // Modify the `pyproject.toml` to loosen the requirement.
@@ -1793,11 +2097,11 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["flask"]
+        dependencies = ["markupsafe"]
         "#,
     )?;
 
-    // Run with `--upgrade`; ensure that `flask` is upgraded.
+    // Run with `--upgrade`; ensure that `markupsafe` is upgraded.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
     success: true
     exit_code: 0
@@ -1805,8 +2109,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Resolved 9 packages in [TIME]
-    Updating flask v2.3.3, 3.0.0 -> v3.0.2
+    Resolved 2 packages in [TIME]
+    Updated markupsafe v1.1.1, v2.0.0 -> v2.1.5
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -1818,76 +2122,15 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        environment-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
-        name = "blinker"
-        version = "1.7.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a1/13/6df5fc090ff4e5d246baf1f45fe9e5623aa8565757dfa5bd243f6a545f9e/blinker-1.7.0.tar.gz", hash = "sha256:e6820ff6fa4e4d1d8e2747c2283749c3f547e4fee112b98555cdcdae32996182", size = 28134 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/fa/2a/7f3714cbc6356a0efec525ce7a0613d581072ed6eb53eb7b9754f33db807/blinker-1.7.0-py3-none-any.whl", hash = "sha256:c3f865d4d54db7abc53758a01601cf343fe55b84c1de4e3fa910e420b438d5b9", size = 13068 },
-        ]
-
-        [[distribution]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
-        ]
-
-        [[distribution]]
-        name = "colorama"
-        version = "0.4.6"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
-        ]
-
-        [[distribution]]
-        name = "flask"
-        version = "3.0.2"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "blinker" },
-            { name = "click" },
-            { name = "itsdangerous" },
-            { name = "jinja2" },
-            { name = "werkzeug" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/3f/e0/a89e8120faea1edbfca1a9b171cff7f2bf62ec860bbafcb2c2387c0317be/flask-3.0.2.tar.gz", hash = "sha256:822c03f4b799204250a7ee84b1eddc40665395333973dfb9deebfe425fefcb7d", size = 675248 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/93/a6/aa98bfe0eb9b8b15d36cdfd03c8ca86a03968a87f27ce224fb4f766acb23/flask-3.0.2-py3-none-any.whl", hash = "sha256:3232e0e9c850d781933cf0207523d1ece087eb8d87b23777ae38456e2fbe7c6e", size = 101300 },
-        ]
-
-        [[distribution]]
-        name = "itsdangerous"
-        version = "2.1.2"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/7f/a1/d3fb83e7a61fa0c0d3d08ad0a94ddbeff3731c05212617dff3a94e097f08/itsdangerous-2.1.2.tar.gz", hash = "sha256:5dbbc68b317e5e42f327f9021763545dc3fc3bfe22e6deb96aaf1fc38874156a", size = 56143 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/68/5f/447e04e828f47465eeab35b5d408b7ebaaaee207f48b7136c5a7267a30ae/itsdangerous-2.1.2-py3-none-any.whl", hash = "sha256:2c2349112351b88699d8d4b6b075022c0808887cb7ad10069318a8b0bc88db44", size = 15749 },
-        ]
-
-        [[distribution]]
-        name = "jinja2"
-        version = "3.1.3"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "markupsafe" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", hash = "sha256:ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90", size = 268261 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", size = 133236 },
-        ]
-
-        [[distribution]]
+        [[package]]
         name = "markupsafe"
         version = "2.1.5"
         source = { registry = "https://pypi.org/simple" }
@@ -1905,24 +2148,12 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/3f/14/c3554d512d5f9100a95e737502f4a2323a1959f6d0d01e0d0997b35f7b10/MarkupSafe-2.1.5-cp312-cp312-win_amd64.whl", hash = "sha256:823b65d8706e32ad2df51ed89496147a42a2a6e01c13cfb6ffb8b1e92bc910bb", size = 17127 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "flask" },
-        ]
-
-        [[distribution]]
-        name = "werkzeug"
-        version = "3.0.1"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
             { name = "markupsafe" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", hash = "sha256:507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc", size = 801436 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669 },
         ]
         "###
         );
@@ -1967,9 +2198,11 @@ fn lock_preference() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "iniconfig"
             version = "1.1.1"
             source = { registry = "https://pypi.org/simple" }
@@ -1978,7 +2211,7 @@ fn lock_preference() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2023,9 +2256,11 @@ fn lock_preference() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[package]]
         name = "iniconfig"
         version = "1.1.1"
         source = { registry = "https://pypi.org/simple" }
@@ -2034,7 +2269,7 @@ fn lock_preference() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -2045,59 +2280,56 @@ fn lock_preference() -> Result<()> {
         );
     });
 
-    deterministic! { context =>
-        // Run with `--upgrade`; ensure that `iniconfig` is upgraded.
-        let mut filters = context.filters();
-        // Running `lock` multiple times causes the update log to change between alternate runs
-        filters.push(("Updating iniconfig v1.1.1 -> v2.0.0", ""));
-        filters.push(("note: pass `--verbose` to see 1 unchanged dependencies", ""));
-        uv_snapshot!(filters, context.lock().arg("--upgrade"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    Updated iniconfig v1.1.1 -> v2.0.0
+    "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "iniconfig"
-            version = "2.0.0"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
-            ]
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "iniconfig" },
-            ]
-            "###
-            );
-        });
-    }
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+        "###
+        );
+    });
 
     Ok(())
 }
 
 /// Respect locked versions with `uv lock`, unless `--upgrade` is passed.
 #[test]
+#[cfg(feature = "git")]
 fn lock_git_sha() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2133,9 +2365,11 @@ fn lock_git_sha() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2143,7 +2377,7 @@ fn lock_git_sha() -> Result<()> {
                 { name = "uv-public-pypackage" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "uv-public-pypackage"
             version = "0.1.0"
             source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
@@ -2154,9 +2388,36 @@ fn lock_git_sha() -> Result<()> {
 
     // Rewrite the lockfile, as if it were locked against `main`.
     let lock = lock.replace("rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979", "rev=main");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [[package]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
+        );
+    });
+
     fs_err::write(context.temp_dir.join("uv.lock"), lock)?;
 
-    // Lock `anyio` against `main`.
+    // Lock against `main`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -2190,9 +2451,11 @@ fn lock_git_sha() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -2200,7 +2463,7 @@ fn lock_git_sha() -> Result<()> {
             { name = "uv-public-pypackage" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
@@ -2231,9 +2494,11 @@ fn lock_git_sha() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2241,7 +2506,7 @@ fn lock_git_sha() -> Result<()> {
                 { name = "uv-public-pypackage" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "uv-public-pypackage"
             version = "0.1.0"
             source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
@@ -2330,9 +2595,11 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "attrs"
             version = "23.2.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2344,7 +2611,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "cattrs"
             version = "23.1.2"
             source = { registry = "https://pypi.org/simple" }
@@ -2358,7 +2625,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/3a/ba/05df14efaa0624fac6b1510e87f5ce446208d2f6ce50270a89b6268aebfe/cattrs-23.1.2-py3-none-any.whl", hash = "sha256:b2bb14311ac17bed0d58785e5a60f022e5431aca3932e3fc5cc8ed8639de50a4", size = 50845 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "exceptiongroup"
             version = "1.2.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2367,7 +2634,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "importlib-metadata"
             version = "6.7.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2380,7 +2647,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ff/94/64287b38c7de4c90683630338cf28f129decbba0a44f0c6db35a873c73c4/importlib_metadata-6.7.0-py3-none-any.whl", hash = "sha256:cb52082e659e97afc5dac71e79de97d8681de3aa07ff18578330904a9d18e5b5", size = 22934 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "lsprotocol"
             version = "2023.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2393,7 +2660,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/8d/37/2351e48cb3309673492d3a8c59d407b75fb6630e560eb27ecd4da03adc9a/lsprotocol-2023.0.1-py3-none-any.whl", hash = "sha256:c75223c9e4af2f24272b14c6375787438279369236cd568f596d4951052a60f2", size = 70826 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2401,7 +2668,7 @@ fn lock_requires_python() -> Result<()> {
                 { name = "pygls" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "pygls"
             version = "1.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2414,7 +2681,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/da/9b/4fd77a060068f2f3f46f97ed6ba8762c5a73f11ef0c196cfd34f3a9be878/pygls-1.0.1-py3-none-any.whl", hash = "sha256:adacc96da77598c70f46acfdfd1481d3da90cd54f639f7eee52eb6e4dbd57b55", size = 40367 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "typeguard"
             version = "2.13.3"
             source = { registry = "https://pypi.org/simple" }
@@ -2423,7 +2690,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/9a/bb/d43e5c75054e53efce310e79d63df0ac3f25e34c926be5dffb7d283fb2a8/typeguard-2.13.3-py3-none-any.whl", hash = "sha256:5e3e3be01e887e7eafae5af63d1f36c849aaa94e3a0112097312aabfa16284f1", size = 17605 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "typing-extensions"
             version = "4.7.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2432,7 +2699,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "zipp"
             version = "3.15.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2479,9 +2746,11 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.7.9"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "attrs"
             version = "23.2.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2493,7 +2762,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "cattrs"
             version = "23.1.2"
             source = { registry = "https://pypi.org/simple" }
@@ -2507,7 +2776,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/3a/ba/05df14efaa0624fac6b1510e87f5ce446208d2f6ce50270a89b6268aebfe/cattrs-23.1.2-py3-none-any.whl", hash = "sha256:b2bb14311ac17bed0d58785e5a60f022e5431aca3932e3fc5cc8ed8639de50a4", size = 50845 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "exceptiongroup"
             version = "1.2.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2516,7 +2785,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/b8/9a/5028fd52db10e600f1c4674441b968cf2ea4959085bfb5b99fb1250e5f68/exceptiongroup-1.2.0-py3-none-any.whl", hash = "sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14", size = 16210 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "importlib-metadata"
             version = "6.7.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2529,7 +2798,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ff/94/64287b38c7de4c90683630338cf28f129decbba0a44f0c6db35a873c73c4/importlib_metadata-6.7.0-py3-none-any.whl", hash = "sha256:cb52082e659e97afc5dac71e79de97d8681de3aa07ff18578330904a9d18e5b5", size = 22934 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "lsprotocol"
             version = "2023.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2542,7 +2811,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/2d/5b/f18eb1823a4cee9bed70cdcc25eed5a75845367c42e63a79010a7c34f8a7/lsprotocol-2023.0.0-py3-none-any.whl", hash = "sha256:e85fc87ee26c816adca9eb497bb3db1a7c79c477a11563626e712eaccf926a05", size = 70789 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2550,7 +2819,7 @@ fn lock_requires_python() -> Result<()> {
                 { name = "pygls" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "pygls"
             version = "1.2.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2562,7 +2831,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/36/31/3799444d3f072ffca1a35eb02a48f964384cc13f001125e87d9f0748687b/pygls-1.2.1-py3-none-any.whl", hash = "sha256:7dcfcf12b6f15beb606afa46de2ed348b65a279c340ef2242a9a35c22eeafe94", size = 55983 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "typing-extensions"
             version = "4.7.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2571,7 +2840,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ec/6b/63cc3df74987c36fe26157ee12e09e8f9db4de771e0f3404263117e75b95/typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36", size = 33232 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "zipp"
             version = "3.15.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2618,9 +2887,11 @@ fn lock_requires_python() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "attrs"
             version = "23.2.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2629,7 +2900,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "cattrs"
             version = "23.2.3"
             source = { registry = "https://pypi.org/simple" }
@@ -2641,7 +2912,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/b3/0d/cd4a4071c7f38385dc5ba91286723b4d1090b87815db48216212c6c6c30e/cattrs-23.2.3-py3-none-any.whl", hash = "sha256:0341994d94971052e9ee70662542699a3162ea1e0c62f7ce1b4a57f563685108", size = 57474 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "lsprotocol"
             version = "2023.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2654,7 +2925,7 @@ fn lock_requires_python() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/8d/37/2351e48cb3309673492d3a8c59d407b75fb6630e560eb27ecd4da03adc9a/lsprotocol-2023.0.1-py3-none-any.whl", hash = "sha256:c75223c9e4af2f24272b14c6375787438279369236cd568f596d4951052a60f2", size = 70826 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2662,7 +2933,7 @@ fn lock_requires_python() -> Result<()> {
                 { name = "pygls" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "pygls"
             version = "1.3.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2692,6 +2963,17 @@ fn lock_requires_python() -> Result<()> {
         // Platform independent message for the missing Python installation
         .chain([(" or `py` launcher", "")])
         .collect();
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
@@ -2748,9 +3030,11 @@ fn lock_requires_python_wheels() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12, <3.13"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "frozenlist"
             version = "1.4.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2774,7 +3058,7 @@ fn lock_requires_python_wheels() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/83/10/466fe96dae1bff622021ee687f68e5524d6392b0a2f80d05001cd3a451ba/frozenlist-1.4.1-py3-none-any.whl", hash = "sha256:04ced3e6a46b4cfffe20f9ae482818e34eba9b5fb0ce4056e4cc9b6e212d09b7", size = 11552 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2818,9 +3102,11 @@ fn lock_requires_python_wheels() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "frozenlist"
             version = "1.4.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2859,7 +3145,7 @@ fn lock_requires_python_wheels() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/83/10/466fe96dae1bff622021ee687f68e5524d6392b0a2f80d05001cd3a451ba/frozenlist-1.4.1-py3-none-any.whl", hash = "sha256:04ced3e6a46b4cfffe20f9ae482818e34eba9b5fb0ce4056e4cc9b6e212d09b7", size = 11552 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2913,9 +3199,11 @@ fn lock_requires_python_star() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "attrs"
             version = "23.2.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2924,7 +3212,7 @@ fn lock_requires_python_star() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "cattrs"
             version = "23.2.3"
             source = { registry = "https://pypi.org/simple" }
@@ -2936,7 +3224,7 @@ fn lock_requires_python_star() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/b3/0d/cd4a4071c7f38385dc5ba91286723b4d1090b87815db48216212c6c6c30e/cattrs-23.2.3-py3-none-any.whl", hash = "sha256:0341994d94971052e9ee70662542699a3162ea1e0c62f7ce1b4a57f563685108", size = 57474 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "linehaul"
             version = "1.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -2950,7 +3238,7 @@ fn lock_requires_python_star() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/03/73/c73588052198be06462d1a7c4653b602a109a0df0208c59e58075dc3bc73/linehaul-1.0.1-py3-none-any.whl", hash = "sha256:d19ca669008dad910868dfae7f904dfc5362583729bda344799cf7ea2ad5ef12", size = 27848 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "packaging"
             version = "24.0"
             source = { registry = "https://pypi.org/simple" }
@@ -2959,7 +3247,7 @@ fn lock_requires_python_star() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -2967,7 +3255,7 @@ fn lock_requires_python_star() -> Result<()> {
                 { name = "linehaul" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "pyparsing"
             version = "3.1.2"
             source = { registry = "https://pypi.org/simple" }
@@ -3023,9 +3311,11 @@ fn lock_requires_python_pre() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "attrs"
             version = "23.2.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3034,7 +3324,7 @@ fn lock_requires_python_pre() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "cattrs"
             version = "23.2.3"
             source = { registry = "https://pypi.org/simple" }
@@ -3046,7 +3336,7 @@ fn lock_requires_python_pre() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/b3/0d/cd4a4071c7f38385dc5ba91286723b4d1090b87815db48216212c6c6c30e/cattrs-23.2.3-py3-none-any.whl", hash = "sha256:0341994d94971052e9ee70662542699a3162ea1e0c62f7ce1b4a57f563685108", size = 57474 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "linehaul"
             version = "1.0.1"
             source = { registry = "https://pypi.org/simple" }
@@ -3060,7 +3350,7 @@ fn lock_requires_python_pre() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/03/73/c73588052198be06462d1a7c4653b602a109a0df0208c59e58075dc3bc73/linehaul-1.0.1-py3-none-any.whl", hash = "sha256:d19ca669008dad910868dfae7f904dfc5362583729bda344799cf7ea2ad5ef12", size = 27848 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "packaging"
             version = "24.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3069,7 +3359,7 @@ fn lock_requires_python_pre() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -3077,7 +3367,7 @@ fn lock_requires_python_pre() -> Result<()> {
                 { name = "linehaul" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "pyparsing"
             version = "3.1.2"
             source = { registry = "https://pypi.org/simple" }
@@ -3132,9 +3422,11 @@ fn lock_requires_python_unbounded() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = "<=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "iniconfig"
             version = "1.1.1"
             source = { registry = "https://pypi.org/simple" }
@@ -3143,7 +3435,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -3209,9 +3501,21 @@ fn lock_python_version_marker_complement() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.8"
+            environment-markers = [
+                "python_full_version <= '3.10' and python_version == '3.10'",
+                "python_full_version <= '3.10' and python_version < '3.10'",
+                "python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version > '3.10'",
+                "python_full_version > '3.10' and python_version == '3.10'",
+                "python_full_version > '3.10' and python_version < '3.10'",
+                "python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10'",
+                "python_full_version > '3.10' and python_version > '3.10'",
+            ]
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "attrs"
             version = "23.2.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3220,7 +3524,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/e0/44/827b2a91a5816512fcaf3cc4ebc465ccd5d598c45cefa6703fcf4a79018f/attrs-23.2.0-py3-none-any.whl", hash = "sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1", size = 60752 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "iniconfig"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3229,7 +3533,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -3239,7 +3543,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
                 { name = "typing-extensions", marker = "python_full_version <= '3.10' or python_full_version > '3.10'" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "typing-extensions"
             version = "4.10.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3294,9 +3598,11 @@ fn lock_dev() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "iniconfig"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3305,7 +3611,7 @@ fn lock_dev() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -3313,12 +3619,12 @@ fn lock_dev() -> Result<()> {
                 { name = "iniconfig" },
             ]
 
-            [distribution.dev-dependencies]
+            [package.dev-dependencies]
             dev = [
                 { name = "typing-extensions" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "typing-extensions"
             version = "4.12.2"
             source = { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl" }
@@ -3395,9 +3701,11 @@ fn lock_conditional_unconditional() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "iniconfig"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3406,7 +3714,7 @@ fn lock_conditional_unconditional() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -3457,9 +3765,11 @@ fn lock_multiple_markers() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "iniconfig"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3468,7 +3778,7 @@ fn lock_multiple_markers() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -3559,9 +3869,11 @@ fn relative_and_absolute_paths() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.11, <3.13"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "a"
             version = "0.1.0"
             source = { editable = "." }
@@ -3570,12 +3882,12 @@ fn relative_and_absolute_paths() -> Result<()> {
                 { name = "c" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "b"
             version = "0.1.0"
             source = { directory = "b" }
 
-            [[distribution]]
+            [[package]]
             name = "c"
             version = "0.1.0"
             source = { directory = "[TEMP_DIR]/c" }
@@ -3623,9 +3935,11 @@ fn lock_cycles() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "argparse"
             version = "1.4.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3634,7 +3948,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/f2/94/3af39d34be01a24a6e65433d19e107099374224905f1e0cc6bbe1fd22a2f/argparse-1.4.0-py2.py3-none-any.whl", hash = "sha256:c31647edb69fd3d465a847ea3157d37bed1f95f19760b11a47aa91c04b666314", size = 23000 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "extras"
             version = "1.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3643,7 +3957,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/03/e9/e915af1f97914cd0bc021e125fd1bfd4106de614a275e4b6866dd9a209ac/extras-1.0.0-py2.py3-none-any.whl", hash = "sha256:f689f08df47e2decf76aa6208c081306e7bd472630eb1ec8a875c67de2366e87", size = 7279 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "fixtures"
             version = "3.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3657,7 +3971,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/a8/28/7eed6bf76792f418029a18d5b2ace87ce7562927cdd00f1cefe481cd148f/fixtures-3.0.0-py2.py3-none-any.whl", hash = "sha256:2a551b0421101de112d9497fb5f6fd25e5019391c0fbec9bad591ecae981420d", size = 67478 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "linecache2"
             version = "1.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3666,7 +3980,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c7/a3/c5da2a44c85bfbb6eebcfc1dde24933f8704441b98fdde6528f4831757a6/linecache2-1.0.0-py2.py3-none-any.whl", hash = "sha256:e78be9c0a0dfcbac712fe04fbf92b96cddae80b1b842f24248214c8496f006ef", size = 12967 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "pbr"
             version = "6.0.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3675,7 +3989,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/64/dd/171c9fb653591cf265bcc89c436eec75c9bde3dec921cc236fa71e5698df/pbr-6.0.0-py2.py3-none-any.whl", hash = "sha256:4a7317d5e3b17a3dccb6a8cfe67dab65b20551404c52c8ed41279fa4f0cb4cda", size = 107506 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -3684,7 +3998,7 @@ fn lock_cycles() -> Result<()> {
                 { name = "testtools" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "python-mimeparse"
             version = "1.6.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3693,7 +4007,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/26/2e/03bce213a9bf02a2750dcb04e761785e9c763fc11071edc4b447eacbb842/python_mimeparse-1.6.0-py2.py3-none-any.whl", hash = "sha256:a295f03ff20341491bfe4717a39cd0a8cc9afad619ba44b77e86b0ab8a2b8282", size = 6057 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "six"
             version = "1.16.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3702,7 +4016,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/d9/5a/e7c31adbe875f2abbb91bd84cf2dc52d792b5a01506781dbcf25c91daf11/six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254", size = 11053 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "testtools"
             version = "2.3.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3720,7 +4034,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/87/74/a4d55da28d7bba6d6f49430f22a62afd8472cb24a63fa61daef80d3e821b/testtools-2.3.0-py2.py3-none-any.whl", hash = "sha256:a2be448869171b6e0f26d9544088b8b98439ec180ce272040236d570a40bcbed", size = 184636 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "traceback2"
             version = "1.4.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3732,7 +4046,7 @@ fn lock_cycles() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/17/0a/6ac05a3723017a967193456a2efa0aa9ac4b51456891af1e2353bb9de21e/traceback2-1.4.0-py2.py3-none-any.whl", hash = "sha256:8253cebec4b19094d67cc5ed5af99bf1dba1285292226e98a31929f87a5d6b23", size = 16793 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "unittest2"
             version = "1.1.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3749,6 +4063,17 @@ fn lock_cycles() -> Result<()> {
             );
         });
     }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 11 packages in [TIME]
+    "###);
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -3811,9 +4136,11 @@ fn lock_new_extras() -> Result<()> {
                 lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "certifi"
             version = "2024.2.2"
             source = { registry = "https://pypi.org/simple" }
@@ -3822,7 +4149,7 @@ fn lock_new_extras() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl", hash = "sha256:dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1", size = 163774 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "charset-normalizer"
             version = "3.3.2"
             source = { registry = "https://pypi.org/simple" }
@@ -3846,7 +4173,7 @@ fn lock_new_extras() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/28/76/e6222113b83e3622caa4bb41032d0b1bf785250607392e1b778aca0b8a7d/charset_normalizer-3.3.2-py3-none-any.whl", hash = "sha256:3e4d1f6587322d2788836a99c69062fbb091331ec940e02d12d179c1d53e25fc", size = 48543 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "idna"
             version = "3.6"
             source = { registry = "https://pypi.org/simple" }
@@ -3855,7 +4182,7 @@ fn lock_new_extras() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -3863,7 +4190,7 @@ fn lock_new_extras() -> Result<()> {
                 { name = "requests" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "requests"
             version = "2.31.0"
             source = { registry = "https://pypi.org/simple" }
@@ -3878,7 +4205,7 @@ fn lock_new_extras() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", hash = "sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f", size = 62574 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "urllib3"
             version = "2.2.1"
             source = { registry = "https://pypi.org/simple" }
@@ -3902,118 +4229,119 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    deterministic! { context =>
-        uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
 
         ----- stderr -----
         Resolved 7 packages in [TIME]
+        Added pysocks v1.7.1
         "###);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
 
-            [[distribution]]
-            name = "certifi"
-            version = "2024.2.2"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/71/da/e94e26401b62acd6d91df2b52954aceb7f561743aa5ccc32152886c76c96/certifi-2024.2.2.tar.gz", hash = "sha256:0569859f95fc761b18b45ef421b1290a0f65f147e92a1e5eb3e635f9a5e4e66f", size = 164886 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl", hash = "sha256:dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1", size = 163774 },
-            ]
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
-            name = "charset-normalizer"
-            version = "3.3.2"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/63/09/c1bc53dab74b1816a00d8d030de5bf98f724c52c1635e07681d312f20be8/charset-normalizer-3.3.2.tar.gz", hash = "sha256:f30c3cb33b24454a82faecaf01b19c18562b1e89558fb6c56de4d9118a032fd5", size = 104809 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/d1/b2/fcedc8255ec42afee97f9e6f0145c734bbe104aac28300214593eb326f1d/charset_normalizer-3.3.2-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:0b2b64d2bb6d3fb9112bafa732def486049e63de9618b5843bcdd081d8144cd8", size = 192892 },
-                { url = "https://files.pythonhosted.org/packages/2e/7d/2259318c202f3d17f3fe6438149b3b9e706d1070fe3fcbb28049730bb25c/charset_normalizer-3.3.2-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:ddbb2551d7e0102e7252db79ba445cdab71b26640817ab1e3e3648dad515003b", size = 122213 },
-                { url = "https://files.pythonhosted.org/packages/3a/52/9f9d17c3b54dc238de384c4cb5a2ef0e27985b42a0e5cc8e8a31d918d48d/charset_normalizer-3.3.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:55086ee1064215781fff39a1af09518bc9255b50d6333f2e4c74ca09fac6a8f6", size = 119404 },
-                { url = "https://files.pythonhosted.org/packages/99/b0/9c365f6d79a9f0f3c379ddb40a256a67aa69c59609608fe7feb6235896e1/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:8f4a014bc36d3c57402e2977dada34f9c12300af536839dc38c0beab8878f38a", size = 137275 },
-                { url = "https://files.pythonhosted.org/packages/91/33/749df346e93d7a30cdcb90cbfdd41a06026317bfbfb62cd68307c1a3c543/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:a10af20b82360ab00827f916a6058451b723b4e65030c5a18577c8b2de5b3389", size = 147518 },
-                { url = "https://files.pythonhosted.org/packages/72/1a/641d5c9f59e6af4c7b53da463d07600a695b9824e20849cb6eea8a627761/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:8d756e44e94489e49571086ef83b2bb8ce311e730092d2c34ca8f7d925cb20aa", size = 140182 },
-                { url = "https://files.pythonhosted.org/packages/ee/fb/14d30eb4956408ee3ae09ad34299131fb383c47df355ddb428a7331cfa1e/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:90d558489962fd4918143277a773316e56c72da56ec7aa3dc3dbbe20fdfed15b", size = 141869 },
-                { url = "https://files.pythonhosted.org/packages/df/3e/a06b18788ca2eb6695c9b22325b6fde7dde0f1d1838b1792a0076f58fe9d/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:6ac7ffc7ad6d040517be39eb591cac5ff87416c2537df6ba3cba3bae290c0fed", size = 144042 },
-                { url = "https://files.pythonhosted.org/packages/45/59/3d27019d3b447a88fe7e7d004a1e04be220227760264cc41b405e863891b/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:7ed9e526742851e8d5cc9e6cf41427dfc6068d4f5a3bb03659444b4cabf6bc26", size = 138275 },
-                { url = "https://files.pythonhosted.org/packages/7b/ef/5eb105530b4da8ae37d506ccfa25057961b7b63d581def6f99165ea89c7e/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:8bdb58ff7ba23002a4c5808d608e4e6c687175724f54a5dade5fa8c67b604e4d", size = 144819 },
-                { url = "https://files.pythonhosted.org/packages/a2/51/e5023f937d7f307c948ed3e5c29c4b7a3e42ed2ee0b8cdf8f3a706089bf0/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_ppc64le.whl", hash = "sha256:6b3251890fff30ee142c44144871185dbe13b11bab478a88887a639655be1068", size = 149415 },
-                { url = "https://files.pythonhosted.org/packages/24/9d/2e3ef673dfd5be0154b20363c5cdcc5606f35666544381bee15af3778239/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_s390x.whl", hash = "sha256:b4a23f61ce87adf89be746c8a8974fe1c823c891d8f86eb218bb957c924bb143", size = 141212 },
-                { url = "https://files.pythonhosted.org/packages/5b/ae/ce2c12fcac59cb3860b2e2d76dc405253a4475436b1861d95fe75bdea520/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:efcb3f6676480691518c177e3b465bcddf57cea040302f9f4e6e191af91174d4", size = 142167 },
-                { url = "https://files.pythonhosted.org/packages/ed/3a/a448bf035dce5da359daf9ae8a16b8a39623cc395a2ffb1620aa1bce62b0/charset_normalizer-3.3.2-cp312-cp312-win32.whl", hash = "sha256:d965bba47ddeec8cd560687584e88cf699fd28f192ceb452d1d7ee807c5597b7", size = 93041 },
-                { url = "https://files.pythonhosted.org/packages/b6/7c/8debebb4f90174074b827c63242c23851bdf00a532489fba57fef3416e40/charset_normalizer-3.3.2-cp312-cp312-win_amd64.whl", hash = "sha256:96b02a3dc4381e5494fad39be677abcb5e6634bf7b4fa83a6dd3112607547001", size = 100397 },
-                { url = "https://files.pythonhosted.org/packages/28/76/e6222113b83e3622caa4bb41032d0b1bf785250607392e1b778aca0b8a7d/charset_normalizer-3.3.2-py3-none-any.whl", hash = "sha256:3e4d1f6587322d2788836a99c69062fbb091331ec940e02d12d179c1d53e25fc", size = 48543 },
-            ]
+        [[package]]
+        name = "certifi"
+        version = "2024.2.2"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/71/da/e94e26401b62acd6d91df2b52954aceb7f561743aa5ccc32152886c76c96/certifi-2024.2.2.tar.gz", hash = "sha256:0569859f95fc761b18b45ef421b1290a0f65f147e92a1e5eb3e635f9a5e4e66f", size = 164886 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ba/06/a07f096c664aeb9f01624f858c3add0a4e913d6c96257acb4fce61e7de14/certifi-2024.2.2-py3-none-any.whl", hash = "sha256:dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1", size = 163774 },
+        ]
 
-            [[distribution]]
-            name = "idna"
-            version = "3.6"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
-            ]
+        [[package]]
+        name = "charset-normalizer"
+        version = "3.3.2"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/63/09/c1bc53dab74b1816a00d8d030de5bf98f724c52c1635e07681d312f20be8/charset-normalizer-3.3.2.tar.gz", hash = "sha256:f30c3cb33b24454a82faecaf01b19c18562b1e89558fb6c56de4d9118a032fd5", size = 104809 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d1/b2/fcedc8255ec42afee97f9e6f0145c734bbe104aac28300214593eb326f1d/charset_normalizer-3.3.2-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:0b2b64d2bb6d3fb9112bafa732def486049e63de9618b5843bcdd081d8144cd8", size = 192892 },
+            { url = "https://files.pythonhosted.org/packages/2e/7d/2259318c202f3d17f3fe6438149b3b9e706d1070fe3fcbb28049730bb25c/charset_normalizer-3.3.2-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:ddbb2551d7e0102e7252db79ba445cdab71b26640817ab1e3e3648dad515003b", size = 122213 },
+            { url = "https://files.pythonhosted.org/packages/3a/52/9f9d17c3b54dc238de384c4cb5a2ef0e27985b42a0e5cc8e8a31d918d48d/charset_normalizer-3.3.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:55086ee1064215781fff39a1af09518bc9255b50d6333f2e4c74ca09fac6a8f6", size = 119404 },
+            { url = "https://files.pythonhosted.org/packages/99/b0/9c365f6d79a9f0f3c379ddb40a256a67aa69c59609608fe7feb6235896e1/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:8f4a014bc36d3c57402e2977dada34f9c12300af536839dc38c0beab8878f38a", size = 137275 },
+            { url = "https://files.pythonhosted.org/packages/91/33/749df346e93d7a30cdcb90cbfdd41a06026317bfbfb62cd68307c1a3c543/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:a10af20b82360ab00827f916a6058451b723b4e65030c5a18577c8b2de5b3389", size = 147518 },
+            { url = "https://files.pythonhosted.org/packages/72/1a/641d5c9f59e6af4c7b53da463d07600a695b9824e20849cb6eea8a627761/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:8d756e44e94489e49571086ef83b2bb8ce311e730092d2c34ca8f7d925cb20aa", size = 140182 },
+            { url = "https://files.pythonhosted.org/packages/ee/fb/14d30eb4956408ee3ae09ad34299131fb383c47df355ddb428a7331cfa1e/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:90d558489962fd4918143277a773316e56c72da56ec7aa3dc3dbbe20fdfed15b", size = 141869 },
+            { url = "https://files.pythonhosted.org/packages/df/3e/a06b18788ca2eb6695c9b22325b6fde7dde0f1d1838b1792a0076f58fe9d/charset_normalizer-3.3.2-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:6ac7ffc7ad6d040517be39eb591cac5ff87416c2537df6ba3cba3bae290c0fed", size = 144042 },
+            { url = "https://files.pythonhosted.org/packages/45/59/3d27019d3b447a88fe7e7d004a1e04be220227760264cc41b405e863891b/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:7ed9e526742851e8d5cc9e6cf41427dfc6068d4f5a3bb03659444b4cabf6bc26", size = 138275 },
+            { url = "https://files.pythonhosted.org/packages/7b/ef/5eb105530b4da8ae37d506ccfa25057961b7b63d581def6f99165ea89c7e/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:8bdb58ff7ba23002a4c5808d608e4e6c687175724f54a5dade5fa8c67b604e4d", size = 144819 },
+            { url = "https://files.pythonhosted.org/packages/a2/51/e5023f937d7f307c948ed3e5c29c4b7a3e42ed2ee0b8cdf8f3a706089bf0/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_ppc64le.whl", hash = "sha256:6b3251890fff30ee142c44144871185dbe13b11bab478a88887a639655be1068", size = 149415 },
+            { url = "https://files.pythonhosted.org/packages/24/9d/2e3ef673dfd5be0154b20363c5cdcc5606f35666544381bee15af3778239/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_s390x.whl", hash = "sha256:b4a23f61ce87adf89be746c8a8974fe1c823c891d8f86eb218bb957c924bb143", size = 141212 },
+            { url = "https://files.pythonhosted.org/packages/5b/ae/ce2c12fcac59cb3860b2e2d76dc405253a4475436b1861d95fe75bdea520/charset_normalizer-3.3.2-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:efcb3f6676480691518c177e3b465bcddf57cea040302f9f4e6e191af91174d4", size = 142167 },
+            { url = "https://files.pythonhosted.org/packages/ed/3a/a448bf035dce5da359daf9ae8a16b8a39623cc395a2ffb1620aa1bce62b0/charset_normalizer-3.3.2-cp312-cp312-win32.whl", hash = "sha256:d965bba47ddeec8cd560687584e88cf699fd28f192ceb452d1d7ee807c5597b7", size = 93041 },
+            { url = "https://files.pythonhosted.org/packages/b6/7c/8debebb4f90174074b827c63242c23851bdf00a532489fba57fef3416e40/charset_normalizer-3.3.2-cp312-cp312-win_amd64.whl", hash = "sha256:96b02a3dc4381e5494fad39be677abcb5e6634bf7b4fa83a6dd3112607547001", size = 100397 },
+            { url = "https://files.pythonhosted.org/packages/28/76/e6222113b83e3622caa4bb41032d0b1bf785250607392e1b778aca0b8a7d/charset_normalizer-3.3.2-py3-none-any.whl", hash = "sha256:3e4d1f6587322d2788836a99c69062fbb091331ec940e02d12d179c1d53e25fc", size = 48543 },
+        ]
 
-            [[distribution]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "requests", extra = ["socks"] },
-            ]
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
 
-            [[distribution]]
-            name = "pysocks"
-            version = "1.7.1"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725 },
-            ]
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "requests", extra = ["socks"] },
+        ]
 
-            [[distribution]]
-            name = "requests"
-            version = "2.31.0"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "certifi" },
-                { name = "charset-normalizer" },
-                { name = "idna" },
-                { name = "urllib3" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d4380d62fd5b955065c3/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7ffb0d1cf7af05c3d2791656dbd6ad1e1", size = 110794 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", hash = "sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f", size = 62574 },
-            ]
+        [[package]]
+        name = "pysocks"
+        version = "1.7.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725 },
+        ]
 
-            [distribution.optional-dependencies]
-            socks = [
-                { name = "pysocks" },
-            ]
+        [[package]]
+        name = "requests"
+        version = "2.31.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "certifi" },
+            { name = "charset-normalizer" },
+            { name = "idna" },
+            { name = "urllib3" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d4380d62fd5b955065c3/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7ffb0d1cf7af05c3d2791656dbd6ad1e1", size = 110794 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", hash = "sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f", size = 62574 },
+        ]
 
-            [[distribution]]
-            name = "urllib3"
-            version = "2.2.1"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/7a/50/7fd50a27caa0652cd4caf224aa87741ea41d3265ad13f010886167cfcc79/urllib3-2.2.1.tar.gz", hash = "sha256:d0570876c61ab9e520d776c38acbbb5b05a776d3f9ff98a5c8fd5162a444cf19", size = 291020 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
-            ]
-            "###
-            );
-        });
-    }
+        [package.optional-dependencies]
+        socks = [
+            { name = "pysocks" },
+        ]
+
+        [[package]]
+        name = "urllib3"
+        version = "2.2.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/7a/50/7fd50a27caa0652cd4caf224aa87741ea41d3265ad13f010886167cfcc79/urllib3-2.2.1.tar.gz", hash = "sha256:d0570876c61ab9e520d776c38acbbb5b05a776d3f9ff98a5c8fd5162a444cf19", size = 291020 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d", size = 121067 },
+        ]
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -4041,7 +4369,7 @@ fn lock_invalid_hash() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
 
-        [[distribution]]
+        [[package]]
         name = "anyio"
         version = "3.7.0"
         source = { registry = "https://pypi.org/simple" }
@@ -4054,7 +4382,7 @@ fn lock_invalid_hash() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
@@ -4063,7 +4391,7 @@ fn lock_invalid_hash() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:d05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -4071,7 +4399,7 @@ fn lock_invalid_hash() -> Result<()> {
             { name = "anyio" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
@@ -4081,8 +4409,19 @@ fn lock_invalid_hash() -> Result<()> {
         ]
         "#)?;
 
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
+
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove("UV_EXCLUDE_NEWER"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4139,9 +4478,11 @@ fn lock_resolution_mode() -> Result<()> {
             lock, @r###"
             version = 1
             requires-python = ">=3.12"
+
+            [options]
             exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[distribution]]
+            [[package]]
             name = "anyio"
             version = "4.3.0"
             source = { registry = "https://pypi.org/simple" }
@@ -4154,7 +4495,7 @@ fn lock_resolution_mode() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "idna"
             version = "3.6"
             source = { registry = "https://pypi.org/simple" }
@@ -4163,7 +4504,7 @@ fn lock_resolution_mode() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "project"
             version = "0.1.0"
             source = { editable = "." }
@@ -4171,7 +4512,7 @@ fn lock_resolution_mode() -> Result<()> {
                 { name = "anyio" },
             ]
 
-            [[distribution]]
+            [[package]]
             name = "sniffio"
             version = "1.3.1"
             source = { registry = "https://pypi.org/simple" }
@@ -4196,14 +4537,15 @@ fn lock_resolution_mode() -> Result<()> {
 
     // Locking with `lowest-direct` should ignore the existing lockfile.
     uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
-        Resolved 4 packages in [TIME]
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
+    Resolved 4 packages in [TIME]
+    Updated anyio v4.3.0 -> v3.0.0
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -4215,10 +4557,12 @@ fn lock_resolution_mode() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
         resolution-mode = "lowest-direct"
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[package]]
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
@@ -4231,7 +4575,7 @@ fn lock_resolution_mode() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", hash = "sha256:e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395", size = 72182 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
@@ -4240,7 +4584,7 @@ fn lock_resolution_mode() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -4248,7 +4592,7 @@ fn lock_resolution_mode() -> Result<()> {
             { name = "anyio" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
@@ -4362,51 +4706,69 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        environment-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin'",
+        ]
+
+        [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
-        [[distribution]]
+        [[package]]
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
+        environment-markers = [
+            "sys_platform != 'darwin'",
+        ]
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            { name = "idna", marker = "sys_platform != 'darwin'" },
+            { name = "sniffio", marker = "sys_platform != 'darwin'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", hash = "sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9", size = 116952 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", hash = "sha256:e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395", size = 72182 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "anyio"
         version = "3.7.0"
         source = { registry = "https://pypi.org/simple" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            { name = "idna", marker = "sys_platform == 'darwin'" },
+            { name = "sniffio", marker = "sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v1" }
+        environment-markers = [
+            "sys_platform == 'darwin'",
+        ]
         dependencies = [
-            { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "dependency"
         version = "0.0.1"
         source = { directory = "[TEMP_DIR]/v2" }
+        environment-markers = [
+            "sys_platform != 'darwin'",
+        ]
         dependencies = [
-            { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
@@ -4415,7 +4777,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
         ]
 
-        [[distribution]]
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
@@ -4424,7 +4786,925 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v2" }, marker = "sys_platform != 'darwin'" },
         ]
 
-        [[distribution]]
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// When locking with `--resolution-mode=lowest`, we shouldn't warn on unbounded direct
+/// dependencies.
+#[test]
+fn lock_unsafe_lowest() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        all = ["project[dev]"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Lock a package that's excluded from the parent workspace, but depends on that parent.
+#[test]
+fn lock_exclusion() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = []
+        exclude = ["child"]
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["project"]
+
+        [tool.uv.sources]
+        project = { path = ".." }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(child.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "project" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { directory = "../" }
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Ensure that development dependencies are omitted for non-workspace members. Below, `bar` depends
+/// on `foo`, but `bar/uv.lock` should omit `anyio`, but should include `typing-extensions`.
+#[test]
+fn lock_dev_transitive() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let foo = context.temp_dir.child("foo");
+    fs_err::create_dir_all(&foo)?;
+
+    let pyproject_toml = foo.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+        "#,
+    )?;
+
+    let bar = context.temp_dir.child("bar");
+    fs_err::create_dir_all(&bar)?;
+
+    let pyproject_toml = bar.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo", "baz", "iniconfig>1"]
+
+        [tool.uv.sources]
+        foo = { path = "../foo" }
+        baz = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["baz"]
+        "#,
+    )?;
+
+    let baz = bar.child("baz");
+    fs_err::create_dir_all(&baz)?;
+
+    let pyproject_toml = baz.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "baz"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["typing-extensions>4"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&bar), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(bar.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "bar"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "baz" },
+            { name = "foo" },
+            { name = "iniconfig" },
+        ]
+
+        [[package]]
+        name = "baz"
+        version = "0.1.0"
+        source = { editable = "baz" }
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "typing-extensions" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { directory = "../foo" }
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Avoid persisting credentials in `uv.lock`.
+#[test]
+fn lock_redact() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    // The lockfile shout omit the credentials.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
+        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+        "###
+        );
+    });
+
+    // Installing from the lockfile should fail without credentials.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    "###);
+
+    // Installing from the lockfile should fail without an index.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    "###);
+
+    // Installing from the lockfile should succeed when credentials are included.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+/// Lock a package that's excluded from the parent workspace, but depends on that parent.
+#[test]
+fn lock_no_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        [tool.uv.sources]
+        anyio = { path = "./anyio" }
+        "#,
+    )?;
+
+    let anyio = context.temp_dir.child("anyio");
+    fs_err::create_dir_all(&anyio)?;
+
+    let pyproject_toml = anyio.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Lock the root package with `tool.uv.sources` enabled.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "0.1.0"
+        source = { directory = "anyio" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+        "###
+        );
+    });
+
+    // Lock the root package with `tool.uv.sources` disabled.
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Updated anyio v0.1.0 -> v4.3.0
+    Added idna v3.6
+    Removed iniconfig v2.0.0
+    Added sniffio v1.3.1
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Lock a project that has an existing lockfile with a deprecated schema.
+#[test]
+fn lock_migrate() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    // Write a lockfile with a deprecated schema.
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str(
+        r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[distribution-term-we-dont-know]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[distribution-term-we-dont-know]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[distribution-term-we-dont-know]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+        { name = "anyio" },
+        ]
+
+        [[distribution-term-we-dont-know]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "#
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Added anyio v4.3.0
+    Added idna v3.6
+    Added project v0.1.0
+    Added sniffio v1.3.1
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Upgrade a specific package with `--upgrade-package`.
+#[test]
+fn lock_upgrade_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Constrain `anyio` and `idna.`
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<=2", "idna<=3"]
+        "#,
+    )?;
+
+    // Lock the root package.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/fe/dc/daeadb9b34093d3968afcc93946ee567cd6d2b402a96c608cb160f74d737/anyio-2.0.0.tar.gz", hash = "sha256:ceca4669ffa3f02bf20ef3d6c2a0c323b16cdc71d1ce0b0bc03c6f1f36054826", size = 91291 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/8a/19/10fe682e962efd1610aa41376399fc3f3e002425449b02d0fb04749bb712/anyio-2.0.0-py3-none-any.whl", hash = "sha256:0b8375c8fc665236cb4d143ea13e849eb9e074d727b1b5c27d88aba44ca8c547", size = 62675 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/2f/2e/bfe821bd26194fb474e0932df8ed82e24bd312ba628a8644d93c5a28b5d4/idna-3.0.tar.gz", hash = "sha256:c9a26e10e5558412384fac891eefb41957831d31be55f1e2c98ed97a70abb969", size = 180786 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0f/6b/3a878f15ef3324754bf4780f8f047d692d9860be894ff8fb3135cef8bed8/idna-3.0-py2.py3-none-any.whl", hash = "sha256:320229aadbdfc597bc28876748cc0c9d04d476e0fe6caacaaddea146365d9f63", size = 58618 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+            { name = "idna" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    // Remove the constraints.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio", "idna"]
+        "#,
+    )?;
+
+    // Upgrade `anyio`, but nothing else.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    "###);
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/2f/2e/bfe821bd26194fb474e0932df8ed82e24bd312ba628a8644d93c5a28b5d4/idna-3.0.tar.gz", hash = "sha256:c9a26e10e5558412384fac891eefb41957831d31be55f1e2c98ed97a70abb969", size = 180786 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0f/6b/3a878f15ef3324754bf4780f8f047d692d9860be894ff8fb3135cef8bed8/idna-3.0-py2.py3-none-any.whl", hash = "sha256:320229aadbdfc597bc28876748cc0c9d04d476e0fe6caacaaddea146365d9f63", size = 58618 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+            { name = "idna" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    // Upgrade everything.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Updated idna v3.0 -> v3.6
+    "###);
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+            { name = "idna" },
+        ]
+
+        [[package]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }

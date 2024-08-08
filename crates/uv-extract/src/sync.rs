@@ -14,6 +14,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
     target: &Path,
 ) -> Result<(), Error> {
     // Unzip in parallel.
+    let reader = std::io::BufReader::new(reader);
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
     let directories = Mutex::new(FxHashSet::default());
     (0..archive.len())
@@ -45,8 +46,16 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             }
 
             // Copy the file contents.
-            let mut outfile = fs_err::File::create(&path)?;
-            std::io::copy(&mut file, &mut outfile)?;
+            let outfile = fs_err::File::create(&path)?;
+            let size = file.size();
+            if size > 0 {
+                let mut writer = if let Ok(size) = usize::try_from(size) {
+                    std::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), outfile)
+                } else {
+                    std::io::BufWriter::new(outfile)
+                };
+                std::io::copy(&mut file, &mut writer)?;
+            }
 
             // See `uv_extract::stream::unzip`. For simplicity, this is identical with the code there except for being
             // sync.
@@ -60,10 +69,12 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
                     let has_any_executable_bit = mode & 0o111;
                     if has_any_executable_bit != 0 {
                         let permissions = fs_err::metadata(&path)?.permissions();
-                        fs_err::set_permissions(
-                            &path,
-                            Permissions::from_mode(permissions.mode() | 0o111),
-                        )?;
+                        if permissions.mode() & 0o111 != 0o111 {
+                            fs_err::set_permissions(
+                                &path,
+                                Permissions::from_mode(permissions.mode() | 0o111),
+                            )?;
+                        }
                     }
                 }
             }

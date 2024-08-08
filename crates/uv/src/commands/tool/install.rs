@@ -6,7 +6,6 @@ use distribution_types::UnresolvedRequirementSpecification;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
@@ -18,6 +17,9 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_tool::InstalledTools;
 use uv_warnings::{warn_user, warn_user_once};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+
+use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{
     project::{resolve_environment, resolve_names, sync_environment, update_environment},
     tool::common::InstallAction,
@@ -30,6 +32,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Install a tool.
 pub(crate) async fn install(
     package: String,
+    editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
     python: Option<String>,
@@ -72,6 +75,9 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls);
 
     // Resolve the `from` requirement.
     let from = if let Some(from) = from {
@@ -81,9 +87,18 @@ pub(crate) async fn install(
             bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{package}`)", from = from.cyan(), package = package.cyan())
         };
 
+        let source = if editable {
+            RequirementsSource::Editable(from)
+        } else {
+            RequirementsSource::Package(from)
+        };
+        let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+            .await?
+            .requirements;
+
         let from_requirement = {
             resolve_names(
-                vec![RequirementsSpecification::parse_package(&from)?],
+                requirements,
                 &interpreter,
                 &settings,
                 &state,
@@ -111,8 +126,17 @@ pub(crate) async fn install(
 
         from_requirement
     } else {
+        let source = if editable {
+            RequirementsSource::Editable(package.clone())
+        } else {
+            RequirementsSource::Package(package.clone())
+        };
+        let requirements = RequirementsSpecification::from_source(&source, &client_builder)
+            .await?
+            .requirements;
+
         resolve_names(
-            vec![RequirementsSpecification::parse_package(&package)?],
+            requirements,
             &interpreter,
             &settings,
             &state,
@@ -129,12 +153,7 @@ pub(crate) async fn install(
     };
 
     // Read the `--with` requirements.
-    let spec = {
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
-        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
-    };
+    let spec = RequirementsSpecification::from_simple_sources(with, &client_builder).await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -169,10 +188,10 @@ pub(crate) async fn install(
     //
     // (If we find existing entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing
     // the external tool's entrypoints (without `--force`).)
-    let (existing_tool_receipt, reinstall_entry_points) =
+    let (existing_tool_receipt, invalid_tool_receipt) =
         match installed_tools.get_tool_receipt(&from.name) {
             Ok(None) => (None, false),
-            Ok(Some(receipt)) => (Some(receipt), true),
+            Ok(Some(receipt)) => (Some(receipt), false),
             Err(_) => {
                 // If the tool is not installed properly, remove the environment and continue.
                 match installed_tools.remove_environment(&from.name) {
@@ -213,12 +232,7 @@ pub(crate) async fn install(
     // If the requested and receipt requirements are the same...
     if existing_environment.is_some() {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
-            let receipt = tool_receipt
-                .requirements()
-                .iter()
-                .cloned()
-                .map(Requirement::from)
-                .collect::<Vec<_>>();
+            let receipt = tool_receipt.requirements().to_vec();
             if requirements == receipt {
                 // And the user didn't request a reinstall or upgrade...
                 if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
@@ -249,11 +263,13 @@ pub(crate) async fn install(
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
-        update_environment(
+        let environment = update_environment(
             environment,
             spec,
             &settings,
             &state,
+            Box::new(DefaultResolveLogger),
+            Box::new(DefaultInstallLogger),
             preview,
             connectivity,
             concurrency,
@@ -261,7 +277,15 @@ pub(crate) async fn install(
             cache,
             printer,
         )
-        .await?
+        .await?;
+
+        // At this point, we updated the existing environment, so we should remove any of its
+        // existing executables.
+        if let Some(existing_receipt) = existing_tool_receipt {
+            remove_entrypoints(&existing_receipt);
+        }
+
+        environment
     } else {
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
@@ -270,6 +294,7 @@ pub(crate) async fn install(
             spec,
             settings.as_ref().into(),
             &state,
+            Box::new(DefaultResolveLogger),
             preview,
             connectivity,
             concurrency,
@@ -281,12 +306,19 @@ pub(crate) async fn install(
 
         let environment = installed_tools.create_environment(&from.name, interpreter)?;
 
+        // At this point, we removed any existing environment, so we should remove any of its
+        // executables.
+        if let Some(existing_receipt) = existing_tool_receipt {
+            remove_entrypoints(&existing_receipt);
+        }
+
         // Sync the environment with the resolved requirements.
         sync_environment(
             environment,
             &resolution.into(),
             settings.as_ref().into(),
             &state,
+            Box::new(DefaultInstallLogger),
             preview,
             connectivity,
             concurrency,
@@ -296,13 +328,13 @@ pub(crate) async fn install(
         )
         .await?
     };
+
     install_executables(
         &environment,
         &from.name,
         &installed_tools,
         printer,
-        force,
-        reinstall_entry_points,
+        force || invalid_tool_receipt,
         python,
         requirements,
         &InstallAction::Install,

@@ -3,6 +3,7 @@ use std::fmt::Write;
 use anstream::eprint;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use pep508_rs::PackageName;
 use tracing::{debug, enabled, Level};
 
 use distribution_types::{IndexLocations, Resolution, UnresolvedRequirementSpecification};
@@ -13,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+    IndexStrategy, PreviewMode, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -24,11 +25,12 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PreReleaseMode, PythonRequirement,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
     ResolutionMode, ResolverMarkers,
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::{elapsed, ExitStatus, SharedState};
@@ -40,11 +42,12 @@ pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     resolution_mode: ResolutionMode,
-    prerelease_mode: PreReleaseMode,
+    prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
@@ -58,11 +61,13 @@ pub(crate) async fn pip_install(
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
+    no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     strict: bool,
     exclude_newer: Option<ExcludeNewer>,
+    sources: SourceStrategy,
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
@@ -104,6 +109,10 @@ pub(crate) async fn pip_install(
         &client_builder,
     )
     .await?;
+
+    // Read build constraints.
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     let constraints: Vec<Requirement> = constraints
         .iter()
@@ -283,8 +292,10 @@ pub(crate) async fn pip_install(
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(&environment)
-    } else {
+    } else if no_build_isolation_package.is_empty() {
         BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
     // Initialize any shared state.
@@ -294,6 +305,7 @@ pub(crate) async fn pip_install(
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
+        &build_constraints,
         interpreter,
         &index_locations,
         &flat_index,
@@ -307,6 +319,7 @@ pub(crate) async fn pip_install(
         link_mode,
         &build_options,
         exclude_newer,
+        sources,
         concurrency,
         preview,
     );
@@ -342,9 +355,9 @@ pub(crate) async fn pip_install(
         &build_dispatch,
         concurrency,
         options,
+        Box::new(DefaultResolveLogger),
         printer,
         preview,
-        false,
     )
     .await
     {
@@ -375,6 +388,7 @@ pub(crate) async fn pip_install(
         &build_dispatch,
         &cache,
         &environment,
+        Box::new(DefaultInstallLogger),
         dry_run,
         printer,
         preview,

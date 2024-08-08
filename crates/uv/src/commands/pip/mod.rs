@@ -10,13 +10,14 @@ pub(crate) mod compile;
 pub(crate) mod freeze;
 pub(crate) mod install;
 pub(crate) mod list;
+pub(crate) mod loggers;
 pub(crate) mod operations;
 pub(crate) mod show;
 pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod uninstall;
 
-// Determine the tags, markers, and interpreter to use for resolution.
+/// Determine the tags, markers, and interpreter to use for resolution.
 pub(crate) fn resolution_environment(
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,

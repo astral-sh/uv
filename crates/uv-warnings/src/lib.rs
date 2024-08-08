@@ -1,10 +1,9 @@
 use std::sync::atomic::AtomicBool;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 // macro hygiene: The user might not have direct dependencies on those crates
 #[doc(hidden)]
 pub use anstream;
-use once_cell::sync::Lazy;
 #[doc(hidden)]
 pub use owo_colors;
 use rustc_hash::FxHashSet;
@@ -37,7 +36,7 @@ macro_rules! warn_user {
     };
 }
 
-pub static WARNINGS: Lazy<Mutex<FxHashSet<String>>> = Lazy::new(Mutex::default);
+pub static WARNINGS: LazyLock<Mutex<FxHashSet<String>>> = LazyLock::new(Mutex::default);
 
 /// Warn a user once, if warnings are enabled, with uniqueness determined by the content of the
 /// message.

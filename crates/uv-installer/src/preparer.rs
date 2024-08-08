@@ -4,26 +4,33 @@ use std::sync::Arc;
 use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
 use pep508_rs::PackageName;
 use tokio::task::JoinError;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use url::Url;
 
-use distribution_types::{BuildableSource, CachedDist, Dist, Hashed, Identifier, RemoteSource};
+use distribution_types::{
+    BuildableSource, CachedDist, Dist, Hashed, Identifier, Name, RemoteSource,
+};
 use platform_tags::Tags;
 use uv_cache::Cache;
+use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_types::{BuildContext, HashStrategy, InFlight};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("Building source distributions is disabled, but attempted to build `{0}`")]
+    NoBuild(PackageName),
+    #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
+    NoBinary(PackageName),
     #[error("Failed to unzip wheel: {0}")]
-    Unzip(Dist, #[source] uv_extract::Error),
+    Unzip(Dist, #[source] Box<uv_extract::Error>),
     #[error("Failed to fetch wheel: {0}")]
-    Fetch(Dist, #[source] uv_distribution::Error),
+    Fetch(Dist, #[source] Box<uv_distribution::Error>),
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
     #[error(transparent)]
-    Editable(#[from] uv_distribution::Error),
+    Editable(#[from] Box<uv_distribution::Error>),
     #[error("Failed to write to the client cache")]
     CacheWrite(#[source] std::io::Error),
     #[error("Unzip failed in another thread: {0}")]
@@ -37,6 +44,7 @@ pub struct Preparer<'a, Context: BuildContext> {
     tags: &'a Tags,
     cache: &'a Cache,
     hashes: &'a HashStrategy,
+    build_options: &'a BuildOptions,
     database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -46,12 +54,14 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         cache: &'a Cache,
         tags: &'a Tags,
         hashes: &'a HashStrategy,
+        build_options: &'a BuildOptions,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             tags,
             cache,
             hashes,
+            build_options,
             database,
             reporter: None,
         }
@@ -65,6 +75,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             tags: self.tags,
             cache: self.cache,
             hashes: self.hashes,
+            build_options: self.build_options,
             database: self.database.with_reporter(Facade::from(reporter.clone())),
             reporter: Some(reporter.clone()),
         }
@@ -110,10 +121,27 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
 
         Ok(wheels)
     }
-
     /// Download, build, and unzip a single wheel.
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
+        // Validate that the distribution is compatible with the build options.
+        match dist {
+            Dist::Built(ref dist) => {
+                if self.build_options.no_binary_package(dist.name()) {
+                    return Err(Error::NoBinary(dist.name().clone()));
+                }
+            }
+            Dist::Source(ref dist) => {
+                if self.build_options.no_build_package(dist.name()) {
+                    if dist.is_editable() {
+                        debug!("Allowing build for editable source distribution: {dist}");
+                    } else {
+                        return Err(Error::NoBuild(dist.name().clone()));
+                    }
+                }
+            }
+        }
+
         let id = dist.distribution_id();
         if in_flight.downloads.register(id.clone()) {
             let policy = self.hashes.get(&dist);
@@ -122,7 +150,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed_local()
-                .map_err(|err| Error::Fetch(dist.clone(), err))
+                .map_err(|err| Error::Fetch(dist.clone(), Box::new(err)))
                 .await
                 .and_then(|wheel: LocalWheel| {
                     if wheel.satisfies(policy) {
@@ -130,11 +158,11 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     } else {
                         Err(Error::Fetch(
                             dist.clone(),
-                            uv_distribution::Error::hash_mismatch(
+                            Box::new(uv_distribution::Error::hash_mismatch(
                                 dist.to_string(),
                                 policy.digests(),
                                 wheel.hashes(),
-                            ),
+                            )),
                         ))
                     }
                 })

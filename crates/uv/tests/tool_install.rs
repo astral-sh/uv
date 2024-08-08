@@ -82,7 +82,7 @@ fn tool_install() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = [{ name = "black" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -144,7 +144,6 @@ fn tool_install() {
             sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
             sys.exit(main())
         "###);
-
     });
 
     uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
@@ -161,10 +160,9 @@ fn tool_install() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a new tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["flask"]
+        requirements = [{ name = "flask" }]
         entrypoints = [
             { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
         ]
@@ -300,7 +298,7 @@ fn tool_install_version() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black==24.2.0"]
+        requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -314,6 +312,371 @@ fn tool_install_version() {
     ----- stdout -----
     black, 24.2.0 (compiled: yes)
     Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    "###);
+}
+
+/// Test an editable installation of a tool.
+#[test]
+fn tool_install_editable() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` as an editable package.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    Installed 1 executable: black
+    "###);
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run black in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/black/bin/python
+        # -*- coding: utf-8 -*-
+        import re
+        import sys
+        from black import main
+        if __name__ == "__main__":
+            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+        ]
+        "###);
+    });
+
+    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello world!
+
+    ----- stderr -----
+    "###);
+
+    // Request `black`. It should reinstall from the registry.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Installed 1 executable: black
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+        ]
+        "###);
+    });
+
+    // Request `black` at a different version. It should install a new version.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--from")
+        .arg("black==24.2.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 6 packages in [TIME]
+     - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==24.2.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black", specifier = "==24.2.0" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+}
+
+/// Ensure that we remove any existing entrypoints upon error.
+#[test]
+fn tool_install_remove_on_empty() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Request `black`. It should reinstall from the registry.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+
+    // Install `black` as an editable package, but without any entrypoints.
+    let black = context.temp_dir.child("black");
+    fs_err::create_dir_all(black.path())?;
+
+    let pyproject_toml = black.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "black"
+        version = "0.1.0"
+        description = "Black without any entrypoints"
+        authors = []
+        dependencies = []
+        requires-python = ">=3.11,<3.13"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+    })?;
+
+    let src = black.child("src").child("black");
+    fs_err::create_dir_all(src.path())?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("-e")
+        .arg(black.path())
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    No executables are provided by `black`
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     - black==24.3.0
+     + black==0.1.0 (from file://[TEMP_DIR]/black)
+     - click==8.1.7
+     - mypy-extensions==1.0.0
+     - packaging==24.0
+     - pathspec==0.12.1
+     - platformdirs==4.2.0
+    "###);
+
+    // Re-request `black`. It should reinstall, without requiring `--force`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+        "###);
+    });
+
+    Ok(())
+}
+
+/// Test an editable installation of a tool using `--from`.
+#[test]
+fn tool_install_editable_from() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` as an editable package.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("-e")
+        .arg("--from")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    Installed 1 executable: black
+    "###);
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run black in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/black/bin/python
+        # -*- coding: utf-8 -*-
+        import re
+        import sys
+        from black import main
+        if __name__ == "__main__":
+            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+        ]
+        "###);
+    });
+
+    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello world!
 
     ----- stderr -----
     "###);
@@ -453,7 +816,7 @@ fn tool_install_already_installed() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = [{ name = "black" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -487,7 +850,7 @@ fn tool_install_already_installed() {
         // We should not have an additional tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = [{ name = "black" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -510,6 +873,7 @@ fn tool_install_already_installed() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - black==24.3.0
@@ -543,6 +907,7 @@ fn tool_install_already_installed() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - black==24.3.0
@@ -566,6 +931,7 @@ fn tool_install_already_installed() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - click==8.1.7
@@ -639,6 +1005,7 @@ fn tool_install_entry_point_exists() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
@@ -765,6 +1132,7 @@ fn tool_install_entry_point_exists() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - black==24.3.0
@@ -790,7 +1158,7 @@ fn tool_install_entry_point_exists() {
         // We write a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = [{ name = "black" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -823,7 +1191,7 @@ fn tool_install_entry_point_exists() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = [{ name = "black" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -1053,7 +1421,7 @@ fn tool_install_unnamed_package() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl"]
+        requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -1165,7 +1533,7 @@ fn tool_install_unnamed_from() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl"]
+        requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -1253,8 +1621,8 @@ fn tool_install_unnamed_with() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = [
-            "black",
-            "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+            { name = "black" },
+            { name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
@@ -1320,8 +1688,8 @@ fn tool_install_requirements_txt() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = [
-            "black",
-            "iniconfig",
+            { name = "black" },
+            { name = "iniconfig" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
@@ -1363,8 +1731,8 @@ fn tool_install_requirements_txt() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = [
-            "black",
-            "idna",
+            { name = "black" },
+            { name = "idna" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
@@ -1425,8 +1793,8 @@ fn tool_install_requirements_txt_arguments() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = [
-            "black",
-            "idna",
+            { name = "black" },
+            { name = "idna" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
@@ -1541,7 +1909,7 @@ fn tool_install_upgrade() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black==24.1.1"]
+        requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -1571,7 +1939,7 @@ fn tool_install_upgrade() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = [{ name = "black" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -1607,8 +1975,8 @@ fn tool_install_upgrade() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
         requirements = [
-            "black",
-            "iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+            { name = "black" },
+            { name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
@@ -1647,7 +2015,7 @@ fn tool_install_upgrade() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = ["black"]
+        requirements = [{ name = "black" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
@@ -1908,4 +2276,75 @@ fn tool_install_bad_receipt() -> Result<()> {
     "###);
 
     Ok(())
+}
+
+/// Test installing a tool with a malformed `.dist-info` directory (i.e., a `.dist-info` directory
+/// that isn't properly normalized).
+#[test]
+fn tool_install_malformed() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.14.0
+    Installed 1 executable: pybabel
+    "###);
+
+    tool_dir.child("babel").assert(predicate::path::is_dir());
+    tool_dir
+        .child("babel")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run black in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/babel/bin/python
+        # -*- coding: utf-8 -*-
+        import re
+        import sys
+        from babel.messages.frontend import main
+        if __name__ == "__main__":
+            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "babel" }]
+        entrypoints = [
+            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+        ]
+        "###);
+    });
 }

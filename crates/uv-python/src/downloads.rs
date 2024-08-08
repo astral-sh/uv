@@ -14,6 +14,7 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use pypi_types::{HashAlgorithm, HashDigest};
+use uv_cache::Cache;
 use uv_client::WrappedReqwestError;
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
@@ -35,10 +36,10 @@ pub enum Error {
     InvalidPythonVersion(String),
     #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
-    #[error("Download failed")]
+    #[error(transparent)]
     NetworkError(#[from] WrappedReqwestError),
-    #[error("Download failed")]
-    NetworkMiddlewareError(#[source] anyhow::Error),
+    #[error(transparent)]
+    NetworkMiddlewareError(#[from] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
     ExtractError(String, #[source] uv_extract::Error),
     #[error("Failed to hash installation")]
@@ -69,6 +70,10 @@ pub enum Error {
     InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
+    #[error(
+        "A mirror was provided via `{0}`, but the URL does not match the expected format: {0}"
+    )]
+    Mirror(&'static str, &'static str),
 }
 
 #[derive(Debug, PartialEq)]
@@ -401,14 +406,15 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract
-    #[instrument(skip(client, parent_path, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, parent_path, cache, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
         parent_path: &Path,
+        cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let url = Url::parse(self.url)?;
+        let url = self.download_url()?;
         let path = parent_path.join(self.key().to_string());
 
         // If it already exists, return it
@@ -428,11 +434,11 @@ impl ManagedPythonDownload {
             .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
 
         // Download and extract into a temporary directory.
-        let temp_dir = tempfile::tempdir_in(parent_path).map_err(Error::DownloadDirError)?;
+        let temp_dir = tempfile::tempdir_in(cache.root()).map_err(Error::DownloadDirError)?;
 
         debug!(
-            "Downloading {url} to temporary location {}",
-            temp_dir.path().display()
+            "Downloading {url} to temporary location: {}",
+            temp_dir.path().simplified().display()
         );
 
         let stream = response
@@ -493,6 +499,21 @@ impl ManagedPythonDownload {
             extracted = extracted.join("install");
         }
 
+        // If the distribution is missing a `python`-to-`pythonX.Y` symlink, add it. PEP 394 permits
+        // it, and python-build-standalone releases after `20240726` include it, but releases prior
+        // to that date do not.
+        #[cfg(unix)]
+        {
+            match std::os::unix::fs::symlink(
+                format!("python{}.{}", self.key.major, self.key.minor),
+                extracted.join("bin").join("python"),
+            ) {
+                Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
+
         // Persist it to the target
         debug!("Moving {} to {}", extracted.display(), path.user_display());
         rename_with_retry(extracted, &path)
@@ -507,6 +528,41 @@ impl ManagedPythonDownload {
 
     pub fn python_version(&self) -> PythonVersion {
         self.key.version()
+    }
+
+    /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the
+    /// appropriate environment variable, use it instead.
+    fn download_url(&self) -> Result<Url, Error> {
+        match self.key.implementation {
+            LenientImplementationName::Known(ImplementationName::CPython) => {
+                if let Ok(mirror) = std::env::var("UV_PYTHON_INSTALL_MIRROR") {
+                    let Some(suffix) = self.url.strip_prefix(
+                        "https://github.com/indygreg/python-build-standalone/releases/download/",
+                    ) else {
+                        return Err(Error::Mirror("UV_PYTHON_INSTALL_MIRROR", self.url));
+                    };
+                    return Ok(Url::parse(
+                        format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
+                    )?);
+                }
+            }
+
+            LenientImplementationName::Known(ImplementationName::PyPy) => {
+                if let Ok(mirror) = std::env::var("UV_PYPY_INSTALL_MIRROR") {
+                    let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
+                    else {
+                        return Err(Error::Mirror("UV_PYPY_INSTALL_MIRROR", self.url));
+                    };
+                    return Ok(Url::parse(
+                        format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
+                    )?);
+                }
+            }
+
+            _ => {}
+        }
+
+        Ok(Url::parse(self.url)?)
     }
 }
 

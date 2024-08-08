@@ -236,6 +236,34 @@ fn install_symlink() -> Result<()> {
     Ok(())
 }
 
+/// Reject attempts to use symlink semantics with `--no-cache`.
+#[test]
+fn install_symlink_no_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("symlink")
+        .arg("--no-cache")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Symlink-based installation is not supported with `--no-cache`. The created environment will be rendered unusable by the removal of the cache.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install multiple packages into a virtual environment.
 #[test]
 fn install_many() -> Result<()> {
@@ -1962,6 +1990,7 @@ fn reinstall() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - markupsafe==2.1.3
@@ -2016,6 +2045,7 @@ fn reinstall_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tomli==2.0.1
@@ -2069,6 +2099,7 @@ fn reinstall_git() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
@@ -2198,7 +2229,8 @@ fn refresh_package() -> Result<()> {
 fn sync_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let poetry_editable = context.temp_dir.child("poetry_editable");
-    // Copy into the temporary directory so we can mutate it
+
+    // Copy into the temporary directory so we can mutate it.
     copy_dir_all(
         context
             .workspace_root
@@ -2216,7 +2248,7 @@ fn sync_editable() -> Result<()> {
         poetry_editable = poetry_editable.display()
     })?;
 
-    // Install the editable packages.
+    // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg(requirements_txt.path()), @r###"
     success: true
@@ -2233,7 +2265,20 @@ fn sync_editable() -> Result<()> {
     "###
     );
 
-    // Reinstall the editable packages.
+    // Re-install the editable package. This is a no-op.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg(requirements_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###
+    );
+
+    // Reinstall the editable package. This won't trigger a rebuild, but it will trigger an install.
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg(requirements_txt.path())
         .arg("--reinstall-package")
@@ -2260,7 +2305,7 @@ fn sync_editable() -> Result<()> {
    "#};
     context.assert_command(check_installed).success();
 
-    // Edit the sources and make sure the changes are respected without syncing again
+    // Edit the sources and make sure the changes are respected without syncing again.
     let python_version_1 = indoc::indoc! {r"
         version = 1
    "};
@@ -2285,6 +2330,8 @@ fn sync_editable() -> Result<()> {
    "};
     context.assert_command(check_installed).success();
 
+    // Reinstall the editable package. This won't trigger a rebuild or reinstall, since we only
+    // detect changes to metadata files (like `pyproject.toml`).
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg(requirements_txt.path()), @r###"
     success: true
@@ -2294,6 +2341,56 @@ fn sync_editable() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Audited 3 packages in [TIME]
+    "###
+    );
+
+    // Modify the `pyproject.toml` file.
+    let pyproject_toml = poetry_editable.path().join("pyproject.toml");
+    let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
+    fs_err::write(
+        &pyproject_toml,
+        pyproject_toml_contents.replace("0.1.0", "0.1.1"),
+    )?;
+
+    // Reinstall the editable package. This will trigger a rebuild and reinstall.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg(requirements_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
+    "###
+    );
+
+    // Modify the `pyproject.toml` file.
+    let pyproject_toml = poetry_editable.path().join("pyproject.toml");
+    let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
+    fs_err::write(
+        &pyproject_toml,
+        pyproject_toml_contents.replace("0.1.0", "0.1.1"),
+    )?;
+
+    // Reinstall the editable package. This will trigger a rebuild and reinstall.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg(requirements_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
+     + poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
 
@@ -2486,7 +2583,6 @@ fn sync_editable_and_local() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
@@ -2739,6 +2835,7 @@ fn find_links_wheel_cache() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tqdm==1000.0.0
@@ -2789,6 +2886,7 @@ fn find_links_source_cache() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - tqdm==999.0.0
@@ -3704,6 +3802,7 @@ fn require_hashes_source_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
@@ -3805,6 +3904,7 @@ fn require_hashes_wheel_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
@@ -3899,6 +3999,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
 /// Reject Git dependencies when `--require-hashes` is provided.
 #[test]
+#[cfg(feature = "git")]
 fn require_hashes_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4017,6 +4118,7 @@ fn require_hashes_re_download() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4417,6 +4519,7 @@ fn require_hashes_at_least_one() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4439,6 +4542,7 @@ fn require_hashes_at_least_one() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4674,6 +4778,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###
@@ -4880,6 +4985,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-a-961b4c22==1.0.0
     "###
@@ -5239,6 +5345,65 @@ fn preserve_markers() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==4.3.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with an incompatible constraint.
+#[test]
+fn incompatible_build_constraint() -> Result<()> {
+    let context = TestContext::new("3.8");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==1.2")?;
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==1")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to build: `requests==1.2.0`
+      Caused by: Failed to install requirements from setup.py build (resolve)
+      Caused by: No solution found when resolving: setuptools>=40.8.0
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with a compatible constraint.
+#[test]
+fn compatible_build_constraint() -> Result<()> {
+    let context = TestContext::new("3.8");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==1.2")?;
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
     "###
     );
 

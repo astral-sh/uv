@@ -26,9 +26,10 @@ requirements-txt = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
+uv-fs = { workspace = true, features = ["serde"] }
 uv-git = { workspace = true }
-uv-python = { workspace = true }
 uv-normalize = { workspace = true }
+uv-python = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
@@ -43,7 +44,6 @@ futures = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
-path-slash = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
 rkyv = { workspace = true }

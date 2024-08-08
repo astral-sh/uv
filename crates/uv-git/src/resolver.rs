@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -27,15 +28,6 @@ pub enum GitResolverError {
 pub struct GitResolver(Arc<DashMap<RepositoryReference, GitSha>>);
 
 impl GitResolver {
-    /// Initialize a [`GitResolver`] with a set of resolved references.
-    pub fn from_refs(refs: Vec<ResolvedRepositoryReference>) -> Self {
-        Self(Arc::new(
-            refs.into_iter()
-                .map(|ResolvedRepositoryReference { reference, sha }| (reference, sha))
-                .collect(),
-        ))
-    }
-
     /// Inserts a new [`GitSha`] for the given [`RepositoryReference`].
     pub fn insert(&self, reference: RepositoryReference, sha: GitSha) {
         self.0.insert(reference, sha);
@@ -46,9 +38,7 @@ impl GitResolver {
         self.0.get(reference)
     }
 
-    /// Download a source distribution from a Git repository.
-    ///
-    /// Assumes that the URL is a precise Git URL, with a full commit hash.
+    /// Fetch a remote Git repository.
     pub async fn fetch(
         &self,
         url: &GitUrl,
@@ -58,24 +48,42 @@ impl GitResolver {
     ) -> Result<Fetch, GitResolverError> {
         debug!("Fetching source distribution from Git: {url}");
 
+        let reference = RepositoryReference::from(url);
+
+        // If we know the precise commit already, reuse it, to ensure that all fetches within a
+        // single process are consistent.
+        let url = {
+            if let Some(precise) = self.get(&reference) {
+                Cow::Owned(url.clone().with_precise(*precise))
+            } else {
+                Cow::Borrowed(url)
+            }
+        };
+
         // Avoid races between different processes, too.
         let lock_dir = cache.join("locks");
         fs::create_dir_all(&lock_dir).await?;
         let repository_url = RepositoryUrl::new(url.repository());
         let _lock = LockedFile::acquire(
-            lock_dir.join(cache_key::digest(&repository_url)),
+            lock_dir.join(cache_key::cache_digest(&repository_url)),
             &repository_url,
         )?;
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.clone(), client, cache).with_reporter(reporter)
+            GitSource::new(url.as_ref().clone(), client, cache).with_reporter(reporter)
         } else {
-            GitSource::new(url.clone(), client, cache)
+            GitSource::new(url.as_ref().clone(), client, cache)
         };
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
             .map_err(GitResolverError::Git)?;
+
+        // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
+        // resolve to the same precise commit.
+        if let Some(precise) = fetch.git().precise() {
+            self.insert(reference, precise);
+        }
 
         Ok(fetch)
     }
@@ -88,49 +96,10 @@ impl GitResolver {
     /// This method takes into account various normalizations that are independent from the Git
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
-    pub async fn resolve(
-        &self,
-        url: &GitUrl,
-        client: ClientWithMiddleware,
-        cache: PathBuf,
-        reporter: Option<impl Reporter + 'static>,
-    ) -> Result<Option<GitUrl>, GitResolverError> {
-        // If the Git reference already contains a complete SHA, short-circuit.
-        if url.precise().is_some() {
-            return Ok(None);
-        }
-
-        // If the Git reference is in the in-memory cache, return it.
-        {
-            let reference = RepositoryReference::from(url);
-            if let Some(precise) = self.get(&reference) {
-                return Ok(Some(url.clone().with_precise(*precise)));
-            }
-        }
-
-        let fetch = self.fetch(url, client, cache, reporter).await?;
-        let git = fetch.into_git();
-
-        // Insert the resolved URL into the in-memory cache.
-        if let Some(precise) = git.precise() {
-            let reference = RepositoryReference::from(url);
-            self.insert(reference, precise);
-        }
-
-        Ok(Some(git))
-    }
-
-    /// Given a remote source distribution, return a precise variant, if possible.
-    ///
-    /// For example, given a Git dependency with a reference to a branch or tag, return a URL
-    /// with a precise reference to the current commit of that branch or tag.
-    ///
-    /// This method takes into account various normalizations that are independent from the Git
-    /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
-    /// prefix kinds.
     ///
     /// This method will only return precise URLs for URLs that have already been resolved via
-    /// [`resolve_precise`].
+    /// [`resolve_precise`], and will return `None` for URLs that have not been resolved _or_
+    /// already have a precise reference.
     pub fn precise(&self, url: GitUrl) -> Option<GitUrl> {
         let reference = RepositoryReference::from(&url);
         let precise = self.get(&reference)?;

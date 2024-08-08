@@ -5,6 +5,7 @@ use anyhow::Result;
 use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
+use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_resolver::{Lock, Preference, PreferenceError};
 
@@ -34,7 +35,7 @@ pub async fn read_requirements_txt(
     // Parse the requirements from the lockfile.
     let requirements_txt = RequirementsTxt::parse(
         output_file,
-        std::env::current_dir()?,
+        &*CWD,
         &BaseClientBuilder::new().connectivity(Connectivity::Offline),
     )
     .await?;
@@ -66,17 +67,17 @@ pub fn read_lock_requirements(lock: &Lock, upgrade: &Upgrade) -> LockedRequireme
     let mut preferences = Vec::new();
     let mut git = Vec::new();
 
-    for dist in lock.distributions() {
+    for package in lock.packages() {
         // Skip the distribution if it's not included in the upgrade strategy.
-        if upgrade.contains(dist.name()) {
+        if upgrade.contains(package.name()) {
             continue;
         }
 
         // Map each entry in the lockfile to a preference.
-        preferences.push(Preference::from_lock(dist));
+        preferences.push(Preference::from_lock(package));
 
         // Map each entry in the lockfile to a Git SHA.
-        if let Some(git_ref) = dist.as_git_ref() {
+        if let Some(git_ref) = package.as_git_ref() {
             git.push(git_ref);
         }
     }

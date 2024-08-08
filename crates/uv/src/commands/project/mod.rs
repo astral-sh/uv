@@ -1,11 +1,12 @@
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{Resolution, UnresolvedRequirementSpecification};
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionSpecifiers};
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -17,6 +18,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
+use uv_normalize::PackageName;
 use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
     PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
@@ -29,6 +31,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::Workspace;
 
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, SharedState};
@@ -59,6 +62,15 @@ pub(crate) enum ProjectError {
 
     #[error("The requested Python interpreter ({0}) is incompatible with the project Python requirement: `{1}`")]
     RequestedPythonIncompatibility(Version, RequiresPython),
+
+    #[error("The requested Python interpreter ({0}) is incompatible with the project Python requirement: `{1}`. However, a workspace member (`{member}`) supports Python {3}. To install the workspace member on its own, navigate to `{path}`, then run `{venv}` followed by `{install}`.", member = _2.cyan(), venv = format!("uv venv --python {_0}").green(), install = "uv pip install -e .".green(), path = _4.user_display().cyan() )]
+    RequestedMemberPythonIncompatibility(
+        Version,
+        RequiresPython,
+        PackageName,
+        VersionSpecifiers,
+        PathBuf,
+    ),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -101,7 +113,7 @@ pub(crate) enum ProjectError {
 pub(crate) fn find_requires_python(
     workspace: &Workspace,
 ) -> Result<Option<RequiresPython>, uv_resolver::RequiresPythonError> {
-    RequiresPython::union(workspace.packages().values().filter_map(|member| {
+    RequiresPython::intersection(workspace.packages().values().filter_map(|member| {
         member
             .pyproject_toml()
             .project
@@ -137,9 +149,51 @@ fn interpreter_meets_requirements(
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum FoundInterpreter {
     Interpreter(Interpreter),
     Environment(PythonEnvironment),
+}
+
+/// The resolved Python request and requirement for a [`Workspace`].
+#[derive(Debug, Clone)]
+pub(crate) struct WorkspacePython {
+    /// The resolved Python request, computed by considering (1) any explicit request from the user
+    /// via `--python`, (2) any implicit request from the user via `.python-version`, and (3) any
+    /// `Requires-Python` specifier in the `pyproject.toml`.
+    python_request: Option<PythonRequest>,
+    /// The resolved Python requirement for the project, computed by taking the intersection of all
+    /// `Requires-Python` specifiers in the workspace.
+    requires_python: Option<RequiresPython>,
+}
+
+impl WorkspacePython {
+    /// Determine the [`WorkspacePython`] for the current [`Workspace`].
+    pub(crate) async fn from_request(
+        python_request: Option<PythonRequest>,
+        workspace: &Workspace,
+    ) -> Result<Self, ProjectError> {
+        let requires_python = find_requires_python(workspace)?;
+
+        // (1) Explicit request from user
+        let python_request = if let Some(request) = python_request {
+            Some(request)
+            // (2) Request from `.python-version`
+        } else if let Some(request) = request_from_version_file(workspace.install_path()).await? {
+            Some(request)
+            // (3) `Requires-Python` in `pyproject.toml`
+        } else {
+            requires_python
+                .as_ref()
+                .map(RequiresPython::specifiers)
+                .map(|specifiers| PythonRequest::Version(VersionRequest::Range(specifiers.clone())))
+        };
+
+        Ok(Self {
+            python_request,
+            requires_python,
+        })
+    }
 }
 
 impl FoundInterpreter {
@@ -154,21 +208,11 @@ impl FoundInterpreter {
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
-        let requires_python = find_requires_python(workspace)?;
-
-        // (1) Explicit request from user
-        let python_request = if let Some(request) = python_request {
-            Some(request)
-            // (2) Request from `.python-version`
-        } else if let Some(request) = request_from_version_file().await? {
-            Some(request)
-            // (3) `Requires-Python` in `pyproject.toml`
-        } else {
-            requires_python
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| PythonRequest::Version(VersionRequest::Range(specifiers.clone())))
-        };
+        // Resolve the Python request and requirement for the workspace.
+        let WorkspacePython {
+            python_request,
+            requires_python,
+        } = WorkspacePython::from_request(python_request, workspace).await?;
 
         // Read from the virtual environment first.
         match find_environment(workspace, cache) {
@@ -207,7 +251,7 @@ impl FoundInterpreter {
         let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment
-        let interpreter = PythonInstallation::find_or_fetch(
+        let python = PythonInstallation::find_or_fetch(
             python_request,
             EnvironmentPreference::OnlySystem,
             python_preference,
@@ -216,18 +260,51 @@ impl FoundInterpreter {
             cache,
             Some(&reporter),
         )
-        .await?
-        .into_interpreter();
+        .await?;
 
-        writeln!(
-            printer.stderr(),
-            "Using Python {} interpreter at: {}",
-            interpreter.python_version(),
-            interpreter.sys_executable().user_display().cyan()
-        )?;
+        let managed = python.source().is_managed();
+        let interpreter = python.into_interpreter();
+
+        if managed {
+            writeln!(
+                printer.stderr(),
+                "Using Python {}",
+                interpreter.python_version().cyan()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Using Python {} interpreter at: {}",
+                interpreter.python_version(),
+                interpreter.sys_executable().user_display().cyan()
+            )?;
+        }
 
         if let Some(requires_python) = requires_python.as_ref() {
             if !requires_python.contains(interpreter.python_version()) {
+                // If the Python version is compatible with one of the workspace _members_, raise
+                // a dedicated error. For example, if the workspace root requires Python >=3.12, but
+                // a library in the workspace is compatible with Python >=3.8, the user may attempt
+                // to sync on Python 3.8. This will fail, but we should provide a more helpful error
+                // message.
+                for (name, member) in workspace.packages() {
+                    let Some(project) = member.pyproject_toml().project.as_ref() else {
+                        continue;
+                    };
+                    let Some(specifiers) = project.requires_python.as_ref() else {
+                        continue;
+                    };
+                    if specifiers.contains(interpreter.python_version()) {
+                        return Err(ProjectError::RequestedMemberPythonIncompatibility(
+                            interpreter.python_version().clone(),
+                            requires_python.clone(),
+                            name.clone(),
+                            specifiers.clone(),
+                            member.root().clone(),
+                        ));
+                    }
+                }
+
                 return Err(ProjectError::RequestedPythonIncompatibility(
                     interpreter.python_version().clone(),
                     requires_python.clone(),
@@ -302,6 +379,7 @@ pub(crate) async fn get_or_init_environment(
                 uv_virtualenv::Prompt::None,
                 false,
                 false,
+                false,
             )?)
         }
     }
@@ -328,9 +406,12 @@ pub(crate) async fn resolve_names(
         resolution: _,
         prerelease: _,
         config_setting,
+        no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode: _,
+        sources,
         upgrade: _,
         reinstall: _,
         build_options,
@@ -352,17 +433,30 @@ pub(crate) async fn resolve_names(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if *no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&environment)
+    } else if no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    };
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
     let flat_index = FlatIndex::default();
+    let build_constraints = [];
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -376,6 +470,7 @@ pub(crate) async fn resolve_names(
         *link_mode,
         build_options,
         *exclude_newer,
+        *sources,
         concurrency,
         preview,
     );
@@ -398,6 +493,7 @@ pub(crate) async fn resolve_environment<'a>(
     spec: RequirementsSpecification,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn ResolveLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -414,10 +510,13 @@ pub(crate) async fn resolve_environment<'a>(
         resolution,
         prerelease,
         config_setting,
+        no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         upgrade: _,
         build_options,
+        sources,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -451,6 +550,18 @@ pub(crate) async fn resolve_environment<'a>(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let environment;
+    let build_isolation = if no_build_isolation {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&environment)
+    } else if no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
+    } else {
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    };
+
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
@@ -460,12 +571,12 @@ pub(crate) async fn resolve_environment<'a>(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
     let dev = Vec::default();
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
     let setup_py = SetupPyStrategy::default();
+    let build_constraints = [];
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls and
     // upgrades aren't relevant.
@@ -483,6 +594,7 @@ pub(crate) async fn resolve_environment<'a>(
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -496,6 +608,7 @@ pub(crate) async fn resolve_environment<'a>(
         link_mode,
         build_options,
         exclude_newer,
+        sources,
         concurrency,
         preview,
     );
@@ -523,9 +636,9 @@ pub(crate) async fn resolve_environment<'a>(
         &resolve_dispatch,
         concurrency,
         options,
+        logger,
         printer,
         preview,
-        false,
     )
     .await?)
 }
@@ -536,6 +649,7 @@ pub(crate) async fn sync_environment(
     resolution: &Resolution,
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn InstallLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -548,11 +662,13 @@ pub(crate) async fn sync_environment(
         index_strategy,
         keyring_provider,
         config_setting,
+        no_build_isolation,
         exclude_newer,
         link_mode,
         compile_bytecode,
         reinstall,
         build_options,
+        sources,
     } = settings;
 
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -578,9 +694,16 @@ pub(crate) async fn sync_environment(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
     let dry_run = false;
     let hasher = HashStrategy::default();
     let setup_py = SetupPyStrategy::default();
@@ -596,6 +719,7 @@ pub(crate) async fn sync_environment(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -609,6 +733,7 @@ pub(crate) async fn sync_environment(
         link_mode,
         build_options,
         exclude_newer,
+        sources,
         concurrency,
         preview,
     );
@@ -631,6 +756,7 @@ pub(crate) async fn sync_environment(
         &build_dispatch,
         cache,
         &venv,
+        logger,
         dry_run,
         printer,
         preview,
@@ -649,6 +775,8 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     settings: &ResolverInstallerSettings,
     state: &SharedState,
+    resolve: Box<dyn ResolveLogger>,
+    install: Box<dyn InstallLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -665,9 +793,12 @@ pub(crate) async fn update_environment(
         resolution,
         prerelease,
         config_setting,
+        no_build_isolation,
+        no_build_isolation_package,
         exclude_newer,
         link_mode,
         compile_bytecode,
+        sources,
         upgrade,
         reinstall,
         build_options,
@@ -729,6 +860,15 @@ pub(crate) async fn update_environment(
         .platform(interpreter.platform())
         .build();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if *no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else if no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
+    } else {
+        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
+    };
+
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
@@ -738,7 +878,7 @@ pub(crate) async fn update_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_isolation = BuildIsolation::default();
+    let build_constraints = [];
     let dev = Vec::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
@@ -757,6 +897,7 @@ pub(crate) async fn update_environment(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -770,6 +911,7 @@ pub(crate) async fn update_environment(
         *link_mode,
         build_options,
         *exclude_newer,
+        *sources,
         concurrency,
         preview,
     );
@@ -797,9 +939,9 @@ pub(crate) async fn update_environment(
         &build_dispatch,
         concurrency,
         options,
+        resolve,
         printer,
         preview,
-        false,
     )
     .await
     {
@@ -825,6 +967,7 @@ pub(crate) async fn update_environment(
         &build_dispatch,
         cache,
         &venv,
+        install,
         dry_run,
         printer,
         preview,

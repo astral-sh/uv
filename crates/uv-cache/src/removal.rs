@@ -40,7 +40,12 @@ impl Removal {
 
             // Remove the file.
             self.total_bytes += metadata.len();
-            remove_file(path)?;
+            if cfg!(windows) && metadata.is_symlink() {
+                // Remove the junction.
+                remove_dir(path)?;
+            } else {
+                remove_file(path)?;
+            }
 
             return Ok(());
         }
@@ -64,7 +69,7 @@ impl Removal {
 
             let entry = entry?;
             if cfg!(windows) && entry.file_type().is_symlink() {
-                // In this branch, we try to handle junction removal.
+                // Remove the junction.
                 self.num_files += 1;
                 remove_dir(entry.path())?;
             } else if entry.file_type().is_dir() {

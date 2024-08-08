@@ -1,13 +1,12 @@
-use std::io;
-use std::path::Path;
-
 use memchr::memmem::Finder;
-use once_cell::sync::Lazy;
 use pypi_types::VerbatimParsedUrl;
 use serde::{Deserialize, Serialize};
+use std::io;
+use std::path::Path;
+use std::sync::LazyLock;
 use thiserror::Error;
 
-static FINDER: Lazy<Finder> = Lazy::new(|| Finder::new(b"# /// script"));
+static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
@@ -15,7 +14,7 @@ static FINDER: Lazy<Finder> = Lazy::new(|| Finder::new(b"# /// script"));
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
-    pub dependencies: Vec<pep508_rs::Requirement<VerbatimParsedUrl>>,
+    pub dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
     pub requires_python: Option<pep440_rs::VersionSpecifiers>,
 }
 

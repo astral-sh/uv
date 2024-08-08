@@ -338,6 +338,65 @@ impl Metadata10 {
     }
 }
 
+/// Python Package Metadata 1.2 and later as specified in
+/// <https://peps.python.org/pep-0345/>.
+///
+/// This is a subset of the full metadata specification, and only includes the
+/// fields that have been consistent across all versions of the specification later than 1.2.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct Metadata12 {
+    pub name: PackageName,
+    pub version: Version,
+    pub requires_python: Option<VersionSpecifiers>,
+}
+
+impl Metadata12 {
+    /// Parse the [`Metadata12`] from a `.dist-info` `METADATA` file, as included in a built
+    /// distribution.
+    pub fn parse_metadata(content: &[u8]) -> Result<Self, MetadataError> {
+        let headers = Headers::parse(content)?;
+
+        // To rely on a source distribution's `PKG-INFO` file, the `Metadata-Version` field must be
+        // present and set to a value of at least `2.2`.
+        let metadata_version = headers
+            .get_first_value("Metadata-Version")
+            .ok_or(MetadataError::FieldNotFound("Metadata-Version"))?;
+
+        // Parse the version into (major, minor).
+        let (major, minor) = parse_version(&metadata_version)?;
+
+        // At time of writing:
+        // > Version of the file format; legal values are “1.0”, “1.1”, “1.2”, “2.1”, “2.2”, and “2.3”.
+        if (major, minor) < (1, 0) || (major, minor) >= (3, 0) {
+            return Err(MetadataError::InvalidMetadataVersion(metadata_version));
+        }
+
+        let name = PackageName::new(
+            headers
+                .get_first_value("Name")
+                .ok_or(MetadataError::FieldNotFound("Name"))?,
+        )?;
+        let version = Version::from_str(
+            &headers
+                .get_first_value("Version")
+                .ok_or(MetadataError::FieldNotFound("Version"))?,
+        )
+        .map_err(MetadataError::Pep440VersionError)?;
+        let requires_python = headers
+            .get_first_value("Requires-Python")
+            .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
+            .transpose()?
+            .map(VersionSpecifiers::from);
+
+        Ok(Self {
+            name,
+            version,
+            requires_python,
+        })
+    }
+}
+
 /// Parse a `Metadata-Version` field into a (major, minor) tuple.
 fn parse_version(metadata_version: &str) -> Result<(u8, u8), MetadataError> {
     let (major, minor) =

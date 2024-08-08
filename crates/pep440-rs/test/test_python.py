@@ -2,7 +2,7 @@
 This is implementation has some very rudimentary python bindings
 """
 
-from pep440_rs import Version, VersionSpecifier, Operator, VersionSpecifiers
+from pep440_rs import Operator, Version, VersionSpecifier, VersionSpecifiers
 
 
 def test_pep440():

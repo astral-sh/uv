@@ -1,7 +1,7 @@
 use uv_cache::Refresh;
 use uv_configuration::ConfigSettings;
-use uv_resolver::PreReleaseMode;
-use uv_settings::{InstallerOptions, PipOptions, ResolverInstallerOptions, ResolverOptions};
+use uv_resolver::PrereleaseMode;
+use uv_settings::{PipOptions, ResolverInstallerOptions, ResolverOptions};
 
 use crate::{
     BuildArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs, ResolverInstallerArgs,
@@ -42,8 +42,12 @@ impl From<ResolverArgs> for PipOptions {
             prerelease,
             pre,
             config_setting,
+            no_build_isolation,
+            no_build_isolation_package,
+            build_isolation,
             exclude_newer,
             link_mode,
+            no_sources,
         } = args;
 
         Self {
@@ -53,14 +57,17 @@ impl From<ResolverArgs> for PipOptions {
             keyring_provider,
             resolution,
             prerelease: if pre {
-                Some(PreReleaseMode::Allow)
+                Some(PrereleaseMode::Allow)
             } else {
                 prerelease
             },
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            no_build_isolation: flag(no_build_isolation, build_isolation),
+            no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
             link_mode,
+            no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
         }
     }
@@ -76,10 +83,13 @@ impl From<InstallerArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             config_setting,
+            no_build_isolation,
+            build_isolation,
             exclude_newer,
             link_mode,
             compile_bytecode,
             no_compile_bytecode,
+            no_sources,
         } = args;
 
         Self {
@@ -89,9 +99,11 @@ impl From<InstallerArgs> for PipOptions {
             keyring_provider,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            no_build_isolation: flag(no_build_isolation, build_isolation),
             exclude_newer,
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
         }
     }
@@ -113,10 +125,14 @@ impl From<ResolverInstallerArgs> for PipOptions {
             prerelease,
             pre,
             config_setting,
+            no_build_isolation,
+            no_build_isolation_package,
+            build_isolation,
             exclude_newer,
             link_mode,
             compile_bytecode,
             no_compile_bytecode,
+            no_sources,
         } = args;
 
         Self {
@@ -128,15 +144,18 @@ impl From<ResolverInstallerArgs> for PipOptions {
             keyring_provider,
             resolution,
             prerelease: if pre {
-                Some(PreReleaseMode::Allow)
+                Some(PrereleaseMode::Allow)
             } else {
                 prerelease
             },
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            no_build_isolation: flag(no_build_isolation, build_isolation),
+            no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
         }
     }
@@ -166,61 +185,6 @@ impl From<IndexArgs> for PipOptions {
     }
 }
 
-/// Construct the [`InstallerOptions`] from the [`InstallerArgs`] and [`BuildArgs`].
-pub fn installer_options(installer_args: InstallerArgs, build_args: BuildArgs) -> InstallerOptions {
-    let InstallerArgs {
-        index_args,
-        reinstall,
-        no_reinstall,
-        reinstall_package,
-        index_strategy,
-        keyring_provider,
-        config_setting,
-        exclude_newer,
-        link_mode,
-        compile_bytecode,
-        no_compile_bytecode,
-    } = installer_args;
-
-    let BuildArgs {
-        no_build,
-        build,
-        no_build_package,
-        no_binary,
-        binary,
-        no_binary_package,
-    } = build_args;
-
-    InstallerOptions {
-        index_url: index_args.index_url.and_then(Maybe::into_option),
-        extra_index_url: index_args.extra_index_url.map(|extra_index_urls| {
-            extra_index_urls
-                .into_iter()
-                .filter_map(Maybe::into_option)
-                .collect()
-        }),
-        no_index: if index_args.no_index {
-            Some(true)
-        } else {
-            None
-        },
-        find_links: index_args.find_links,
-        reinstall: flag(reinstall, no_reinstall),
-        reinstall_package: Some(reinstall_package),
-        index_strategy,
-        keyring_provider,
-        config_settings: config_setting
-            .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-        exclude_newer,
-        link_mode,
-        compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
-        no_build: flag(no_build, build),
-        no_build_package: Some(no_build_package),
-        no_binary: flag(no_binary, binary),
-        no_binary_package: Some(no_binary_package),
-    }
-}
-
 /// Construct the [`ResolverOptions`] from the [`ResolverArgs`] and [`BuildArgs`].
 pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> ResolverOptions {
     let ResolverArgs {
@@ -234,8 +198,12 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         prerelease,
         pre,
         config_setting,
+        no_build_isolation,
+        no_build_isolation_package,
+        build_isolation,
         exclude_newer,
         link_mode,
+        no_sources,
     } = resolver_args;
 
     let BuildArgs {
@@ -267,18 +235,21 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         keyring_provider,
         resolution,
         prerelease: if pre {
-            Some(PreReleaseMode::Allow)
+            Some(PrereleaseMode::Allow)
         } else {
             prerelease
         },
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        no_build_isolation: flag(no_build_isolation, build_isolation),
+        no_build_isolation_package: Some(no_build_isolation_package),
         exclude_newer,
         link_mode,
         no_build: flag(no_build, build),
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
         no_binary_package: Some(no_binary_package),
+        no_sources: if no_sources { Some(true) } else { None },
     }
 }
 
@@ -301,10 +272,14 @@ pub fn resolver_installer_options(
         prerelease,
         pre,
         config_setting,
+        no_build_isolation,
+        no_build_isolation_package,
+        build_isolation,
         exclude_newer,
         link_mode,
         compile_bytecode,
         no_compile_bytecode,
+        no_sources,
     } = resolver_installer_args;
 
     let BuildArgs {
@@ -338,12 +313,14 @@ pub fn resolver_installer_options(
         keyring_provider,
         resolution,
         prerelease: if pre {
-            Some(PreReleaseMode::Allow)
+            Some(PrereleaseMode::Allow)
         } else {
             prerelease
         },
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        no_build_isolation: flag(no_build_isolation, build_isolation),
+        no_build_isolation_package: Some(no_build_isolation_package),
         exclude_newer,
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
@@ -351,5 +328,6 @@ pub fn resolver_installer_options(
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
         no_binary_package: Some(no_binary_package),
+        no_sources: if no_sources { Some(true) } else { None },
     }
 }

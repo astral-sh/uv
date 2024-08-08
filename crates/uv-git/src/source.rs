@@ -8,7 +8,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 use url::Url;
 
-use cache_key::{digest, RepositoryUrl};
+use cache_key::{cache_digest, RepositoryUrl};
 
 use crate::git::GitRemote;
 use crate::{GitOid, GitSha, GitUrl};
@@ -53,7 +53,7 @@ impl GitSource {
     #[instrument(skip(self), fields(repository = %self.git.repository, rev = ?self.git.precise))]
     pub fn fetch(self) -> Result<Fetch> {
         // The path to the repo, within the Git database.
-        let ident = digest(&RepositoryUrl::new(&self.git.repository));
+        let ident = cache_digest(&RepositoryUrl::new(&self.git.repository));
         let db_path = self.cache.join("db").join(&ident);
 
         let remote = GitRemote::new(&self.git.repository);
