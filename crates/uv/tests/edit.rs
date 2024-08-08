@@ -68,7 +68,7 @@ fn add_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -221,7 +221,7 @@ fn add_git() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -426,7 +426,7 @@ fn add_git_raw() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -638,7 +638,7 @@ fn add_unnamed() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -734,7 +734,7 @@ fn add_remove_dev() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -850,7 +850,7 @@ fn add_remove_dev() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -938,7 +938,7 @@ fn add_remove_optional() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -1055,7 +1055,7 @@ fn add_remove_optional() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -1182,7 +1182,7 @@ fn add_remove_workspace() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -1258,7 +1258,7 @@ fn add_remove_workspace() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -1370,7 +1370,7 @@ fn add_workspace_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -1568,7 +1568,7 @@ fn update() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -1832,7 +1832,7 @@ fn add_no_clean() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -1966,7 +1966,7 @@ fn remove_registry() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -2588,7 +2588,7 @@ fn add_lower_bound_optional() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -2693,7 +2693,6 @@ fn add_lower_bound_local() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [[distribution]]
@@ -2793,7 +2792,7 @@ fn add_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]

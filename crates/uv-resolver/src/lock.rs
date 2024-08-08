@@ -19,8 +19,8 @@ use cache_key::RepositoryUrl;
 use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, PrioritizedDist, RegistryBuiltDist, RegistryBuiltWheel,
+    DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexLocations, IndexUrl,
+    Name, PathBuiltDist, PathSourceDist, PrioritizedDist, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, SourceDistCompatibility,
     ToUrlError, UrlString, VersionId, WheelCompatibility,
 };
@@ -60,7 +60,7 @@ pub struct Lock {
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
     /// The main index, which is used as source if no other source is configured.
-    default_source: Option<Source>,
+    source: Option<Source>,
     /// We discard the lockfile if these options match.
     options: ResolverOptions,
     /// The actual locked version and their metadata.
@@ -83,7 +83,7 @@ impl Lock {
     /// Initialize a [`Lock`] from a [`ResolutionGraph`].
     pub fn from_resolution_graph(
         graph: &ResolutionGraph,
-        default_index: Option<&IndexUrl>,
+        index_locations: &IndexLocations,
     ) -> Result<Self, LockError> {
         let mut locked_dists = BTreeMap::new();
 
@@ -162,8 +162,17 @@ impl Lock {
 
         let distributions = locked_dists.into_values().collect();
         let requires_python = graph.requires_python.clone();
-        let default_source =
-            default_index.map(|index| Source::Registry(UrlString::from(index.url())));
+        // Only set the source if there is only a single index (regular or flat) in use, otherwise
+        // show all sources.
+        let source = if index_locations.extra_index().next().is_some()
+            || index_locations.flat_index().next().is_some()
+        {
+            None
+        } else {
+            index_locations
+                .index()
+                .map(|index| Source::Registry(UrlString::from(index.url())))
+        };
         let options = ResolverOptions {
             resolution_mode: graph.options.resolution_mode,
             prerelease_mode: graph.options.prerelease_mode,
@@ -173,7 +182,7 @@ impl Lock {
             VERSION,
             distributions,
             requires_python,
-            default_source,
+            source,
             options,
             graph.fork_markers.clone(),
         )?;
@@ -185,7 +194,7 @@ impl Lock {
         version: u32,
         mut distributions: Vec<Distribution>,
         requires_python: Option<RequiresPython>,
-        default_source: Option<Source>,
+        source: Option<Source>,
         options: ResolverOptions,
         fork_markers: Option<BTreeSet<MarkerTree>>,
     ) -> Result<Self, LockError> {
@@ -343,7 +352,7 @@ impl Lock {
             version,
             fork_markers,
             requires_python,
-            default_source,
+            source,
             options,
             distributions,
             by_id,
@@ -483,8 +492,8 @@ impl Lock {
         let mut doc = toml_edit::DocumentMut::new();
         doc.insert("version", value(i64::from(self.version)));
 
-        if let Some(ref default_source) = self.default_source {
-            doc.insert("default-source", value(default_source.to_toml()));
+        if let Some(ref source) = self.source {
+            doc.insert("source", value(source.to_toml()));
         }
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
@@ -530,7 +539,7 @@ impl Lock {
 
         let mut distributions = ArrayOfTables::new();
         for dist in &self.distributions {
-            distributions.push(dist.to_toml(&dist_count_by_name, self.default_source.as_ref())?);
+            distributions.push(dist.to_toml(&dist_count_by_name, self.source.as_ref())?);
         }
 
         doc.insert("distribution", Item::ArrayOfTables(distributions));
@@ -646,7 +655,7 @@ struct LockWire {
     #[serde(rename = "environment-markers")]
     fork_markers: Option<BTreeSet<MarkerTree>>,
     #[serde(default)]
-    default_source: Option<Source>,
+    source: Option<Source>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
@@ -659,7 +668,7 @@ impl From<Lock> for LockWire {
         LockWire {
             version: lock.version,
             requires_python: lock.requires_python,
-            default_source: lock.default_source,
+            source: lock.source,
             fork_markers: lock.fork_markers,
             options: lock.options,
             distributions: lock
@@ -691,22 +700,20 @@ impl TryFrom<LockWire> for Lock {
             }
             unambiguous_dist_ids.insert(
                 dist.id.name.clone(),
-                dist.id
-                    .clone()
-                    .into_distribution_id(wire.default_source.as_ref())?,
+                dist.id.clone().into_distribution_id(wire.source.as_ref())?,
             );
         }
 
         let distributions = wire
             .distributions
             .into_iter()
-            .map(|dist| dist.unwire(&unambiguous_dist_ids, wire.default_source.as_ref()))
+            .map(|dist| dist.unwire(&unambiguous_dist_ids, wire.source.as_ref()))
             .collect::<Result<Vec<_>, _>>()?;
         Lock::new(
             wire.version,
             distributions,
             wire.requires_python,
-            wire.default_source,
+            wire.source,
             wire.options,
             wire.fork_markers,
         )
@@ -1097,11 +1104,11 @@ impl Distribution {
     fn to_toml(
         &self,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
-        default_source: Option<&Source>,
+        source: Option<&Source>,
     ) -> anyhow::Result<Table> {
         let mut table = Table::new();
 
-        self.id.to_toml(None, &mut table, default_source);
+        self.id.to_toml(None, &mut table, source);
 
         if let Some(ref fork_markers) = self.fork_markers {
             let wheels =
@@ -1110,20 +1117,21 @@ impl Distribution {
         }
 
         if !self.dependencies.is_empty() {
-            let deps = each_element_on_its_line_array(self.dependencies.iter().map(|dep| {
-                dep.to_toml(dist_count_by_name, default_source)
-                    .into_inline_table()
-            }));
+            let deps = each_element_on_its_line_array(
+                self.dependencies
+                    .iter()
+                    .map(|dep| dep.to_toml(dist_count_by_name, source).into_inline_table()),
+            );
             table.insert("dependencies", value(deps));
         }
 
         if !self.optional_dependencies.is_empty() {
             let mut optional_deps = Table::new();
             for (extra, deps) in &self.optional_dependencies {
-                let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(dist_count_by_name, default_source)
-                        .into_inline_table()
-                }));
+                let deps = each_element_on_its_line_array(
+                    deps.iter()
+                        .map(|dep| dep.to_toml(dist_count_by_name, source).into_inline_table()),
+                );
                 optional_deps.insert(extra.as_ref(), value(deps));
             }
             table.insert("optional-dependencies", Item::Table(optional_deps));
@@ -1132,10 +1140,10 @@ impl Distribution {
         if !self.dev_dependencies.is_empty() {
             let mut dev_dependencies = Table::new();
             for (extra, deps) in &self.dev_dependencies {
-                let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(dist_count_by_name, default_source)
-                        .into_inline_table()
-                }));
+                let deps = each_element_on_its_line_array(
+                    deps.iter()
+                        .map(|dep| dep.to_toml(dist_count_by_name, source).into_inline_table()),
+                );
                 dev_dependencies.insert(extra.as_ref(), value(deps));
             }
             table.insert("dev-dependencies", Item::Table(dev_dependencies));
@@ -1244,7 +1252,7 @@ fn verbatim_url(path: PathBuf, id: &DistributionId) -> Result<VerbatimUrl, LockE
 }
 
 /// A [`DistributionId`], but the `source` is optional since it defaults to the top level
-/// `default-source`.
+/// `source`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct DistributionIdWire {
     name: PackageName,
@@ -1263,12 +1271,9 @@ impl From<DistributionId> for DistributionIdWire {
 }
 
 impl DistributionIdWire {
-    fn into_distribution_id(
-        self,
-        default_source: Option<&Source>,
-    ) -> Result<DistributionId, LockError> {
+    fn into_distribution_id(self, source: Option<&Source>) -> Result<DistributionId, LockError> {
         let source = match self.source {
-            None => default_source
+            None => source
                 .ok_or_else(|| LockErrorKind::MissingSource {
                     name: self.name.clone(),
                     version: self.version.clone(),
@@ -1307,15 +1312,15 @@ impl DistributionWire {
     fn unwire(
         self,
         unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
-        default_source: Option<&Source>,
+        source: Option<&Source>,
     ) -> Result<Distribution, LockError> {
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| dep.unwire(unambiguous_dist_ids, default_source))
+                .map(|dep| dep.unwire(unambiguous_dist_ids, source))
                 .collect()
         };
         Ok(Distribution {
-            id: self.id.into_distribution_id(default_source)?,
+            id: self.id.into_distribution_id(source)?,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: (!self.fork_markers.is_empty()).then_some(self.fork_markers),
@@ -1391,13 +1396,13 @@ impl DistributionId {
         &self,
         dist_count_by_name: Option<&FxHashMap<PackageName, u64>>,
         table: &mut Table,
-        default_source: Option<&Source>,
+        source: Option<&Source>,
     ) {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
         if count.map(|count| count > 1).unwrap_or(true) {
             table.insert("version", value(self.version.to_string()));
-            if !self.source.is_default_source(default_source) {
+            if !self.source.is_default_source(source) {
                 table.insert("source", value(self.source.to_toml()));
             }
         }
@@ -1421,7 +1426,7 @@ impl DistributionIdForDependency {
     fn unwire(
         self,
         unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
-        default_source: Option<&Source>,
+        source: Option<&Source>,
     ) -> Result<DistributionId, LockError> {
         let unambiguous_dist_id = unambiguous_dist_ids.get(&self.name);
         let version = self.version.map(Ok::<_, LockError>).unwrap_or_else(|| {
@@ -1440,7 +1445,7 @@ impl DistributionIdForDependency {
             .source
             .clone()
             .or_else(|| unambiguous_dist_id.map(|dist_id| dist_id.source.clone()))
-            .or_else(|| default_source.cloned())
+            .or_else(|| source.cloned())
         else {
             return Err(LockErrorKind::MissingDependencySource {
                 name: self.name.clone(),
@@ -1602,8 +1607,8 @@ impl Source {
     }
 
     /// Whether this source equals the default index and should be omitted.
-    fn is_default_source(&self, default_source: Option<&Source>) -> bool {
-        default_source.is_some_and(|default_source| default_source == self)
+    fn is_default_source(&self, source: Option<&Source>) -> bool {
+        source.is_some_and(|source| source == self)
     }
 
     fn to_toml(&self) -> InlineTable {
@@ -2363,11 +2368,11 @@ impl Dependency {
     fn to_toml(
         &self,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
-        default_source: Option<&Source>,
+        source: Option<&Source>,
     ) -> Table {
         let mut table = Table::new();
         self.distribution_id
-            .to_toml(Some(dist_count_by_name), &mut table, default_source);
+            .to_toml(Some(dist_count_by_name), &mut table, source);
         if !self.extra.is_empty() {
             let extra_array = self
                 .extra
@@ -2421,12 +2426,10 @@ impl DependencyWire {
     fn unwire(
         self,
         unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
-        default_source: Option<&Source>,
+        source: Option<&Source>,
     ) -> Result<Dependency, LockError> {
         Ok(Dependency {
-            distribution_id: self
-                .distribution_id
-                .unwire(unambiguous_dist_ids, default_source)?,
+            distribution_id: self.distribution_id.unwire(unambiguous_dist_ids, source)?,
             extra: self.extra,
             marker: self.marker,
         })
@@ -2677,7 +2680,7 @@ enum LockErrorKind {
     /// An error that occurs when an ambiguous `distribution.dependency` is
     /// missing a `source` field.
     #[error(
-        "dependency {name} has no `source` and no `default-source` is defined \
+        "dependency {name} has no `source` and no default `source` is defined \
          field but has more than one matching distribution"
     )]
     MissingDependencySource {

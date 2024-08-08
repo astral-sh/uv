@@ -6,7 +6,7 @@ Err(
     Error {
         inner: Error {
             inner: TomlError {
-                message: "dependency a has no `source` and no `default-source` is defined field but has more than one matching distribution",
+                message: "dependency a has no `source` and no default `source` is defined field but has more than one matching distribution",
                 raw: None,
                 keys: [],
                 span: None,

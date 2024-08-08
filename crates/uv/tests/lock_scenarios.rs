@@ -82,7 +82,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -193,7 +193,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
 
         [[distribution]]
@@ -288,7 +288,7 @@ fn fork_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -567,7 +567,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -740,7 +740,7 @@ fn fork_incomplete_markers() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "python_version < '3.10'",
@@ -885,7 +885,7 @@ fn fork_marker_accrue() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
 
         [[distribution]]
@@ -1081,7 +1081,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'linux'",
@@ -1252,7 +1252,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'linux'",
@@ -1413,7 +1413,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'linux'",
@@ -1568,7 +1568,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -1709,7 +1709,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -1856,7 +1856,7 @@ fn fork_marker_inherit() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -1986,7 +1986,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -2133,7 +2133,7 @@ fn fork_marker_selection() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -2280,7 +2280,7 @@ fn fork_marker_track() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -2424,7 +2424,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
 
         [[distribution]]
@@ -2829,7 +2829,7 @@ fn preferences_dependent_forking() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'linux'",
@@ -2963,7 +2963,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.10"
 
         [[distribution]]
@@ -3046,7 +3046,7 @@ fn fork_requires_python_full() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.10"
 
         [[distribution]]
@@ -3132,7 +3132,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.10.1"
 
         [[distribution]]
@@ -3224,7 +3224,7 @@ fn fork_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         requires-python = ">=3.10"
 
         [[distribution]]

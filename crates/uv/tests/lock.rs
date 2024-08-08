@@ -65,7 +65,7 @@ fn lock_wheel_registry() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -176,7 +176,7 @@ fn lock_sdist_registry() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [[distribution]]
@@ -263,7 +263,7 @@ fn lock_sdist_git() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -359,7 +359,7 @@ fn lock_sdist_git() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -417,7 +417,7 @@ fn lock_sdist_git() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -475,7 +475,7 @@ fn lock_sdist_git() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -536,11 +536,10 @@ fn lock_sdist_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
-[options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -602,11 +601,10 @@ fn lock_sdist_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
-[options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -657,11 +655,10 @@ fn lock_sdist_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
-[options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -712,11 +709,10 @@ fn lock_sdist_git_pep508() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
-[options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[distribution]]
@@ -774,7 +770,7 @@ fn lock_wheel_url() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -885,7 +881,7 @@ fn lock_sdist_url() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -997,7 +993,7 @@ fn lock_project_extra() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -1222,7 +1218,7 @@ fn lock_dependency_extra() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -1414,7 +1410,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.7"
 
             [options]
@@ -1684,7 +1680,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -1861,7 +1857,7 @@ fn lock_upgrade_log() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -1938,7 +1934,7 @@ fn lock_upgrade_log() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -2020,7 +2016,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
             environment-markers = [
                 "sys_platform == 'win32'",
@@ -2101,7 +2097,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
         environment-markers = [
             "sys_platform == 'win32'",
@@ -2177,7 +2173,7 @@ fn lock_preference() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -2235,7 +2231,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -2279,7 +2275,7 @@ fn lock_preference() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -2343,7 +2339,7 @@ fn lock_git_sha() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -2403,7 +2399,7 @@ fn lock_git_sha() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -2447,7 +2443,7 @@ fn lock_git_sha() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -2549,7 +2545,7 @@ fn lock_requires_python() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.7"
 
             [options]
@@ -2692,7 +2688,7 @@ fn lock_requires_python() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.7.9"
 
             [options]
@@ -2826,7 +2822,7 @@ fn lock_requires_python() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -2966,7 +2962,7 @@ fn lock_requires_python_wheels() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12, <3.13"
 
             [options]
@@ -3038,7 +3034,7 @@ fn lock_requires_python_wheels() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.11, <3.12"
 
             [options]
@@ -3135,7 +3131,7 @@ fn lock_requires_python_star() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.11, <3.12"
 
             [options]
@@ -3243,7 +3239,7 @@ fn lock_requires_python_pre() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.11"
 
             [options]
@@ -3350,7 +3346,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = "<=3.12"
 
             [options]
@@ -3429,7 +3425,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.8"
             environment-markers = [
                 "python_full_version <= '3.10' and python_version == '3.10'",
@@ -3524,7 +3520,7 @@ fn lock_dev() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -3627,7 +3623,7 @@ fn lock_conditional_unconditional() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -3691,7 +3687,7 @@ fn lock_multiple_markers() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -3795,7 +3791,7 @@ fn relative_and_absolute_paths() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.11, <3.13"
 
             [options]
@@ -3862,7 +3858,7 @@ fn lock_cycles() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -4054,7 +4050,7 @@ fn lock_new_extras() -> Result<()> {
             assert_snapshot!(
                 lock, @r###"
             version = 1
-            default-source = { registry = "https://pypi.org/simple" }
+            source = { registry = "https://pypi.org/simple" }
             requires-python = ">=3.12"
 
             [options]
@@ -4162,7 +4158,7 @@ fn lock_new_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -4278,7 +4274,7 @@ fn lock_invalid_hash() -> Result<()> {
     lock.write_str(r#"
         version = 1
         requires-python = ">=3.12"
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
 
         [[distribution]]
         name = "anyio"
@@ -4385,7 +4381,7 @@ fn lock_resolution_mode() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -4462,7 +4458,7 @@ fn lock_resolution_mode() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -4609,7 +4605,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
         environment-markers = [
             "sys_platform == 'darwin'",
@@ -4793,7 +4789,7 @@ fn lock_exclusion() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -4899,7 +4895,7 @@ fn lock_dev_transitive() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -4987,7 +4983,7 @@ fn lock_redact() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple" }
+        source = { registry = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -5108,7 +5104,7 @@ fn lock_no_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]
@@ -5164,7 +5160,7 @@ fn lock_no_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        default-source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple" }
         requires-python = ">=3.12"
 
         [options]

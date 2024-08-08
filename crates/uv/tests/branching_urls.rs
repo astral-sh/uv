@@ -207,7 +207,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
-    default-source = { registry = "https://pypi.org/simple" }
+    source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
     environment-markers = [
         "python_version < '3.12'",
@@ -380,7 +380,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
-    default-source = { registry = "https://pypi.org/simple" }
+    source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
     environment-markers = [
         "python_version < '3.12'",
@@ -522,7 +522,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
-    default-source = { registry = "https://pypi.org/simple" }
+    source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
     environment-markers = [
         "python_version < '3.12'",
@@ -601,7 +601,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
-    default-source = { registry = "https://pypi.org/simple" }
+    source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
     environment-markers = [
         "python_version < '3.12'",
@@ -723,7 +723,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
 
     assert_snapshot!(fs_err::read_to_string(context.temp_dir.join("uv.lock"))?, @r###"
     version = 1
-    default-source = { registry = "https://pypi.org/simple" }
+    source = { registry = "https://pypi.org/simple" }
     requires-python = ">=3.11, <3.13"
 
     [options]
