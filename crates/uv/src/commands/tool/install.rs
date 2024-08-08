@@ -14,7 +14,7 @@ use uv_python::{
     EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::ResolverInstallerOptions;
+use uv_settings::{ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -77,6 +77,7 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = SharedState::default();
+
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -178,6 +179,9 @@ pub(crate) async fn install(
         );
         requirements
     };
+
+    // Convert to tool options.
+    let options = ToolOptions::from(options);
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.acquire_lock()?;
@@ -344,7 +348,7 @@ pub(crate) async fn install(
         &environment,
         &from.name,
         &installed_tools,
-        &options,
+        options,
         force || invalid_tool_receipt,
         python,
         requirements,

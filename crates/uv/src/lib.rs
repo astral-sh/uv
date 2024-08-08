@@ -6,15 +6,15 @@ use std::process::ExitCode;
 
 use anstream::eprintln;
 use anyhow::Result;
-use clap::{CommandFactory, Parser};
 use clap::error::{ContextKind, ContextValue};
+use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 
 use settings::PipTreeSettings;
 use uv_cache::{Cache, Refresh, Timestamp};
 use uv_cli::{
-    CacheCommand, CacheNamespace, Cli, Commands, compat::CompatArgs, PipCommand, PipNamespace,
+    compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand,
 };
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace};

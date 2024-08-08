@@ -15,7 +15,7 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
-use uv_settings::{Combine, ResolverInstallerOptions};
+use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
@@ -111,26 +111,17 @@ pub(crate) async fn upgrade(
 
         // Resolve the appropriate settings, preferring: CLI > receipt > user.
         let options = args.clone().combine(
-            existing_tool_receipt
-                .options()
-                .clone()
+            ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
                 .combine(filesystem.clone()),
         );
-
-        // Force-enable upgrades.
-        let settings = ResolverInstallerSettings {
-            upgrade: Upgrade::All,
-            ..ResolverInstallerSettings::from(options.clone())
-        };
+        let settings = ResolverInstallerSettings::from(options.clone());
 
         // Resolve the requirements.
         let requirements = existing_tool_receipt.requirements();
         let spec = RequirementsSpecification::from_requirements(requirements.to_vec());
 
-        // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
-        // This lets us confirm the environment is valid before removing an existing install. However,
-        // entrypoints always contain an absolute path to the relevant Python interpreter, which would
-        // be invalidated by moving the environment.
+        // TODO(zanieb): Build the environment in the cache directory then copy into the tool
+        // directory.
         let environment = update_environment(
             existing_environment,
             spec,
@@ -155,7 +146,7 @@ pub(crate) async fn upgrade(
             &environment,
             &name,
             &installed_tools,
-            &options,
+            ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
             requirements.to_vec(),

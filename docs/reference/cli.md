@@ -2496,10 +2496,6 @@ uv tool upgrade [OPTIONS] <NAME>
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
-</dd><dt><code>--refresh</code></dt><dd><p>Refresh all cached data</p>
-
-</dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
-
 </dd><dt><code>--reinstall</code></dt><dd><p>Reinstall all packages, regardless of whether they&#8217;re already installed. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--reinstall-package</code> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it&#8217;s already installed. Implies <code>--refresh-package</code></p>
