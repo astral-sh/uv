@@ -2829,3 +2829,86 @@ fn add_virtual() -> Result<()> {
 
     Ok(())
 }
+
+/// Add the same requirement multiple times.
+#[test]
+fn add_repeat() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+        ]
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.add(&["anyio"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}

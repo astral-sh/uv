@@ -55,11 +55,6 @@ impl PyProjectTomlMut {
         })
     }
 
-    /// Initialize a [`PyProjectToml`] from a [`PyProjectTomlMut`].
-    pub fn to_toml(&self) -> Result<PyProjectToml, Error> {
-        Ok(toml::from_str(&self.doc.to_string()).map_err(Box::new)?)
-    }
-
     /// Adds a project to the workspace.
     pub fn add_workspace(&mut self, path: impl AsRef<Path>) -> Result<(), Error> {
         // Get or create `tool.uv.workspace.members`.
