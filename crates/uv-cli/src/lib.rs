@@ -521,12 +521,46 @@ pub enum ProjectCommand {
     /// created during the first sync.
     Init(InitArgs),
     /// Add dependencies to the project (experimental).
+    ///
+    /// Dependencies are added to the project's `pyproject.toml` file.
+    ///
+    /// If no constraint or URL is provided for a dependency, a lower bound is
+    /// added equal to the latest compatible version of the package, e.g.,
+    /// `>=1.2.3`, unless `--frozen` is provided, in which case no resolution is
+    /// performed.
+    ///
+    /// The lockfile and project environment will be updated to reflect the
+    /// added dependencies. To skip updating the lockfile, use `--frozen`. To
+    /// skip updating the environment, use `--no-sync`.
+    ///
+    /// If any of the requested dependencies cannot be found, uv will exit with
+    /// an error, unless the `--frozen` flag is provided, in which case uv will
+    /// add the dependencies verbatim without checking that they exist or are
+    /// compatible with the project.
+    ///
+    /// uv will search for a project in the current directory or any parent
+    /// directory. If a project cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help add` for more details.",
         after_long_help = ""
     )]
     Add(AddArgs),
     /// Remove dependencies from the project (experimental).
+    ///
+    /// Dependencies are removed from the project's `pyproject.toml` file.
+    ///
+    /// The lockfile and project environment will be updated to reflect the
+    /// removed dependencies. To skip updating the lockfile, use `--frozen`. To
+    /// skip updating the environment, use `--no-sync`.
+    ///
+    /// If any of the requested dependencies are not present in the project, uv
+    /// will exit with an error.
+    ///
+    /// If a package has been manually installed in the environment, i.e., with
+    /// `uv pip install`, it will not be removed by `uv remove`.
+    ///
+    /// uv will search for a project in the current directory or any parent
+    /// directory. If a project cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help remove` for more details.",
         after_long_help = ""
@@ -2264,6 +2298,12 @@ pub struct AddArgs {
     pub dev: bool,
 
     /// Add the requirements to the specified optional dependency group.
+    ///
+    /// The group may then be activated when installing the project with the
+    /// `--extra` flag.
+    ///
+    /// To enable an optional dependency group for this requirement instead, see
+    /// `--extra`.
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
@@ -2288,19 +2328,26 @@ pub struct AddArgs {
     )]
     pub raw_sources: bool,
 
-    /// Specific commit to use when adding from Git.
+    /// Commit to use when adding a dependency from Git.
+    ///
+    ///
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub rev: Option<String>,
 
-    /// Tag to use when adding from git.
+    /// Tag to use when adding a dependency from Git.
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub tag: Option<String>,
 
-    /// Branch to use when adding from git.
+    /// Branch to use when adding a dependency from Git.
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub branch: Option<String>,
 
-    /// Extras to activate for the dependency; may be provided more than once.
+    /// Extras to enable for the dependency.
+    ///
+    /// May be provided more than once.
+    ///
+    /// To add this dependency to an optional group in the current project
+    /// instead, see `--optional`.
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
@@ -2309,10 +2356,19 @@ pub struct AddArgs {
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing, or
+    /// if it needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Add the requirements without updating the `uv.lock` file.
+    /// Run without updating the `uv.lock` file.
+    ///
+    /// Instead of checking if the lockfile is up-to-date, uses the versions in
+    /// the lockfile as the source of truth. If the lockfile is missing, uv will
+    /// exit with an error. If the `pyproject.toml` includes new dependencies
+    /// that have not been included in the lockfile yet, they will not be
+    /// present in the environment.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
