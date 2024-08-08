@@ -1,9 +1,8 @@
-#![allow(clippy::default_trait_access)]
-
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
+use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -11,7 +10,7 @@ use std::sync::Arc;
 use either::Either;
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -62,19 +61,19 @@ pub struct Lock {
     /// We discard the lockfile if these options match.
     options: ResolverOptions,
     /// The actual locked version and their metadata.
-    distributions: Vec<Distribution>,
-    /// A map from distribution ID to index in `distributions`.
+    packages: Vec<Package>,
+    /// A map from package ID to index in `packages`.
     ///
-    /// This can be used to quickly lookup the full distribution for any ID
-    /// in this lock. For example, the dependencies for each distribution are
-    /// listed as distributions IDs. This map can be used to find the full
-    /// distribution for each such dependency.
+    /// This can be used to quickly lookup the full package for any ID
+    /// in this lock. For example, the dependencies for each package are
+    /// listed as package IDs. This map can be used to find the full
+    /// package for each such dependency.
     ///
-    /// It is guaranteed that every distribution in this lock has an entry in
-    /// this map, and that every dependency for every distribution has an ID
+    /// It is guaranteed that every package in this lock has an entry in
+    /// this map, and that every dependency for every package has an ID
     /// that exists in this map. That is, there are no dependencies that don't
-    /// have a corresponding locked distribution entry in the same lockfile.
-    by_id: FxHashMap<DistributionId, usize>,
+    /// have a corresponding locked package entry in the same lockfile.
+    by_id: FxHashMap<PackageId, usize>,
 }
 
 impl Lock {
@@ -91,7 +90,7 @@ impl Lock {
                 let fork_markers = graph
                     .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
                     .cloned();
-                let mut locked_dist = Distribution::from_annotated_dist(dist, fork_markers)?;
+                let mut locked_dist = Package::from_annotated_dist(dist, fork_markers)?;
 
                 // Add all dependencies
                 for edge in graph.petgraph.edges(node_index) {
@@ -104,7 +103,7 @@ impl Lock {
                 }
                 let id = locked_dist.id.clone();
                 if let Some(locked_dist) = locked_dists.insert(id, locked_dist) {
-                    return Err(LockErrorKind::DuplicateDistribution {
+                    return Err(LockErrorKind::DuplicatePackage {
                         id: locked_dist.id.clone(),
                     }
                     .into());
@@ -118,7 +117,7 @@ impl Lock {
                 continue;
             };
             if let Some(extra) = dist.extra.as_ref() {
-                let id = DistributionId::from_annotated_dist(dist);
+                let id = PackageId::from_annotated_dist(dist);
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
                     return Err(LockErrorKind::MissingExtraBase {
                         id,
@@ -136,7 +135,7 @@ impl Lock {
                 }
             }
             if let Some(group) = dist.dev.as_ref() {
-                let id = DistributionId::from_annotated_dist(dist);
+                let id = PackageId::from_annotated_dist(dist);
                 let Some(locked_dist) = locked_dists.get_mut(&id) else {
                     return Err(LockErrorKind::MissingDevBase {
                         id,
@@ -155,7 +154,7 @@ impl Lock {
             }
         }
 
-        let distributions = locked_dists.into_values().collect();
+        let packages = locked_dists.into_values().collect();
         let requires_python = graph.requires_python.clone();
         let options = ResolverOptions {
             resolution_mode: graph.options.resolution_mode,
@@ -164,7 +163,7 @@ impl Lock {
         };
         let lock = Self::new(
             VERSION,
-            distributions,
+            packages,
             requires_python,
             options,
             graph.fork_markers.clone(),
@@ -172,23 +171,23 @@ impl Lock {
         Ok(lock)
     }
 
-    /// Initialize a [`Lock`] from a list of [`Distribution`] entries.
+    /// Initialize a [`Lock`] from a list of [`Package`] entries.
     fn new(
         version: u32,
-        mut distributions: Vec<Distribution>,
+        mut packages: Vec<Package>,
         requires_python: Option<RequiresPython>,
         options: ResolverOptions,
         fork_markers: Option<BTreeSet<MarkerTree>>,
     ) -> Result<Self, LockError> {
-        // Put all dependencies for each distribution in a canonical order and
+        // Put all dependencies for each package in a canonical order and
         // check for duplicates.
-        for dist in &mut distributions {
-            dist.dependencies.sort();
-            for windows in dist.dependencies.windows(2) {
+        for package in &mut packages {
+            package.dependencies.sort();
+            for windows in package.dependencies.windows(2) {
                 let (dep1, dep2) = (&windows[0], &windows[1]);
                 if dep1 == dep2 {
                     return Err(LockErrorKind::DuplicateDependency {
-                        id: dist.id.clone(),
+                        id: package.id.clone(),
                         dependency: dep1.clone(),
                     }
                     .into());
@@ -196,13 +195,13 @@ impl Lock {
             }
 
             // Perform the same validation for optional dependencies.
-            for (extra, dependencies) in &mut dist.optional_dependencies {
+            for (extra, dependencies) in &mut package.optional_dependencies {
                 dependencies.sort();
                 for windows in dependencies.windows(2) {
                     let (dep1, dep2) = (&windows[0], &windows[1]);
                     if dep1 == dep2 {
                         return Err(LockErrorKind::DuplicateOptionalDependency {
-                            id: dist.id.clone(),
+                            id: package.id.clone(),
                             extra: extra.clone(),
                             dependency: dep1.clone(),
                         }
@@ -212,13 +211,13 @@ impl Lock {
             }
 
             // Perform the same validation for dev dependencies.
-            for (group, dependencies) in &mut dist.dev_dependencies {
+            for (group, dependencies) in &mut package.dev_dependencies {
                 dependencies.sort();
                 for windows in dependencies.windows(2) {
                     let (dep1, dep2) = (&windows[0], &windows[1]);
                     if dep1 == dep2 {
                         return Err(LockErrorKind::DuplicateDevDependency {
-                            id: dist.id.clone(),
+                            id: package.id.clone(),
                             group: group.clone(),
                             dependency: dep1.clone(),
                         }
@@ -230,18 +229,19 @@ impl Lock {
             // Remove wheels that don't match `requires-python` and can't be selected for
             // installation.
             if let Some(requires_python) = &requires_python {
-                dist.wheels
+                package
+                    .wheels
                     .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
             }
         }
-        distributions.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
+        packages.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
 
-        // Check for duplicate distribution IDs and also build up the map for
-        // distributions keyed by their ID.
+        // Check for duplicate package IDs and also build up the map for
+        // packages keyed by their ID.
         let mut by_id = FxHashMap::default();
-        for (i, dist) in distributions.iter().enumerate() {
+        for (i, dist) in packages.iter().enumerate() {
             if by_id.insert(dist.id.clone(), i).is_some() {
-                return Err(LockErrorKind::DuplicateDistribution {
+                return Err(LockErrorKind::DuplicatePackage {
                     id: dist.id.clone(),
                 }
                 .into());
@@ -250,7 +250,7 @@ impl Lock {
 
         // Build up a map from ID to extras.
         let mut extras_by_id = FxHashMap::default();
-        for dist in &distributions {
+        for dist in &packages {
             for extra in dist.optional_dependencies.keys() {
                 extras_by_id
                     .entry(dist.id.clone())
@@ -260,7 +260,7 @@ impl Lock {
         }
 
         // Remove any non-existent extras (e.g., extras that were requested but don't exist).
-        for dist in &mut distributions {
+        for dist in &mut packages {
             for dep in dist
                 .dependencies
                 .iter_mut()
@@ -269,7 +269,7 @@ impl Lock {
             {
                 dep.extra.retain(|extra| {
                     extras_by_id
-                        .get(&dep.distribution_id)
+                        .get(&dep.package_id)
                         .is_some_and(|extras| extras.contains(extra))
                 });
             }
@@ -277,10 +277,10 @@ impl Lock {
 
         // Check that every dependency has an entry in `by_id`. If any don't,
         // it implies we somehow have a dependency with no corresponding locked
-        // distribution.
-        for dist in &distributions {
+        // package.
+        for dist in &packages {
             for dep in &dist.dependencies {
-                if !by_id.contains_key(&dep.distribution_id) {
+                if !by_id.contains_key(&dep.package_id) {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
                         dependency: dep.clone(),
@@ -292,7 +292,7 @@ impl Lock {
             // Perform the same validation for optional dependencies.
             for dependencies in dist.optional_dependencies.values() {
                 for dep in dependencies {
-                    if !by_id.contains_key(&dep.distribution_id) {
+                    if !by_id.contains_key(&dep.package_id) {
                         return Err(LockErrorKind::UnrecognizedDependency {
                             id: dist.id.clone(),
                             dependency: dep.clone(),
@@ -305,7 +305,7 @@ impl Lock {
             // Perform the same validation for dev dependencies.
             for dependencies in dist.dev_dependencies.values() {
                 for dep in dependencies {
-                    if !by_id.contains_key(&dep.distribution_id) {
+                    if !by_id.contains_key(&dep.package_id) {
                         return Err(LockErrorKind::UnrecognizedDependency {
                             id: dist.id.clone(),
                             dependency: dep.clone(),
@@ -335,19 +335,19 @@ impl Lock {
             fork_markers,
             requires_python,
             options,
-            distributions,
+            packages,
             by_id,
         })
     }
 
-    /// Returns the [`Distribution`] entries in this lock.
-    pub fn distributions(&self) -> &[Distribution] {
-        &self.distributions
+    /// Returns the [`Package`] entries in this lock.
+    pub fn packages(&self) -> &[Package] {
+        &self.packages
     }
 
-    /// Returns the owned [`Distribution`] entries in this lock.
-    pub fn into_distributions(self) -> Vec<Distribution> {
-        self.distributions
+    /// Returns the owned [`Package`] entries in this lock.
+    pub fn into_packages(self) -> Vec<Package> {
+        self.packages
     }
 
     /// Returns the supported Python version range for the lockfile, if present.
@@ -385,14 +385,14 @@ impl Lock {
         extras: &ExtrasSpecification,
         dev: &[GroupName],
     ) -> Result<Resolution, LockError> {
-        let mut queue: VecDeque<(&Distribution, Option<&ExtraName>)> = VecDeque::new();
+        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
         // Add the workspace packages to the queue.
         for root_name in project.packages() {
             let root = self
                 .find_by_name(root_name)
-                .expect("found too many distributions matching root")
+                .expect("found too many packages matching root")
                 .expect("could not find root");
 
             // Add the base package.
@@ -420,7 +420,7 @@ impl Lock {
             for dependency in project.group(group) {
                 let root = self
                     .find_by_name(dependency)
-                    .expect("found too many distributions matching root")
+                    .expect("found too many packages matching root")
                     .expect("could not find root");
                 queue.push_back((root, None));
             }
@@ -445,12 +445,12 @@ impl Lock {
                     .as_ref()
                     .map_or(true, |marker| marker.evaluate(marker_env, &[]))
                 {
-                    let dep_dist = self.find_by_id(&dep.distribution_id);
-                    if seen.insert((&dep.distribution_id, None)) {
+                    let dep_dist = self.find_by_id(&dep.package_id);
+                    if seen.insert((&dep.package_id, None)) {
                         queue.push_back((dep_dist, None));
                     }
                     for extra in &dep.extra {
-                        if seen.insert((&dep.distribution_id, Some(extra))) {
+                        if seen.insert((&dep.package_id, Some(extra))) {
                             queue.push_back((dep_dist, Some(extra)));
                         }
                     }
@@ -506,33 +506,33 @@ impl Lock {
             doc.insert("options", Item::Table(options_table));
         }
 
-        // Count the number of distributions for each package name. When
-        // there's only one distribution for a particular package name (the
+        // Count the number of packages for each package name. When
+        // there's only one package for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
         // version) on dependency edges since it is strictly redundant.
         let mut dist_count_by_name: FxHashMap<PackageName, u64> = FxHashMap::default();
-        for dist in &self.distributions {
+        for dist in &self.packages {
             *dist_count_by_name.entry(dist.id.name.clone()).or_default() += 1;
         }
 
-        let mut distributions = ArrayOfTables::new();
-        for dist in &self.distributions {
-            distributions.push(dist.to_toml(&dist_count_by_name)?);
+        let mut packages = ArrayOfTables::new();
+        for dist in &self.packages {
+            packages.push(dist.to_toml(&dist_count_by_name)?);
         }
 
-        doc.insert("distribution", Item::ArrayOfTables(distributions));
+        doc.insert("package", Item::ArrayOfTables(packages));
         Ok(doc.to_string())
     }
 
-    /// Returns the distribution with the given name. If there are multiple
-    /// matching distributions, then an error is returned. If there are no
-    /// matching distributions, then `Ok(None)` is returned.
-    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Distribution>, String> {
+    /// Returns the package with the given name. If there are multiple
+    /// matching packages, then an error is returned. If there are no
+    /// matching packages, then `Ok(None)` is returned.
+    fn find_by_name(&self, name: &PackageName) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
-        for dist in &self.distributions {
+        for dist in &self.packages {
             if &dist.id.name == name {
                 if found_dist.is_some() {
-                    return Err(format!("found multiple distributions matching `{name}`"));
+                    return Err(format!("found multiple packages matching `{name}`"));
                 }
                 found_dist = Some(dist);
             }
@@ -540,12 +540,9 @@ impl Lock {
         Ok(found_dist)
     }
 
-    fn find_by_id(&self, id: &DistributionId) -> &Distribution {
-        let index = *self.by_id.get(id).expect("locked distribution for ID");
-        let dist = self
-            .distributions
-            .get(index)
-            .expect("valid index for distribution");
+    fn find_by_id(&self, id: &PackageId) -> &Package {
+        let index = *self.by_id.get(id).expect("locked package for ID");
+        let dist = self.packages.get(index).expect("valid index for package");
         dist
     }
 
@@ -558,17 +555,17 @@ impl Lock {
         upgrade: &Upgrade,
     ) -> Result<InMemoryIndex, LockError> {
         let distributions =
-            FxOnceMap::with_capacity_and_hasher(self.distributions.len(), Default::default());
+            FxOnceMap::with_capacity_and_hasher(self.packages.len(), BuildHasherDefault::default());
         let mut packages: FxHashMap<_, BTreeMap<Version, PrioritizedDist>> =
-            FxHashMap::with_capacity_and_hasher(self.distributions.len(), Default::default());
+            FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher);
 
-        for distribution in &self.distributions {
+        for package in &self.packages {
             // Skip packages that may be upgraded from their pinned version.
-            if upgrade.contains(distribution.name()) {
+            if upgrade.contains(package.name()) {
                 continue;
             }
 
-            match distribution.id.source {
+            match package.id.source {
                 Source::Registry(..) | Source::Git(..) => {}
                 // Skip local and direct URL dependencies, as their metadata may have been mutated
                 // without a version change.
@@ -579,17 +576,17 @@ impl Lock {
             }
 
             // Add registry distributions to the package index.
-            if let Some(prioritized_dist) = distribution.to_prioritized_dist(install_path)? {
+            if let Some(prioritized_dist) = package.to_prioritized_dist(install_path)? {
                 packages
-                    .entry(distribution.name().clone())
+                    .entry(package.name().clone())
                     .or_default()
-                    .insert(distribution.id.version.clone(), prioritized_dist);
+                    .insert(package.id.version.clone(), prioritized_dist);
             }
 
             // Extract the distribution metadata.
-            let version_id = distribution.version_id(install_path)?;
-            let hashes = distribution.hashes();
-            let metadata = distribution.to_metadata(install_path)?;
+            let version_id = package.version_id(install_path)?;
+            let hashes = package.hashes();
+            let metadata = package.to_metadata(install_path)?;
 
             // Add metadata to the distributions index.
             let response = MetadataResponse::Found(ArchiveMetadata::with_hashes(metadata, hashes));
@@ -635,8 +632,8 @@ struct LockWire {
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
-    #[serde(rename = "distribution", default)]
-    distributions: Vec<DistributionWire>,
+    #[serde(rename = "package", alias = "distribution", default)]
+    packages: Vec<PackageWire>,
 }
 
 impl From<Lock> for LockWire {
@@ -646,11 +643,7 @@ impl From<Lock> for LockWire {
             requires_python: lock.requires_python,
             fork_markers: lock.fork_markers,
             options: lock.options,
-            distributions: lock
-                .distributions
-                .into_iter()
-                .map(DistributionWire::from)
-                .collect(),
+            packages: lock.packages.into_iter().map(PackageWire::from).collect(),
         }
     }
 }
@@ -659,31 +652,31 @@ impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Lock, LockError> {
-        // Count the number of distributions for each package name. When
-        // there's only one distribution for a particular package name (the
+        // Count the number of sources for each package name. When
+        // there's only one source for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
         // version) on dependency edges since it is strictly redundant.
-        let mut unambiguous_dist_ids: FxHashMap<PackageName, DistributionId> = FxHashMap::default();
+        let mut unambiguous_package_ids: FxHashMap<PackageName, PackageId> = FxHashMap::default();
         let mut ambiguous = FxHashSet::default();
-        for dist in &wire.distributions {
+        for dist in &wire.packages {
             if ambiguous.contains(&dist.id.name) {
                 continue;
             }
-            if unambiguous_dist_ids.remove(&dist.id.name).is_some() {
+            if unambiguous_package_ids.remove(&dist.id.name).is_some() {
                 ambiguous.insert(dist.id.name.clone());
                 continue;
             }
-            unambiguous_dist_ids.insert(dist.id.name.clone(), dist.id.clone());
+            unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
         }
 
-        let distributions = wire
-            .distributions
+        let packages = wire
+            .packages
             .into_iter()
-            .map(|dist| dist.unwire(&unambiguous_dist_ids))
+            .map(|dist| dist.unwire(&unambiguous_package_ids))
             .collect::<Result<Vec<_>, _>>()?;
         Lock::new(
             wire.version,
-            distributions,
+            packages,
             wire.requires_python,
             wire.options,
             wire.fork_markers,
@@ -692,13 +685,13 @@ impl TryFrom<LockWire> for Lock {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Distribution {
-    pub(crate) id: DistributionId,
+pub struct Package {
+    pub(crate) id: PackageId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
-    /// If there are multiple distributions for the same package name, we add the markers of the
-    /// fork(s) that contained this distribution, so we can set the correct preferences in the next
-    /// resolution.
+    /// If there are multiple versions or sources for the same package name, we add the markers of
+    /// the fork(s) that contained this version or source, so we can set the correct preferences in
+    /// the next resolution.
     ///
     /// Named `environment-markers` in `uv.lock`.
     fork_markers: Option<BTreeSet<MarkerTree>>,
@@ -707,15 +700,15 @@ pub struct Distribution {
     dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
 }
 
-impl Distribution {
+impl Package {
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         fork_markers: Option<BTreeSet<MarkerTree>>,
     ) -> Result<Self, LockError> {
-        let id = DistributionId::from_annotated_dist(annotated_dist);
+        let id = PackageId::from_annotated_dist(annotated_dist);
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
-        Ok(Distribution {
+        Ok(Package {
             id,
             sdist,
             wheels,
@@ -726,11 +719,11 @@ impl Distribution {
         })
     }
 
-    /// Add the [`AnnotatedDist`] as a dependency of the [`Distribution`].
+    /// Add the [`AnnotatedDist`] as a dependency of the [`Package`].
     fn add_dependency(&mut self, annotated_dist: &AnnotatedDist, marker: Option<&MarkerTree>) {
         let new_dep = Dependency::from_annotated_dist(annotated_dist, marker);
         for existing_dep in &mut self.dependencies {
-            if existing_dep.distribution_id == new_dep.distribution_id
+            if existing_dep.package_id == new_dep.package_id
                 && existing_dep.marker == new_dep.marker
             {
                 existing_dep.extra.extend(new_dep.extra);
@@ -740,7 +733,7 @@ impl Distribution {
         self.dependencies.push(new_dep);
     }
 
-    /// Add the [`AnnotatedDist`] as an optional dependency of the [`Distribution`].
+    /// Add the [`AnnotatedDist`] as an optional dependency of the [`Package`].
     fn add_optional_dependency(
         &mut self,
         extra: ExtraName,
@@ -753,7 +746,7 @@ impl Distribution {
             .push(Dependency::from_annotated_dist(annotated_dist, marker));
     }
 
-    /// Add the [`AnnotatedDist`] as a development dependency of the [`Distribution`].
+    /// Add the [`AnnotatedDist`] as a development dependency of the [`Package`].
     fn add_dev_dependency(
         &mut self,
         dev: GroupName,
@@ -766,7 +759,7 @@ impl Distribution {
             .push(Dependency::from_annotated_dist(annotated_dist, marker));
     }
 
-    /// Convert the [`Distribution`] to a [`Dist`] that can be used in installation.
+    /// Convert the [`Package`] to a [`Dist`] that can be used in installation.
     fn to_dist(&self, workspace_root: &Path, tags: &Tags) -> Result<Dist, LockError> {
         if let Some(best_wheel_index) = self.find_best_wheel(tags) {
             return match &self.id.source {
@@ -835,7 +828,7 @@ impl Distribution {
         .into())
     }
 
-    /// Convert the source of this [`Distribution`] to a [`SourceDist`] that can be used in installation.
+    /// Convert the source of this [`Package`] to a [`SourceDist`] that can be used in installation.
     ///
     /// Returns `Ok(None)` if the source cannot be converted because `self.sdist` is `None`. This is required
     /// for registry sources.
@@ -956,7 +949,7 @@ impl Distribution {
         Ok(Some(sdist))
     }
 
-    /// Convert the [`Distribution`] to a [`PrioritizedDist`] that can be used for resolution, if
+    /// Convert the [`Package`] to a [`PrioritizedDist`] that can be used for resolution, if
     /// it has a registry source.
     fn to_prioritized_dist(
         &self,
@@ -996,7 +989,7 @@ impl Distribution {
         Ok(Some(prioritized_dist))
     }
 
-    /// Convert the [`Distribution`] to [`Metadata`] that can be used for resolution.
+    /// Convert the [`Package`] to [`Metadata`] that can be used for resolution.
     pub fn to_metadata(&self, workspace_root: &Path) -> Result<Metadata, LockError> {
         let name = self.name().clone();
         let version = self.id.version.clone();
@@ -1154,12 +1147,12 @@ impl Distribution {
         best.map(|(_, i)| i)
     }
 
-    /// Returns the [`PackageName`] of the distribution.
+    /// Returns the [`PackageName`] of the package.
     pub fn name(&self) -> &PackageName {
         &self.id.name
     }
 
-    /// Returns the [`Version`] of the distribution.
+    /// Returns the [`Version`] of the package.
     pub fn version(&self) -> &Version {
         &self.id.version
     }
@@ -1179,7 +1172,7 @@ impl Distribution {
         }
     }
 
-    /// Returns all the hashes associated with this [`Distribution`].
+    /// Returns all the hashes associated with this [`Package`].
     fn hashes(&self) -> Vec<HashDigest> {
         let mut hashes = Vec::new();
         if let Some(ref sdist) = self.sdist {
@@ -1193,7 +1186,7 @@ impl Distribution {
         hashes
     }
 
-    /// Returns the [`ResolvedRepositoryReference`] for the distribution, if it is a Git source.
+    /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
     pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
         match &self.id.source {
             Source::Git(url, git) => Some(ResolvedRepositoryReference {
@@ -1209,7 +1202,7 @@ impl Distribution {
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given `Path`.
-fn verbatim_url(path: PathBuf, id: &DistributionId) -> Result<VerbatimUrl, LockError> {
+fn verbatim_url(path: PathBuf, id: &PackageId) -> Result<VerbatimUrl, LockError> {
     let url = VerbatimUrl::from_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
         id: id.clone(),
         err,
@@ -1220,9 +1213,9 @@ fn verbatim_url(path: PathBuf, id: &DistributionId) -> Result<VerbatimUrl, LockE
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct DistributionWire {
+struct PackageWire {
     #[serde(flatten)]
-    id: DistributionId,
+    id: PackageId,
     #[serde(default)]
     sdist: Option<SourceDist>,
     #[serde(default)]
@@ -1237,17 +1230,17 @@ struct DistributionWire {
     dev_dependencies: BTreeMap<GroupName, Vec<DependencyWire>>,
 }
 
-impl DistributionWire {
+impl PackageWire {
     fn unwire(
         self,
-        unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
-    ) -> Result<Distribution, LockError> {
+        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+    ) -> Result<Package, LockError> {
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| dep.unwire(unambiguous_dist_ids))
+                .map(|dep| dep.unwire(unambiguous_package_ids))
                 .collect()
         };
-        Ok(Distribution {
+        Ok(Package {
             id: self.id,
             sdist: self.sdist,
             wheels: self.wheels,
@@ -1267,12 +1260,12 @@ impl DistributionWire {
     }
 }
 
-impl From<Distribution> for DistributionWire {
-    fn from(dist: Distribution) -> DistributionWire {
+impl From<Package> for PackageWire {
+    fn from(dist: Package) -> PackageWire {
         let wire_deps = |deps: Vec<Dependency>| -> Vec<DependencyWire> {
             deps.into_iter().map(DependencyWire::from).collect()
         };
-        DistributionWire {
+        PackageWire {
             id: dist.id,
             sdist: dist.sdist,
             wheels: dist.wheels,
@@ -1292,28 +1285,28 @@ impl From<Distribution> for DistributionWire {
     }
 }
 
-/// Inside the lockfile, we match a dependency entry to a distribution entry through a key made up
+/// Inside the lockfile, we match a dependency entry to a package entry through a key made up
 /// of the name, the version and the source url.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
-pub(crate) struct DistributionId {
+pub(crate) struct PackageId {
     pub(crate) name: PackageName,
     pub(crate) version: Version,
     source: Source,
 }
 
-impl DistributionId {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> DistributionId {
+impl PackageId {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> PackageId {
         let name = annotated_dist.metadata.name.clone();
         let version = annotated_dist.metadata.version.clone();
         let source = Source::from_resolved_dist(&annotated_dist.dist);
-        DistributionId {
+        PackageId {
             name,
             version,
             source,
         }
     }
 
-    /// Writes this distribution ID inline into the table given.
+    /// Writes this package ID inline into the table given.
     ///
     /// When a map is given, and if the package name in this ID is unambiguous
     /// (i.e., it has a count of 1 in the map), then the `version` and `source`
@@ -1329,27 +1322,27 @@ impl DistributionId {
     }
 }
 
-impl std::fmt::Display for DistributionId {
+impl std::fmt::Display for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}=={} @ {}", self.name, self.version, self.source)
     }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
-struct DistributionIdForDependency {
+struct PackageIdForDependency {
     name: PackageName,
     version: Option<Version>,
     source: Option<Source>,
 }
 
-impl DistributionIdForDependency {
+impl PackageIdForDependency {
     fn unwire(
         self,
-        unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
-    ) -> Result<DistributionId, LockError> {
-        let unambiguous_dist_id = unambiguous_dist_ids.get(&self.name);
+        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+    ) -> Result<PackageId, LockError> {
+        let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
         let version = self.version.map(Ok::<_, LockError>).unwrap_or_else(|| {
-            let Some(dist_id) = unambiguous_dist_id else {
+            let Some(dist_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencyVersion {
                     name: self.name.clone(),
                 }
@@ -1358,15 +1351,15 @@ impl DistributionIdForDependency {
             Ok(dist_id.version.clone())
         })?;
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
-            let Some(dist_id) = unambiguous_dist_id else {
+            let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
                     name: self.name.clone(),
                 }
                 .into());
             };
-            Ok(dist_id.source.clone())
+            Ok(package_id.source.clone())
         })?;
-        Ok(DistributionId {
+        Ok(PackageId {
             name: self.name,
             version,
             source,
@@ -1374,9 +1367,9 @@ impl DistributionIdForDependency {
     }
 }
 
-impl From<DistributionId> for DistributionIdForDependency {
-    fn from(id: DistributionId) -> DistributionIdForDependency {
-        DistributionIdForDependency {
+impl From<PackageId> for PackageIdForDependency {
+    fn from(id: PackageId) -> PackageIdForDependency {
+        PackageIdForDependency {
             name: id.name,
             version: Some(id.version),
             source: Some(id.source),
@@ -1384,13 +1377,13 @@ impl From<DistributionId> for DistributionIdForDependency {
     }
 }
 
-/// A unique identifier to differentiate between different distributions for the same version of a
+/// A unique identifier to differentiate between different sources for the same version of a
 /// package.
 ///
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lockfile to have a different
-/// canonical ordering of distributions.
+/// canonical ordering of sources.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(try_from = "SourceWire")]
 enum Source {
@@ -1667,7 +1660,7 @@ struct DirectSource {
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
 /// variants should be added without changing the relative ordering of other
 /// variants. Otherwise, this could cause the lockfile to have a different
-/// canonical ordering of distributions.
+/// canonical ordering of package entries.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
     precise: GitSha,
@@ -1780,7 +1773,7 @@ impl SourceDist {
 
 impl SourceDist {
     fn from_annotated_dist(
-        id: &DistributionId,
+        id: &PackageId,
         annotated_dist: &AnnotatedDist,
     ) -> Result<Option<SourceDist>, LockError> {
         match annotated_dist.dist {
@@ -1793,7 +1786,7 @@ impl SourceDist {
     }
 
     fn from_dist(
-        id: &DistributionId,
+        id: &PackageId,
         dist: &Dist,
         hashes: &[HashDigest],
     ) -> Result<Option<SourceDist>, LockError> {
@@ -1810,7 +1803,7 @@ impl SourceDist {
     }
 
     fn from_source_dist(
-        id: &DistributionId,
+        id: &PackageId,
         source_dist: &distribution_types::SourceDist,
         hashes: &[HashDigest],
     ) -> Result<Option<SourceDist>, LockError> {
@@ -1846,7 +1839,7 @@ impl SourceDist {
     }
 
     fn from_direct_dist(
-        id: &DistributionId,
+        id: &PackageId,
         direct_dist: &DirectUrlSourceDist,
         hashes: &[HashDigest],
     ) -> Result<SourceDist, LockError> {
@@ -2175,10 +2168,10 @@ impl TryFrom<WheelWire> for Wheel {
     }
 }
 
-/// A single dependency of a distribution in a lockfile.
+/// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 struct Dependency {
-    distribution_id: DistributionId,
+    package_id: PackageId,
     extra: BTreeSet<ExtraName>,
     marker: Option<MarkerTree>,
 }
@@ -2188,11 +2181,11 @@ impl Dependency {
         annotated_dist: &AnnotatedDist,
         marker: Option<&MarkerTree>,
     ) -> Dependency {
-        let distribution_id = DistributionId::from_annotated_dist(annotated_dist);
+        let package_id = PackageId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.iter().cloned().collect();
         let marker = marker.cloned();
         Dependency {
-            distribution_id,
+            package_id,
             extra,
             marker,
         }
@@ -2207,20 +2200,19 @@ impl Dependency {
         // Keep track of extras, these will be denormalized later.
         if !self.extra.is_empty() {
             extras
-                .entry(self.distribution_id.name.clone())
+                .entry(self.package_id.name.clone())
                 .or_default()
                 .extend(self.extra.iter().cloned());
         }
 
         // Reconstruct the `RequirementSource` from the `Source`.
-        let source = match &self.distribution_id.source {
+        let source = match &self.package_id.source {
             Source::Registry(_) => RequirementSource::Registry {
                 // We don't store the version specifier that was originally used for resolution in
                 // the lockfile, so this might be too restrictive. However, this is the only version
                 // we have the metadata for, so if resolution fails we will need to fallback to a
                 // clean resolve.
-                specifier: VersionSpecifier::equals_version(self.distribution_id.version.clone())
-                    .into(),
+                specifier: VersionSpecifier::equals_version(self.package_id.version.clone()).into(),
                 index: None,
             },
             Source::Git(repository, git) => {
@@ -2246,24 +2238,24 @@ impl Dependency {
             Source::Path(ref path) => RequirementSource::Path {
                 lock_path: path.clone(),
                 install_path: workspace_root.join(path),
-                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+                url: verbatim_url(workspace_root.join(path), &self.package_id)?,
             },
             Source::Directory(ref path) => RequirementSource::Directory {
                 editable: false,
                 lock_path: path.clone(),
                 install_path: workspace_root.join(path),
-                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+                url: verbatim_url(workspace_root.join(path), &self.package_id)?,
             },
             Source::Editable(ref path) => RequirementSource::Directory {
                 editable: true,
                 lock_path: path.clone(),
                 install_path: workspace_root.join(path),
-                url: verbatim_url(workspace_root.join(path), &self.distribution_id)?,
+                url: verbatim_url(workspace_root.join(path), &self.package_id)?,
             },
         };
 
         let requirement = Requirement {
-            name: self.distribution_id.name.clone(),
+            name: self.package_id.name.clone(),
             marker: self.marker.clone(),
             origin: None,
             extras: Vec::new(),
@@ -2276,7 +2268,7 @@ impl Dependency {
     /// Returns the TOML representation of this dependency.
     fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> Table {
         let mut table = Table::new();
-        self.distribution_id
+        self.package_id
             .to_toml(Some(dist_count_by_name), &mut table);
         if !self.extra.is_empty() {
             let extra_array = self
@@ -2300,28 +2292,26 @@ impl std::fmt::Display for Dependency {
             write!(
                 f,
                 "{}=={} @ {}",
-                self.distribution_id.name,
-                self.distribution_id.version,
-                self.distribution_id.source
+                self.package_id.name, self.package_id.version, self.package_id.source
             )
         } else {
             write!(
                 f,
                 "{}[{}]=={} @ {}",
-                self.distribution_id.name,
+                self.package_id.name,
                 self.extra.iter().join(","),
-                self.distribution_id.version,
-                self.distribution_id.source
+                self.package_id.version,
+                self.package_id.source
             )
         }
     }
 }
 
-/// A single dependency of a distribution in a lockfile.
+/// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct DependencyWire {
     #[serde(flatten)]
-    distribution_id: DistributionIdForDependency,
+    package_id: PackageIdForDependency,
     #[serde(default)]
     extra: BTreeSet<ExtraName>,
     marker: Option<MarkerTree>,
@@ -2330,10 +2320,10 @@ struct DependencyWire {
 impl DependencyWire {
     fn unwire(
         self,
-        unambiguous_dist_ids: &FxHashMap<PackageName, DistributionId>,
+        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
         Ok(Dependency {
-            distribution_id: self.distribution_id.unwire(unambiguous_dist_ids)?,
+            package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             marker: self.marker,
         })
@@ -2343,7 +2333,7 @@ impl DependencyWire {
 impl From<Dependency> for DependencyWire {
     fn from(dependency: Dependency) -> DependencyWire {
         DependencyWire {
-            distribution_id: DistributionIdForDependency::from(dependency.distribution_id),
+            package_id: PackageIdForDependency::from(dependency.package_id),
             extra: dependency.extra,
             marker: dependency.marker,
         }
@@ -2417,44 +2407,44 @@ where
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
-    /// An error that occurs when multiple distributions with the same
+    /// An error that occurs when multiple packages with the same
     /// ID were found.
-    #[error("found duplicate distribution `{id}`")]
-    DuplicateDistribution {
-        /// The ID of the conflicting distributions.
-        id: DistributionId,
+    #[error("found duplicate package `{id}`")]
+    DuplicatePackage {
+        /// The ID of the conflicting package.
+        id: PackageId,
     },
     /// An error that occurs when there are multiple dependencies for the
-    /// same distribution that have identical identifiers.
-    #[error("for distribution `{id}`, found duplicate dependency `{dependency}`")]
+    /// same package that have identical identifiers.
+    #[error("for package `{id}`, found duplicate dependency `{dependency}`")]
     DuplicateDependency {
-        /// The ID of the distribution for which a duplicate dependency was
+        /// The ID of the package for which a duplicate dependency was
         /// found.
-        id: DistributionId,
+        id: PackageId,
         /// The ID of the conflicting dependency.
         dependency: Dependency,
     },
     /// An error that occurs when there are multiple dependencies for the
-    /// same distribution that have identical identifiers, as part of the
-    /// that distribution's optional dependencies.
-    #[error("for distribution `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
+    /// same package that have identical identifiers, as part of the
+    /// that package's optional dependencies.
+    #[error("for package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
     DuplicateOptionalDependency {
-        /// The ID of the distribution for which a duplicate dependency was
+        /// The ID of the package for which a duplicate dependency was
         /// found.
-        id: DistributionId,
+        id: PackageId,
         /// The name of the optional dependency group.
         extra: ExtraName,
         /// The ID of the conflicting dependency.
         dependency: Dependency,
     },
     /// An error that occurs when there are multiple dependencies for the
-    /// same distribution that have identical identifiers, as part of the
-    /// that distribution's development dependencies.
-    #[error("for distribution `{id}:{group}`, found duplicate dependency `{dependency}`")]
+    /// same package that have identical identifiers, as part of the
+    /// that package's development dependencies.
+    #[error("for package `{id}:{group}`, found duplicate dependency `{dependency}`")]
     DuplicateDevDependency {
-        /// The ID of the distribution for which a duplicate dependency was
+        /// The ID of the package for which a duplicate dependency was
         /// found.
-        id: DistributionId,
+        id: PackageId,
         /// The name of the dev dependency group.
         group: GroupName,
         /// The ID of the conflicting dependency.
@@ -2479,45 +2469,45 @@ enum LockErrorKind {
     ),
     /// An error that occurs when there's an unrecognized dependency.
     ///
-    /// That is, a dependency for a distribution that isn't in the lockfile.
-    #[error(
-        "for distribution `{id}`, found dependency `{dependency}` with no locked distribution"
-    )]
+    /// That is, a dependency for a package that isn't in the lockfile.
+    #[error("for package `{id}`, found dependency `{dependency}` with no locked package")]
     UnrecognizedDependency {
-        /// The ID of the distribution that has an unrecognized dependency.
-        id: DistributionId,
-        /// The ID of the dependency that doesn't have a corresponding distribution
+        /// The ID of the package that has an unrecognized dependency.
+        id: PackageId,
+        /// The ID of the dependency that doesn't have a corresponding package
         /// entry.
         dependency: Dependency,
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
-    #[error("since the distribution `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
+    #[error("since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     Hash {
-        /// The ID of the distribution that has a missing hash.
-        id: DistributionId,
-        /// The specific type of artifact, e.g., "source distribution"
+        /// The ID of the package that has a missing hash.
+        id: PackageId,
+        /// The specific type of artifact, e.g., "source package"
         /// or "wheel".
         artifact_type: &'static str,
         /// When true, a hash is expected to be present.
         expected: bool,
     },
-    /// An error that occurs when a distribution is included with an extra name,
-    /// but no corresponding base distribution (i.e., without the extra) exists.
-    #[error("found distribution `{id}` with extra `{extra}` but no base distribution")]
+    /// An error that occurs when a package is included with an extra name,
+    /// but no corresponding base package (i.e., without the extra) exists.
+    #[error("found package `{id}` with extra `{extra}` but no base package")]
     MissingExtraBase {
-        /// The ID of the distribution that has a missing base.
-        id: DistributionId,
+        /// The ID of the package that has a missing base.
+        id: PackageId,
         /// The extra name that was found.
         extra: ExtraName,
     },
-    /// An error that occurs when a distribution is included with a development
-    /// dependency group, but no corresponding base distribution (i.e., without
+    /// An error that occurs when a package is included with a development
+    /// dependency group, but no corresponding base package (i.e., without
     /// the group) exists.
-    #[error("found distribution `{id}` with development dependency group `{group}` but no base distribution")]
+    #[error(
+        "found package `{id}` with development dependency group `{group}` but no base package"
+    )]
     MissingDevBase {
-        /// The ID of the distribution that has a missing base.
-        id: DistributionId,
+        /// The ID of the package that has a missing base.
+        id: PackageId,
         /// The development dependency group that was found.
         group: GroupName,
     },
@@ -2526,7 +2516,7 @@ enum LockErrorKind {
     #[error("wheels cannot come from {source_type} sources")]
     InvalidWheelSource {
         /// The ID of the distribution that has a missing base.
-        id: DistributionId,
+        id: PackageId,
         /// The kind of the invalid source.
         source_type: &'static str,
     },
@@ -2535,46 +2525,46 @@ enum LockErrorKind {
     #[error("found registry distribution {id} without a valid URL")]
     MissingUrl {
         /// The ID of the distribution that is missing a URL.
-        id: DistributionId,
+        id: PackageId,
     },
     /// An error that occurs when a distribution indicates that it is sourced from a registry, but
     /// is missing a filename.
     #[error("found registry distribution {id} without a valid filename")]
     MissingFilename {
         /// The ID of the distribution that is missing a filename.
-        id: DistributionId,
+        id: PackageId,
     },
     /// An error that occurs when a distribution is included with neither wheels nor a source
     /// distribution.
     #[error("distribution {id} can't be installed because it doesn't have a source distribution or wheel for the current platform")]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution that has a missing base.
-        id: DistributionId,
+        id: PackageId,
     },
     /// An error that occurs when converting between URLs and paths.
     #[error("found dependency `{id}` with no locked distribution")]
     VerbatimUrl {
         /// The ID of the distribution that has a missing base.
-        id: DistributionId,
+        id: PackageId,
         /// The inner error we forward.
         #[source]
         err: VerbatimUrlError,
     },
-    /// An error that occurs when an ambiguous `distribution.dependency` is
+    /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
     #[error(
         "dependency {name} has missing `version` \
-         field but has more than one matching distribution"
+         field but has more than one matching package"
     )]
     MissingDependencyVersion {
         /// The name of the dependency that is missing a `version` field.
         name: PackageName,
     },
-    /// An error that occurs when an ambiguous `distribution.dependency` is
+    /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
     #[error(
         "dependency {name} has missing `source` \
-         field but has more than one matching distribution"
+         field but has more than one matching package"
     )]
     MissingDependencySource {
         /// The name of the dependency that is missing a `source` field.
@@ -2650,16 +2640,15 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
     /// The root nodes in the [`Lock`].
-    roots: Vec<&'env DistributionId>,
+    roots: Vec<&'env PackageId>,
     /// The edges in the [`Lock`].
     ///
     /// While the dependencies exist on the [`Lock`] directly, if `--invert` is enabled, the
     /// direction must be inverted when constructing the tree.
-    dependencies: FxHashMap<&'env DistributionId, Vec<Cow<'env, Dependency>>>,
+    dependencies: FxHashMap<&'env PackageId, Vec<Cow<'env, Dependency>>>,
     optional_dependencies:
-        FxHashMap<&'env DistributionId, FxHashMap<ExtraName, Vec<Cow<'env, Dependency>>>>,
-    dev_dependencies:
-        FxHashMap<&'env DistributionId, FxHashMap<GroupName, Vec<Cow<'env, Dependency>>>>,
+        FxHashMap<&'env PackageId, FxHashMap<ExtraName, Vec<Cow<'env, Dependency>>>>,
+    dev_dependencies: FxHashMap<&'env PackageId, FxHashMap<GroupName, Vec<Cow<'env, Dependency>>>>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Prune the given packages from the display of the dependency tree.
@@ -2671,7 +2660,7 @@ pub struct TreeDisplay<'env> {
 }
 
 impl<'env> TreeDisplay<'env> {
-    /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
+    /// Create a new [`DisplayDependencyGraph`] for the set of installed packages.
     pub fn new(
         lock: &'env Lock,
         markers: Option<&'env MarkerEnvironment>,
@@ -2689,16 +2678,16 @@ impl<'env> TreeDisplay<'env> {
         let mut optional_dependencies: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
         let mut dev_dependencies: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
 
-        for distribution in &lock.distributions {
-            for dependency in &distribution.dependencies {
+        for packages in &lock.packages {
+            for dependency in &packages.dependencies {
                 let parent = if invert {
-                    &dependency.distribution_id
+                    &dependency.package_id
                 } else {
-                    &distribution.id
+                    &packages.id
                 };
                 let child = if invert {
                     Cow::Owned(Dependency {
-                        distribution_id: distribution.id.clone(),
+                        package_id: packages.id.clone(),
                         extra: dependency.extra.clone(),
                         marker: dependency.marker.clone(),
                     })
@@ -2706,7 +2695,7 @@ impl<'env> TreeDisplay<'env> {
                     Cow::Borrowed(dependency)
                 };
 
-                non_roots.insert(child.distribution_id.clone());
+                non_roots.insert(child.package_id.clone());
 
                 // Skip dependencies that don't apply to the current environment.
                 if let Some(environment_markers) = markers {
@@ -2720,16 +2709,16 @@ impl<'env> TreeDisplay<'env> {
                 dependencies.entry(parent).or_default().push(child);
             }
 
-            for (extra, dependencies) in &distribution.optional_dependencies {
+            for (extra, dependencies) in &packages.optional_dependencies {
                 for dependency in dependencies {
                     let parent = if invert {
-                        &dependency.distribution_id
+                        &dependency.package_id
                     } else {
-                        &distribution.id
+                        &packages.id
                     };
                     let child = if invert {
                         Cow::Owned(Dependency {
-                            distribution_id: distribution.id.clone(),
+                            package_id: packages.id.clone(),
                             extra: dependency.extra.clone(),
                             marker: dependency.marker.clone(),
                         })
@@ -2737,7 +2726,7 @@ impl<'env> TreeDisplay<'env> {
                         Cow::Borrowed(dependency)
                     };
 
-                    non_roots.insert(child.distribution_id.clone());
+                    non_roots.insert(child.package_id.clone());
 
                     // Skip dependencies that don't apply to the current environment.
                     if let Some(environment_markers) = markers {
@@ -2757,16 +2746,16 @@ impl<'env> TreeDisplay<'env> {
                 }
             }
 
-            for (group, dependencies) in &distribution.dev_dependencies {
+            for (group, dependencies) in &packages.dev_dependencies {
                 for dependency in dependencies {
                     let parent = if invert {
-                        &dependency.distribution_id
+                        &dependency.package_id
                     } else {
-                        &distribution.id
+                        &packages.id
                     };
                     let child = if invert {
                         Cow::Owned(Dependency {
-                            distribution_id: distribution.id.clone(),
+                            package_id: packages.id.clone(),
                             extra: dependency.extra.clone(),
                             marker: dependency.marker.clone(),
                         })
@@ -2774,7 +2763,7 @@ impl<'env> TreeDisplay<'env> {
                         Cow::Borrowed(dependency)
                     };
 
-                    non_roots.insert(child.distribution_id.clone());
+                    non_roots.insert(child.package_id.clone());
 
                     // Skip dependencies that don't apply to the current environment.
                     if let Some(environment_markers) = markers {
@@ -2797,7 +2786,7 @@ impl<'env> TreeDisplay<'env> {
 
         // Compute the root nodes.
         let roots = lock
-            .distributions
+            .packages
             .iter()
             .map(|dist| &dist.id)
             .filter(|id| !non_roots.contains(*id))
@@ -2815,12 +2804,12 @@ impl<'env> TreeDisplay<'env> {
         }
     }
 
-    /// Perform a depth-first traversal of the given distribution and its dependencies.
+    /// Perform a depth-first traversal of the given package and its dependencies.
     fn visit(
         &'env self,
         node: Node<'env>,
-        visited: &mut FxHashMap<&'env DistributionId, Vec<&'env DistributionId>>,
-        path: &mut Vec<&'env DistributionId>,
+        visited: &mut FxHashMap<&'env PackageId, Vec<&'env PackageId>>,
+        path: &mut Vec<&'env PackageId>,
     ) -> Vec<String> {
         // Short-circuit if the current path is longer than the provided depth.
         if path.len() > self.depth {
@@ -2828,13 +2817,13 @@ impl<'env> TreeDisplay<'env> {
         }
 
         let line = {
-            let mut line = format!("{}", node.distribution_id().name);
+            let mut line = format!("{}", node.package_id().name);
 
             if let Some(extras) = node.extras().filter(|extras| !extras.is_empty()) {
                 line.push_str(&format!("[{}]", extras.iter().join(",")));
             }
 
-            line.push_str(&format!(" v{}", node.distribution_id().version));
+            line.push_str(&format!(" v{}", node.package_id().version));
 
             match node {
                 Node::Root(_) => line,
@@ -2847,8 +2836,8 @@ impl<'env> TreeDisplay<'env> {
         // Skip the traversal if:
         // 1. The package is in the current traversal path (i.e., a dependency cycle).
         // 2. The package has been visited and de-duplication is enabled (default).
-        if let Some(requirements) = visited.get(node.distribution_id()) {
-            if !self.no_dedupe || path.contains(&node.distribution_id()) {
+        if let Some(requirements) = visited.get(node.package_id()) {
+            if !self.no_dedupe || path.contains(&node.package_id()) {
                 return if requirements.is_empty() {
                     vec![line]
                 } else {
@@ -2859,13 +2848,13 @@ impl<'env> TreeDisplay<'env> {
 
         let dependencies: Vec<Node<'env>> = self
             .dependencies
-            .get(node.distribution_id())
+            .get(node.package_id())
             .into_iter()
             .flatten()
             .map(|dep| Node::Dependency(dep.as_ref()))
             .chain(
                 self.optional_dependencies
-                    .get(node.distribution_id())
+                    .get(node.package_id())
                     .into_iter()
                     .flatten()
                     .flat_map(|(extra, deps)| {
@@ -2875,24 +2864,24 @@ impl<'env> TreeDisplay<'env> {
             )
             .chain(
                 self.dev_dependencies
-                    .get(node.distribution_id())
+                    .get(node.package_id())
                     .into_iter()
                     .flatten()
                     .flat_map(|(group, deps)| {
                         deps.iter().map(move |dep| Node::DevDependency(group, dep))
                     }),
             )
-            .filter(|dep| !self.prune.contains(&dep.distribution_id().name))
+            .filter(|dep| !self.prune.contains(&dep.package_id().name))
             .collect::<Vec<_>>();
 
         let mut lines = vec![line];
 
         // Keep track of the dependency path to avoid cycles.
         visited.insert(
-            node.distribution_id(),
-            dependencies.iter().map(Node::distribution_id).collect(),
+            node.package_id(),
+            dependencies.iter().map(Node::package_id).collect(),
         );
-        path.push(node.distribution_id());
+        path.push(node.package_id());
 
         for (index, dep) in dependencies.iter().enumerate() {
             // For sub-visited packages, add the prefix to make the tree display user-friendly.
@@ -2966,19 +2955,19 @@ impl<'env> TreeDisplay<'env> {
 
 #[derive(Debug, Copy, Clone)]
 enum Node<'env> {
-    Root(&'env DistributionId),
+    Root(&'env PackageId),
     Dependency(&'env Dependency),
     OptionalDependency(&'env ExtraName, &'env Dependency),
     DevDependency(&'env GroupName, &'env Dependency),
 }
 
 impl<'env> Node<'env> {
-    fn distribution_id(&self) -> &'env DistributionId {
+    fn package_id(&self) -> &'env PackageId {
         match self {
             Self::Root(id) => id,
-            Self::Dependency(dep) => &dep.distribution_id,
-            Self::OptionalDependency(_, dep) => &dep.distribution_id,
-            Self::DevDependency(_, dep) => &dep.distribution_id,
+            Self::Dependency(dep) => &dep.package_id,
+            Self::OptionalDependency(_, dep) => &dep.package_id,
+            Self::DevDependency(_, dep) => &dep.package_id,
         }
     }
 
@@ -3024,19 +3013,19 @@ mod tests {
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "b"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 version = "0.1.0"
 "#;
@@ -3049,19 +3038,19 @@ version = "0.1.0"
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "b"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 source =  { registry = "https://pypi.org/simple" }
 "#;
@@ -3074,19 +3063,19 @@ source =  { registry = "https://pypi.org/simple" }
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "b"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
@@ -3098,25 +3087,25 @@ name = "a"
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.1"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "b"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 version = "0.1.0"
 "#;
@@ -3129,25 +3118,25 @@ version = "0.1.0"
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.1"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "b"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 source =  { registry = "https://pypi.org/simple" }
 "#;
@@ -3160,25 +3149,25 @@ source =  { registry = "https://pypi.org/simple" }
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "a"
 version = "0.1.1"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution]]
+[[package]]
 name = "b"
 version = "0.1.0"
 source =  { registry = "https://pypi.org/simple" }
 sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 
-[[distribution.dependencies]]
+[[package.dependencies]]
 name = "a"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
@@ -3190,7 +3179,7 @@ name = "a"
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "anyio"
 version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3205,7 +3194,7 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "anyio"
 version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3220,7 +3209,7 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "anyio"
 version = "4.3.0"
 source = { path = "file:///foo/bar" }
@@ -3235,7 +3224,7 @@ wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "anyio"
 version = "4.3.0"
 source = { url = "https://burntsushi.net" }
@@ -3249,7 +3238,7 @@ source = { url = "https://burntsushi.net" }
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "anyio"
 version = "4.3.0"
 source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
@@ -3263,7 +3252,7 @@ source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "anyio"
 version = "4.3.0"
 source = { directory = "path/to/dir" }
@@ -3277,7 +3266,7 @@ source = { directory = "path/to/dir" }
         let data = r#"
 version = 1
 
-[[distribution]]
+[[package]]
 name = "anyio"
 version = "4.3.0"
 source = { editable = "path/to/dir" }

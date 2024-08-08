@@ -296,8 +296,8 @@ pub(crate) async fn add(
     if !raw_sources {
         // Extract the minimum-supported version for each dependency.
         let mut minimum_version =
-            FxHashMap::with_capacity_and_hasher(lock.lock.distributions().len(), FxBuildHasher);
-        for dist in lock.lock.distributions() {
+            FxHashMap::with_capacity_and_hasher(lock.lock.packages().len(), FxBuildHasher);
+        for dist in lock.lock.packages() {
             let name = dist.name();
             let version = dist.version();
             match minimum_version.entry(name) {
