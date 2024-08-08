@@ -24,7 +24,7 @@ use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::{ExitStatus, ToolRunCommand};
@@ -629,6 +629,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Venv(args) => {
             args.compat_args.validate()?;
+
+            if args.no_system {
+                warn_user_once!("The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+            }
+
+            if args.system {
+                warn_user_once!("The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+            }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VenvSettings::resolve(args, filesystem);

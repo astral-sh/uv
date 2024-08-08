@@ -1837,15 +1837,22 @@ pub struct VenvArgs {
     )]
     pub python: Option<String>,
 
-    // TODO(zanieb): Hide me, I do nothing.
+    /// Ignore virtual environments when searching for the Python interpreter.
+    ///
+    /// This is the default behavior and has no effect.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
         value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
+        overrides_with("no_system"),
+        hide = true,
     )]
     pub system: bool,
 
+    /// This flag is included for compatibility only, it has no effect.
+    ///
+    /// uv will never search for interpreters in virtual environments when
+    /// creating a virtual environment.
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
