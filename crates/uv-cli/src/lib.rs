@@ -2107,8 +2107,8 @@ pub struct RunArgs {
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
-    /// Requires that the lockfile is up-to-date. If the lockfile is missing, or
-    /// if it needs to be updated, uv will exit with an error.
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
@@ -2357,8 +2357,8 @@ pub struct AddArgs {
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
-    /// Requires that the lockfile is up-to-date. If the lockfile is missing, or
-    /// if it needs to be updated, uv will exit with an error.
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
@@ -2416,8 +2416,8 @@ pub struct RemoveArgs {
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
-    /// Requires that the lockfile is up-to-date. If the lockfile is missing, or
-    /// if it needs to be updated, uv will exit with an error.
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
@@ -2457,8 +2457,13 @@ pub struct RemoveArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct TreeArgs {
-    /// Show the resolved package versions for all Python versions and platforms, rather than
-    /// filtering to those that are relevant for the current environment.
+    /// Show a platform-independent dependency tree.
+    ///
+    /// Shows resolved package versions for all Python versions and platforms,
+    /// rather than filtering to those that are relevant for the current
+    /// environment.
+    ///
+    /// Multiple versions may be shown for a each package.
     #[arg(long)]
     pub universal: bool,
 
@@ -2466,10 +2471,15 @@ pub struct TreeArgs {
     pub tree: DisplayTreeArgs,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Display the requirements without updating the `uv.lock` file.
+    /// Display the requirements without locking the project.
+    ///
+    /// If the lockfile is missing, uv will exit with an error.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
