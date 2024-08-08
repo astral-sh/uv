@@ -2308,11 +2308,39 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+<dl class="cli-reference"><dt><code>--all</code></dt><dd><p>Upgrade all tools</p>
 
-<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
-<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--extra-index-url</code> flag.</p>
+<p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>{FOLDERID_LocalAppData}\uv\cache</code> on Windows.</p>
+
+</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+
+<p>[default: auto]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
+</dd><dt><code>--compile-bytecode</code></dt><dd><p>Compile Python files to bytecode after installation.</p>
+
+<p>By default, uv does not compile Python (<code>.py</code>) files to bytecode (<code>__pycache__/*.pyc</code>); instead, compilation is performed lazily the first time a module is imported. For use-cases in which start time is critical, such as CLI applications and Docker containers, this option can be enabled to trade longer installation times for faster start times.</p>
+
+<p>When enabled, uv will process the entire site-packages directory (including packages that are not being modified by the current operation) for consistency. Like pip, it will also ignore errors.</p>
+
+</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+
+</dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+
+</dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+
+<p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and UTC dates in the same format (e.g., <code>2006-12-02</code>).</p>
 
 </dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
@@ -2326,9 +2354,7 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
-</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
-
-</dd><dt><code>--reinstall-package</code> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it&#8217;s already installed. Implies <code>--refresh-package</code></p>
+</dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -2343,6 +2369,12 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--extra-index-url</code> flag.</p>
+
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
@@ -2356,19 +2388,65 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
-</dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
+</dd><dt><code>--link-mode</code> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 
-<p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
+<p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
 <p>Possible values:</p>
 
 <ul>
-<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
 
-<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
 
-<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+
+<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
+
+</dd><dt><code>--no-binary</code></dt><dd><p>Don&#8217;t install pre-built wheels.</p>
+
+<p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
+
+</dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
+
+</dd><dt><code>--no-build</code></dt><dd><p>Don&#8217;t build source distributions.</p>
+
+<p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
+
+</dd><dt><code>--no-build-isolation</code></dt><dd><p>Disable isolation when building source distributions.</p>
+
+<p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
+
+</dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
+
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
+
+</dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
+
+</dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+
+</dd><dt><code>--no-config</code></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+
+</dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+
+</dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
+
+<p>For example, spinners or progress bars.</p>
+
+</dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
+
+</dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -2386,41 +2464,15 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
 </ul>
-</dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
-
-</dd><dt><code>--no-build-isolation-package</code> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
-
-<p>Assumes that the packages&#8217; build dependencies specified by PEP 518  are already installed.</p>
-
-</dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
-
-<p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and UTC dates in the same format (e.g., <code>2006-12-02</code>).</p>
-
-</dd><dt><code>--link-mode</code> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
-
-<p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
 
 <p>Possible values:</p>
 
 <ul>
-<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
 
-<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
-
-<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
-
-<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
 </ul>
-</dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
-
-</dd><dt><code>--no-binary-package</code> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
-
-</dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
-
-</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
-
-<p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>{FOLDERID_LocalAppData}\uv\cache</code> on Windows.</p>
-
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -2436,30 +2488,38 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
+</dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--refresh</code></dt><dd><p>Refresh all cached data</p>
+
+</dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
+
+</dd><dt><code>--reinstall</code></dt><dd><p>Reinstall all packages, regardless of whether they&#8217;re already installed. Implies <code>--refresh</code></p>
+
+</dd><dt><code>--reinstall-package</code> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it&#8217;s already installed. Implies <code>--refresh-package</code></p>
+
+</dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
+
+<p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
 
 <p>Possible values:</p>
 
 <ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
 
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
+</dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file</p>
 
-<p>[default: auto]</p>
-<p>Possible values:</p>
+</dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file</p>
 
-<ul>
-<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+</dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
-<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-<li><code>never</code>:  Disables colored output</li>
-</ul>
-</dd><dt><code>--config-file</code> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
-
-<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+</dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
