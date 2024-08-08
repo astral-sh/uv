@@ -20,8 +20,8 @@ use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
-    PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
@@ -202,7 +202,7 @@ impl FoundInterpreter {
         workspace: &Workspace,
         python_request: Option<PythonRequest>,
         python_preference: PythonPreference,
-        python_fetch: PythonFetch,
+        python_downloads: PythonDownloads,
         connectivity: Connectivity,
         native_tls: bool,
         cache: &Cache,
@@ -251,11 +251,11 @@ impl FoundInterpreter {
         let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment
-        let python = PythonInstallation::find_or_fetch(
+        let python = PythonInstallation::find_or_download(
             python_request,
             EnvironmentPreference::OnlySystem,
             python_preference,
-            python_fetch,
+            python_downloads,
             &client_builder,
             cache,
             Some(&reporter),
@@ -329,7 +329,7 @@ pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
     python: Option<PythonRequest>,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
@@ -339,7 +339,7 @@ pub(crate) async fn get_or_init_environment(
         workspace,
         python,
         python_preference,
-        python_fetch,
+        python_downloads,
         connectivity,
         native_tls,
         cache,

@@ -20,8 +20,8 @@ use uv_configuration::{Concurrency, PreviewMode};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
-    PythonRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_tool::{entrypoint_paths, InstalledTools};
@@ -70,7 +70,7 @@ pub(crate) async fn run(
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -107,7 +107,7 @@ pub(crate) async fn run(
         isolated,
         preview,
         python_preference,
-        python_fetch,
+        python_downloads,
         connectivity,
         concurrency,
         native_tls,
@@ -293,7 +293,7 @@ async fn get_or_create_environment(
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -309,11 +309,11 @@ async fn get_or_create_environment(
     let python_request = python.map(PythonRequest::parse);
 
     // Discover an interpreter.
-    let interpreter = PythonInstallation::find_or_fetch(
+    let interpreter = PythonInstallation::find_or_download(
         python_request.clone(),
         EnvironmentPreference::OnlySystem,
         python_preference,
-        python_fetch,
+        python_downloads,
         &client_builder,
         cache,
         Some(&reporter),

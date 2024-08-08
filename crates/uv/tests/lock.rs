@@ -2977,7 +2977,7 @@ fn lock_requires_python() -> Result<()> {
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
-    uv_snapshot!(filters, context38.sync().arg("--frozen").arg("--python-fetch").arg("manual"), @r###"
+    uv_snapshot!(filters, context38.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

@@ -18,8 +18,8 @@ use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
-    PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_warnings::warn_user_once;
@@ -53,7 +53,7 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -122,11 +122,11 @@ pub(crate) async fn run(
                 .connectivity(connectivity)
                 .native_tls(native_tls);
 
-            let interpreter = PythonInstallation::find_or_fetch(
+            let interpreter = PythonInstallation::find_or_download(
                 python_request,
                 EnvironmentPreference::Any,
                 python_preference,
-                python_fetch,
+                python_downloads,
                 &client_builder,
                 cache,
                 Some(&download_reporter),
@@ -240,11 +240,11 @@ pub(crate) async fn run(
                     .await?;
 
                     // Note we force preview on during `uv run` for now since the entire interface is in preview.
-                    PythonInstallation::find_or_fetch(
+                    PythonInstallation::find_or_download(
                         python_request,
                         EnvironmentPreference::Any,
                         python_preference,
-                        python_fetch,
+                        python_downloads,
                         &client_builder,
                         cache,
                         Some(&download_reporter),
@@ -270,7 +270,7 @@ pub(crate) async fn run(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
                     python_preference,
-                    python_fetch,
+                    python_downloads,
                     connectivity,
                     native_tls,
                     cache,
@@ -342,12 +342,12 @@ pub(crate) async fn run(
                     .connectivity(connectivity)
                     .native_tls(native_tls);
 
-                let python = PythonInstallation::find_or_fetch(
+                let python = PythonInstallation::find_or_download(
                     python.as_deref().map(PythonRequest::parse),
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,
-                    python_fetch,
+                    python_downloads,
                     &client_builder,
                     cache,
                     Some(&download_reporter),
@@ -460,11 +460,11 @@ pub(crate) async fn run(
                 .native_tls(native_tls);
 
             // Note we force preview on during `uv run` for now since the entire interface is in preview
-            PythonInstallation::find_or_fetch(
+            PythonInstallation::find_or_download(
                 python.as_deref().map(PythonRequest::parse),
                 EnvironmentPreference::Any,
                 python_preference,
-                python_fetch,
+                python_downloads,
                 &client_builder,
                 cache,
                 Some(&download_reporter),
