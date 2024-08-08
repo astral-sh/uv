@@ -203,10 +203,27 @@ fn test_tool_upgrade_settings() {
     Installed 2 executables: black, blackd
     "###);
 
-    // Upgrade `black`. It should respect `lowest-direct`, but doesn't right now, so it's
-    // unintentionally upgraded.
+    // Upgrade `black`. This should be a no-op, since the resolution is set to `lowest-direct`.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool upgrade` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
+    Updated 2 executables: black, blackd
+    "###);
+
+    // Upgrade `black`, but override the resolution.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("black")
+        .arg("--resolution=highest")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"

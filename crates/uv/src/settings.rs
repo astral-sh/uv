@@ -319,6 +319,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
+    pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) force: bool,
     pub(crate) editable: bool,
@@ -341,6 +342,15 @@ impl ToolInstallSettings {
             python,
         } = args;
 
+        let options = resolver_installer_options(installer, build).combine(
+            filesystem
+                .map(FilesystemOptions::into_options)
+                .map(|options| options.top_level)
+                .unwrap_or_default(),
+        );
+
+        let settings = ResolverInstallerSettings::from(options.clone());
+
         Self {
             package,
             from,
@@ -353,10 +363,45 @@ impl ToolInstallSettings {
             force,
             editable,
             refresh: Refresh::from(refresh),
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
-                filesystem,
-            ),
+            options,
+            settings,
+        }
+    }
+}
+
+/// The resolved settings to use for a `tool upgrade` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct ToolUpgradeSettings {
+    pub(crate) name: Option<PackageName>,
+    pub(crate) refresh: Refresh,
+    pub(crate) args: ResolverInstallerOptions,
+    pub(crate) filesystem: ResolverInstallerOptions,
+}
+
+impl ToolUpgradeSettings {
+    /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: ToolUpgradeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let ToolUpgradeArgs {
+            name,
+            all,
+            installer,
+            build,
+            refresh,
+        } = args;
+
+        let args = resolver_installer_options(installer, build);
+        let filesystem = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.top_level)
+            .unwrap_or_default();
+
+        Self {
+            name: name.filter(|_| !all),
+            refresh: Refresh::from(refresh),
+            args,
+            filesystem,
         }
     }
 }
@@ -375,42 +420,6 @@ impl ToolListSettings {
         let ToolListArgs { show_paths } = args;
 
         Self { show_paths }
-    }
-}
-
-/// The resolved settings to use for a `tool upgrade` invocation.
-#[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone)]
-pub(crate) struct ToolUpgradeSettings {
-    pub(crate) name: Option<PackageName>,
-    pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) refresh: Refresh,
-}
-
-impl ToolUpgradeSettings {
-    /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolUpgradeArgs, filesystem: Option<FilesystemOptions>) -> Self {
-        let ToolUpgradeArgs {
-            name,
-            all,
-            mut installer,
-            build,
-            refresh,
-        } = args;
-
-        if !installer.upgrade && installer.upgrade_package.is_empty() {
-            installer.upgrade = true;
-        }
-
-        Self {
-            name: name.filter(|_| !all),
-            settings: ResolverInstallerSettings::combine(
-                resolver_installer_options(installer, build),
-                filesystem,
-            ),
-            refresh: Refresh::from(refresh),
-        }
     }
 }
 
@@ -1663,31 +1672,6 @@ impl From<ResolverOptions> for ResolverSettings {
     }
 }
 
-/// The resolved settings to use for an invocation of the uv CLI with both resolver and installer
-/// capabilities.
-///
-/// Represents the shared settings that are used across all uv commands outside the `pip` API.
-/// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
-#[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, Default)]
-pub(crate) struct ResolverInstallerSettings {
-    pub(crate) index_locations: IndexLocations,
-    pub(crate) index_strategy: IndexStrategy,
-    pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PrereleaseMode,
-    pub(crate) config_setting: ConfigSettings,
-    pub(crate) no_build_isolation: bool,
-    pub(crate) no_build_isolation_package: Vec<PackageName>,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
-    pub(crate) link_mode: LinkMode,
-    pub(crate) compile_bytecode: bool,
-    pub(crate) sources: SourceStrategy,
-    pub(crate) upgrade: Upgrade,
-    pub(crate) reinstall: Reinstall,
-    pub(crate) build_options: BuildOptions,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
@@ -1705,6 +1689,32 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) upgrade: &'a Upgrade,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
+}
+
+/// The resolved settings to use for an invocation of the uv CLI with both resolver and installer
+/// capabilities.
+///
+/// Represents the shared settings that are used across all uv commands outside the `pip` API.
+/// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub(crate) struct ResolverInstallerSettings {
+    pub(crate) index_locations: IndexLocations,
+    pub(crate) index_strategy: IndexStrategy,
+    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) resolution: ResolutionMode,
+    pub(crate) prerelease: PrereleaseMode,
+    pub(crate) config_setting: ConfigSettings,
+    pub(crate) no_build_isolation: bool,
+    pub(crate) no_build_isolation_package: Vec<PackageName>,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) link_mode: LinkMode,
+    pub(crate) compile_bytecode: bool,
+    pub(crate) sources: SourceStrategy,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) reinstall: Reinstall,
+    pub(crate) build_options: BuildOptions,
 }
 
 impl ResolverInstallerSettings {

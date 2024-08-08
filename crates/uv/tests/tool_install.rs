@@ -87,6 +87,9 @@ fn tool_install() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -166,6 +169,9 @@ fn tool_install() {
         entrypoints = [
             { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 }
@@ -303,6 +309,9 @@ fn tool_install_version() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -382,6 +391,9 @@ fn tool_install_editable() {
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -419,6 +431,9 @@ fn tool_install_editable() {
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -461,6 +476,9 @@ fn tool_install_editable() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 }
@@ -507,6 +525,9 @@ fn tool_install_remove_on_empty() -> Result<()> {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -596,6 +617,9 @@ fn tool_install_remove_on_empty() -> Result<()> {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -669,6 +693,9 @@ fn tool_install_editable_from() {
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -821,6 +848,9 @@ fn tool_install_already_installed() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -855,6 +885,9 @@ fn tool_install_already_installed() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -1163,6 +1196,10 @@ fn tool_install_entry_point_exists() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        reinstall = true
         "###);
     });
 
@@ -1196,6 +1233,10 @@ fn tool_install_entry_point_exists() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        reinstall = true
         "###);
     });
 
@@ -1426,6 +1467,9 @@ fn tool_install_unnamed_package() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -1538,6 +1582,9 @@ fn tool_install_unnamed_from() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -1628,6 +1675,9 @@ fn tool_install_unnamed_with() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -1695,6 +1745,9 @@ fn tool_install_requirements_txt() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -1738,6 +1791,9 @@ fn tool_install_requirements_txt() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 }
@@ -1800,6 +1856,9 @@ fn tool_install_requirements_txt_arguments() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -1914,6 +1973,9 @@ fn tool_install_upgrade() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -1944,6 +2006,9 @@ fn tool_install_upgrade() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -1982,6 +2047,9 @@ fn tool_install_upgrade() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 
@@ -2020,6 +2088,10 @@ fn tool_install_upgrade() {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        upgrade = true
         "###);
     });
 }
@@ -2281,14 +2353,14 @@ fn tool_install_bad_receipt() -> Result<()> {
 /// Test installing a tool with a malformed `.dist-info` directory (i.e., a `.dist-info` directory
 /// that isn't properly normalized).
 #[test]
-fn tool_install_malformed() {
+fn tool_install_malformed_dist_info() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `babel`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -2345,6 +2417,165 @@ fn tool_install_malformed() {
         entrypoints = [
             { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+}
+
+/// Test installing, then re-installing with different settings.
+#[test]
+fn tool_install_settings() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask>=3")
+        .arg("--resolution=lowest-direct")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    "###);
+
+    tool_dir.child("flask").assert(predicate::path::is_dir());
+    tool_dir
+        .child("flask")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("flask{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/flask/bin/python
+        # -*- coding: utf-8 -*-
+        import re
+        import sys
+        from flask.cli import main
+        if __name__ == "__main__":
+            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "flask", specifier = ">=3" }]
+        entrypoints = [
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+        ]
+
+        [tool.options]
+        resolution = "lowest-direct"
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    // Reinstall with `highest`. This is a no-op, since we _do_ have a compatible version installed.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask>=3")
+        .arg("--resolution=highest")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    `flask>=3` is already installed
+    "###);
+
+    // It should update the receipt though.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "flask", specifier = ">=3" }]
+        entrypoints = [
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+        ]
+
+        [tool.options]
+        resolution = "highest"
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    // Reinstall with `highest` and `--upgrade`. This should change the setting and install a higher
+    // version.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask>=3")
+        .arg("--resolution=highest")
+        .arg("--upgrade")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - flask==3.0.0
+     + flask==3.0.2
+    Installed 1 executable: flask
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "flask", specifier = ">=3" }]
+        entrypoints = [
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+        ]
+
+        [tool.options]
+        resolution = "highest"
+        exclude-newer = "2024-03-25T00:00:00Z"
+        upgrade = true
         "###);
     });
 }

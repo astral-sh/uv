@@ -290,7 +290,8 @@ impl From<VerbatimUrl> for FlatIndexLocation {
 /// The index locations to use for fetching packages. By default, uses the PyPI index.
 ///
 /// From a pip perspective, this type merges `--index-url`, `--extra-index-url`, and `--find-links`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct IndexLocations {
     index: Option<IndexUrl>,
     extra_index: Vec<IndexUrl>,

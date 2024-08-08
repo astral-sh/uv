@@ -42,15 +42,6 @@ impl ToolReceipt {
     }
 }
 
-// Ignore raw document in comparison.
-impl PartialEq for ToolReceipt {
-    fn eq(&self, other: &Self) -> bool {
-        self.tool.eq(&other.tool)
-    }
-}
-
-impl Eq for ToolReceipt {}
-
 impl From<Tool> for ToolReceipt {
     fn from(tool: Tool) -> Self {
         ToolReceipt {

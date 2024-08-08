@@ -1,6 +1,6 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
@@ -212,7 +212,9 @@ pub struct ResolverOptions {
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
+)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverInstallerOptions {
