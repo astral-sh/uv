@@ -458,16 +458,16 @@ pub(crate) enum Edges {
     // The edges of a version variable, representing a disjoint set of ranges that cover
     // the output space.
     //
-    // Note that all ranges are simple, meaning they can be represented by a bounded interval
-    // without gaps.
+    // Invariant: All ranges are simple, meaning they can be represented by a bounded
+    // interval without gaps. Additionally, there are at least two edges in the set.
     Version {
         edges: SmallVec<(Range<Version>, NodeId)>,
     },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
     //
-    // Note that all ranges are simple, meaning they can be represented by a bounded interval
-    // without gaps.
+    // Invariant: All ranges are simple, meaning they can be represented by a bounded
+    // interval without gaps. Additionally, there are at least two edges in the set.
     String {
         edges: SmallVec<(Range<String>, NodeId)>,
     },
