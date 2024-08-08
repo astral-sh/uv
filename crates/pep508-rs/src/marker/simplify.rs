@@ -19,8 +19,10 @@ pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
 
 /// Walk a [`MarkerTree`] recursively and construct a DNF expression.
 ///
-/// A decision diagram can be converted to DNF form by walking the tree and collecting
-/// all paths to a `true` terminal node.
+/// A decision diagram can be converted to DNF form by performing a depth-first traversal of
+/// the tree and collecting all paths to a `true` terminal node.
+///
+/// `path` is the list of marker expressions traversed on the current path.
 fn collect_dnf(
     tree: &MarkerTree,
     dnf: &mut Vec<Vec<MarkerExpression>>,
