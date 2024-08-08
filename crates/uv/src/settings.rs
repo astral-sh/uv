@@ -1598,95 +1598,14 @@ pub(crate) struct ResolverSettingsRef<'a> {
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
     pub(crate) fn combine(args: ResolverOptions, filesystem: Option<FilesystemOptions>) -> Self {
-        let ResolverInstallerOptions {
-            index_url,
-            extra_index_url,
-            no_index,
-            find_links,
-            index_strategy,
-            keyring_provider,
-            resolution,
-            prerelease,
-            config_settings,
-            no_build_isolation,
-            no_build_isolation_package,
-            exclude_newer,
-            link_mode,
-            compile_bytecode: _,
-            no_sources,
-            upgrade,
-            upgrade_package,
-            reinstall: _,
-            reinstall_package: _,
-            no_build,
-            no_build_package,
-            no_binary,
-            no_binary_package,
-        } = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(|options| options.top_level)
-            .unwrap_or_default();
+        let options = args.combine(ResolverOptions::from(
+            filesystem
+                .map(FilesystemOptions::into_options)
+                .map(|options| options.top_level)
+                .unwrap_or_default(),
+        ));
 
-        Self {
-            index_locations: IndexLocations::new(
-                args.index_url.combine(index_url),
-                args.extra_index_url
-                    .combine(extra_index_url)
-                    .unwrap_or_default(),
-                args.find_links.combine(find_links).unwrap_or_default(),
-                args.no_index.combine(no_index).unwrap_or_default(),
-            ),
-            resolution: args.resolution.combine(resolution).unwrap_or_default(),
-            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
-            index_strategy: args
-                .index_strategy
-                .combine(index_strategy)
-                .unwrap_or_default(),
-            keyring_provider: args
-                .keyring_provider
-                .combine(keyring_provider)
-                .unwrap_or_default(),
-            config_setting: args
-                .config_settings
-                .combine(config_settings)
-                .unwrap_or_default(),
-            no_build_isolation: args
-                .no_build_isolation
-                .combine(no_build_isolation)
-                .unwrap_or_default(),
-            no_build_isolation_package: args
-                .no_build_isolation_package
-                .combine(no_build_isolation_package)
-                .unwrap_or_default(),
-            exclude_newer: args.exclude_newer.combine(exclude_newer),
-            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
-            upgrade: Upgrade::from_args(
-                args.upgrade.combine(upgrade),
-                args.upgrade_package
-                    .combine(upgrade_package)
-                    .into_iter()
-                    .flatten()
-                    .map(Requirement::from)
-                    .collect(),
-            ),
-            build_options: BuildOptions::new(
-                NoBinary::from_args(
-                    args.no_binary.combine(no_binary),
-                    args.no_binary_package
-                        .combine(no_binary_package)
-                        .unwrap_or_default(),
-                ),
-                NoBuild::from_args(
-                    args.no_build.combine(no_build),
-                    args.no_build_package
-                        .combine(no_build_package)
-                        .unwrap_or_default(),
-                ),
-            ),
-            sources: SourceStrategy::from_args(
-                args.no_sources.combine(no_sources).unwrap_or_default(),
-            ),
-        }
+        Self::from(options)
     }
 
     pub(crate) fn as_ref(&self) -> ResolverSettingsRef {
@@ -1704,6 +1623,42 @@ impl ResolverSettings {
             upgrade: &self.upgrade,
             build_options: &self.build_options,
             sources: self.sources,
+        }
+    }
+}
+
+impl From<ResolverOptions> for ResolverSettings {
+    fn from(value: ResolverOptions) -> Self {
+        Self {
+            index_locations: IndexLocations::new(
+                value.index_url,
+                value.extra_index_url.unwrap_or_default(),
+                value.find_links.unwrap_or_default(),
+                value.no_index.unwrap_or_default(),
+            ),
+            resolution: value.resolution.unwrap_or_default(),
+            prerelease: value.prerelease.unwrap_or_default(),
+            index_strategy: value.index_strategy.unwrap_or_default(),
+            keyring_provider: value.keyring_provider.unwrap_or_default(),
+            config_setting: value.config_settings.unwrap_or_default(),
+            no_build_isolation: value.no_build_isolation.unwrap_or_default(),
+            no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
+            exclude_newer: value.exclude_newer,
+            link_mode: value.link_mode.unwrap_or_default(),
+            sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+            upgrade: Upgrade::from_args(
+                value.upgrade,
+                value
+                    .upgrade_package
+                    .into_iter()
+                    .flatten()
+                    .map(Requirement::from)
+                    .collect(),
+            ),
+            build_options: BuildOptions::new(
+                NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
+                NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
+            ),
         }
     }
 }
@@ -1753,110 +1708,19 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
 }
 
 impl ResolverInstallerSettings {
-    /// Resolve the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
+    /// Reconcile the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
     pub(crate) fn combine(
         args: ResolverInstallerOptions,
         filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let ResolverInstallerOptions {
-            index_url,
-            extra_index_url,
-            no_index,
-            find_links,
-            index_strategy,
-            keyring_provider,
-            resolution,
-            prerelease,
-            config_settings,
-            no_build_isolation,
-            no_build_isolation_package,
-            exclude_newer,
-            link_mode,
-            compile_bytecode,
-            no_sources,
-            upgrade,
-            upgrade_package,
-            reinstall,
-            reinstall_package,
-            no_build,
-            no_build_package,
-            no_binary,
-            no_binary_package,
-        } = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(|options| options.top_level)
-            .unwrap_or_default();
+        let options = args.combine(
+            filesystem
+                .map(FilesystemOptions::into_options)
+                .map(|options| options.top_level)
+                .unwrap_or_default(),
+        );
 
-        Self {
-            index_locations: IndexLocations::new(
-                args.index_url.combine(index_url),
-                args.extra_index_url
-                    .combine(extra_index_url)
-                    .unwrap_or_default(),
-                args.find_links.combine(find_links).unwrap_or_default(),
-                args.no_index.combine(no_index).unwrap_or_default(),
-            ),
-            resolution: args.resolution.combine(resolution).unwrap_or_default(),
-            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
-            index_strategy: args
-                .index_strategy
-                .combine(index_strategy)
-                .unwrap_or_default(),
-            keyring_provider: args
-                .keyring_provider
-                .combine(keyring_provider)
-                .unwrap_or_default(),
-            config_setting: args
-                .config_settings
-                .combine(config_settings)
-                .unwrap_or_default(),
-            no_build_isolation: args
-                .no_build_isolation
-                .combine(no_build_isolation)
-                .unwrap_or_default(),
-            no_build_isolation_package: args
-                .no_build_isolation_package
-                .combine(no_build_isolation_package)
-                .unwrap_or_default(),
-            exclude_newer: args.exclude_newer.combine(exclude_newer),
-            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
-            sources: SourceStrategy::from_args(
-                args.no_sources.combine(no_sources).unwrap_or_default(),
-            ),
-            compile_bytecode: args
-                .compile_bytecode
-                .combine(compile_bytecode)
-                .unwrap_or_default(),
-            upgrade: Upgrade::from_args(
-                args.upgrade.combine(upgrade),
-                args.upgrade_package
-                    .combine(upgrade_package)
-                    .into_iter()
-                    .flatten()
-                    .map(Requirement::from)
-                    .collect(),
-            ),
-            reinstall: Reinstall::from_args(
-                args.reinstall.combine(reinstall),
-                args.reinstall_package
-                    .combine(reinstall_package)
-                    .unwrap_or_default(),
-            ),
-            build_options: BuildOptions::new(
-                NoBinary::from_args(
-                    args.no_binary.combine(no_binary),
-                    args.no_binary_package
-                        .combine(no_binary_package)
-                        .unwrap_or_default(),
-                ),
-                NoBuild::from_args(
-                    args.no_build.combine(no_build),
-                    args.no_build_package
-                        .combine(no_build_package)
-                        .unwrap_or_default(),
-                ),
-            ),
-        }
+        Self::from(options)
     }
 
     pub(crate) fn as_ref(&self) -> ResolverInstallerSettingsRef {
@@ -1876,6 +1740,47 @@ impl ResolverInstallerSettings {
             upgrade: &self.upgrade,
             reinstall: &self.reinstall,
             build_options: &self.build_options,
+        }
+    }
+}
+
+impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
+    fn from(value: ResolverInstallerOptions) -> Self {
+        Self {
+            index_locations: IndexLocations::new(
+                value.index_url,
+                value.extra_index_url.unwrap_or_default(),
+                value.find_links.unwrap_or_default(),
+                value.no_index.unwrap_or_default(),
+            ),
+            resolution: value.resolution.unwrap_or_default(),
+            prerelease: value.prerelease.unwrap_or_default(),
+            index_strategy: value.index_strategy.unwrap_or_default(),
+            keyring_provider: value.keyring_provider.unwrap_or_default(),
+            config_setting: value.config_settings.unwrap_or_default(),
+            no_build_isolation: value.no_build_isolation.unwrap_or_default(),
+            no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
+            exclude_newer: value.exclude_newer,
+            link_mode: value.link_mode.unwrap_or_default(),
+            sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+            compile_bytecode: value.compile_bytecode.unwrap_or_default(),
+            upgrade: Upgrade::from_args(
+                value.upgrade,
+                value
+                    .upgrade_package
+                    .into_iter()
+                    .flatten()
+                    .map(Requirement::from)
+                    .collect(),
+            ),
+            reinstall: Reinstall::from_args(
+                value.reinstall,
+                value.reinstall_package.unwrap_or_default(),
+            ),
+            build_options: BuildOptions::new(
+                NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
+                NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
+            ),
         }
     }
 }
