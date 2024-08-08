@@ -64,7 +64,7 @@ pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default
 /// It also allows nodes to cheaply compared.
 #[derive(Default)]
 pub(crate) struct Interner {
-    pub shared: InternerShared,
+    pub(crate) shared: InternerShared,
     state: Mutex<InternerState>,
 }
 
