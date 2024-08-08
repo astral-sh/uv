@@ -103,12 +103,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     // Load configuration from the filesystem, prioritizing (in order):
     // 1. The configuration file specified on the command-line.
-    // 2. The configuration file in the current workspace (i.e., the `pyproject.toml` or `uv.toml`
-    //    file in the workspace root directory). If found, this file is combined with the user
-    //    configuration file.
-    // 3. The nearest `uv.toml` file in the directory tree, starting from the current directory. If
-    //    found, this file is combined with the user configuration file. In this case, we don't
-    //    search for `pyproject.toml` files, since we're not in a workspace.
+    // 2. The nearest configuration file (`uv.toml` or `pyproject.toml`) above the workspace root.
+    //    If found, this file is combined with the user configuration file.
+    // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
+    //    starting from the current directory.
     let filesystem = if let Some(config_file) = cli.config_file.as_ref() {
         if config_file
             .file_name()
@@ -122,8 +120,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     } else if matches!(&*cli.command, Commands::Tool(_)) {
         // For commands that operate at the user-level, ignore local configuration.
         FilesystemOptions::user()?
-    } else if let Ok(project) = Workspace::discover(&CWD, &DiscoveryOptions::default()).await {
-        let project = FilesystemOptions::from_directory(project.install_path())?;
+    } else if let Ok(workspace) = Workspace::discover(&CWD, &DiscoveryOptions::default()).await {
+        let project = FilesystemOptions::find(workspace.install_path())?;
         let user = FilesystemOptions::user()?;
         project.combine(user)
     } else {

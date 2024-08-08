@@ -3035,3 +3035,272 @@ fn resolve_config_file() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Ignore empty `pyproject.toml` files when discovering configuration.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_skip_empty() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Set `lowest-direct` in a `uv.toml`.
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        [pip]
+        resolution = "lowest-direct"
+    "#})?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir(&child)?;
+
+    // Create an empty in a `pyproject.toml`.
+    let pyproject = child.child("pyproject.toml");
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "child"
+        dependencies = [
+          "httpx",
+        ]
+    "#})?;
+
+    // Resolution in `child` should use lowest-direct, skipping the `pyproject.toml`, which lacks a
+    // `tool.uv`.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .current_dir(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        build_constraint: [],
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                index: None,
+                extra_index: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: LowestDirect,
+            prerelease: IfNecessaryOrExplicit,
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            setup_py: Pep517,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+            concurrency: Concurrency {
+                downloads: 50,
+                builds: 16,
+                installs: 8,
+            },
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    // Adding a `tool.uv` section should cause us to ignore the `uv.toml`.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "child"
+        dependencies = [
+          "httpx",
+        ]
+
+        [tool.uv]
+    "#})?;
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .current_dir(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: OnlySystem,
+        python_fetch: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        build_constraint: [],
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                index: None,
+                extra_index: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            setup_py: Pep517,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+            concurrency: Concurrency {
+                downloads: 50,
+                builds: 16,
+                installs: 8,
+            },
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
