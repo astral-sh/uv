@@ -632,7 +632,7 @@ struct LockWire {
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
-    #[serde(rename = "package", default)]
+    #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
 }
 
