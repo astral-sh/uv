@@ -153,7 +153,7 @@ $ uv tool install mkdocs --with mkdocs-material
 
 ## Next steps
 
-To learn more about managing tools with uv, see the [Tools concept](../concepts/projects.md) page
+To learn more about managing tools with uv, see the [Tools concept](../concepts/tools.md) page
 and the [command reference](../reference/cli.md#uv-tool).
 
 Or, read on to learn how to to [work on projects](./projects.md).
