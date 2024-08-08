@@ -304,13 +304,11 @@ pub(crate) async fn pip_compile(
     let build_isolation = if no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
+    } else if no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
     } else {
-        if no_build_isolation_package.is_empty() {
-            BuildIsolation::Isolated
-        } else {
-            environment = PythonEnvironment::from_interpreter(interpreter.clone());
-            BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
-        }
+        environment = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
     let build_dispatch = BuildDispatch::new(

@@ -291,12 +291,10 @@ pub(crate) async fn pip_install(
     // Determine whether to enable build isolation.
     let build_isolation = if no_build_isolation {
         BuildIsolation::Shared(&environment)
+    } else if no_build_isolation_package.is_empty() {
+        BuildIsolation::Isolated
     } else {
-        if no_build_isolation_package.is_empty() {
-            BuildIsolation::Isolated
-        } else {
-            BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
-        }
+        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
     };
 
     // Initialize any shared state.
