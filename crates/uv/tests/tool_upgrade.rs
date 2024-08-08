@@ -16,7 +16,7 @@ fn test_tool_upgrade_name() {
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black==23.1")
+        .arg("black>=23.1")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
@@ -29,7 +29,7 @@ fn test_tool_upgrade_name() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==23.1.0
+     + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
@@ -51,11 +51,7 @@ fn test_tool_upgrade_name() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     - black==23.1.0
-     + black==24.3.0
+    Audited [N] packages in [TIME]
     Updated 2 executables: black, blackd
     "###);
 }
@@ -127,18 +123,10 @@ fn test_tool_upgrade_all() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     - black==23.1.0
-     + black==24.3.0
+    Audited [N] packages in [TIME]
     Updated 2 executables: black, blackd
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     - pytest==8.0.0
-     + pytest==8.1.1
+    Audited [N] packages in [TIME]
     Updated 2 executables: py.test, pytest
     "###);
 }

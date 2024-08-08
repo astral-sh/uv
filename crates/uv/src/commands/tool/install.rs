@@ -337,6 +337,6 @@ pub(crate) async fn install(
         force || invalid_tool_receipt,
         python,
         requirements,
-        &InstallAction::Install,
+        InstallAction::Install,
     )
 }
