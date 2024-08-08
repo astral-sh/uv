@@ -478,9 +478,9 @@ are already installed.
 
 #### [`no-build-isolation-package`](#no-build-isolation-package) {: #no-build-isolation-package }
 
-Disable isolation when building source distributions.
+Disable isolation when building source distributions for a specific package.
 
-Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
 are already installed.
 
 **Default value**: `[]`
@@ -1752,9 +1752,9 @@ are already installed.
 #### [`no-build-isolation-package`](#pip_no-build-isolation-package) {: #pip_no-build-isolation-package }
 <span id="no-build-isolation-package"></span>
 
-Disable isolation when building source distributions.
+Disable isolation when building source distributions for a specific package.
 
-Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
 are already installed.
 
 **Default value**: `[]`

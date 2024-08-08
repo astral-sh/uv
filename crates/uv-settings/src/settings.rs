@@ -351,12 +351,10 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub no_build_isolation: Option<bool>,
-
-    /// Disable isolation when building source distributions.
+    /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
     /// are already installed.
-    ///
     #[option(
         default = "[]",
         value_type = "Vec<PackageName>",
@@ -732,9 +730,9 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation: Option<bool>,
-    /// Disable isolation when building source distributions.
+    /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
+    /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
     /// are already installed.
     #[option(
         default = "[]",

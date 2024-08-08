@@ -16,9 +16,9 @@ impl<'a> BuildIsolation<'a> {
         match self {
             Self::Isolated => true,
             Self::Shared(_) => false,
-            Self::SharedPackage(_, packages) => package.map_or(true, |package| {
-                !packages.iter().any(|p| p == package)
-            }),
+            Self::SharedPackage(_, packages) => {
+                package.map_or(true, |package| !packages.iter().any(|p| p == package))
+            }
         }
     }
 
@@ -27,13 +27,13 @@ impl<'a> BuildIsolation<'a> {
         match self {
             Self::Isolated => None,
             Self::Shared(env) => Some(env),
-            Self::SharedPackage(env, packages) => if package.is_some_and(|package| {
-                packages.iter().any(|p| p == package)
-            }) {
-                Some(env)
-            } else {
-                None
-            },
+            Self::SharedPackage(env, packages) => {
+                if package.is_some_and(|package| packages.iter().any(|p| p == package)) {
+                    Some(env)
+                } else {
+                    None
+                }
+            }
         }
     }
 }

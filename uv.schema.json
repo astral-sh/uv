@@ -169,7 +169,7 @@
       ]
     },
     "no-build-isolation-package": {
-      "description": "Disable isolation when building source distributions.\n\nAssumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
+      "description": "Disable isolation when building source distributions for a specific package.\n\nAssumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
       "type": [
         "array",
         "null"
@@ -761,7 +761,7 @@
           ]
         },
         "no-build-isolation-package": {
-          "description": "Disable isolation when building source distributions.\n\nAssumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
+          "description": "Disable isolation when building source distributions for a specific package.\n\nAssumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/) are already installed.",
           "type": [
             "array",
             "null"

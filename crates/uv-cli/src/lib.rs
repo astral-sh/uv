@@ -3034,11 +3034,12 @@ pub struct ResolverArgs {
     )]
     pub no_build_isolation: bool,
 
-    /// Disable isolation when building source distributions for specified packages.
+    /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
     #[arg(long, help_heading = "Build options")]
     pub no_build_isolation_package: Vec<PackageName>,
+
     #[arg(
         long,
         overrides_with("no_build_isolation"),
@@ -3204,9 +3205,9 @@ pub struct ResolverInstallerArgs {
     )]
     pub no_build_isolation: bool,
 
-    /// Disable isolation when building source distributions for specified packages.
+    /// Disable isolation when building source distributions for a specific package.
     ///
-    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    /// Assumes that the packages' build dependencies specified by PEP 518  are already installed.
     #[arg(long, help_heading = "Build options")]
     pub no_build_isolation_package: Vec<PackageName>,
 

@@ -437,7 +437,7 @@ impl SourceBuild {
         let package_name = project.clone().map(|p| p.name);
 
         // Create a virtual environment, or install into the shared environment if requested.
-        let venv = if let Some(venv) =  build_isolation.shared_environment(package_name.as_ref()) {
+        let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
             venv.clone()
         } else {
             uv_virtualenv::create_venv(
