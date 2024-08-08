@@ -1199,7 +1199,6 @@ fn tool_install_entry_point_exists() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
-        reinstall = true
         "###);
     });
 
@@ -1236,7 +1235,6 @@ fn tool_install_entry_point_exists() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
-        reinstall = true
         "###);
     });
 
@@ -2091,7 +2089,6 @@ fn tool_install_upgrade() {
 
         [tool.options]
         exclude-newer = "2024-03-25T00:00:00Z"
-        upgrade = true
         "###);
     });
 }
@@ -2575,7 +2572,6 @@ fn tool_install_settings() {
         [tool.options]
         resolution = "highest"
         exclude-newer = "2024-03-25T00:00:00Z"
-        upgrade = true
         "###);
     });
 }

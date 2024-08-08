@@ -15,7 +15,7 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode, Upgrade};
 use uv_normalize::PackageName;
 use uv_requirements::RequirementsSpecification;
-use uv_settings::{Combine, ResolverInstallerOptions};
+use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
@@ -111,9 +111,7 @@ pub(crate) async fn upgrade(
 
         // Resolve the appropriate settings, preferring: CLI > receipt > user.
         let options = args.clone().combine(
-            existing_tool_receipt
-                .options()
-                .clone()
+            ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
                 .combine(filesystem.clone()),
         );
 
@@ -155,7 +153,7 @@ pub(crate) async fn upgrade(
             &environment,
             &name,
             &installed_tools,
-            &options,
+            ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
             requirements.to_vec(),

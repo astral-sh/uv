@@ -197,6 +197,9 @@ fn tool_list_deprecated() -> Result<()> {
             { name = "black", install-path = "[TEMP_DIR]/bin/black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
         ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
 

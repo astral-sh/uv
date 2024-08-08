@@ -8,7 +8,7 @@ use toml_edit::{Array, Item};
 
 use pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_fs::PortablePath;
-use uv_settings::ResolverInstallerOptions;
+use uv_settings::ToolOptions;
 
 /// A tool entry.
 #[allow(dead_code)]
@@ -21,9 +21,8 @@ pub struct Tool {
     python: Option<String>,
     /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
-    /// The resolver options used to install this tool.
-    #[serde(default)]
-    options: ResolverInstallerOptions,
+    /// The [`ToolOptions`] used to install this tool.
+    options: ToolOptions,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -31,7 +30,8 @@ struct ToolWire {
     requirements: Vec<RequirementWire>,
     python: Option<String>,
     entrypoints: Vec<ToolEntrypoint>,
-    options: ResolverInstallerOptions,
+    #[serde(default)]
+    options: ToolOptions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -119,7 +119,7 @@ impl Tool {
         requirements: Vec<Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
-        options: ResolverInstallerOptions,
+        options: ToolOptions,
     ) -> Self {
         let mut entrypoints: Vec<_> = entrypoints.collect();
         entrypoints.sort();
@@ -131,9 +131,9 @@ impl Tool {
         }
     }
 
-    /// Create a new [`Tool`] with the given [`ResolverInstallerOptions`].
+    /// Create a new [`Tool`] with the given [`ToolOptions`].
     #[must_use]
-    pub fn with_options(self, options: ResolverInstallerOptions) -> Self {
+    pub fn with_options(self, options: ToolOptions) -> Self {
         Self { options, ..self }
     }
 
@@ -175,7 +175,7 @@ impl Tool {
             value(entrypoints)
         });
 
-        if self.options != ResolverInstallerOptions::default() {
+        if self.options != ToolOptions::default() {
             let serialized =
                 serde::Serialize::serialize(&self.options, toml_edit::ser::ValueSerializer::new())?;
             let Value::InlineTable(serialized) = serialized else {
@@ -201,7 +201,7 @@ impl Tool {
         &self.python
     }
 
-    pub fn options(&self) -> &ResolverInstallerOptions {
+    pub fn options(&self) -> &ToolOptions {
         &self.options
     }
 }

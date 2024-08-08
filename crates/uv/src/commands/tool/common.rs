@@ -14,7 +14,7 @@ use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_python::PythonEnvironment;
-use uv_settings::ResolverInstallerOptions;
+use uv_settings::ToolOptions;
 use uv_shell::Shell;
 use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::warn_user;
@@ -73,7 +73,7 @@ pub(crate) fn install_executables(
     environment: &PythonEnvironment,
     name: &PackageName,
     installed_tools: &InstalledTools,
-    options: &ResolverInstallerOptions,
+    options: ToolOptions,
     force: bool,
     python: Option<String>,
     requirements: Vec<Requirement>,
@@ -201,7 +201,7 @@ pub(crate) fn install_executables(
         target_entry_points
             .into_iter()
             .map(|(name, _, target_path)| ToolEntrypoint::new(name, target_path)),
-        options.clone(),
+        options,
     );
     installed_tools.add_tool_receipt(name, tool)?;
 
