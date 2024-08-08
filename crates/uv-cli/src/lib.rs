@@ -2362,13 +2362,9 @@ pub struct AddArgs {
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Run without updating the `uv.lock` file.
+    /// Add dependencies without re-locking the project.
     ///
-    /// Instead of checking if the lockfile is up-to-date, uses the versions in
-    /// the lockfile as the source of truth. If the lockfile is missing, uv will
-    /// exit with an error. If the `pyproject.toml` includes new dependencies
-    /// that have not been included in the lockfile yet, they will not be
-    /// present in the environment.
+    /// The project environment will not be synced.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2402,15 +2398,15 @@ pub struct AddArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RemoveArgs {
-    /// The names of the packages to remove (e.g., `ruff`).
+    /// The names of the dependencies to remove (e.g., `ruff`).
     #[arg(required = true)]
-    pub requirements: Vec<PackageName>,
+    pub packages: Vec<PackageName>,
 
-    /// Remove the requirements from development dependencies.
+    /// Remove the packages from the development dependencies.
     #[arg(long, conflicts_with("optional"))]
     pub dev: bool,
 
-    /// Remove the requirements from the specified optional dependency group.
+    /// Remove the packages from the specified optional dependency group.
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
@@ -2419,10 +2415,15 @@ pub struct RemoveArgs {
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing, or
+    /// if it needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Remove the requirements without updating the `uv.lock` file.
+    /// Remove dependencies without re-locking the project.
+    ///
+    /// The project environment will not be synced.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2435,7 +2436,7 @@ pub struct RemoveArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Remove the dependency from a specific package in the workspace.
+    /// Remove the dependencies from a specific package in the workspace.
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 

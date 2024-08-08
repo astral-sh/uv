@@ -555,18 +555,18 @@ uv will search for a project in the current directory or any parent directory. I
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv remove [OPTIONS] <REQUIREMENTS>...
+uv remove [OPTIONS] <PACKAGES>...
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>REQUIREMENTS</code></dt><dd><p>The names of the packages to remove (e.g., <code>ruff</code>)</p>
+<dl class="cli-reference"><dt><code>PACKAGES</code></dt><dd><p>The names of the dependencies to remove (e.g., <code>ruff</code>)</p>
 
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--optional</code> <i>optional</i></dt><dd><p>Remove the requirements from the specified optional dependency group</p>
+<dl class="cli-reference"><dt><code>--optional</code> <i>optional</i></dt><dd><p>Remove the packages from the specified optional dependency group</p>
 
 </dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
@@ -677,7 +677,7 @@ uv remove [OPTIONS] <REQUIREMENTS>...
 
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
-</dd><dt><code>--package</code> <i>package</i></dt><dd><p>Remove the dependency from a specific package in the workspace</p>
+</dd><dt><code>--package</code> <i>package</i></dt><dd><p>Remove the dependencies from a specific package in the workspace</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 

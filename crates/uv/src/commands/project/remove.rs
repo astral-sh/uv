@@ -23,7 +23,7 @@ pub(crate) async fn remove(
     locked: bool,
     frozen: bool,
     no_sync: bool,
-    requirements: Vec<PackageName>,
+    packages: Vec<PackageName>,
     dependency_type: DependencyType,
     package: Option<PackageName>,
     python: Option<String>,
@@ -52,30 +52,32 @@ pub(crate) async fn remove(
     };
 
     let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
-    for req in requirements {
+    for package in packages {
         match dependency_type {
             DependencyType::Production => {
-                let deps = pyproject.remove_dependency(&req)?;
+                let deps = pyproject.remove_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&req, &pyproject);
-                    anyhow::bail!("The dependency `{req}` could not be found in `dependencies`");
+                    warn_if_present(&package, &pyproject);
+                    anyhow::bail!(
+                        "The dependency `{package}` could not be found in `dependencies`"
+                    );
                 }
             }
             DependencyType::Dev => {
-                let deps = pyproject.remove_dev_dependency(&req)?;
+                let deps = pyproject.remove_dev_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&req, &pyproject);
+                    warn_if_present(&package, &pyproject);
                     anyhow::bail!(
-                        "The dependency `{req}` could not be found in `dev-dependencies`"
+                        "The dependency `{package}` could not be found in `dev-dependencies`"
                     );
                 }
             }
             DependencyType::Optional(ref group) => {
-                let deps = pyproject.remove_optional_dependency(&req, group)?;
+                let deps = pyproject.remove_optional_dependency(&package, group)?;
                 if deps.is_empty() {
-                    warn_if_present(&req, &pyproject);
+                    warn_if_present(&package, &pyproject);
                     anyhow::bail!(
-                        "The dependency `{req}` could not be found in `optional-dependencies`"
+                        "The dependency `{package}` could not be found in `optional-dependencies`"
                     );
                 }
             }
