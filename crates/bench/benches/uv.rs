@@ -9,66 +9,79 @@ use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
-    let runtime = &tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-
-    let cache = &Cache::from_path("../../.cache").init().unwrap();
-    let venv = PythonEnvironment::from_root("../../.venv", cache).unwrap();
-    let client = &RegistryClientBuilder::new(cache.clone()).build();
-    let manifest = &Manifest::simple(vec![Requirement::from(
+    let run = setup(Manifest::simple(vec![Requirement::from(
         pep508_rs::Requirement::from_str("jupyter==1.0.0").unwrap(),
-    )]);
+    )]));
+    c.bench_function("resolve_warm_jupyter", |b| b.iter(|| run(false)));
+}
 
-    let run = || {
-        runtime
-            .block_on(resolver::resolve(
-                black_box(manifest.clone()),
-                black_box(cache.clone()),
-                black_box(client),
-                &venv,
-            ))
-            .unwrap();
-    };
-
-    c.bench_function("resolve_warm_jupyter", |b| b.iter(run));
+fn resolve_warm_jupyter_universal(c: &mut Criterion<WallTime>) {
+    let run = setup(Manifest::simple(vec![Requirement::from(
+        pep508_rs::Requirement::from_str("jupyter==1.0.0").unwrap(),
+    )]));
+    c.bench_function("resolve_warm_jupyter_universal", |b| b.iter(|| run(true)));
 }
 
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
-    let runtime = &tokio::runtime::Builder::new_current_thread()
+    let run = setup(Manifest::simple(vec![
+        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]").unwrap()),
+        Requirement::from(
+            pep508_rs::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
+        ),
+    ]));
+    c.bench_function("resolve_warm_airflow", |b| b.iter(|| run(false)));
+}
+
+fn resolve_warm_airflow_universal(c: &mut Criterion<WallTime>) {
+    let run = setup(Manifest::simple(vec![
+        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]").unwrap()),
+        Requirement::from(
+            pep508_rs::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
+        ),
+    ]));
+    c.bench_function("resolve_warm_airflow_universal", |b| b.iter(|| run(true)));
+}
+
+criterion_group! {
+    name = resolve_jupyter;
+    config = Criterion::default().sample_size(100);
+    targets = resolve_warm_jupyter, resolve_warm_jupyter_universal
+}
+
+criterion_group! {
+    name = resolve_airflow;
+    config = Criterion::default().sample_size(20);
+    targets = resolve_warm_airflow, resolve_warm_airflow_universal
+}
+
+criterion_main!(resolve_jupyter, resolve_airflow);
+
+fn setup(manifest: Manifest) -> impl Fn(bool) {
+    let runtime = tokio::runtime::Builder::new_current_thread()
         // CodSpeed limits the total number of threads to 500
         .max_blocking_threads(256)
         .enable_all()
         .build()
         .unwrap();
 
-    let cache = &Cache::from_path("../../.cache").init().unwrap();
-    let venv = PythonEnvironment::from_root("../../.venv", cache).unwrap();
-    let client = &RegistryClientBuilder::new(cache.clone()).build();
-    let manifest = &Manifest::simple(vec![
-        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]==2.9.2").unwrap()),
-        Requirement::from(
-            pep508_rs::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
-        ),
-    ]);
+    let cache = Cache::from_path("../../.cache").init().unwrap();
+    let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
+        .unwrap()
+        .into_interpreter();
+    let client = RegistryClientBuilder::new(cache.clone()).build();
 
-    let run = || {
+    move |universal| {
         runtime
             .block_on(resolver::resolve(
                 black_box(manifest.clone()),
                 black_box(cache.clone()),
-                black_box(client),
-                &venv,
+                black_box(&client),
+                &interpreter,
+                universal,
             ))
             .unwrap();
-    };
-
-    c.bench_function("resolve_warm_airflow", |b| b.iter(run));
+    }
 }
-
-criterion_group!(uv, resolve_warm_airflow, resolve_warm_jupyter);
-criterion_main!(uv);
 
 mod resolver {
     use std::sync::LazyLock;
@@ -78,6 +91,7 @@ mod resolver {
 
     use distribution_types::IndexLocations;
     use install_wheel_rs::linker::LinkMode;
+    use pep440_rs::Version;
     use pep508_rs::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use platform_tags::{Arch, Os, Platform, Tags};
     use uv_cache::Cache;
@@ -89,10 +103,10 @@ mod resolver {
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
     use uv_git::GitResolver;
-    use uv_python::PythonEnvironment;
+    use uv_python::Interpreter;
     use uv_resolver::{
-        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, ResolutionGraph,
-        Resolver, ResolverMarkers,
+        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
+        ResolutionGraph, Resolver, ResolverMarkers,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -127,14 +141,15 @@ mod resolver {
         manifest: Manifest,
         cache: Cache,
         client: &RegistryClient,
-        venv: &PythonEnvironment,
+        interpreter: &Interpreter,
+        universal: bool,
     ) -> Result<ResolutionGraph> {
         let build_isolation = BuildIsolation::Isolated;
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let exclude_newer = Some(
-            NaiveDate::from_ymd_opt(2024, 6, 20)
+            NaiveDate::from_ymd_opt(2024, 8, 8)
                 .unwrap()
                 .and_hms_opt(0, 0, 0)
                 .unwrap()
@@ -148,12 +163,18 @@ mod resolver {
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
-        let interpreter = venv.interpreter();
-        let python_requirement = PythonRequirement::from_interpreter(interpreter);
         let sources = SourceStrategy::default();
-
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
         let build_constraints = [];
+
+        let python_requirement = if universal {
+            PythonRequirement::from_requires_python(
+                interpreter,
+                &RequiresPython::greater_than_equal_version(&Version::new([3, 11])),
+            )
+        } else {
+            PythonRequirement::from_interpreter(interpreter)
+        };
 
         let build_context = BuildDispatch::new(
             client,
@@ -177,11 +198,17 @@ mod resolver {
             PreviewMode::Disabled,
         );
 
+        let markers = if universal {
+            ResolverMarkers::universal(None)
+        } else {
+            ResolverMarkers::specific_environment(MARKERS.clone())
+        };
+
         let resolver = Resolver::new(
             manifest,
             options,
             &python_requirement,
-            ResolverMarkers::SpecificEnvironment(MARKERS.clone()),
+            markers,
             Some(&TAGS),
             &flat_index,
             &index,

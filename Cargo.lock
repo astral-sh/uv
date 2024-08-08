@@ -393,6 +393,7 @@ dependencies = [
  "distribution-filename",
  "distribution-types",
  "install-wheel-rs",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
