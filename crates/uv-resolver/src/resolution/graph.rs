@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use indexmap::IndexSet;
 use petgraph::{
     graph::{Graph, NodeIndex},
-    Directed,
+    Directed, Direction,
 };
 use pubgrub::Range;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -25,6 +25,7 @@ use crate::preferences::Preferences;
 use crate::python_requirement::PythonTarget;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
+use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
@@ -86,6 +87,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
+        resolution_strategy: &ResolutionStrategy,
         options: Options,
     ) -> Result<Self, ResolveError> {
         let size_guess = resolutions[0].nodes.len();
@@ -193,6 +195,10 @@ impl ResolutionGraph {
                     .collect(),
             )
         };
+
+        if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
+            report_missing_lower_bounds(&petgraph, &mut diagnostics);
+        }
 
         Ok(Self {
             petgraph,
@@ -656,4 +662,73 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
             graph.diagnostics,
         )
     }
+}
+
+/// Find any packages that don't have any lower bound on them when in resolution-lowest mode.
+fn report_missing_lower_bounds(
+    petgraph: &Graph<ResolutionGraphNode, Option<MarkerTree>>,
+    diagnostics: &mut Vec<ResolutionDiagnostic>,
+) {
+    for node_index in petgraph.node_indices() {
+        let ResolutionGraphNode::Dist(dist) = petgraph.node_weight(node_index).unwrap() else {
+            // Ignore the root package.
+            continue;
+        };
+        if dist.dev.is_some() {
+            // TODO(konsti): Dev dependencies are modelled incorrectly in the graph. There should
+            // be an edge from root to project-with-dev, just like to project-with-extra, but
+            // currently there is only an edge from project to to project-with-dev that we then
+            // have to drop.
+            continue;
+        }
+        if !has_lower_bound(node_index, dist.name(), petgraph) {
+            diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
+                package_name: dist.name().clone(),
+            });
+        }
+    }
+}
+
+/// Whether the given package has a lower version bound by another package.
+fn has_lower_bound(
+    node_index: NodeIndex,
+    package_name: &PackageName,
+    petgraph: &Graph<ResolutionGraphNode, Option<MarkerTree>>,
+) -> bool {
+    for neighbor_index in petgraph.neighbors_directed(node_index, Direction::Incoming) {
+        let neighbor_dist = match petgraph.node_weight(neighbor_index).unwrap() {
+            ResolutionGraphNode::Root => {
+                // We already handled direct dependencies with a missing constraint
+                // separately.
+                return true;
+            }
+            ResolutionGraphNode::Dist(neighbor_dist) => neighbor_dist,
+        };
+
+        if neighbor_dist.name() == package_name {
+            // Only warn for real packages, not for virtual packages such as dev nodes.
+            return true;
+        }
+
+        // Get all individual specifier for the current package and check if any has a lower
+        // bound.
+        for requirement in neighbor_dist
+            .metadata
+            .requires_dist
+            .iter()
+            .chain(neighbor_dist.metadata.dev_dependencies.values().flatten())
+        {
+            if requirement.name != *package_name {
+                continue;
+            }
+            let Some(specifiers) = requirement.source.version_specifiers() else {
+                // URL requirements are a bound.
+                return true;
+            };
+            if specifiers.iter().any(VersionSpecifier::has_lower_bound) {
+                return true;
+            }
+        }
+    }
+    false
 }

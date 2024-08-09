@@ -466,6 +466,17 @@ impl RequirementSource {
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Directory { editable: true, .. })
     }
+
+    /// If the source is the registry, return the version specifiers
+    pub fn version_specifiers(&self) -> Option<&VersionSpecifiers> {
+        match self {
+            RequirementSource::Registry { specifier, .. } => Some(specifier),
+            RequirementSource::Url { .. }
+            | RequirementSource::Git { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => None,
+        }
+    }
 }
 
 impl Display for RequirementSource {

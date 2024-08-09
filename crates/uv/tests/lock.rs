@@ -5839,3 +5839,35 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
     assert!(!lock.contains("environment-markers"));
     Ok(())
 }
+
+/// Warn when there are missing bounds on transitive dependencies with `--resolution lowest`.
+#[test]
+fn warn_missing_transitive_lower_bounds() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pytest>8"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    warning: The transitive dependency `packaging` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    warning: The transitive dependency `iniconfig` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    "###);
+
+    Ok(())
+}

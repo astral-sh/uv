@@ -624,6 +624,22 @@ impl VersionSpecifier {
 
         other > this
     }
+
+    /// Whether this version specifier rejects versions below a lower cutoff.
+    pub fn has_lower_bound(&self) -> bool {
+        match self.operator() {
+            Operator::Equal
+            | Operator::EqualStar
+            | Operator::ExactEqual
+            | Operator::TildeEqual
+            | Operator::GreaterThan
+            | Operator::GreaterThanEqual => true,
+            Operator::LessThanEqual
+            | Operator::LessThan
+            | Operator::NotEqualStar
+            | Operator::NotEqual => false,
+        }
+    }
 }
 
 impl FromStr for VersionSpecifier {
