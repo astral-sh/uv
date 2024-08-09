@@ -7,6 +7,3 @@ dev = "run --package uv-dev"
 # See: https://github.com/astral-sh/ruff/issues/11503
 [target.'cfg(all(target_env = "msvc", target_os = "windows"))']
 rustflags = ["-C", "target-feature=+crt-static"]
-
-[target.powerpc64le-unknown-linux-musl]
-lto = "off"
