@@ -1,5 +1,10 @@
 use tracing::debug;
 
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::project::{resolve_environment, sync_environment};
+use crate::commands::SharedState;
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 use cache_key::{cache_digest, hash_digest};
 use distribution_types::Resolution;
 use uv_cache::{Cache, CacheBucket};
@@ -7,11 +12,6 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::RequirementsSpecification;
-
-use crate::commands::project::{resolve_environment, sync_environment};
-use crate::commands::SharedState;
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -31,6 +31,8 @@ impl CachedEnvironment {
         interpreter: Interpreter,
         settings: &ResolverInstallerSettings,
         state: &SharedState,
+        resolve: Box<dyn ResolveLogger>,
+        install: Box<dyn InstallLogger>,
         preview: PreviewMode,
         connectivity: Connectivity,
         concurrency: Concurrency,
@@ -60,6 +62,7 @@ impl CachedEnvironment {
             spec,
             settings.as_ref().into(),
             state,
+            resolve,
             preview,
             connectivity,
             concurrency,
@@ -103,11 +106,13 @@ impl CachedEnvironment {
             false,
             true,
         )?;
+
         sync_environment(
             venv,
             &resolution,
             settings.as_ref().into(),
             state,
+            install,
             preview,
             connectivity,
             concurrency,

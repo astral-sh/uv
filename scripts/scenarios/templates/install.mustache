@@ -57,9 +57,7 @@ fn command(context: &TestContext) -> Command {
 
 {{#scenarios}}
 
-{{#description_lines}}
-/// {{.}}
-{{/description_lines}}
+/// {{description}}
 ///
 /// ```text
 /// {{name}}
@@ -95,9 +93,9 @@ fn {{module_name}}() {
         {{/root.requires}}, @r###"<snapshot>
     "###);
 
-    {{#expected.explanation_lines}}
-    // {{.}}
-    {{/expected.explanation_lines}}
+    {{#expected.explanation}}
+    // {{expected.explanation}}
+    {{/expected.explanation}}
     {{#expected.satisfiable}}
     {{#expected.packages}}
     assert_installed(

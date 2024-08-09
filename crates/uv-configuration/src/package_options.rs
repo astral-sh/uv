@@ -3,7 +3,7 @@ use pep508_rs::PackageName;
 
 use pypi_types::Requirement;
 use rustc_hash::FxHashMap;
-use uv_cache::Refresh;
+use uv_cache::{Refresh, Timestamp};
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone)]
@@ -44,30 +44,15 @@ impl Reinstall {
     pub fn is_all(&self) -> bool {
         matches!(self, Self::All)
     }
+}
 
-    /// Create a [`Refresh`] policy by integrating the [`Reinstall`] policy.
-    pub fn to_refresh(self, refresh: Refresh) -> Refresh {
-        match (self, refresh) {
-            // If the policy is `None`, return the existing refresh policy.
-            (Self::None, Refresh::None(timestamp)) => Refresh::None(timestamp),
-            (Self::None, Refresh::All(timestamp)) => Refresh::All(timestamp),
-            (Self::None, Refresh::Packages(packages, timestamp)) => {
-                Refresh::Packages(packages, timestamp)
-            }
-
-            // If the policy is `All`, refresh all packages.
-            (Self::All, Refresh::None(timestamp)) => Refresh::All(timestamp),
-            (Self::All, Refresh::All(timestamp)) => Refresh::All(timestamp),
-            (Self::All, Refresh::Packages(_packages, timestamp)) => Refresh::All(timestamp),
-
-            // If the policy is `Packages`, take the "max" of the two policies.
-            (Self::Packages(packages), Refresh::None(timestamp)) => {
-                Refresh::Packages(packages, timestamp)
-            }
-            (Self::Packages(_packages), Refresh::All(timestamp)) => Refresh::All(timestamp),
-            (Self::Packages(packages1), Refresh::Packages(packages2, timestamp)) => {
-                Refresh::Packages(packages1.into_iter().chain(packages2).collect(), timestamp)
-            }
+/// Create a [`Refresh`] policy by integrating the [`Reinstall`] policy.
+impl From<Reinstall> for Refresh {
+    fn from(value: Reinstall) -> Self {
+        match value {
+            Reinstall::None => Self::None(Timestamp::now()),
+            Reinstall::All => Self::All(Timestamp::now()),
+            Reinstall::Packages(packages) => Self::Packages(packages, Timestamp::now()),
         }
     }
 }
@@ -141,6 +126,19 @@ impl Upgrade {
             )
         } else {
             Either::Left(std::iter::empty())
+        }
+    }
+}
+
+/// Create a [`Refresh`] policy by integrating the [`Upgrade`] policy.
+impl From<Upgrade> for Refresh {
+    fn from(value: Upgrade) -> Self {
+        match value {
+            Upgrade::None => Self::None(Timestamp::now()),
+            Upgrade::All => Self::All(Timestamp::now()),
+            Upgrade::Packages(packages) => {
+                Self::Packages(packages.into_keys().collect::<Vec<_>>(), Timestamp::now())
+            }
         }
     }
 }

@@ -283,7 +283,7 @@ jobs:
           CARGO_HOME: ${{ env.DEV_DRIVE }}/.cargo
           RUSTUP_HOME: ${{ env.DEV_DRIVE }}/.rustup
         run: |
-          cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+          cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
       - name: "Smoke test"
         working-directory: ${{ env.DEV_DRIVE }}/uv

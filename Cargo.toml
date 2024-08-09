@@ -205,13 +205,50 @@ rest_pat_in_fully_bound_structs = "warn"
 
 [profile.release]
 strip = true
-lto = true
+lto = "fat"
 opt-level = "s"
 
+# This profile is meant to mimic the `release` profile as closely as
+# possible, but using settings that are more beneficial for iterative
+# development. That is, the `release` profile is intended for actually
+# building the release, where as `profiling` is meant for building `uv`
+# for running benchmarks.
+#
+# The main differences here are to avoid stripping debug information
+# and disabling lto. This does result in a mismatch between our release
+# configuration and our benchmarking configuration, which is unfortunate.
+# But compile times with `lto = true` are completely untenable:
+#
+#     $ cargo b --profile profiling -p uv
+#        Compiling uv-cli v0.0.1 (/home/andrew/astral/uv/crates/uv-cli)
+#        Compiling uv v0.2.34 (/home/andrew/astral/uv/crates/uv)
+#         Finished `profiling` profile [optimized + debuginfo] target(s) in 3m 47s
+#
+# Using `lto = "thin"` brings a massive improvement, but it's still slow:
+#
+#     $ cargo b --profile profiling -p uv
+#        Compiling uv v0.2.34 (/home/andrew/astral/uv/crates/uv)
+#         Finished `profiling` profile [optimized + debuginfo] target(s) in 53.98s
+#
+# But with `lto = false`:
+#
+#     $ cargo b --profile profiling -p uv
+#        Compiling uv v0.2.34 (/home/andrew/astral/uv/crates/uv)
+#         Finished `profiling` profile [optimized + debuginfo] target(s) in 30.09s
+#
+# We get more reasonable-ish compile times. At least, it's not enough
+# time to get up and get a cup of coffee before it completes.
+#
+# This setup does risk that we are measuring something in benchmarks
+# that we are shipping, but in order to make those two the same, we'd
+# either need to make compile times way worse for development, or take
+# a hit to binary size and a slight hit to runtime performance in our
+# release builds.
 [profile.profiling]
 inherits = "release"
 strip = false
-debug = true
+debug = "full"
+lto = false
 
 [profile.fast-build]
 inherits = "dev"
@@ -221,7 +258,6 @@ strip = "debuginfo"
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
-lto = "thin"
 
 # Config for 'cargo dist'
 [workspace.metadata.dist]

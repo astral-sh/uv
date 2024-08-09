@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -47,6 +48,18 @@ impl GitResolver {
     ) -> Result<Fetch, GitResolverError> {
         debug!("Fetching source distribution from Git: {url}");
 
+        let reference = RepositoryReference::from(url);
+
+        // If we know the precise commit already, reuse it, to ensure that all fetches within a
+        // single process are consistent.
+        let url = {
+            if let Some(precise) = self.get(&reference) {
+                Cow::Owned(url.clone().with_precise(*precise))
+            } else {
+                Cow::Borrowed(url)
+            }
+        };
+
         // Avoid races between different processes, too.
         let lock_dir = cache.join("locks");
         fs::create_dir_all(&lock_dir).await?;
@@ -58,17 +71,17 @@ impl GitResolver {
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.clone(), client, cache).with_reporter(reporter)
+            GitSource::new(url.as_ref().clone(), client, cache).with_reporter(reporter)
         } else {
-            GitSource::new(url.clone(), client, cache)
+            GitSource::new(url.as_ref().clone(), client, cache)
         };
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
             .map_err(GitResolverError::Git)?;
 
-        // Insert the resolved URL into the in-memory cache.
+        // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
+        // resolve to the same precise commit.
         if let Some(precise) = fetch.git().precise() {
-            let reference = RepositoryReference::from(url);
             self.insert(reference, precise);
         }
 

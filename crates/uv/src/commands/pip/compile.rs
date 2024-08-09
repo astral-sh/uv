@@ -38,6 +38,7 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
+use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -364,9 +365,9 @@ pub(crate) async fn pip_compile(
         &build_dispatch,
         concurrency,
         options,
+        Box::new(DefaultResolveLogger),
         printer,
         preview,
-        false,
     )
     .await
     {

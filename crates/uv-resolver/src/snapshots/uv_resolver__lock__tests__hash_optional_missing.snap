@@ -12,9 +12,9 @@ Ok(
             prerelease_mode: IfNecessaryOrExplicit,
             exclude_newer: None,
         },
-        distributions: [
-            Distribution {
-                id: DistributionId {
+        packages: [
+            Package {
+                id: PackageId {
                     name: PackageName(
                         "anyio",
                     ),
@@ -58,7 +58,7 @@ Ok(
             },
         ],
         by_id: {
-            DistributionId {
+            PackageId {
                 name: PackageName(
                     "anyio",
                 ),

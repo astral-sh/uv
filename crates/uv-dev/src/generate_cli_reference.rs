@@ -199,21 +199,18 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
             output.push_str("</dl>\n\n");
         }
 
-        // Display options
+        // Display options and flags
         let mut options = command
-            .get_opts()
+            .get_arguments()
+            .filter(|arg| !arg.is_positional())
             .filter(|arg| !arg.is_hide_set())
-            .sorted_by_key(|opt| opt.get_id())
+            .sorted_by_key(|arg| arg.get_id())
             .peekable();
 
         if options.peek().is_some() {
             output.push_str("<h3 class=\"cli-reference\">Options</h3>\n\n");
             output.push_str("<dl class=\"cli-reference\">");
-            for opt in command.get_opts() {
-                if opt.is_hide_set() {
-                    continue;
-                }
-
+            for opt in options {
                 let Some(long) = opt.get_long() else { continue };
 
                 output.push_str("<dt>");
@@ -221,12 +218,20 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
                 if let Some(short) = opt.get_short() {
                     output.push_str(&format!(", <code>-{short}</code>"));
                 }
-                if let Some(values) = opt.get_value_names() {
-                    for value in values {
-                        output.push_str(&format!(
-                            " <i>{}</i>",
-                            value.to_lowercase().replace('_', "-")
-                        ));
+
+                // Re-implements private `Arg::is_takes_value_set` used in `Command::get_opts`
+                if opt
+                    .get_num_args()
+                    .unwrap_or_else(|| 1.into())
+                    .takes_values()
+                {
+                    if let Some(values) = opt.get_value_names() {
+                        for value in values {
+                            output.push_str(&format!(
+                                " <i>{}</i>",
+                                value.to_lowercase().replace('_', "-")
+                            ));
+                        }
                     }
                 }
                 output.push_str("</dt>");

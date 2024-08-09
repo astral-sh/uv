@@ -13,6 +13,7 @@ use uv_resolver::TreeDisplay;
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
+use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::FoundInterpreter;
 use crate::commands::{project, ExitStatus};
 use crate::printer::Printer;
@@ -70,6 +71,7 @@ pub(crate) async fn tree(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,

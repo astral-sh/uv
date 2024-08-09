@@ -157,7 +157,7 @@ pub struct GlobalOptions {
 
 /// Settings relevant to all installer operations.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct InstallerOptions {
@@ -183,7 +183,7 @@ pub struct InstallerOptions {
 
 /// Settings relevant to all resolver operations.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverOptions {
@@ -1190,4 +1190,56 @@ pub struct PipOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
+}
+
+impl From<ResolverInstallerOptions> for ResolverOptions {
+    fn from(value: ResolverInstallerOptions) -> Self {
+        Self {
+            index_url: value.index_url,
+            extra_index_url: value.extra_index_url,
+            no_index: value.no_index,
+            find_links: value.find_links,
+            index_strategy: value.index_strategy,
+            keyring_provider: value.keyring_provider,
+            resolution: value.resolution,
+            prerelease: value.prerelease,
+            config_settings: value.config_settings,
+            exclude_newer: value.exclude_newer,
+            link_mode: value.link_mode,
+            upgrade: value.upgrade,
+            upgrade_package: value.upgrade_package,
+            no_build: value.no_build,
+            no_build_package: value.no_build_package,
+            no_binary: value.no_binary,
+            no_binary_package: value.no_binary_package,
+            no_build_isolation: value.no_build_isolation,
+            no_build_isolation_package: value.no_build_isolation_package,
+            no_sources: value.no_sources,
+        }
+    }
+}
+
+impl From<ResolverInstallerOptions> for InstallerOptions {
+    fn from(value: ResolverInstallerOptions) -> Self {
+        Self {
+            index_url: value.index_url,
+            extra_index_url: value.extra_index_url,
+            no_index: value.no_index,
+            find_links: value.find_links,
+            index_strategy: value.index_strategy,
+            keyring_provider: value.keyring_provider,
+            config_settings: value.config_settings,
+            exclude_newer: value.exclude_newer,
+            link_mode: value.link_mode,
+            compile_bytecode: value.compile_bytecode,
+            reinstall: value.reinstall,
+            reinstall_package: value.reinstall_package,
+            no_build: value.no_build,
+            no_build_package: value.no_build_package,
+            no_binary: value.no_binary,
+            no_binary_package: value.no_binary_package,
+            no_build_isolation: value.no_build_isolation,
+            no_sources: value.no_sources,
+        }
+    }
 }

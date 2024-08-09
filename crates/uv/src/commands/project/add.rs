@@ -2,9 +2,9 @@ use std::collections::hash_map::Entry;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap};
-
 use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
+use rustc_hash::{FxBuildHasher, FxHashMap};
+use tracing::debug;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -24,6 +24,7 @@ use uv_workspace::pyproject::{DependencyType, Source, SourceError};
 use uv_workspace::pyproject_mut::{ArrayEdit, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::project::ProjectError;
@@ -246,7 +247,14 @@ pub(crate) async fn add(
     }
 
     // Save the modified `pyproject.toml`.
-    fs_err::write(project.root().join("pyproject.toml"), pyproject.to_string())?;
+    let mut modified = false;
+    let content = pyproject.to_string();
+    if content == existing.raw {
+        debug!("No changes to `pyproject.toml`; skipping update");
+    } else {
+        fs_err::write(project.root().join("pyproject.toml"), &content)?;
+        modified = true;
+    }
 
     // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
     // to exist at all.
@@ -257,7 +265,7 @@ pub(crate) async fn add(
     // Update the `pypackage.toml` in-memory.
     let project = project
         .clone()
-        .with_pyproject_toml(pyproject.to_toml()?)
+        .with_pyproject_toml(toml::from_str(&content)?)
         .context("Failed to update `pyproject.toml`")?;
 
     // Lock and sync the environment, if necessary.
@@ -267,6 +275,7 @@ pub(crate) async fn add(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,
@@ -284,8 +293,10 @@ pub(crate) async fn add(
             let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If this is intentional, run `uv add --frozen` to skip the lock and sync steps.") });
             anstream::eprint!("{report:?}");
 
-            // Revert the changes to the `pyproject.toml`.
-            fs_err::write(project.root().join("pyproject.toml"), existing)?;
+            // Revert the changes to the `pyproject.toml`, if necessary.
+            if modified {
+                fs_err::write(project.root().join("pyproject.toml"), existing)?;
+            }
 
             return Ok(ExitStatus::Failure);
         }
@@ -296,8 +307,8 @@ pub(crate) async fn add(
     if !raw_sources {
         // Extract the minimum-supported version for each dependency.
         let mut minimum_version =
-            FxHashMap::with_capacity_and_hasher(lock.lock.distributions().len(), FxBuildHasher);
-        for dist in lock.lock.distributions() {
+            FxHashMap::with_capacity_and_hasher(lock.lock.packages().len(), FxBuildHasher);
+        for dist in lock.lock.packages() {
             let name = dist.name();
             let version = dist.version();
             match minimum_version.entry(name) {
@@ -359,7 +370,9 @@ pub(crate) async fn add(
             modified = true;
         }
 
-        // Save the modified `pyproject.toml`.
+        // Save the modified `pyproject.toml`. No need to check for changes in the underlying
+        // string content, since the above loop _must_ change an empty specifier to a non-empty
+        // specifier.
         if modified {
             fs_err::write(project.root().join("pyproject.toml"), pyproject.to_string())?;
         }
@@ -400,6 +413,7 @@ pub(crate) async fn add(
         Modifications::Sufficient,
         settings.as_ref().into(),
         &state,
+        Box::new(DefaultInstallLogger),
         preview,
         connectivity,
         concurrency,

@@ -362,16 +362,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     ));
                 }
 
-                // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
-                // the dependency mode is direct, we only need to visit the root package.
-                if self.dependency_mode.is_transitive() {
-                    Self::pre_visit(
-                        state.pubgrub.partial_solution.prioritized_packages(),
-                        &self.urls,
-                        &state.python_requirement,
-                        &request_sink,
-                    )?;
-                }
+                // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
+                Self::pre_visit(
+                    state.pubgrub.partial_solution.prioritized_packages(),
+                    &self.urls,
+                    &state.python_requirement,
+                    &request_sink,
+                )?;
 
                 // Choose a package version.
                 let Some(highest_priority_pkg) = state

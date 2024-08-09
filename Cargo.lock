@@ -2812,6 +2812,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",
+ "distribution-filename",
  "indexmap",
  "itertools 0.13.0",
  "mailparse",
@@ -4816,6 +4817,7 @@ version = "0.0.1"
 dependencies = [
  "async-compression",
  "async_zip",
+ "distribution-filename",
  "fs-err",
  "futures",
  "md-5",
@@ -4945,6 +4947,7 @@ dependencies = [
  "cache-key",
  "clap",
  "configparser",
+ "distribution-filename",
  "fs-err",
  "futures",
  "indoc",

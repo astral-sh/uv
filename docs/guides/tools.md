@@ -151,9 +151,33 @@ As with `uvx`, installations can include additional packages:
 $ uv tool install mkdocs --with mkdocs-material
 ```
 
+## Upgrading tools
+
+To upgrade a tool, use `uv tool upgrade`:
+
+```console
+$ uv tool upgrade ruff
+```
+
+Tool upgrades will respect the version constraints provided when installing the tool. For example,
+`uv tool install ruff >=0.3,<0.4` followed by `uv tool upgrade ruff` will upgrade Ruff to the latest
+version in the range `>=0.3,<0.4`.
+
+To instead replace the version constraints, re-install the tool with `uv tool install`:
+
+```console
+$ uv tool install ruff>=0.4
+```
+
+To instead upgrade all tools:
+
+```console
+$ uv tool upgrade --all
+```
+
 ## Next steps
 
-To learn more about managing tools with uv, see the [Tools concept](../concepts/projects.md) page
-and the [command reference](../reference/cli.md#uv-tool).
+To learn more about managing tools with uv, see the [Tools concept](../concepts/tools.md) page and
+the [command reference](../reference/cli.md#uv-tool).
 
 Or, read on to learn how to to [work on projects](./projects.md).

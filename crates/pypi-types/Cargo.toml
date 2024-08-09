@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+distribution-filename = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 uv-fs = { workspace = true, features = ["serde"] }

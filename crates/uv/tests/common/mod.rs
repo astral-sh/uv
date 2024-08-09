@@ -26,7 +26,7 @@ use uv_python::{
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.31";
+pub const PACKSE_VERSION: &str = "0.3.34";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -504,23 +504,20 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv tool install` command with options shared across scenarios.
-    pub fn tool_install(&self) -> Command {
-        let mut command = self.tool_install_without_exclude_newer();
-        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+    /// Create a `uv upgrade run` command with options shared across scenarios.
+    pub fn tool_upgrade(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command.arg("tool").arg("upgrade");
+        self.add_shared_args(&mut command);
         command
     }
 
-    /// Create a `uv tool install` command with no `--exclude-newer` option.
-    ///
-    /// One should avoid using this in tests to the extent possible because
-    /// it can result in tests failing when the index state changes. Therefore,
-    /// if you use this, there should be some other kind of mitigation in place.
-    /// For example, pinning package versions.
-    pub fn tool_install_without_exclude_newer(&self) -> Command {
+    /// Create a `uv tool install` command with options shared across scenarios.
+    pub fn tool_install(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("install");
         self.add_shared_args(&mut command);
+        command.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
         command
     }
 

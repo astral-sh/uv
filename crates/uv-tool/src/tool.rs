@@ -170,6 +170,10 @@ impl Tool {
     pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
     }
+
+    pub fn python(&self) -> &Option<String> {
+        &self.python
+    }
 }
 
 impl ToolEntrypoint {

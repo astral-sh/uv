@@ -1311,6 +1311,7 @@ fn no_dedupe() {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn with_editable() {
     let context = TestContext::new("3.12");
 

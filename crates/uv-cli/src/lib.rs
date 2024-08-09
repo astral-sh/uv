@@ -521,12 +521,46 @@ pub enum ProjectCommand {
     /// created during the first sync.
     Init(InitArgs),
     /// Add dependencies to the project (experimental).
+    ///
+    /// Dependencies are added to the project's `pyproject.toml` file.
+    ///
+    /// If no constraint or URL is provided for a dependency, a lower bound is
+    /// added equal to the latest compatible version of the package, e.g.,
+    /// `>=1.2.3`, unless `--frozen` is provided, in which case no resolution is
+    /// performed.
+    ///
+    /// The lockfile and project environment will be updated to reflect the
+    /// added dependencies. To skip updating the lockfile, use `--frozen`. To
+    /// skip updating the environment, use `--no-sync`.
+    ///
+    /// If any of the requested dependencies cannot be found, uv will exit with
+    /// an error, unless the `--frozen` flag is provided, in which case uv will
+    /// add the dependencies verbatim without checking that they exist or are
+    /// compatible with the project.
+    ///
+    /// uv will search for a project in the current directory or any parent
+    /// directory. If a project cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help add` for more details.",
         after_long_help = ""
     )]
     Add(AddArgs),
     /// Remove dependencies from the project (experimental).
+    ///
+    /// Dependencies are removed from the project's `pyproject.toml` file.
+    ///
+    /// The lockfile and project environment will be updated to reflect the
+    /// removed dependencies. To skip updating the lockfile, use `--frozen`. To
+    /// skip updating the environment, use `--no-sync`.
+    ///
+    /// If any of the requested dependencies are not present in the project, uv
+    /// will exit with an error.
+    ///
+    /// If a package has been manually installed in the environment, i.e., with
+    /// `uv pip install`, it will not be removed by `uv remove`.
+    ///
+    /// uv will search for a project in the current directory or any parent
+    /// directory. If a project cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help remove` for more details.",
         after_long_help = ""
@@ -539,6 +573,13 @@ pub enum ProjectCommand {
     )]
     Sync(SyncArgs),
     /// Update the project's lockfile (experimental).
+    ///
+    /// If the project lockfile (`uv.lock`) does not exist, it will be created.
+    /// If a lockfile is present, its contents will be used as preferences for
+    /// the resolution.
+    ///
+    /// If there are no changes to the project's dependencies, locking will have
+    /// no effect unless the `--upgrade` flag is provided.
     #[command(
         after_help = "Use `uv help lock` for more details.",
         after_long_help = ""
@@ -1803,15 +1844,22 @@ pub struct VenvArgs {
     )]
     pub python: Option<String>,
 
-    // TODO(zanieb): Hide me, I do nothing.
+    /// Ignore virtual environments when searching for the Python interpreter.
+    ///
+    /// This is the default behavior and has no effect.
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
         value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_system")
+        overrides_with("no_system"),
+        hide = true,
     )]
     pub system: bool,
 
+    /// This flag is included for compatibility only, it has no effect.
+    ///
+    /// uv will never search for interpreters in virtual environments when
+    /// creating a virtual environment.
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
@@ -2073,8 +2121,8 @@ pub struct RunArgs {
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
-    /// Requires that the lockfile is up-to-date. If the lockfile is missing, or
-    /// if it needs to be updated, uv will exit with an error.
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
@@ -2216,6 +2264,9 @@ pub struct SyncArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct LockArgs {
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
@@ -2264,6 +2315,12 @@ pub struct AddArgs {
     pub dev: bool,
 
     /// Add the requirements to the specified optional dependency group.
+    ///
+    /// The group may then be activated when installing the project with the
+    /// `--extra` flag.
+    ///
+    /// To enable an optional dependency group for this requirement instead, see
+    /// `--extra`.
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
@@ -2288,19 +2345,26 @@ pub struct AddArgs {
     )]
     pub raw_sources: bool,
 
-    /// Specific commit to use when adding from Git.
+    /// Commit to use when adding a dependency from Git.
+    ///
+    ///
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub rev: Option<String>,
 
-    /// Tag to use when adding from git.
+    /// Tag to use when adding a dependency from Git.
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub tag: Option<String>,
 
-    /// Branch to use when adding from git.
+    /// Branch to use when adding a dependency from Git.
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub branch: Option<String>,
 
-    /// Extras to activate for the dependency; may be provided more than once.
+    /// Extras to enable for the dependency.
+    ///
+    /// May be provided more than once.
+    ///
+    /// To add this dependency to an optional group in the current project
+    /// instead, see `--optional`.
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
@@ -2309,10 +2373,15 @@ pub struct AddArgs {
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Add the requirements without updating the `uv.lock` file.
+    /// Add dependencies without re-locking the project.
+    ///
+    /// The project environment will not be synced.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2346,15 +2415,15 @@ pub struct AddArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RemoveArgs {
-    /// The names of the packages to remove (e.g., `ruff`).
+    /// The names of the dependencies to remove (e.g., `ruff`).
     #[arg(required = true)]
-    pub requirements: Vec<PackageName>,
+    pub packages: Vec<PackageName>,
 
-    /// Remove the requirements from development dependencies.
+    /// Remove the packages from the development dependencies.
     #[arg(long, conflicts_with("optional"))]
     pub dev: bool,
 
-    /// Remove the requirements from the specified optional dependency group.
+    /// Remove the packages from the specified optional dependency group.
     #[arg(long, conflicts_with("dev"))]
     pub optional: Option<ExtraName>,
 
@@ -2363,10 +2432,15 @@ pub struct RemoveArgs {
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Remove the requirements without updating the `uv.lock` file.
+    /// Remove dependencies without re-locking the project.
+    ///
+    /// The project environment will not be synced.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2379,7 +2453,7 @@ pub struct RemoveArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Remove the dependency from a specific package in the workspace.
+    /// Remove the dependencies from a specific package in the workspace.
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 
@@ -2400,8 +2474,13 @@ pub struct RemoveArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct TreeArgs {
-    /// Show the resolved package versions for all Python versions and platforms, rather than
-    /// filtering to those that are relevant for the current environment.
+    /// Show a platform-independent dependency tree.
+    ///
+    /// Shows resolved package versions for all Python versions and platforms,
+    /// rather than filtering to those that are relevant for the current
+    /// environment.
+    ///
+    /// Multiple versions may be shown for a each package.
     #[arg(long)]
     pub universal: bool,
 
@@ -2409,10 +2488,15 @@ pub struct TreeArgs {
     pub tree: DisplayTreeArgs,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Display the requirements without updating the `uv.lock` file.
+    /// Display the requirements without locking the project.
+    ///
+    /// If the lockfile is missing, uv will exit with an error.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2481,6 +2565,9 @@ pub enum ToolCommand {
     Uvx(ToolRunArgs),
     /// Install a tool.
     Install(ToolInstallArgs),
+    /// Upgrade a tool.
+    #[command(alias = "update")]
+    Upgrade(ToolUpgradeArgs),
     /// List installed tools.
     List(ToolListArgs),
     /// Uninstall a tool.
@@ -2636,6 +2723,27 @@ pub struct ToolUninstallArgs {
     /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]
     pub all: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ToolUpgradeArgs {
+    /// The name of the tool to upgrade.
+    #[arg(required = true)]
+    pub name: Option<PackageName>,
+
+    /// Upgrade all tools.
+    #[arg(long, conflicts_with("name"))]
+    pub all: bool,
+
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
 }
 
 #[derive(Args)]
@@ -3007,7 +3115,8 @@ pub struct ResolverArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Allow package upgrades, ignoring pinned versions in any existing output file.
+    /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
+    /// `--refresh`.
     #[arg(
         long,
         short = 'U',
@@ -3025,7 +3134,7 @@ pub struct ResolverArgs {
     pub no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
-    /// file.
+    /// file. Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
@@ -3155,7 +3264,8 @@ pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Allow package upgrades, ignoring pinned versions in any existing output file.
+    /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
+    /// `--refresh`.
     #[arg(
         long,
         short = 'U',
@@ -3173,7 +3283,7 @@ pub struct ResolverInstallerArgs {
     pub no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
-    /// file.
+    /// file. Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 

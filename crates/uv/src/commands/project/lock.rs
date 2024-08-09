@@ -27,6 +27,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
+use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
@@ -84,6 +85,7 @@ pub(crate) async fn lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        Box::new(DefaultResolveLogger),
         preview,
         connectivity,
         concurrency,
@@ -117,6 +119,7 @@ pub(super) async fn do_safe_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
+    logger: Box<dyn ResolveLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -157,6 +160,7 @@ pub(super) async fn do_safe_lock(
             Some(&existing),
             settings,
             &state,
+            logger,
             preview,
             connectivity,
             concurrency,
@@ -186,6 +190,7 @@ pub(super) async fn do_safe_lock(
             existing.as_ref(),
             settings,
             &state,
+            logger,
             preview,
             connectivity,
             concurrency,
@@ -213,6 +218,7 @@ async fn do_lock(
     existing_lock: Option<&Lock>,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
+    logger: Box<dyn ResolveLogger>,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -387,6 +393,7 @@ async fn do_lock(
 
     // Populate the Git resolver.
     for ResolvedRepositoryReference { reference, sha } in git {
+        debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
         state.git.insert(reference, sha);
     }
 
@@ -413,16 +420,17 @@ async fn do_lock(
     // "preferences-dependent-forking" packse scenario). To avoid this, we store the forks in the
     // lockfile. We read those after all the lockfile filters, to allow the forks to change when
     // the environment changed, e.g. the python bound check above can lead to different forking.
-    let resolver_markers =
-        ResolverMarkers::universal(existing_lock.and_then(|lock| lock.fork_markers().clone()));
+    let resolver_markers = ResolverMarkers::universal(if upgrade.is_all() {
+        // We're discarding all preferences, so we're also discarding the existing forks.
+        None
+    } else {
+        existing_lock.and_then(|lock| lock.fork_markers().clone())
+    });
 
-    let resolution = match existing_lock {
+    let resolution = match existing_lock.filter(|_| upgrade.is_none()) {
         None => None,
 
-        // If we are ignoring pinned versions in the lockfile, we need to do a full resolution.
-        Some(_) if upgrade.is_all() => None,
-
-        // Otherwise, we can try to resolve using metadata in the lockfile.
+        // Try to resolve using metadata in the lockfile.
         //
         // When resolving from the lockfile we can still download and install new distributions,
         // but we rely on the lockfile for the metadata of any existing distributions. If we have
@@ -479,9 +487,9 @@ async fn do_lock(
                 &build_dispatch,
                 concurrency,
                 options,
+                Box::new(SummaryResolveLogger),
                 printer,
                 preview,
-                true,
             )
             .await
             .inspect_err(|err| debug!("Resolution with `uv.lock` failed: {err}"))
@@ -494,7 +502,7 @@ async fn do_lock(
 
                 debug!("Resolution with `uv.lock` failed due to diagnostics:");
                 for diagnostic in resolution.diagnostics() {
-                    debug!("{}", diagnostic.message());
+                    debug!("- {}", diagnostic.message());
                 }
 
                 false
@@ -557,16 +565,16 @@ async fn do_lock(
                 &build_dispatch,
                 concurrency,
                 options,
+                Box::new(SummaryResolveLogger),
                 printer,
                 preview,
-                true,
             )
             .await?
         }
     };
 
     // Print the success message after completing resolution.
-    pip::operations::resolution_success(&resolution, start, printer)?;
+    logger.on_complete(resolution.len(), start, printer)?;
 
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
@@ -600,37 +608,34 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
 
 /// Reports on the versions that were upgraded in the new lockfile.
 fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> anyhow::Result<()> {
-    let existing_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
-        existing_lock.distributions().iter().fold(
-            FxHashMap::with_capacity_and_hasher(existing_lock.distributions().len(), FxBuildHasher),
-            |mut acc, distribution| {
-                acc.entry(distribution.name())
+    let existing_packages: FxHashMap<&PackageName, BTreeSet<&Version>> =
+        existing_lock.packages().iter().fold(
+            FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
+            |mut acc, package| {
+                acc.entry(package.name())
                     .or_default()
-                    .insert(distribution.version());
+                    .insert(package.version());
                 acc
             },
         );
 
     let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
-        new_lock.distributions().iter().fold(
-            FxHashMap::with_capacity_and_hasher(new_lock.distributions().len(), FxBuildHasher),
-            |mut acc, distribution| {
-                acc.entry(distribution.name())
+        new_lock.packages().iter().fold(
+            FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
+            |mut acc, package| {
+                acc.entry(package.name())
                     .or_default()
-                    .insert(distribution.version());
+                    .insert(package.version());
                 acc
             },
         );
 
-    for name in existing_distributions
+    for name in existing_packages
         .keys()
         .chain(new_distributions.keys())
         .collect::<BTreeSet<_>>()
     {
-        match (
-            existing_distributions.get(name),
-            new_distributions.get(name),
-        ) {
+        match (existing_packages.get(name), new_distributions.get(name)) {
             (Some(existing_versions), Some(new_versions)) => {
                 if existing_versions != new_versions {
                     let existing_versions = existing_versions

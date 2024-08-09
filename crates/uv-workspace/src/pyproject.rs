@@ -30,7 +30,7 @@ pub struct PyProjectToml {
     pub tool: Option<Tool>,
     /// The raw unserialized document.
     #[serde(skip)]
-    pub(crate) raw: String,
+    pub raw: String,
 }
 
 impl PyProjectToml {

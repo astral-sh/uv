@@ -12,7 +12,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 
 use settings::PipTreeSettings;
-use uv_cache::Cache;
+use uv_cache::{Cache, Refresh};
 use uv_cli::{
     compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand,
@@ -24,7 +24,7 @@ use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_settings::{Combine, FilesystemOptions};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::{ExitStatus, ToolRunCommand};
@@ -103,12 +103,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     // Load configuration from the filesystem, prioritizing (in order):
     // 1. The configuration file specified on the command-line.
-    // 2. The configuration file in the current workspace (i.e., the `pyproject.toml` or `uv.toml`
-    //    file in the workspace root directory). If found, this file is combined with the user
-    //    configuration file.
-    // 3. The nearest `uv.toml` file in the directory tree, starting from the current directory. If
-    //    found, this file is combined with the user configuration file. In this case, we don't
-    //    search for `pyproject.toml` files, since we're not in a workspace.
+    // 2. The nearest configuration file (`uv.toml` or `pyproject.toml`) above the workspace root.
+    //    If found, this file is combined with the user configuration file.
+    // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
+    //    starting from the current directory.
     let filesystem = if let Some(config_file) = cli.config_file.as_ref() {
         if config_file
             .file_name()
@@ -119,8 +117,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.no_config {
         None
-    } else if let Ok(project) = Workspace::discover(&CWD, &DiscoveryOptions::default()).await {
-        let project = FilesystemOptions::from_directory(project.install_path())?;
+    } else if matches!(&*cli.command, Commands::Tool(_)) {
+        // For commands that operate at the user-level, ignore local configuration.
+        FilesystemOptions::user()?
+    } else if let Ok(workspace) = Workspace::discover(&CWD, &DiscoveryOptions::default()).await {
+        let project = FilesystemOptions::find(workspace.install_path())?;
         let user = FilesystemOptions::user()?;
         project.combine(user)
     } else {
@@ -223,9 +224,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .src_file
@@ -316,9 +319,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .src_file
@@ -388,9 +393,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .expect("failed to initialize global rayon pool");
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .package
@@ -627,6 +634,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Venv(args) => {
             args.compat_args.validate()?;
 
+            if args.no_system {
+                warn_user_once!("The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+            }
+
+            if args.system {
+                warn_user_once!("The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+            }
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VenvSettings::resolve(args, filesystem);
             show_settings!(args);
@@ -696,9 +711,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .with
@@ -739,9 +756,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .with
@@ -784,6 +803,28 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::tool_list(args.show_paths, globals.preview, &cache, printer).await
+        }
+        Commands::Tool(ToolNamespace {
+            command: ToolCommand::Upgrade(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(args.refresh);
+
+            commands::tool_upgrade(
+                args.name,
+                globals.connectivity,
+                args.settings,
+                Concurrency::default(),
+                globals.native_tls,
+                &cache,
+                globals.preview,
+                printer,
+            )
+            .await
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Uninstall(args),
@@ -965,9 +1006,11 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             let requirements = args
                 .with
@@ -1010,9 +1053,11 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             commands::sync(
                 args.locked,
@@ -1064,9 +1109,11 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             commands::add(
                 args.locked,
@@ -1100,15 +1147,17 @@ async fn run_project(
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache
-                .init()?
-                .with_refresh(args.settings.reinstall.clone().to_refresh(args.refresh));
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             commands::remove(
                 args.locked,
                 args.frozen,
                 args.no_sync,
-                args.requirements,
+                args.packages,
                 args.dependency_type,
                 args.package,
                 args.python,

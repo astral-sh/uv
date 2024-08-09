@@ -5,15 +5,15 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
 
+use distribution_filename::{ExtensionError, SourceDistExtension};
 use futures::TryStreamExt;
 use owo_colors::OwoColorize;
+use pypi_types::{HashAlgorithm, HashDigest};
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, instrument};
 use url::Url;
-
-use pypi_types::{HashAlgorithm, HashDigest};
 use uv_cache::Cache;
 use uv_client::WrappedReqwestError;
 use uv_extract::hash::Hasher;
@@ -32,6 +32,8 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
+    #[error("Expected download URL (`{0}`) to end in a supported file extension: {1}")]
+    MissingExtension(String, ExtensionError),
     #[error("Invalid Python version: {0}")]
     InvalidPythonVersion(String),
     #[error("Invalid request key (too many parts): {0}")]
@@ -423,6 +425,8 @@ impl ManagedPythonDownload {
         }
 
         let filename = url.path_segments().unwrap().last().unwrap();
+        let ext = SourceDistExtension::from_path(filename)
+            .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
         let response = client.get(url.clone()).send().await?;
 
         // Ensure the request was successful.
@@ -458,12 +462,12 @@ impl ManagedPythonDownload {
         match progress {
             Some((&reporter, progress)) => {
                 let mut reader = ProgressReader::new(&mut hasher, progress, reporter);
-                uv_extract::stream::archive(&mut reader, filename, temp_dir.path())
+                uv_extract::stream::archive(&mut reader, ext, temp_dir.path())
                     .await
                     .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
             }
             None => {
-                uv_extract::stream::archive(&mut hasher, filename, temp_dir.path())
+                uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
                     .await
                     .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
             }

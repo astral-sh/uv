@@ -229,26 +229,6 @@ impl Cache {
         }
     }
 
-    /// Returns `true` if a cache entry is up-to-date. Unlike [`Cache::freshness`], this method does
-    /// not take the [`Refresh`] policy into account.
-    ///
-    /// A cache entry is considered up-to-date if it was created after the [`Cache`] instance itself
-    /// was initialized.
-    pub fn is_fresh(&self, entry: &CacheEntry) -> io::Result<bool> {
-        // Grab the cutoff timestamp.
-        let timestamp = match &self.refresh {
-            Refresh::None(timestamp) => timestamp,
-            Refresh::All(timestamp) => timestamp,
-            Refresh::Packages(_packages, timestamp) => timestamp,
-        };
-
-        match fs::metadata(entry.path()) {
-            Ok(metadata) => Ok(Timestamp::from_metadata(&metadata) >= *timestamp),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
-            Err(err) => Err(err),
-        }
-    }
-
     /// Persist a temporary directory to the artifact store, returning its unique ID.
     pub async fn persist(
         &self,
@@ -711,7 +691,7 @@ impl CacheBucket {
             Self::Interpreter => "interpreter-v2",
             // Note that when bumping this, you'll also need to bump it
             // in crates/uv/tests/cache_clean.rs.
-            Self::Simple => "simple-v11",
+            Self::Simple => "simple-v12",
             Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
@@ -1004,9 +984,6 @@ impl Freshness {
 }
 
 /// A refresh policy for cache entries.
-///
-/// Each policy stores a timestamp, even if no entries are refreshed, to enable out-of-policy
-/// freshness checks via [`Cache::is_fresh`].
 #[derive(Debug, Clone)]
 pub enum Refresh {
     /// Don't refresh any entries.
@@ -1037,5 +1014,43 @@ impl Refresh {
     /// Returns `true` if no packages should be reinstalled.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None(_))
+    }
+
+    /// Combine two [`Refresh`] policies, taking the "max" of the two policies.
+    #[must_use]
+    pub fn combine(self, other: Refresh) -> Self {
+        /// Return the maximum of two timestamps.
+        fn max(a: Timestamp, b: Timestamp) -> Timestamp {
+            if a > b {
+                a
+            } else {
+                b
+            }
+        }
+
+        match (self, other) {
+            // If the policy is `None`, return the existing refresh policy.
+            // Take the `max` of the two timestamps.
+            (Self::None(t1), Refresh::None(t2)) => Refresh::None(max(t1, t2)),
+            (Self::None(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
+            (Self::None(t1), Refresh::Packages(packages, t2)) => {
+                Refresh::Packages(packages, max(t1, t2))
+            }
+
+            // If the policy is `All`, refresh all packages.
+            (Self::All(t1), Refresh::None(t2)) => Refresh::All(max(t1, t2)),
+            (Self::All(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
+            (Self::All(t1), Refresh::Packages(_packages, t2)) => Refresh::All(max(t1, t2)),
+
+            // If the policy is `Packages`, take the "max" of the two policies.
+            (Self::Packages(packages, t1), Refresh::None(t2)) => {
+                Refresh::Packages(packages, max(t1, t2))
+            }
+            (Self::Packages(_packages, t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
+            (Self::Packages(packages1, t1), Refresh::Packages(packages2, t2)) => Refresh::Packages(
+                packages1.into_iter().chain(packages2).collect(),
+                max(t1, t2),
+            ),
+        }
     }
 }

@@ -40,9 +40,12 @@ impl FilesystemOptions {
         let root = dir.join("uv");
         let file = root.join("uv.toml");
 
-        debug!("Loading user configuration from: `{}`", file.display());
+        debug!("Searching for user configuration in: `{}`", file.display());
         match read_file(&file) {
-            Ok(options) => Ok(Some(Self(options))),
+            Ok(options) => {
+                debug!("Found user configuration in: `{}`", file.display());
+                Ok(Some(Self(options)))
+            }
             Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(_) if !dir.is_dir() => {
                 // Ex) `XDG_CONFIG_HOME=/dev/null`

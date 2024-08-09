@@ -29,6 +29,9 @@ use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::reporters::PythonDownloadReporter;
 
+use crate::commands::pip::loggers::{
+    DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
+};
 use crate::commands::project::resolve_names;
 use crate::commands::{
     project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
@@ -38,6 +41,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// The user-facing command used to invoke a tool run.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ToolRunCommand {
     /// via the `uvx` alias
     Uvx,
@@ -97,6 +101,7 @@ pub(crate) async fn run(
     let (from, environment) = get_or_create_environment(
         &from,
         with,
+        show_resolution,
         python.as_deref(),
         &settings,
         isolated,
@@ -107,7 +112,7 @@ pub(crate) async fn run(
         concurrency,
         native_tls,
         cache,
-        printer.filter(show_resolution),
+        printer,
     )
     .await?;
 
@@ -148,7 +153,7 @@ pub(crate) async fn run(
         &executable.to_string_lossy(),
         &from.name,
         &site_packages,
-        &invocation_source,
+        invocation_source,
     );
 
     let mut handle = match process.spawn() {
@@ -233,7 +238,7 @@ fn warn_executable_not_provided_by_package(
     executable: &str,
     from_package: &PackageName,
     site_packages: &SitePackages,
-    invocation_source: &ToolRunCommand,
+    invocation_source: ToolRunCommand,
 ) {
     let packages = matching_packages(executable, site_packages);
     if !packages
@@ -282,6 +287,7 @@ fn warn_executable_not_provided_by_package(
 async fn get_or_create_environment(
     from: &str,
     with: &[RequirementsSource],
+    show_resolution: bool,
     python: Option<&str>,
     settings: &ResolverInstallerSettings,
     isolated: bool,
@@ -418,6 +424,16 @@ async fn get_or_create_environment(
         interpreter,
         settings,
         &state,
+        if show_resolution {
+            Box::new(DefaultResolveLogger)
+        } else {
+            Box::new(SummaryResolveLogger)
+        },
+        if show_resolution {
+            Box::new(DefaultInstallLogger)
+        } else {
+            Box::new(SummaryInstallLogger)
+        },
         preview,
         connectivity,
         concurrency,

@@ -178,7 +178,8 @@ fn tool_install_suggest_other_packages_with_executable() {
     let mut filters = context.filters();
     filters.push(("\\+ uvloop(.+)\n ", ""));
 
-    uv_snapshot!(filters, context.tool_install_without_exclude_newer()
+    uv_snapshot!(filters, context.tool_install()
+    .env_remove("UV_EXCLUDE_NEWER")
     .arg("fastapi==0.111.0")
     .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
     // (FastAPI 0.111 is only available from this date onwards)

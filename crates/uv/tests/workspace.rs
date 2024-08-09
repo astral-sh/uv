@@ -675,20 +675,20 @@ fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
 /// Extract just the sources from the lockfile, to test path resolution.
 #[derive(Deserialize, Serialize)]
 struct SourceLock {
-    distribution: Vec<Distribution>,
+    package: Vec<Package>,
 }
 
 impl SourceLock {
     fn sources(self) -> BTreeMap<String, toml::Value> {
-        self.distribution
+        self.package
             .into_iter()
-            .map(|distribution| (distribution.name, distribution.source))
+            .map(|package| (package.name, package.source))
             .collect()
     }
 }
 
 #[derive(Deserialize, Serialize)]
-struct Distribution {
+struct Package {
     name: String,
     source: toml::Value,
 }
