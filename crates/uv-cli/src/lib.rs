@@ -3104,7 +3104,8 @@ pub struct ResolverArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Allow package upgrades, ignoring pinned versions in any existing output file.
+    /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
+    /// `--refresh`.
     #[arg(
         long,
         short = 'U',
@@ -3122,7 +3123,7 @@ pub struct ResolverArgs {
     pub no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
-    /// file.
+    /// file. Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
@@ -3252,7 +3253,8 @@ pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
 
-    /// Allow package upgrades, ignoring pinned versions in any existing output file.
+    /// Allow package upgrades, ignoring pinned versions in any existing output file. Implies
+    /// `--refresh`.
     #[arg(
         long,
         short = 'U',
@@ -3270,7 +3272,7 @@ pub struct ResolverInstallerArgs {
     pub no_upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in any existing output
-    /// file.
+    /// file. Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
