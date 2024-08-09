@@ -368,7 +368,7 @@ async fn venv_impl(
 /// Quote a path, if necessary, for safe use in a POSIX-compatible shell command.
 fn shlex_posix(executable: impl AsRef<Path>) -> String {
     // Convert to a display path.
-    let executable = executable.as_ref().user_display().to_string();
+    let executable = executable.as_ref().portable_display().to_string();
 
     // Like Python's `shlex.quote`:
     // > Use single quotes, and put single quotes into double quotes
