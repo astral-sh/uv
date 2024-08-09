@@ -587,10 +587,7 @@ impl ResolutionGraph {
                 .constraints
                 .apply(self.overrides.apply(archive.metadata.requires_dist.iter()))
             {
-                let Some(ref marker_tree) = req.marker else {
-                    continue;
-                };
-                add_marker_params_from_tree(marker_tree, &mut seen_marker_values);
+                add_marker_params_from_tree(&req.marker, &mut seen_marker_values);
             }
         }
 
@@ -599,10 +596,7 @@ impl ResolutionGraph {
             .constraints
             .apply(self.overrides.apply(self.requirements.iter()))
         {
-            let Some(ref marker_tree) = direct_req.marker else {
-                continue;
-            };
-            add_marker_params_from_tree(marker_tree, &mut seen_marker_values);
+            add_marker_params_from_tree(&direct_req.marker, &mut seen_marker_values);
         }
 
         // Generate the final marker expression as a conjunction of

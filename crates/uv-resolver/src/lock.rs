@@ -94,30 +94,24 @@ impl Lock {
 
             for package in &mut lock.packages {
                 for dep in &mut package.dependencies {
-                    if let Some(marker) = &mut dep.marker {
-                        *marker = marker.clone().simplify_python_versions(
-                            python_version.clone(),
-                            python_full_version.clone(),
-                        );
-                    }
+                    dep.marker = dep.marker.clone().simplify_python_versions(
+                        python_version.clone(),
+                        python_full_version.clone(),
+                    );
                 }
 
                 for dep in package.optional_dependencies.values_mut().flatten() {
-                    if let Some(marker) = &mut dep.marker {
-                        *marker = marker.clone().simplify_python_versions(
-                            python_version.clone(),
-                            python_full_version.clone(),
-                        );
-                    }
+                    dep.marker = dep.marker.clone().simplify_python_versions(
+                        python_version.clone(),
+                        python_full_version.clone(),
+                    );
                 }
 
                 for dep in package.dev_dependencies.values_mut().flatten() {
-                    if let Some(marker) = &mut dep.marker {
-                        *marker = marker.clone().simplify_python_versions(
-                            python_version.clone(),
-                            python_full_version.clone(),
-                        );
-                    }
+                    dep.marker = dep.marker.clone().simplify_python_versions(
+                        python_version.clone(),
+                        python_full_version.clone(),
+                    );
                 }
             }
         }
@@ -146,8 +140,8 @@ impl Lock {
                     else {
                         continue;
                     };
-                    let marker = edge.weight().as_ref();
-                    locked_dist.add_dependency(dependency_dist, marker);
+                    let marker = edge.weight().clone();
+                    locked_dist.add_dependency(dependency_dist, marker.unwrap_or_default());
                 }
                 let id = locked_dist.id.clone();
                 if let Some(locked_dist) = locked_dists.insert(id, locked_dist) {
@@ -178,8 +172,12 @@ impl Lock {
                     else {
                         continue;
                     };
-                    let marker = edge.weight().as_ref();
-                    locked_dist.add_optional_dependency(extra.clone(), dependency_dist, marker);
+                    let marker = edge.weight().clone();
+                    locked_dist.add_optional_dependency(
+                        extra.clone(),
+                        dependency_dist,
+                        marker.unwrap_or_default(),
+                    );
                 }
             }
             if let Some(group) = dist.dev.as_ref() {
@@ -196,8 +194,12 @@ impl Lock {
                     else {
                         continue;
                     };
-                    let marker = edge.weight().as_ref();
-                    locked_dist.add_dev_dependency(group.clone(), dependency_dist, marker);
+                    let marker = edge.weight().clone();
+                    locked_dist.add_dev_dependency(
+                        group.clone(),
+                        dependency_dist,
+                        marker.unwrap_or_default(),
+                    );
                 }
             }
         }
@@ -488,11 +490,7 @@ impl Lock {
                     ))
                 };
             for dep in deps {
-                if dep
-                    .marker
-                    .as_ref()
-                    .map_or(true, |marker| marker.evaluate(marker_env, &[]))
-                {
+                if dep.marker.evaluate(marker_env, &[]) {
                     let dep_dist = self.find_by_id(&dep.package_id);
                     if seen.insert((&dep.package_id, None)) {
                         queue.push_back((dep_dist, None));
@@ -772,7 +770,7 @@ impl Package {
     }
 
     /// Add the [`AnnotatedDist`] as a dependency of the [`Package`].
-    fn add_dependency(&mut self, annotated_dist: &AnnotatedDist, marker: Option<&MarkerTree>) {
+    fn add_dependency(&mut self, annotated_dist: &AnnotatedDist, marker: MarkerTree) {
         let new_dep = Dependency::from_annotated_dist(annotated_dist, marker);
         for existing_dep in &mut self.dependencies {
             if existing_dep.package_id == new_dep.package_id
@@ -790,7 +788,7 @@ impl Package {
         &mut self,
         extra: ExtraName,
         annotated_dist: &AnnotatedDist,
-        marker: Option<&MarkerTree>,
+        marker: MarkerTree,
     ) {
         self.optional_dependencies
             .entry(extra)
@@ -803,7 +801,7 @@ impl Package {
         &mut self,
         dev: GroupName,
         annotated_dist: &AnnotatedDist,
-        marker: Option<&MarkerTree>,
+        marker: MarkerTree,
     ) {
         self.dev_dependencies
             .entry(dev)
@@ -1070,15 +1068,11 @@ impl Package {
             for dep in deps {
                 if let Some(mut dep) = dep.to_requirement(workspace_root, &mut dependency_extras)? {
                     // Add back the extra marker expression.
-                    let marker = MarkerTree::expression(MarkerExpression::Extra {
-                        operator: ExtraOperator::Equal,
-                        name: extra.clone(),
-                    });
-
-                    match dep.marker {
-                        Some(ref mut tree) => tree.and(marker),
-                        None => dep.marker = Some(marker),
-                    }
+                    dep.marker
+                        .and(MarkerTree::expression(MarkerExpression::Extra {
+                            operator: ExtraOperator::Equal,
+                            name: extra.clone(),
+                        }));
 
                     requires_dist.push(dep);
                 }
@@ -2238,17 +2232,13 @@ impl TryFrom<WheelWire> for Wheel {
 struct Dependency {
     package_id: PackageId,
     extra: BTreeSet<ExtraName>,
-    marker: Option<MarkerTree>,
+    marker: MarkerTree,
 }
 
 impl Dependency {
-    fn from_annotated_dist(
-        annotated_dist: &AnnotatedDist,
-        marker: Option<&MarkerTree>,
-    ) -> Dependency {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist, marker: MarkerTree) -> Dependency {
         let package_id = PackageId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.iter().cloned().collect();
-        let marker = marker.cloned();
         Dependency {
             package_id,
             extra,
@@ -2345,7 +2335,7 @@ impl Dependency {
                 .collect::<Array>();
             table.insert("extra", value(extra_array));
         }
-        if let Some(marker) = self.marker.as_ref().and_then(MarkerTree::contents) {
+        if let Some(marker) = self.marker.contents() {
             table.insert("marker", value(marker.to_string()));
         }
 
@@ -2381,7 +2371,8 @@ struct DependencyWire {
     package_id: PackageIdForDependency,
     #[serde(default)]
     extra: BTreeSet<ExtraName>,
-    marker: Option<MarkerTree>,
+    #[serde(default)]
+    marker: MarkerTree,
 }
 
 impl DependencyWire {
@@ -2770,10 +2761,8 @@ impl<'env> TreeDisplay<'env> {
 
                 // Skip dependencies that don't apply to the current environment.
                 if let Some(environment_markers) = markers {
-                    if let Some(dependency_markers) = dependency.marker.as_ref() {
-                        if !dependency_markers.evaluate(environment_markers, &[]) {
-                            continue;
-                        }
+                    if !dependency.marker.evaluate(environment_markers, &[]) {
+                        continue;
                     }
                 }
 
@@ -2801,10 +2790,8 @@ impl<'env> TreeDisplay<'env> {
 
                     // Skip dependencies that don't apply to the current environment.
                     if let Some(environment_markers) = markers {
-                        if let Some(dependency_markers) = dependency.marker.as_ref() {
-                            if !dependency_markers.evaluate(environment_markers, &[]) {
-                                continue;
-                            }
+                        if !dependency.marker.evaluate(environment_markers, &[]) {
+                            continue;
                         }
                     }
 
@@ -2838,10 +2825,8 @@ impl<'env> TreeDisplay<'env> {
 
                     // Skip dependencies that don't apply to the current environment.
                     if let Some(environment_markers) = markers {
-                        if let Some(dependency_markers) = dependency.marker.as_ref() {
-                            if !dependency_markers.evaluate(environment_markers, &[]) {
-                                continue;
-                            }
+                        if !dependency.marker.evaluate(environment_markers, &[]) {
+                            continue;
                         }
                     }
 

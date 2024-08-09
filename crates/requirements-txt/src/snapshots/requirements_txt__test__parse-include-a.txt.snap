@@ -12,7 +12,7 @@ RequirementsTxt {
                     ),
                     extras: [],
                     version_or_url: None,
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/include-b.txt",
@@ -41,7 +41,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/include-a.txt",

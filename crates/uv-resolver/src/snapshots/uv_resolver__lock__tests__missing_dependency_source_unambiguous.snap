@@ -99,7 +99,7 @@ Ok(
                             ),
                         },
                         extra: {},
-                        marker: None,
+                        marker: true,
                     },
                 ],
                 optional_dependencies: {},

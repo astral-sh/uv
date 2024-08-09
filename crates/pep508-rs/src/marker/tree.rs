@@ -564,6 +564,12 @@ impl Display for MarkerExpression {
 #[derive(Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct MarkerTree(NodeId);
 
+impl Default for MarkerTree {
+    fn default() -> Self {
+        MarkerTree::TRUE
+    }
+}
+
 impl<'de> Deserialize<'de> for MarkerTree {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

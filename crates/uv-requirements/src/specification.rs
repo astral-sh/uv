@@ -37,7 +37,7 @@ use cache_key::CanonicalUrl;
 use distribution_types::{
     FlatIndexLocation, IndexUrl, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use pep508_rs::{UnnamedRequirement, UnnamedRequirementUrl};
+use pep508_rs::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
 use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
@@ -193,7 +193,7 @@ impl RequirementsSpecification {
                         requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
                             url: VerbatimParsedUrl::parse_absolute_path(path)?,
                             extras: vec![],
-                            marker: None,
+                            marker: MarkerTree::TRUE,
                             origin: None,
                         }),
                         hashes: vec![],
