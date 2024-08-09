@@ -432,8 +432,9 @@ impl Lock {
         tags: &Tags,
         extras: &ExtrasSpecification,
         dev: &[GroupName],
+        editable: bool,
     ) -> Result<Resolution, LockError> {
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
+        let mut queue: VecDeque<(&Package, Option<&ExtraName>, bool)> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
         // Add the workspace packages to the queue.
@@ -444,19 +445,19 @@ impl Lock {
                 .expect("could not find root");
 
             // Add the base package.
-            queue.push_back((root, None));
+            queue.push_back((root, None, editable));
 
             // Add any extras.
             match extras {
                 ExtrasSpecification::None => {}
                 ExtrasSpecification::All => {
                     for extra in root.optional_dependencies.keys() {
-                        queue.push_back((root, Some(extra)));
+                        queue.push_back((root, Some(extra), false));
                     }
                 }
                 ExtrasSpecification::Some(extras) => {
                     for extra in extras {
-                        queue.push_back((root, Some(extra)));
+                        queue.push_back((root, Some(extra), false));
                     }
                 }
             }
@@ -470,13 +471,13 @@ impl Lock {
                     .find_by_name(dependency)
                     .expect("found too many packages matching root")
                     .expect("could not find root");
-                queue.push_back((root, None));
+                queue.push_back((root, None, false));
             }
         }
 
         let mut map = BTreeMap::default();
         let mut hashes = BTreeMap::default();
-        while let Some((dist, extra)) = queue.pop_front() {
+        while let Some((dist, extra, editable)) = queue.pop_front() {
             let deps =
                 if let Some(extra) = extra {
                     Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
@@ -495,20 +496,26 @@ impl Lock {
                 {
                     let dep_dist = self.find_by_id(&dep.package_id);
                     if seen.insert((&dep.package_id, None)) {
-                        queue.push_back((dep_dist, None));
+                        queue.push_back((dep_dist, None, dep.editable));
                     }
                     for extra in &dep.extra {
                         if seen.insert((&dep.package_id, Some(extra))) {
-                            queue.push_back((dep_dist, Some(extra)));
+                            queue.push_back((dep_dist, Some(extra), dep.editable));
                         }
                     }
                 }
             }
-            map.insert(
-                dist.id.name.clone(),
-                ResolvedDist::Installable(dist.to_dist(project.workspace().install_path(), tags)?),
-            );
-            hashes.insert(dist.id.name.clone(), dist.hashes());
+            if extra.is_none() {
+                map.insert(
+                    dist.id.name.clone(),
+                    ResolvedDist::Installable(dist.to_dist(
+                        project.workspace().install_path(),
+                        tags,
+                        editable,
+                    )?),
+                );
+                hashes.insert(dist.id.name.clone(), dist.hashes());
+            }
         }
         let diagnostics = vec![];
         Ok(Resolution::new(map, hashes, diagnostics))
@@ -621,10 +628,7 @@ impl Lock {
                 Source::Registry(..) | Source::Git(..) => {}
                 // Skip local and direct URL dependencies, as their metadata may have been mutated
                 // without a version change.
-                Source::Path(..)
-                | Source::Directory(..)
-                | Source::Editable(..)
-                | Source::Direct(..) => continue,
+                Source::Path(..) | Source::Directory(..) | Source::Direct(..) => continue,
             }
 
             // Add registry distributions to the package index.
@@ -812,7 +816,12 @@ impl Package {
     }
 
     /// Convert the [`Package`] to a [`Dist`] that can be used in installation.
-    fn to_dist(&self, workspace_root: &Path, tags: &Tags) -> Result<Dist, LockError> {
+    fn to_dist(
+        &self,
+        workspace_root: &Path,
+        tags: &Tags,
+        editable: bool,
+    ) -> Result<Dist, LockError> {
         if let Some(best_wheel_index) = self.find_best_wheel(tags) {
             return match &self.id.source {
                 Source::Registry(url) => {
@@ -864,15 +873,10 @@ impl Package {
                     source_type: "directory",
                 }
                 .into()),
-                Source::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
-                    id: self.id.clone(),
-                    source_type: "editable",
-                }
-                .into()),
             };
         }
 
-        if let Some(sdist) = self.to_source_dist(workspace_root)? {
+        if let Some(sdist) = self.to_source_dist(workspace_root, editable)? {
             return Ok(Dist::Source(sdist));
         }
 
@@ -889,6 +893,7 @@ impl Package {
     fn to_source_dist(
         &self,
         workspace_root: &Path,
+        editable: bool,
     ) -> Result<Option<distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
@@ -907,17 +912,7 @@ impl Package {
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
-                    editable: false,
-                };
-                distribution_types::SourceDist::Directory(dir_dist)
-            }
-            Source::Editable(path) => {
-                let dir_dist = DirectorySourceDist {
-                    name: self.id.name.clone(),
-                    url: verbatim_url(workspace_root.join(path), &self.id)?,
-                    install_path: workspace_root.join(path),
-                    lock_path: path.clone(),
-                    editable: true,
+                    editable,
                 };
                 distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -1023,7 +1018,7 @@ impl Package {
 
                 // Add the source distribution.
                 if let Some(distribution_types::SourceDist::Registry(sdist)) =
-                    self.to_source_dist(workspace_root)?
+                    self.to_source_dist(workspace_root, false)?
                 {
                     // When resolving from a lockfile all sources are equally compatible.
                     let compat = SourceDistCompatibility::Compatible(HashComparison::Matched);
@@ -1235,7 +1230,10 @@ impl Package {
                 self.name().clone(),
                 self.id.version.clone(),
             )),
-            _ => Ok(self.to_source_dist(workspace_root)?.unwrap().version_id()),
+            _ => Ok(self
+                .to_source_dist(workspace_root, false)?
+                .unwrap()
+                .version_id()),
         }
     }
 
@@ -1459,7 +1457,6 @@ enum Source {
     Direct(UrlString, DirectSource),
     Path(PathBuf),
     Directory(PathBuf),
-    Editable(PathBuf),
 }
 
 impl Source {
@@ -1541,11 +1538,7 @@ impl Source {
     }
 
     fn from_directory_source_dist(directory_dist: &DirectorySourceDist) -> Source {
-        if directory_dist.editable {
-            Source::Editable(directory_dist.lock_path.clone())
-        } else {
-            Source::Directory(directory_dist.lock_path.clone())
-        }
+        Source::Directory(directory_dist.lock_path.clone())
     }
 
     fn from_index_url(index_url: &IndexUrl) -> Source {
@@ -1604,12 +1597,6 @@ impl Source {
                     Value::from(PortablePath::from(path).to_string()),
                 );
             }
-            Source::Editable(ref path) => {
-                source_table.insert(
-                    "editable",
-                    Value::from(PortablePath::from(path).to_string()),
-                );
-            }
         }
         table.insert("source", value(source_table));
     }
@@ -1621,7 +1608,7 @@ impl std::fmt::Display for Source {
             Source::Registry(url) | Source::Git(url, _) | Source::Direct(url, _) => {
                 write!(f, "{}+{}", self.name(), url)
             }
-            Source::Path(path) | Source::Directory(path) | Source::Editable(path) => {
+            Source::Path(path) | Source::Directory(path) => {
                 write!(f, "{}+{}", self.name(), PortablePath::from(path))
             }
         }
@@ -1636,7 +1623,6 @@ impl Source {
             Self::Direct(..) => "direct",
             Self::Path(..) => "path",
             Self::Directory(..) => "directory",
-            Self::Editable(..) => "editable",
         }
     }
 
@@ -1651,7 +1637,7 @@ impl Source {
         match *self {
             Self::Registry(..) => None,
             Self::Direct(..) | Self::Path(..) => Some(true),
-            Self::Git(..) | Self::Directory(..) | Self::Editable(..) => Some(false),
+            Self::Git(..) | Self::Directory(..) => Some(false),
         }
     }
 }
@@ -1675,9 +1661,6 @@ enum SourceWire {
     },
     Directory {
         directory: PortablePathBuf,
-    },
-    Editable {
-        editable: PortablePathBuf,
     },
 }
 
@@ -1714,7 +1697,6 @@ impl TryFrom<SourceWire> for Source {
             Direct { url, subdirectory } => Ok(Source::Direct(url, DirectSource { subdirectory })),
             Path { path } => Ok(Source::Path(path.into())),
             Directory { directory } => Ok(Source::Directory(directory.into())),
-            Editable { editable } => Ok(Source::Editable(editable.into())),
         }
     }
 }
@@ -2283,6 +2265,7 @@ struct Dependency {
     package_id: PackageId,
     extra: BTreeSet<ExtraName>,
     marker: Option<MarkerTree>,
+    editable: bool,
 }
 
 impl Dependency {
@@ -2293,10 +2276,12 @@ impl Dependency {
         let package_id = PackageId::from_annotated_dist(annotated_dist);
         let extra = annotated_dist.extra.iter().cloned().collect();
         let marker = marker.cloned();
+        let editable = annotated_dist.is_editable();
         Dependency {
             package_id,
             extra,
             marker,
+            editable,
         }
     }
 
@@ -2357,12 +2342,6 @@ impl Dependency {
                 install_path: workspace_root.join(path),
                 url: verbatim_url(workspace_root.join(path), &self.package_id)?,
             },
-            Source::Editable(ref path) => RequirementSource::Directory {
-                editable: true,
-                lock_path: path.clone(),
-                install_path: workspace_root.join(path),
-                url: verbatim_url(workspace_root.join(path), &self.package_id)?,
-            },
         };
 
         let requirement = Requirement {
@@ -2391,6 +2370,9 @@ impl Dependency {
         }
         if let Some(marker) = self.marker.as_ref().and_then(MarkerTree::contents) {
             table.insert("marker", value(marker.to_string()));
+        }
+        if self.editable {
+            table.insert("editable", value(true));
         }
 
         table
@@ -2426,6 +2408,8 @@ struct DependencyWire {
     #[serde(default)]
     extra: BTreeSet<ExtraName>,
     marker: Option<MarkerTree>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    editable: bool,
 }
 
 impl DependencyWire {
@@ -2437,6 +2421,7 @@ impl DependencyWire {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             marker: self.marker,
+            editable: self.editable,
         })
     }
 }
@@ -2447,6 +2432,7 @@ impl From<Dependency> for DependencyWire {
             package_id: PackageIdForDependency::from(dependency.package_id),
             extra: dependency.extra,
             marker: dependency.marker,
+            editable: dependency.editable,
         }
     }
 }
@@ -2807,6 +2793,7 @@ impl<'env> TreeDisplay<'env> {
                         package_id: packages.id.clone(),
                         extra: dependency.extra.clone(),
                         marker: dependency.marker.clone(),
+                        editable: dependency.editable,
                     })
                 } else {
                     Cow::Borrowed(dependency)
@@ -2838,6 +2825,7 @@ impl<'env> TreeDisplay<'env> {
                             package_id: packages.id.clone(),
                             extra: dependency.extra.clone(),
                             marker: dependency.marker.clone(),
+                            editable: dependency.editable,
                         })
                     } else {
                         Cow::Borrowed(dependency)
@@ -2875,6 +2863,7 @@ impl<'env> TreeDisplay<'env> {
                             package_id: packages.id.clone(),
                             extra: dependency.extra.clone(),
                             marker: dependency.marker.clone(),
+                            editable: dependency.editable,
                         })
                     } else {
                         Cow::Borrowed(dependency)

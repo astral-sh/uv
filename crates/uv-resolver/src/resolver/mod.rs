@@ -547,9 +547,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     state.requires_python.as_ref(),
                 )?;
 
-                println!("for_package: {:?}", for_package);
-
-                println!("forked_deps: {:?}", forked_deps);
                 match forked_deps {
                     ForkedDependencies::Unavailable(reason) => {
                         state

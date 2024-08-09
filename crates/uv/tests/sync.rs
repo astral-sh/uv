@@ -760,7 +760,7 @@ fn sync_relative_wheel() -> Result<()> {
             [[package]]
             name = "relative-wheel"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "ok" },
             ]

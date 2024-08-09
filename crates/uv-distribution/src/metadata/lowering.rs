@@ -234,7 +234,6 @@ pub(crate) fn lower_requirement(
             let relative_to_main_workspace = workspace.lock_path().join(relative_to_workspace);
             let url = VerbatimUrl::parse_absolute_path(member.root())?
                 .with_given(relative_to_main_workspace.to_string_lossy());
-            println!("editable: {:?}", editable);
             RequirementSource::Directory {
                 install_path: member.root().clone(),
                 lock_path: relative_to_main_workspace,

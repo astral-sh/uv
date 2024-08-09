@@ -34,6 +34,11 @@ impl AnnotatedDist {
     pub(crate) fn is_base(&self) -> bool {
         self.extra.is_none() && self.dev.is_none()
     }
+
+    /// Returns `true` if the [`AnnotatedDist`] is editable.
+    pub(crate) fn is_editable(&self) -> bool {
+        self.dist.is_editable()
+    }
 }
 
 impl Name for AnnotatedDist {

@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 dependencies = ["bird-feeder", "tqdm>=4,<5"]
 
 [tool.uv.sources]
-bird-feeder = { workspace = true, editable = false }
+bird-feeder = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]

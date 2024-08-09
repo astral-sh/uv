@@ -775,16 +775,16 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     assert_json_snapshot!(lock.sources(), @r###"
     {
       "a": {
-        "editable": "packages/a"
+        "directory": "packages/a"
       },
       "b": {
-        "editable": "packages/b"
+        "directory": "packages/b"
       },
       "c": {
-        "editable": "../other-workspace/packages/c"
+        "directory": "../other-workspace/packages/c"
       },
       "d": {
-        "editable": "../other-workspace/packages/d"
+        "directory": "../other-workspace/packages/d"
       }
     }
     "###);
@@ -879,10 +879,10 @@ fn workspace_hidden_files() -> Result<()> {
     assert_json_snapshot!(lock.sources(), @r###"
     {
       "a": {
-        "editable": "packages/a"
+        "directory": "packages/a"
       },
       "b": {
-        "editable": "packages/b"
+        "directory": "packages/b"
       }
     }
     "###);
@@ -942,13 +942,13 @@ fn workspace_hidden_member() -> Result<()> {
     assert_json_snapshot!(lock.sources(), @r###"
     {
       "a": {
-        "editable": "packages/a"
+        "directory": "packages/a"
       },
       "b": {
-        "editable": "packages/b"
+        "directory": "packages/b"
       },
       "c": {
-        "editable": "packages/.c"
+        "directory": "packages/.c"
       }
     }
     "###);

@@ -97,7 +97,7 @@ fn lock_wheel_registry() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "anyio" },
             ]
@@ -185,7 +185,7 @@ fn lock_sdist_registry() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "source-distribution" },
             ]
@@ -267,25 +267,25 @@ fn lock_sdist_git() -> Result<()> {
         }, {
             assert_snapshot!(
                 lock, @r###"
-                version = 1
-                requires-python = ">=3.12"
+            version = 1
+            requires-python = ">=3.12"
 
-                [options]
-                exclude-newer = "2024-03-25 00:00:00 UTC"
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
 
-                [[package]]
-                name = "project"
-                version = "0.1.0"
-                source = { editable = "." }
-                dependencies = [
-                    { name = "uv-public-pypackage" },
-                ]
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { directory = "." }
+            dependencies = [
+                { name = "uv-public-pypackage" },
+            ]
 
-                [[package]]
-                name = "uv-public-pypackage"
-                version = "0.1.0"
-                source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-                "###
+            [[package]]
+            name = "uv-public-pypackage"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+            "###
             );
         });
     }
@@ -371,7 +371,7 @@ fn lock_sdist_git() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -428,7 +428,7 @@ fn lock_sdist_git() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -485,7 +485,7 @@ fn lock_sdist_git() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -551,7 +551,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "example-pkg-a" },
             ]
@@ -632,7 +632,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -696,7 +696,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -749,7 +749,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -802,7 +802,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -883,7 +883,7 @@ fn lock_wheel_url() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "anyio" },
             ]
@@ -993,7 +993,7 @@ fn lock_sdist_url() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "anyio" },
             ]
@@ -1118,7 +1118,7 @@ fn lock_project_extra() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "anyio" },
             ]
@@ -1405,7 +1405,7 @@ fn lock_dependency_extra() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "flask", extra = ["dotenv"] },
             ]
@@ -1630,7 +1630,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "requests" },
                 { name = "requests", extra = ["socks"], marker = "python_version < '3.10'" },
@@ -1875,7 +1875,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "flask" },
             ]
@@ -1989,7 +1989,7 @@ fn lock_upgrade_log() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "iniconfig" },
                 { name = "markupsafe" },
@@ -2070,7 +2070,7 @@ fn lock_upgrade_log() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "markupsafe" },
             { name = "typing-extensions" },
@@ -2157,7 +2157,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "markupsafe", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
                 { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
@@ -2235,7 +2235,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2298,7 +2298,7 @@ fn lock_preference() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "iniconfig" },
             ]
@@ -2356,7 +2356,7 @@ fn lock_preference() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -2400,7 +2400,7 @@ fn lock_preference() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -2456,7 +2456,7 @@ fn lock_git_sha() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -2486,7 +2486,7 @@ fn lock_git_sha() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -2542,7 +2542,7 @@ fn lock_git_sha() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -2585,7 +2585,7 @@ fn lock_git_sha() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "uv-public-pypackage" },
             ]
@@ -2747,7 +2747,7 @@ fn lock_requires_python() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "pygls" },
             ]
@@ -2898,7 +2898,7 @@ fn lock_requires_python() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "pygls" },
             ]
@@ -3012,7 +3012,7 @@ fn lock_requires_python() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "pygls" },
             ]
@@ -3145,7 +3145,7 @@ fn lock_requires_python_wheels() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "frozenlist" },
             ]
@@ -3232,7 +3232,7 @@ fn lock_requires_python_wheels() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "frozenlist" },
             ]
@@ -3334,7 +3334,7 @@ fn lock_requires_python_star() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "linehaul" },
             ]
@@ -3446,7 +3446,7 @@ fn lock_requires_python_pre() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "linehaul" },
             ]
@@ -3522,7 +3522,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "iniconfig" },
             ]
@@ -3618,7 +3618,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "attrs" },
                 { name = "iniconfig" },
@@ -3696,7 +3696,7 @@ fn lock_dev() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "iniconfig" },
             ]
@@ -3799,7 +3799,7 @@ fn lock_conditional_unconditional() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "iniconfig" },
             ]
@@ -3863,7 +3863,7 @@ fn lock_multiple_markers() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "iniconfig", marker = "implementation_name == 'cpython'" },
             ]
@@ -3958,7 +3958,7 @@ fn relative_and_absolute_paths() -> Result<()> {
             [[package]]
             name = "a"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "b" },
                 { name = "c" },
@@ -4074,7 +4074,7 @@ fn lock_cycles() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "fixtures" },
                 { name = "testtools" },
@@ -4267,7 +4267,7 @@ fn lock_new_extras() -> Result<()> {
             [[package]]
             name = "project"
             version = "0.1.0"
-            source = { editable = "." }
+            source = { directory = "." }
             dependencies = [
                 { name = "requests" },
             ]
@@ -4379,7 +4379,7 @@ fn lock_new_extras() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "requests", extra = ["socks"] },
         ]
@@ -4476,7 +4476,7 @@ fn lock_invalid_hash() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -4558,51 +4558,51 @@ fn lock_resolution_mode() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r###"
-            version = 1
-            requires-python = ">=3.12"
+        version = 1
+        requires-python = ">=3.12"
 
-            [options]
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
 
-            [[package]]
-            name = "anyio"
-            version = "4.3.0"
-            source = { registry = "https://pypi.org/simple" }
-            dependencies = [
-                { name = "idna" },
-                { name = "sniffio" },
-            ]
-            sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
-            ]
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
 
-            [[package]]
-            name = "idna"
-            version = "3.6"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
-            ]
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
 
-            [[package]]
-            name = "project"
-            version = "0.1.0"
-            source = { editable = "." }
-            dependencies = [
-                { name = "anyio" },
-            ]
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { directory = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
 
-            [[package]]
-            name = "sniffio"
-            version = "1.3.1"
-            source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
-            wheels = [
-                { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
-            ]
-            "###
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
         );
     });
 
@@ -4669,7 +4669,7 @@ fn lock_resolution_mode() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -4862,7 +4862,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v1" }, marker = "sys_platform == 'darwin'" },
             { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v2" }, marker = "sys_platform != 'darwin'" },
@@ -4982,7 +4982,7 @@ fn lock_exclusion() -> Result<()> {
         [[package]]
         name = "child"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "project" },
         ]
@@ -5087,9 +5087,9 @@ fn lock_dev_transitive() -> Result<()> {
         [[package]]
         name = "bar"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
-            { name = "baz" },
+            { name = "baz", editable = true },
             { name = "foo" },
             { name = "iniconfig" },
         ]
@@ -5097,7 +5097,7 @@ fn lock_dev_transitive() -> Result<()> {
         [[package]]
         name = "baz"
         version = "0.1.0"
-        source = { editable = "baz" }
+        source = { directory = "baz" }
 
         [package.dev-dependencies]
         dev = [
@@ -5176,7 +5176,7 @@ fn lock_redact() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -5313,7 +5313,7 @@ fn lock_no_sources() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -5374,7 +5374,7 @@ fn lock_no_sources() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -5445,7 +5445,7 @@ fn lock_migrate() -> Result<()> {
         [[distribution-term-we-dont-know]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
         { name = "anyio" },
         ]
@@ -5513,7 +5513,7 @@ fn lock_migrate() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -5610,7 +5610,7 @@ fn lock_upgrade_package() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
             { name = "idna" },
@@ -5701,7 +5701,7 @@ fn lock_upgrade_package() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
             { name = "idna" },
@@ -5780,7 +5780,7 @@ fn lock_upgrade_package() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
             { name = "idna" },

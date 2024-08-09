@@ -98,7 +98,7 @@ fn add_registry() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
         ]
@@ -254,7 +254,7 @@ fn add_git() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
             { name = "uv-public-pypackage" },
@@ -463,7 +463,7 @@ fn add_git_raw() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "anyio" },
             { name = "uv-public-pypackage" },
@@ -658,7 +658,7 @@ fn add_unnamed() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
@@ -775,7 +775,7 @@ fn add_remove_dev() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
 
         [package.dev-dependencies]
         dev = [
@@ -871,7 +871,7 @@ fn add_remove_dev() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         "###
         );
     });
@@ -980,7 +980,7 @@ fn add_remove_optional() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
 
         [package.optional-dependencies]
         io = [
@@ -1077,7 +1077,7 @@ fn add_remove_optional() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         "###
         );
     });
@@ -1638,7 +1638,7 @@ fn update() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "requests", extra = ["socks", "use-chardet-on-py3"] },
         ]
@@ -1866,7 +1866,7 @@ fn add_no_clean() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -1991,7 +1991,7 @@ fn remove_registry() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         "###
         );
     });
@@ -2634,7 +2634,7 @@ fn add_lower_bound_optional() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
 
         [package.optional-dependencies]
         io = [
@@ -2725,7 +2725,7 @@ fn add_lower_bound_local() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { directory = "." }
         dependencies = [
             { name = "local-simple-a" },
         ]

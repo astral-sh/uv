@@ -180,7 +180,7 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(project, markers, tags, extras, &dev)?;
+    let resolution = lock.to_resolution(project, markers, tags, extras, &dev, true)?;
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
