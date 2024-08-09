@@ -1,7 +1,7 @@
 use uv_auth::{self, KeyringProvider};
 
 /// Keyring provider type to use for credential lookup.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]

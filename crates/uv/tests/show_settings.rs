@@ -2444,6 +2444,39 @@ fn resolve_tool() -> anyhow::Result<()> {
                 },
             ),
         ),
+        options: ResolverInstallerOptions {
+            index_url: None,
+            extra_index_url: None,
+            no_index: None,
+            find_links: None,
+            index_strategy: None,
+            keyring_provider: None,
+            resolution: Some(
+                LowestDirect,
+            ),
+            prerelease: None,
+            config_settings: None,
+            no_build_isolation: None,
+            no_build_isolation_package: None,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            link_mode: Some(
+                Clone,
+            ),
+            compile_bytecode: None,
+            no_sources: None,
+            upgrade: None,
+            upgrade_package: None,
+            reinstall: None,
+            reinstall_package: None,
+            no_build: None,
+            no_build_package: None,
+            no_binary: None,
+            no_binary_package: None,
+        },
         settings: ResolverInstallerSettings {
             index_locations: IndexLocations {
                 index: None,

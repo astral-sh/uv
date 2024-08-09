@@ -2759,9 +2759,6 @@ pub struct ToolUpgradeArgs {
 
     #[command(flatten)]
     pub build: BuildArgs,
-
-    #[command(flatten)]
-    pub refresh: RefreshArgs,
 }
 
 #[derive(Args)]

@@ -14,6 +14,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_settings::{ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -37,6 +38,7 @@ pub(crate) async fn install(
     with: &[RequirementsSource],
     python: Option<String>,
     force: bool,
+    options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
     python_preference: PythonPreference,
@@ -75,6 +77,7 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = SharedState::default();
+
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -177,6 +180,9 @@ pub(crate) async fn install(
         requirements
     };
 
+    // Convert to tool options.
+    let options = ToolOptions::from(options);
+
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.acquire_lock()?;
 
@@ -236,12 +242,21 @@ pub(crate) async fn install(
             if requirements == receipt {
                 // And the user didn't request a reinstall or upgrade...
                 if !force && settings.reinstall.is_none() && settings.upgrade.is_none() {
-                    // We're done.
+                    if *tool_receipt.options() != options {
+                        // ...but the options differ, we need to update the receipt.
+                        installed_tools.add_tool_receipt(
+                            &from.name,
+                            tool_receipt.clone().with_options(options),
+                        )?;
+                    }
+
+                    // We're done, though we might need to update the receipt.
                     writeln!(
                         printer.stderr(),
                         "`{from}` is already installed",
                         from = from.cyan()
                     )?;
+
                     return Ok(ExitStatus::Success);
                 }
             }
@@ -333,10 +348,11 @@ pub(crate) async fn install(
         &environment,
         &from.name,
         &installed_tools,
-        printer,
+        options,
         force || invalid_tool_receipt,
         python,
         requirements,
         InstallAction::Install,
+        printer,
     )
 }

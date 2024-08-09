@@ -12,7 +12,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 
 use settings::PipTreeSettings;
-use uv_cache::{Cache, Refresh};
+use uv_cache::{Cache, Refresh, Timestamp};
 use uv_cli::{
     compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand,
@@ -780,6 +780,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 args.python,
                 args.force,
+                args.options,
                 args.settings,
                 globals.preview,
                 globals.python_preference,
@@ -812,12 +813,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache.init()?.with_refresh(Refresh::All(Timestamp::now()));
 
             commands::tool_upgrade(
                 args.name,
                 globals.connectivity,
-                args.settings,
+                args.args,
+                args.filesystem,
                 Concurrency::default(),
                 globals.native_tls,
                 &cache,
