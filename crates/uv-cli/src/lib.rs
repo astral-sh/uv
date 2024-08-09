@@ -246,6 +246,7 @@ pub enum Commands {
     /// Manage Python projects.
     #[command(flatten)]
     Project(Box<ProjectCommand>),
+
     /// Run and manage tools provided by Python packages (experimental).
     #[command(
         after_help = "Use `uv help tool` for more details.",
@@ -293,6 +294,11 @@ pub enum Commands {
     /// e.g., if `pypy` is requested, uv will first check if the virtual
     /// environment contains a PyPy interpreter then check if each executable in
     /// the path is a PyPy interpreter.
+    ///
+    /// uv supports discovering CPython, PyPy, and GraalPy interpreters.
+    /// Unsupported interpreters will be skipped during discovery. If an
+    /// unsupported interpreter implementation is requested, uv will exit with
+    /// an error.
     #[clap(verbatim_doc_comment)]
     #[command(
         after_help = "Use `uv help python` for more details.",
@@ -2773,15 +2779,49 @@ pub struct PythonNamespace {
 #[derive(Subcommand)]
 pub enum PythonCommand {
     /// List the available Python installations.
+    ///
+    /// By default, installed Python versions and the downloads for latest
+    /// available patch version of each supported Python major version are
+    /// shown.
+    ///
+    /// The displayed versions are filtered by the `--python-preference` option,
+    /// i.e., if using `only-system`, no managed Python versions will be shown.
+    ///
+    /// Use `--all-versions` to view all available patch versions.
+    ///
+    /// Use `--only-installed` to omit available downloads.
     List(PythonListArgs),
 
     /// Download and install Python versions.
+    ///
+    /// Multiple Python versions may be requested.
+    ///
+    /// Supports CPython and PyPy.
+    ///
+    /// CPython distributions are downloaded from the `python-build-standalone` project.
+    ///
+    /// Python versions are installed into the uv Python directory, which can be
+    /// retrieved with `uv python dir`. A `python` executable is not made
+    /// globally available, managed Python versions are only used in uv
+    /// commands or in active virtual environments.
+    ///
+    /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
 
     /// Search for a Python installation.
+    ///
+    /// Displays the path to the Python executable.
+    ///
+    /// See `uv help python` to view supported request formats and details on
+    /// discovery behavior.
     Find(PythonFindArgs),
 
     /// Pin to a specific Python version.
+    ///
+    /// Writes the pinned version to a `.python-version` file, which is then
+    /// read by other uv commands when determining the required Python version.
+    ///
+    /// See `uv help python` to view supported request formats.
     Pin(PythonPinArgs),
 
     /// Show the uv Python installation directory.
@@ -2794,15 +2834,21 @@ pub enum PythonCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonListArgs {
-    /// List all Python versions, including outdated patch versions.
+    /// List all Python versions, including old patch versions.
+    ///
+    /// By default, only the latest patch version is shown for each minor version.
     #[arg(long)]
     pub all_versions: bool,
 
-    /// List Python installations for all platforms.
+    /// List Python downloads for all platforms.
+    ///
+    /// By default, only downloads for the current platform are shown.
     #[arg(long)]
     pub all_platforms: bool,
 
     /// Only show installed Python versions, exclude available downloads.
+    ///
+    /// By default, available downloads for the current platform are shown.
     #[arg(long)]
     pub only_installed: bool,
 }
@@ -2821,6 +2867,9 @@ pub struct PythonInstallArgs {
     pub targets: Vec<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
+    ///
+    /// By default, uv will exit successfully if the version is already
+    /// installed.
     #[arg(long, short, alias = "force")]
     pub reinstall: bool,
 }
@@ -2863,14 +2912,20 @@ pub struct PythonPinArgs {
     /// Write the resolved Python interpreter path instead of the request.
     ///
     /// Ensures that the exact same interpreter is used.
+    ///
+    /// This option is usually not safe to use when committing the
+    /// `.python-version` file to version control.
     #[arg(long, overrides_with("resolved"))]
     pub resolved: bool,
 
     #[arg(long, overrides_with("no_resolved"), hide = true)]
     pub no_resolved: bool,
 
-    /// Avoid validating the Python pin against the workspace in the current directory or any parent
-    /// directory.
+    /// Avoid validating the Python pin is compatible with the workspace.
+    ///
+    /// By default, a workspace is discovered in the current directory or any parent
+    /// directory. If a workspace is found, the Python pin is validated against
+    /// the workspace's `requires-python` constraint.
     #[arg(long)]
     pub no_workspace: bool,
 }
