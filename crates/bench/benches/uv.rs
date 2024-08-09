@@ -24,7 +24,7 @@ fn resolve_warm_jupyter_universal(c: &mut Criterion<WallTime>) {
 
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     let run = setup(Manifest::simple(vec![
-        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]").unwrap()),
+        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]==2.9.3").unwrap()),
         Requirement::from(
             pep508_rs::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
         ),
@@ -44,12 +44,12 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
 // }
 
 criterion_group!(
-    resolve,
+    uv,
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
     resolve_warm_airflow
 );
-criterion_main!(resolve);
+criterion_main!(uv);
 
 fn setup(manifest: Manifest) -> impl Fn(bool) {
     let runtime = tokio::runtime::Builder::new_current_thread()
