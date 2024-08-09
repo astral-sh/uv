@@ -298,6 +298,16 @@ pub enum Commands {
     )]
     Pip(PipNamespace),
     /// Create a virtual environment.
+    ///
+    /// By default, creates a virtual environment named `.venv` in the working
+    /// directory. An alternative path may be provided positionally.
+    ///
+    /// If a virtual environment exists at the target path, it will be removed
+    /// and a new, empty virtual environment will be created.
+    ///
+    /// When using uv, the virtual environment does not need to be activated. uv
+    /// will find a virtual environment (named `.venv`) in the working directory
+    /// or any parent directories.
     #[command(
         alias = "virtualenv",
         alias = "v",
@@ -1887,13 +1897,13 @@ pub struct VenvArgs {
 
     /// Provide an alternative prompt prefix for the virtual environment.
     ///
-    /// The default behavior depends on whether the virtual environment path is provided:
-    /// - If provided (`uv venv project`), the prompt is set to the virtual environment's directory name.
-    /// - If not provided (`uv venv`), the prompt is set to the current directory's name.
+    /// By default, the prompt is dependent on whether a path was provided to
+    /// `uv venv`. If provided (e.g, `uv venv project`), the prompt is set to
+    /// the directory name. If not provided (`uv venv`), the prompt is set to
+    /// the current directory's name.
     ///
-    /// Possible values:
-    /// - `.`: Use the current directory name.
-    /// - Any string: Use the given string.
+    /// If "." is provided, the the current directory name will be used
+    /// regardless of whether a path was provided to `uv venv`.
     #[arg(long, verbatim_doc_comment)]
     pub prompt: Option<String>,
 
@@ -1902,7 +1912,7 @@ pub struct VenvArgs {
     /// Unlike `pip`, when a virtual environment is created with `--system-site-packages`, uv will
     /// _not_ take system site packages into account when running commands like `uv pip list` or
     /// `uv pip install`. The `--system-site-packages` flag will provide the virtual environment
-    /// with access to the system site packages directory at runtime, but it will not affect the
+    /// with access to the system site packages directory at runtime, but will not affect the
     /// behavior of uv commands.
     #[arg(long)]
     pub system_site_packages: bool,
