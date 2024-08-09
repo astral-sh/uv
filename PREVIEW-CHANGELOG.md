@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.35
+
+### Preview features
+
+- Add CLI flags to reference documentation ([#5926](https://github.com/astral-sh/uv/pull/5926))
+- Add `update` alias for `uv tool upgrade` ([#5948](https://github.com/astral-sh/uv/pull/5948))
+- Add caveat about pip interface name ([#5940](https://github.com/astral-sh/uv/pull/5940))
+- Add hint for long help to `uvx` ([#5971](https://github.com/astral-sh/uv/pull/5971))
+- Avoid requires-python warning in virtual-only workspace ([#5895](https://github.com/astral-sh/uv/pull/5895))
+- Discard forks when using `--upgrade` ([#5905](https://github.com/astral-sh/uv/pull/5905))
+- Document the `tool upgrade` command ([#5947](https://github.com/astral-sh/uv/pull/5947))
+- Document virtual environment discovery ([#5965](https://github.com/astral-sh/uv/pull/5965))
+- Enable mirror for `python-build-standalone` downloads ([#5719](https://github.com/astral-sh/uv/pull/5719))
+- Fix reuse of Git commits in lockfile ([#5908](https://github.com/astral-sh/uv/pull/5908))
+- Ignore local configuration in tool commands ([#5923](https://github.com/astral-sh/uv/pull/5923))
+- Improve the CLI documentation for `uv add` ([#5914](https://github.com/astral-sh/uv/pull/5914))
+- Improve the CLI documentation for `uv remove` ([#5916](https://github.com/astral-sh/uv/pull/5916))
+- Improve the `uv lock` CLI documentation ([#5932](https://github.com/astral-sh/uv/pull/5932))
+- Improve the `uv python` CLI documentation ([#5961](https://github.com/astral-sh/uv/pull/5961))
+- Improve the `uv sync` CLI documentation ([#5930](https://github.com/astral-sh/uv/pull/5930))
+- Improve the `uv tree` CLI documentation ([#5917](https://github.com/astral-sh/uv/pull/5917))
+- Fix link to tools concept page ([#5906](https://github.com/astral-sh/uv/pull/5906))
+- Add `uv tool upgrade` command ([#5197](https://github.com/astral-sh/uv/pull/5197))
+- Implement marker trees using algebraic decision diagrams ([#5898](https://github.com/astral-sh/uv/pull/5898))
+- Make repeated `uv add` operations simpler ([#5922](https://github.com/astral-sh/uv/pull/5922))
+- Move some documents to relevant sections ([#5968](https://github.com/astral-sh/uv/pull/5968))
+- Rename `distribution` to `packages` in lockfile ([#5861](https://github.com/astral-sh/uv/pull/5861))
+- Respect `--upgrade-package` in tool install ([#5941](https://github.com/astral-sh/uv/pull/5941))
+- Respect `--upgrade-package` when resolving from lockfile ([#5907](https://github.com/astral-sh/uv/pull/5907))
+- Retain and respect settings in tool upgrades ([#5937](https://github.com/astral-sh/uv/pull/5937))
+- Search beyond workspace root when discovering configuration ([#5931](https://github.com/astral-sh/uv/pull/5931))
+- Show build and install summaries in `uv run` and `uv tool run` ([#5899](https://github.com/astral-sh/uv/pull/5899))
+- Support relative path wheels ([#5969](https://github.com/astral-sh/uv/pull/5969))
+- Update the interface for declaring Python download preferences ([#5936](https://github.com/astral-sh/uv/pull/5936))
+- Use cached environments for `--with` layers ([#5897](https://github.com/astral-sh/uv/pull/5897))
+
 ## 0.2.34
 
 ### Preview features
