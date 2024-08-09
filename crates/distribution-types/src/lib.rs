@@ -216,8 +216,12 @@ pub struct DirectUrlBuiltDist {
 #[derive(Debug, Clone, Hash)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
-    /// The path to the wheel.
-    pub path: PathBuf,
+    /// The resolved, absolute path to the wheel which we use for installing.
+    pub install_path: PathBuf,
+    /// The absolute path or path relative to the workspace root pointing to the wheel
+    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+    pub lock_path: PathBuf,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -372,7 +376,8 @@ impl Dist {
                 }
                 Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                     filename,
-                    path: canonicalized_path,
+                    install_path: canonicalized_path.clone(),
+                    lock_path: lock_path.to_path_buf(),
                     url,
                 })))
             }

@@ -828,16 +828,6 @@ impl Package {
                     };
                     Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
                 }
-                Source::Path(path) => {
-                    let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
-                    let path_dist = PathBuiltDist {
-                        filename,
-                        url: verbatim_url(workspace_root.join(path), &self.id)?,
-                        path: path.clone(),
-                    };
-                    let built_dist = BuiltDist::Path(path_dist);
-                    Ok(Dist::Built(built_dist))
-                }
                 Source::Direct(url, direct) => {
                     let filename: WheelFilename = self.wheels[best_wheel_index].filename.clone();
                     let url = Url::from(ParsedArchiveUrl {
@@ -868,7 +858,29 @@ impl Package {
                     source_type: "editable",
                 }
                 .into()),
+                Source::Path(_) => Err(LockErrorKind::InvalidWheelSource {
+                    id: self.id.clone(),
+                    source_type: "wheel",
+                }
+                .into()),
             };
+        }
+
+        // Wheel path dependencies are different: We can't store relative paths in the URL, so
+        // we store them without wheel entry. We also don't hash-check for local files.
+        if let Source::Path(path) = &self.id.source {
+            if let Some(filename) = path.file_name().and_then(|filename| {
+                WheelFilename::from_str(filename.to_string_lossy().as_ref()).ok()
+            }) {
+                let path_dist = PathBuiltDist {
+                    filename,
+                    url: verbatim_url(workspace_root.join(path), &self.id)?,
+                    install_path: workspace_root.join(path),
+                    lock_path: path.clone(),
+                };
+                let built_dist = BuiltDist::Path(path_dist);
+                return Ok(Dist::Built(built_dist));
+            }
         }
 
         if let Some(sdist) = self.to_source_dist(workspace_root)? {
@@ -1531,7 +1543,7 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist) -> Source {
-        Source::Path(path_dist.path.clone())
+        Source::Path(path_dist.lock_path.clone())
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist) -> Source {
@@ -2109,7 +2121,9 @@ impl Wheel {
             BuiltDist::DirectUrl(ref direct_dist) => {
                 Ok(vec![Wheel::from_direct_dist(direct_dist, hashes)])
             }
-            BuiltDist::Path(ref path_dist) => Ok(vec![Wheel::from_path_dist(path_dist, hashes)]),
+            // The URL would contain the absolute URL, while we want to support having the relative
+            // path only.
+            BuiltDist::Path(ref _path_dist) => Ok(vec![]),
         }
     }
 
@@ -2145,15 +2159,6 @@ impl Wheel {
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             filename: direct_dist.filename.clone(),
-        }
-    }
-
-    fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Wheel {
-        Wheel {
-            url: path_dist.url.to_url().into(),
-            hash: hashes.iter().max().cloned().map(Hash::from),
-            size: None,
-            filename: path_dist.filename.clone(),
         }
     }
 

@@ -89,7 +89,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",  self.client.unmanaged.timeout()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.client.unmanaged.timeout()
                 ),
             )
         } else {
@@ -351,8 +351,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     wheel.filename.stem(),
                 );
 
-                self.load_wheel(&wheel.path, &wheel.filename, cache_entry, dist, hashes)
-                    .await
+                self.load_wheel(
+                    &wheel.install_path,
+                    &wheel.filename,
+                    cache_entry,
+                    dist,
+                    hashes,
+                )
+                .await
             }
         }
     }
