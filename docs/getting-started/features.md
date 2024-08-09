@@ -15,7 +15,7 @@ Installing and managing Python itself.
 - `uv python pin`: Pin the current project to use a specific Python version.
 - `uv python uninstall`: Uninstall a Python version.
 
-See the [guide on installing Python](./guides/install-python.md) to get started.
+See the [guide on installing Python](../guides/install-python.md) to get started.
 
 ## Scripts
 
@@ -23,7 +23,7 @@ Executing standalone Python scripts, e.g., `example.py`.
 
 - `uv run`: Run a script.
 
-See the [guide on running scripts](./guides/scripts.md) to get started.
+See the [guide on running scripts](../guides/scripts.md) to get started.
 
 ## Projects
 
@@ -37,7 +37,7 @@ Creating and working on Python projects, i.e., with a `pyproject.toml`.
 - `uv run`: Run a command in the project environment.
 - `uv tree`: View the dependency tree for the project.
 
-See the [guide on projects](./guides/projects.md) to get started.
+See the [guide on projects](../guides/projects.md) to get started.
 
 ## Tools
 
@@ -49,7 +49,7 @@ Running and installing tools published to Python package indexes, e.g., `ruff` o
 - `uv tool list`: List installed tools.
 - `uv tool update-shell`: Update the shell to include tool executables.
 
-See the [guide on tools](./guides/tools.md) to get started.
+See the [guide on tools](../guides/tools.md) to get started.
 
 ## The pip interface
 
@@ -60,7 +60,7 @@ Creating virtual environments (replacing `venv` and `virtualenv`):
 
 - `uv venv`: Create a new virtual environment.
 
-See the documentation on [using environments](./pip/environments.md) for details.
+See the documentation on [using environments](../pip/environments.md) for details.
 
 Managing packages in an environment (replacing [`pip`](https://github.com/pypa/pip) and
 [`pipdeptree`](https://github.com/tox-dev/pipdeptree)):
@@ -73,18 +73,18 @@ Managing packages in an environment (replacing [`pip`](https://github.com/pypa/p
 - `uv pip uninstall`: Uninstall packages.
 - `uv pip tree`: View the dependency tree for the environment.
 
-See the documentation on [managing packages](./pip/packages.md) for details.
+See the documentation on [managing packages](../pip/packages.md) for details.
 
 Locking packages in an environment (replacing [`pip-tools`](https://github.com/jazzband/pip-tools)):
 
 - `uv pip compile`: Compile requirements into a lockfile.
 - `uv pip sync`: Sync an environment with a lockfile.
 
-See the documentation on [locking environments](./pip/compile.md) for details.
+See the documentation on [locking environments](../pip/compile.md) for details.
 
 !!! important
 
-    These commands do not exactly implement the interfaces and behavior of the tools they are based on. The further you stray from common workflows, the more likely you are to encounter differences. Consult the [pip-compatibility guide](./pip/compatibility.md) for details.
+    These commands do not exactly implement the interfaces and behavior of the tools they are based on. The further you stray from common workflows, the more likely you are to encounter differences. Consult the [pip-compatibility guide](../pip/compatibility.md) for details.
 
 ## Utility
 
@@ -100,5 +100,5 @@ self-update:
 
 ## Next steps
 
-Read the [guides](./guides/index.md) for an introduction to each feature or check out
-[concept](./concepts/index.md) pages for in-depth details about uv's features.
+Read the [guides](../guides/index.md) for an introduction to each feature or check out
+[concept](../concepts/index.md) pages for in-depth details about uv's features.
