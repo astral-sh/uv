@@ -320,6 +320,18 @@ fn run_pep723_script() -> Result<()> {
     Reading inline script metadata from: main.py
     "###);
 
+    // Running a script with `--no-project` should warn.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("--no-project").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    warning: `--no-project` is a no-op for Python scripts with inline metadata, which always run in isolation
+    "###);
+
     Ok(())
 }
 
@@ -1117,6 +1129,30 @@ fn run_no_project() -> Result<()> {
 
     ----- stderr -----
     warning: `uv run` is experimental and may change without warning
+    "###);
+
+    // `run --no-project` should not (but it should still run in the same environment, as it would
+    // if there were no project at all).
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    "###);
+
+    // `run --no-project --locked` should fail.
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    warning: `--locked` has no effect when used alongside `--no-project`
     "###);
 
     Ok(())
