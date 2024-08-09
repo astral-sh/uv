@@ -71,15 +71,51 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
     let should_page = !no_pager && !is_root && is_terminal;
 
     if should_page {
-        if let Ok(less) = which("less") {
-            // When using less, we use the command name as the file name and can support colors
-            let prompt = format!("help: uv {}", query.join(" "));
-            spawn_pager(less, &["-R", "-P", &prompt], &help_ansi)?;
-        } else if let Ok(more) = which("more") {
-            // When using more, we skip the ANSI color codes
-            spawn_pager(more, &[], &help)?;
-        } else {
-            writeln!(printer.stdout(), "{help_ansi}")?;
+        match std::env::var_os("PAGER") {
+            Some(pager) => {
+                // When using a pager, we use the command name as the file name and can support colors
+                match pager.to_str() {
+                    Some(pager_str) => {
+                        let mut parts = pager_str.split_whitespace();
+                        let pager_command = parts.next().unwrap_or("");
+                        let pager_args: Vec<&str> = parts.collect();
+
+                        let pager_name = std::path::Path::new(pager_command)
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .unwrap_or("");
+
+                        if pager_command.is_empty() {
+                            writeln!(printer.stdout(), "{help_ansi}")?;
+                        } else if pager_name == "less" {
+                            let prompt = format!("help: uv {}", query.join(" "));
+                            let args = if pager_args.is_empty() {
+                                vec!["-R", "-P", &prompt]
+                            } else {
+                                pager_args
+                            };
+                            spawn_pager(pager_command, &args, &help_ansi)?;
+                        } else {
+                            spawn_pager(pager_command, &pager_args, &help)?;
+                        }
+                    }
+                    None => {
+                        writeln!(printer.stdout(), "{help_ansi}")?;
+                    }
+                }
+            }
+            None => {
+                if let Ok(less) = which("less") {
+                    // When using less, we use the command name as the file name and can support colors
+                    let prompt = format!("help: uv {}", query.join(" "));
+                    spawn_pager(less, &["-R", "-P", &prompt], &help_ansi)?;
+                } else if let Ok(more) = which("more") {
+                    // When using more, we skip the ANSI color codes
+                    spawn_pager(more, &[], &help)?;
+                } else {
+                    writeln!(printer.stdout(), "{help_ansi}")?;
+                }
+            }
         }
     } else {
         writeln!(printer.stdout(), "{help_ansi}")?;
