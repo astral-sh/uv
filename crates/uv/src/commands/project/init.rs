@@ -167,10 +167,7 @@ async fn init_project(
     printer: Printer,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
-    let workspace = if no_workspace {
-        None
-    } else {
-        // Attempt to find a workspace root.
+    let workspace = {
         let parent = path.parent().expect("Project path has no parent");
         match Workspace::discover(
             parent,
@@ -186,6 +183,17 @@ async fn init_project(
             Err(WorkspaceError::NonWorkspace(_)) => None,
             Err(err) => return Err(err.into()),
         }
+    };
+
+    // Ignore the current workspace, if `--no-workspace` was provided.
+    let workspace = if no_workspace {
+        // If the user runs with `--no-workspace` and we can't find a workspace, warn.
+        if workspace.is_none() {
+            warn_user_once!("`--no-workspace` was provided, but no workspace was found");
+        }
+        None
+    } else {
+        workspace
     };
 
     // Add a `requires-python` field to the `pyproject.toml`.

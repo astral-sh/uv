@@ -187,11 +187,42 @@ pub(crate) async fn run(
     // Discover and sync the base environment.
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
+        // If we found a PEP 723 script and the user provided a project-only setting, warn.
+        if !extras.is_empty() {
+            warn_user_once!("Extras are not supported for Python scripts with inline metadata");
+        }
+        if !dev {
+            warn_user_once!("`--no-dev` is not supported for Python scripts with inline metadata");
+        }
+        if no_project {
+            warn_user_once!(
+                "`--no-project` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if package.is_some() {
+            warn_user_once!(
+                "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if locked {
+            warn_user_once!(
+                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if frozen {
+            warn_user_once!(
+                "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if isolated {
+            warn_user_once!(
+                "`--isolated` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+
         script_interpreter
     } else {
-        let project = if no_project {
-            None
-        } else if let Some(package) = package {
+        let project = if let Some(package) = package {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
@@ -207,6 +238,47 @@ pub(crate) async fn run(
                 Err(WorkspaceError::NonWorkspace(_)) => None,
                 Err(err) => return Err(err.into()),
             }
+        };
+
+        let project = if no_project {
+            // If the user runs with `--no-project` and we can't find a project, warn.
+            if project.is_none() {
+                warn_user_once!("`--no-project` was provided, but no project was found");
+            }
+
+            // If the user ran with `--no-project` and provided a project-only setting, warn.
+            if !extras.is_empty() {
+                warn_user_once!("Extras have no effect when used alongside `--no-project`");
+            }
+            if !dev {
+                warn_user_once!("`--no-dev` has no effect when used alongside `--no-project`");
+            }
+            if locked {
+                warn_user_once!("`--locked` has no effect when used alongside `--no-project`");
+            }
+            if frozen {
+                warn_user_once!("`--frozen` has no effect when used alongside `--no-project`");
+            }
+
+            None
+        } else {
+            // If we can't find a project and the user provided a project-only setting, warn.
+            if project.is_none() {
+                if !extras.is_empty() {
+                    warn_user_once!("Extras have no effect when used outside of a project");
+                }
+                if !dev {
+                    warn_user_once!("`--no-dev` has no effect when used outside of a project");
+                }
+                if locked {
+                    warn_user_once!("`--locked` has no effect when used outside of a project");
+                }
+                if frozen {
+                    warn_user_once!("`--frozen` has no effect when used outside of a project");
+                }
+            }
+
+            project
         };
 
         let interpreter = if let Some(project) = project {
