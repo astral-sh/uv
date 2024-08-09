@@ -983,7 +983,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 Update the project's environment (experimental).
 
-Syncing ensures that all dependencies of the project are installed and up to date with the lockfile. Syncing also removes packages that are not declared as dependencies of the project.
+Syncing ensures that all project dependencies are installed and up-to-date with the lockfile. Syncing also removes packages that are not declared as dependencies of the project.
 
 If the project virtual environment (`.venv`) does not exist, it will be created.
 
