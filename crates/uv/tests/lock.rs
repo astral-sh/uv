@@ -503,6 +503,92 @@ fn lock_sdist_git() -> Result<()> {
 /// Lock a Git requirement using PEP 508.
 #[test]
 #[cfg(feature = "git")]
+fn lock_sdist_git_subdirectory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a"]
+        "#,
+    )?;
+
+    deterministic! { context =>
+        uv_snapshot!(context.filters(), context.lock(), @r###"
+                success: true
+                exit_code: 0
+                ----- stdout -----
+
+                ----- stderr -----
+                warning: `uv lock` is experimental and may change without warning
+                Resolved 2 packages in [TIME]
+                "###);
+
+        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "example-pkg-a"
+            version = "1"
+            source = { git = "https://github.com/pypa/sample-namespace-packages.git?subdirectory=pkg_resources%2Fpkg_a&rev=df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45" }
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "example-pkg-a" },
+            ]
+            "###
+            );
+        });
+    }
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+/// Lock a Git requirement using PEP 508.
+#[test]
+#[cfg(feature = "git")]
 fn lock_sdist_git_pep508() -> Result<()> {
     let context = TestContext::new("3.12");
 
