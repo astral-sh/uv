@@ -38,7 +38,7 @@
 //! Additionally, the implementation in this module uses complemented edges, meaning a marker tree and
 //! it's complement are represented by the same node internally. This allows cheap constant-time marker
 //! tree negation. It also allows us to only implement a single operation for both `AND` and `OR`, implementing
-//! the other in terms of its DeMorgan Complement.
+//! the other in terms of its De Morgan Complement.
 //!
 //! ADDs are created and managed through the global [`Interner`]. A given ADD is referenced through
 //! a [`NodeId`], which represents a potentially complemented reference to a [`Node`] in the interner,
@@ -215,7 +215,7 @@ impl InternerGuard<'_> {
     // Returns a decision node representing the disjunction of two nodes.
     pub(crate) fn or(&mut self, x: NodeId, y: NodeId) -> NodeId {
         // We take advantage of cheap negation here and implement OR in terms
-        // of it's DeMorgan complement.
+        // of it's De Morgan complement.
         self.and(x.not(), y.not()).not()
     }
 
