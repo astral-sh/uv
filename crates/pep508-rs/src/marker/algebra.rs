@@ -21,7 +21,7 @@
 //! Specifically, a marker tree is represented as a Reduced Ordered ADD. An ADD is ordered if
 //! different variables appear in the same order on all paths from the root. Additionally, an ADD
 //! is reduced if:
-//! - Isomoprhic nodes are merged.
+//! - Isomorphic nodes are merged.
 //! - Nodes with isomorphic children are eliminated.
 //!
 //! These two rules provide an important guarantee for marker trees: marker trees are canonical for
@@ -37,7 +37,13 @@
 //!
 //! Additionally, the implementation in this module uses complemented edges, meaning a marker tree and
 //! it's complement are represented by the same node internally. This allows cheap constant-time marker
-//! tree negation.
+//! tree negation. It also allows us to only implement a single operation for both `AND` and `OR`, implementing
+//! the other in terms of its DeMorgan Complement.
+//!
+//! ADDs are created and managed through the global [`Interner`]. A given ADD is referenced through
+//! a [`NodeId`], which represents a potentially complemented reference to a [`Node`] in the interner,
+//! or a terminal `true`/`false` node. Interning allows the reduction rule that isomorphic nodes are
+//! merged to be applied globally.
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Bound;
@@ -60,7 +66,7 @@ pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default
 
 /// An interner for decision nodes.
 ///
-/// Interning decision nodes allows isomoprhic nodes to be automatically merged.
+/// Interning decision nodes allows isomorphic nodes to be automatically merged.
 /// It also allows nodes to cheaply compared.
 #[derive(Default)]
 pub(crate) struct Interner {
@@ -83,7 +89,7 @@ struct InternerState {
     unique: FxHashMap<Node, NodeId>,
 
     /// A cache for `AND` operations between two nodes.
-    /// Note that that `OR` is implemented in terms of `AND`.
+    /// Note that `OR` is implemented in terms of `AND`.
     cache: FxHashMap<(NodeId, NodeId), NodeId>,
 }
 
@@ -164,7 +170,7 @@ impl InternerGuard<'_> {
             //
             // Note that in the presence of the `in` operator, we may not be able to simplify
             // some marker trees to a constant `true` or `false`. For example, it is not trivial to
-            // detect that `os_name < 'z' and os_name in 'Linux'` is unsatisfiable.
+            // detect that `os_name > 'z' and os_name in 'Linux'` is unsatisfiable.
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::In,
@@ -274,7 +280,9 @@ impl InternerGuard<'_> {
 
     // Restrict the output of a given boolean variable in the tree.
     //
-    // This allows a tree to be simplified if a variable is known to be `true`.
+    // If the provided function `f` returns a `Some` boolean value, the tree will be simplified
+    // with the assumption that the given variable is restricted to that value. If the function
+    // returns `None`, the variable will not be affected.
     pub(crate) fn restrict(&mut self, i: NodeId, f: &impl Fn(&Variable) -> Option<bool>) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
@@ -297,8 +305,9 @@ impl InternerGuard<'_> {
 
     // Restrict the output of a given version variable in the tree.
     //
-    // This allows the tree to be simplified if a variable is known to be restricted to a
-    // particular range of outputs.
+    // If the provided function `f` returns a `Some` range, the tree will be simplified with
+    // the assumption that the given variable is restricted to values in that range. If the function
+    // returns `None`, the variable will not be affected.
     pub(crate) fn restrict_versions(
         &mut self,
         i: NodeId,
@@ -392,7 +401,7 @@ impl Node {
     }
 }
 
-/// An ID representing a unique decision node.
+/// An ID representing a reference to a decision node in the [`Interner`].
 ///
 /// The lowest bit of the ID is used represent complemented edges.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -407,31 +416,26 @@ impl NodeId {
 
     /// Create a new, optionally complemented, [`NodeId`] with the given index.
     fn new(index: usize, complement: bool) -> NodeId {
-        NodeId(((index + 1) << 1) | usize::from(complement))
+        // Ensure the index does not interfere with the lowest complement bit.
+        let index = (index + 1) << 1;
+        NodeId(index | usize::from(complement))
     }
 
     /// Returns the index of this ID, ignoring the complemented edge.
     fn index(self) -> usize {
+        // Ignore the lowest bit and bring indices back to starting at `0`.
         (self.0 >> 1) - 1
     }
 
     /// Returns `true` if this ID represents a complemented edge.
     fn is_complement(self) -> bool {
+        // Whether the lowest bit is set.
         (self.0 & 1) == 1
-    }
-
-    /// Returns `true` if this node represents an unsatisfiable node.
-    pub(crate) fn is_false(self) -> bool {
-        self == NodeId::FALSE
-    }
-
-    /// Returns `true` if this node represents a trivially `true` node.
-    pub(crate) fn is_true(self) -> bool {
-        self == NodeId::TRUE
     }
 
     /// Returns the complement of this node.
     pub(crate) fn not(self) -> NodeId {
+        // Toggle the lowest bit.
         NodeId(self.0 ^ 1)
     }
 
@@ -445,6 +449,16 @@ impl NodeId {
         } else {
             self
         }
+    }
+
+    /// Returns `true` if this node represents an unsatisfiable node.
+    pub(crate) fn is_false(self) -> bool {
+        self == NodeId::FALSE
+    }
+
+    /// Returns `true` if this node represents a trivially `true` node.
+    pub(crate) fn is_true(self) -> bool {
+        self == NodeId::TRUE
     }
 }
 
@@ -519,14 +533,16 @@ impl Edges {
 
     /// Returns the [`Edges`] for a version specifier.
     fn from_specifier(specifier: &VersionSpecifier) -> Edges {
-        // The decision diagram relies on the assumption that the negation of a marker tree
-        // is the complement of the marker space. However, pre-release versions violate
-        // this assumption. For example, the marker `python_version > '3.9' or python_version <= '3.9'`
-        // does not match `python_version == 3.9.0a0`. However, it's negation,
-        // `python_version > '3.9' and python_version <= '3.9'` also does not include `3.9.0a0`, and is
-        // actually `false`.
+        // The decision diagram relies on the assumption that the negation of a marker tree is
+        // the complement of the marker space. However, pre-release versions violate this assumption.
+        // For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
+        // does not match `python_full_version == 3.9.0a0`. However, it's negation,
+        // `python_full_version > '3.9' and python_full_version <= '3.9'` also does not include
+        // `3.9.0a0`, and is actually `false`.
         //
-        // For this reason we ignore pre-release versions completely when evaluating markers.
+        // For this reason we ignore pre-release versions entirely when evaluating markers.
+        // Note that `python_version` cannot take on pre-release values so this is necessary for
+        // simplifying ranges, but for `python_full_version` this decision is a semantic change.
         let specifier = PubGrubSpecifier::from_release_specifier(specifier).unwrap();
         Edges::Version {
             edges: Edges::from_range(&specifier.into()),
@@ -538,8 +554,6 @@ impl Edges {
     where
         T: Ord + Clone,
     {
-        let complement = range.complement();
-
         let mut edges = SmallVec::new();
 
         // Add the `true` edges.
@@ -549,7 +563,7 @@ impl Edges {
         }
 
         // Add the `false` edges.
-        for (start, end) in complement.iter() {
+        for (start, end) in range.complement().iter() {
             let range = Range::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::FALSE));
         }

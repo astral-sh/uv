@@ -10,6 +10,13 @@ use rustc_hash::FxBuildHasher;
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 
 /// Returns a simplified DNF expression for a given marker tree.
+///
+/// Marker trees are represented as decision diagrams that cannot be directly serialized to.
+/// a boolean expression. Instead, you must traverse and collect all possible solutions to the
+/// diagram, which can be used to create a DNF expression, or all non-solutions to the diagram,
+/// which can be used to create a CNF expression.
+///
+/// We choose DNF as it is easier to simplify for user-facing output.
 pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let mut dnf = Vec::new();
     collect_dnf(tree, &mut dnf, &mut Vec::new());
@@ -162,19 +169,21 @@ fn collect_dnf(
 
 /// Simplifies a DNF expression.
 ///
-/// A decision tree is canonical, but only for a given variable order. Depending on the
+/// A decision diagram is canonical, but only for a given variable order. Depending on the
 /// pre-defined order, the DNF expression produced by a decision tree can still be further
 /// simplified.
 ///
-/// Completely simplifying a DNF expression is NP-hard and amounts to the set cover
-/// problem. Additionally, marker expressions can contain complex expressions involving
-/// version ranges that are not trivial to simplify.
+/// For example, the decision diagram for the expression `A or B` will be represented as
+/// `A or (not A and B)` or `B or (not B and A)`, depending on the variable order. In both
+/// cases, the negation in the second clause is redundant.
 ///
-/// Instead, we choose to simplify at the boolean variable level without any truth table
-/// expansion. Combined with the normalization applied by decision trees, this seems to be
-/// sufficient in practice.
+/// Completely simplifying a DNF expression is NP-hard and amounts to the set cover problem.
+/// Additionally, marker expressions can contain complex expressions involving version ranges
+/// that are not trivial to simplify. Instead, we choose to simplify at the boolean variable
+/// level without any truth table expansion. Combined with the normalization applied by decision
+/// trees, this seems to be sufficient in practice.
 ///
-/// Note: This function has quadratic time complexity. However, it not applied on every marker
+/// Note: This function has quadratic time complexity. However, it is not applied on every marker
 /// operation, only to user facing output, which are typically very simple.
 fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
     for i in 0..dnf.len() {
