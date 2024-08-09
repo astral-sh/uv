@@ -2430,7 +2430,7 @@ fn tool_install_settings() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `flask`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask>=3")
         .arg("--resolution=lowest-direct")
