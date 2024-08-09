@@ -591,6 +591,19 @@ pub enum ProjectCommand {
     )]
     Remove(RemoveArgs),
     /// Update the project's environment (experimental).
+    ///
+    /// Syncing ensures that all project dependencies are installed and
+    /// up-to-date with the lockfile. Syncing also removes packages that are not
+    /// declared as dependencies of the project.
+    ///
+    /// If the project virtual environment (`.venv`) does not exist, it will be
+    /// created.
+    ///
+    /// The project is re-locked before syncing unless the `--locked` or
+    /// `--frozen` flag is provided.
+    ///
+    /// uv will search for a project in the current directory or any parent
+    /// directory. If a project cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help sync` for more details.",
         after_long_help = ""
@@ -2154,9 +2167,9 @@ pub struct RunArgs {
     ///
     /// Instead of checking if the lockfile is up-to-date, uses the versions in
     /// the lockfile as the source of truth. If the lockfile is missing, uv will
-    /// exit with an error. If the `pyproject.toml` includes new dependencies
-    /// that have not been included in the lockfile yet, they will not be
-    /// present in the environment.
+    /// exit with an error. If the `pyproject.toml` includes changes to
+    /// dependencies that have not been included in the lockfile yet, they will
+    /// not be present in the environment.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2212,15 +2225,13 @@ pub struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// May be provided more than once.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
-    ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
@@ -2235,18 +2246,31 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// When syncing, make the minimum necessary changes to satisfy the requirements.
+    /// Do not remove extraneous packages.
     ///
-    /// By default, `uv sync` will remove any extraneous packages from the environment, unless
-    /// `--no-build-isolation` is enabled.
+    /// When enabled, uv will make the minimum necessary changes to satisfy the
+    /// requirements.
+    ///
+    /// By default, syncing will remove any extraneous packages from the
+    /// environment, unless `--no-build-isolation` is enabled, in which case
+    /// extra packages are considered necessary for builds.
     #[arg(long)]
     pub no_clean: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Install without updating the `uv.lock` file.
+    /// Sync without updating the `uv.lock` file.
+    ///
+    /// Instead of checking if the lockfile is up-to-date, uses the versions in
+    /// the lockfile as the source of truth. If the lockfile is missing, uv will
+    /// exit with an error. If the `pyproject.toml` includes changes to dependencies
+    /// that have not been included in the lockfile yet, they will not be
+    /// present in the environment.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2259,7 +2283,13 @@ pub struct SyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Sync a specific package in the workspace.
+    /// Sync for a specific package in the workspace.
+    ///
+    /// The workspace's environment (`.venv`) is updated to reflect the subset
+    /// of dependencies declared by the specified workspace member package.
+    ///
+    /// If not in a workspace, or if the workspace member does not exist, uv
+    /// will exit with an error.
     #[arg(long)]
     pub package: Option<PackageName>,
 
@@ -2370,8 +2400,6 @@ pub struct AddArgs {
     pub raw_sources: bool,
 
     /// Commit to use when adding a dependency from Git.
-    ///
-    ///
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub rev: Option<String>,
 
