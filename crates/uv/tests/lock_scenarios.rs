@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.32/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.34/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -666,6 +666,119 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
             { name = "package-a", version = "4.4.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-b", marker = "sys_platform == 'linux'" },
             { name = "package-c", marker = "sys_platform == 'darwin'" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock`
+    context
+        .lock()
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .assert()
+        .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
+
+    Ok(())
+}
+
+/// This test checks that we discard fork markers when using `--upgrade`.
+///
+/// ```text
+/// fork-upgrade
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires foo
+/// │       ├── satisfied by foo-1.0.0
+/// │       └── satisfied by foo-2.0.0
+/// ├── bar
+/// │   ├── bar-1.0.0
+/// │   └── bar-2.0.0
+/// └── foo
+///     ├── foo-1.0.0
+///     │   ├── requires bar==1; sys_platform == "linux"
+///     │   │   └── satisfied by bar-1.0.0
+///     │   └── requires bar==2; sys_platform != "linux"
+///     │       └── satisfied by bar-2.0.0
+///     └── foo-2.0.0
+///         └── requires bar==2
+///             └── satisfied by bar-2.0.0
+/// ```
+#[test]
+fn fork_upgrade() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"fork-upgrade-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''fork-upgrade-foo''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove("UV_EXCLUDE_NEWER");
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+
+        [[package]]
+        name = "package-bar"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_upgrade_bar-2.0.0.tar.gz", hash = "sha256:2e7b5370d7be19b5af56092a8364a2718a7b8516142a12a95656b82d1b9c8cbc" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_upgrade_bar-2.0.0-py3-none-any.whl", hash = "sha256:d8ce562bf363e849fbf4add170a519b5412ab63e378fb4b7ea290183c77616fc" },
+        ]
+
+        [[package]]
+        name = "package-foo"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-bar" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_upgrade_foo-2.0.0.tar.gz", hash = "sha256:77296a92069aa604c7fe1d538cf1698dcdc35b4bc3a4a7b16503d520d871e67e" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_upgrade_foo-2.0.0-py3-none-any.whl", hash = "sha256:f066d0608d24ebdb2c23959810188e2f25947a3b492f1d4402ff203287efaf8a" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "package-foo" },
         ]
         "###
         );
