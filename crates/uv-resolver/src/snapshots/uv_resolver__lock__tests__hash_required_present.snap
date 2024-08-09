@@ -26,9 +26,11 @@ Ok(
                 sdist: None,
                 wheels: [
                     Wheel {
-                        url: UrlString(
-                            "file:///foo/bar/anyio-4.3.0-py3-none-any.whl",
-                        ),
+                        url: Url {
+                            url: UrlString(
+                                "file:///foo/bar/anyio-4.3.0-py3-none-any.whl",
+                            ),
+                        },
                         hash: Some(
                             Hash(
                                 HashDigest {

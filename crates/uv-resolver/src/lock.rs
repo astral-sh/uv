@@ -768,7 +768,7 @@ impl Package {
                         .wheels
                         .iter()
                         .map(|wheel| wheel.to_registry_dist(url.to_url()))
-                        .collect();
+                        .collect::<Result<_, LockError>>()?;
                     let reg_built_dist = RegistryBuiltDist {
                         wheels,
                         best_wheel_index,
@@ -781,7 +781,8 @@ impl Package {
                     let path_dist = PathBuiltDist {
                         filename,
                         url: verbatim_url(workspace_root.join(path), &self.id)?,
-                        path: path.clone(),
+                        install_path: workspace_root.join(path),
+                        lock_path: path.clone(),
                     };
                     let built_dist = BuiltDist::Path(path_dist);
                     Ok(Dist::Built(built_dist))
@@ -919,7 +920,8 @@ impl Package {
                 };
 
                 let file_url = sdist.url().ok_or_else(|| LockErrorKind::MissingUrl {
-                    id: self.id.clone(),
+                    name: self.id.name.clone(),
+                    version: self.id.version.clone(),
                 })?;
                 let filename = sdist
                     .filename()
@@ -983,7 +985,7 @@ impl Package {
                 // Add any wheels.
                 for wheel in &self.wheels {
                     let hash = wheel.hash.as_ref().map(|h| h.0.clone());
-                    let wheel = wheel.to_registry_dist(url.to_url());
+                    let wheel = wheel.to_registry_dist(url.to_url())?;
                     let compat =
                         WheelCompatibility::Compatible(HashComparison::Matched, None, None);
                     prioritized_dist.insert_built(wheel, hash, compat);
@@ -1474,7 +1476,7 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist) -> Source {
-        Source::Path(path_dist.path.clone())
+        Source::Path(path_dist.lock_path.clone())
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist) -> Source {
@@ -2002,7 +2004,7 @@ struct Wheel {
     /// against was found. The location does not need to exist in the future,
     /// so this should be treated as only a hint to where to look and/or
     /// recording where the wheel file originally came from.
-    url: UrlString,
+    url: WheelWireSource,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -2075,7 +2077,7 @@ impl Wheel {
         let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
         let size = wheel.file.size;
         Ok(Wheel {
-            url,
+            url: WheelWireSource::Url { url },
             hash,
             size,
             filename,
@@ -2084,7 +2086,9 @@ impl Wheel {
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
-            url: direct_dist.url.to_url().into(),
+            url: WheelWireSource::Url {
+                url: direct_dist.url.to_url().into(),
+            },
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             filename: direct_dist.filename.clone(),
@@ -2093,15 +2097,27 @@ impl Wheel {
 
     fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
-            url: path_dist.url.to_url().into(),
+            url: WheelWireSource::Filename {
+                filename: path_dist.filename.clone(),
+            },
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
             filename: path_dist.filename.clone(),
         }
     }
 
-    fn to_registry_dist(&self, url: Url) -> RegistryBuiltWheel {
+    fn to_registry_dist(&self, url: Url) -> Result<RegistryBuiltWheel, LockError> {
         let filename: WheelFilename = self.filename.clone();
+        let url_string = match &self.url {
+            WheelWireSource::Url { url } => url.clone(),
+            WheelWireSource::Filename { .. } => {
+                return Err(LockErrorKind::MissingUrl {
+                    name: self.filename.name.clone(),
+                    version: self.filename.version.clone(),
+                }
+                .into())
+            }
+        };
         let file = Box::new(distribution_types::File {
             dist_info_metadata: false,
             filename: filename.to_string(),
@@ -2109,25 +2125,22 @@ impl Wheel {
             requires_python: None,
             size: self.size,
             upload_time_utc_ms: None,
-            url: FileLocation::AbsoluteUrl(self.url.clone()),
+            url: FileLocation::AbsoluteUrl(url_string),
             yanked: None,
         });
         let index = IndexUrl::Url(VerbatimUrl::from_url(url));
-        RegistryBuiltWheel {
+        Ok(RegistryBuiltWheel {
             filename,
             file,
             index,
-        }
+        })
     }
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
 struct WheelWire {
-    /// A URL or file path (via `file://`) where the wheel that was locked
-    /// against was found. The location does not need to exist in the future,
-    /// so this should be treated as only a hint to where to look and/or
-    /// recording where the wheel file originally came from.
-    url: UrlString,
+    #[serde(flatten)]
+    url: WheelWireSource,
     /// A hash of the built distribution.
     ///
     /// This is only present for wheels that come from registries and direct
@@ -2140,11 +2153,39 @@ struct WheelWire {
     size: Option<u64>,
 }
 
+#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+enum WheelWireSource {
+    /// Used for all wheels except path wheels.
+    Url {
+        /// A URL or file path (via `file://`) where the wheel that was locked
+        /// against was found. The location does not need to exist in the future,
+        /// so this should be treated as only a hint to where to look and/or
+        /// recording where the wheel file originally came from.
+        url: UrlString,
+    },
+    /// Used for path wheels.
+    ///
+    /// We only store the filename for path wheel, since we can't store a relative path in the url
+    Filename {
+        /// We duplicate the filename since a lot of code relies on having the filename on the
+        /// wheel entry.
+        filename: WheelFilename,
+    },
+}
+
 impl Wheel {
     /// Returns the TOML representation of this wheel.
     fn to_toml(&self) -> anyhow::Result<InlineTable> {
         let mut table = InlineTable::new();
-        table.insert("url", Value::from(self.url.base()));
+        match &self.url {
+            WheelWireSource::Url { url } => {
+                table.insert("url", Value::from(url.base()));
+            }
+            WheelWireSource::Filename { filename } => {
+                table.insert("filename", Value::from(filename.to_string()));
+            }
+        }
         if let Some(ref hash) = self.hash {
             table.insert("hash", Value::from(hash.to_string()));
         }
@@ -2159,13 +2200,16 @@ impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
     fn try_from(wire: WheelWire) -> Result<Wheel, String> {
-        // Extract the filename segment from the URL.
-        let filename = wire.url.filename().map_err(|err| err.to_string())?;
-
-        // Parse the filename as a wheel filename.
-        let filename = filename
-            .parse::<WheelFilename>()
-            .map_err(|err| format!("failed to parse `{filename}` as wheel filename: {err}"))?;
+        // If necessary, extract the filename from the URL.
+        let filename = match &wire.url {
+            WheelWireSource::Url { url } => {
+                let filename = url.filename().map_err(|err| err.to_string())?;
+                filename.parse::<WheelFilename>().map_err(|err| {
+                    format!("failed to parse `{filename}` as wheel filename: {err}")
+                })?
+            }
+            WheelWireSource::Filename { filename } => filename.clone(),
+        };
 
         Ok(Wheel {
             url: wire.url,
@@ -2536,10 +2580,12 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a registry, but
     /// is missing a URL.
-    #[error("found registry distribution {id} without a valid URL")]
+    #[error("found registry distribution {name}=={version} without a valid URL")]
     MissingUrl {
-        /// The ID of the distribution that is missing a URL.
-        id: PackageId,
+        /// The name of the distribution that is missing a URL.
+        name: PackageName,
+        /// The version of the distribution that is missing a URL.
+        version: Version,
     },
     /// An error that occurs when a distribution indicates that it is sourced from a registry, but
     /// is missing a filename.
