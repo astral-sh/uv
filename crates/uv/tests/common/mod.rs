@@ -514,21 +514,10 @@ impl TestContext {
 
     /// Create a `uv tool install` command with options shared across scenarios.
     pub fn tool_install(&self) -> Command {
-        let mut command = self.tool_install_without_exclude_newer();
-        command.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
-        command
-    }
-
-    /// Create a `uv tool install` command with no `--exclude-newer` option.
-    ///
-    /// One should avoid using this in tests to the extent possible because
-    /// it can result in tests failing when the index state changes. Therefore,
-    /// if you use this, there should be some other kind of mitigation in place.
-    /// For example, pinning package versions.
-    pub fn tool_install_without_exclude_newer(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("install");
         self.add_shared_args(&mut command);
+        command.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
         command
     }
 
