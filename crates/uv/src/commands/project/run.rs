@@ -187,7 +187,7 @@ pub(crate) async fn run(
     // Discover and sync the base environment.
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
-        Some(script_interpreter)
+        script_interpreter
     } else {
         let project = if no_project {
             None
@@ -376,16 +376,14 @@ pub(crate) async fn run(
             }
         };
 
-        Some(interpreter)
+        interpreter
     };
 
-    if let Some(base_interpreter) = &base_interpreter {
-        debug!(
-            "Using Python {} interpreter at: {}",
-            base_interpreter.python_version(),
-            base_interpreter.sys_executable().display()
-        );
-    }
+    debug!(
+        "Using Python {} interpreter at: {}",
+        base_interpreter.python_version(),
+        base_interpreter.sys_executable().display()
+    );
 
     // Read the requirements.
     let spec = if requirements.is_empty() {
@@ -401,77 +399,12 @@ pub(crate) async fn run(
         Some(spec)
     };
 
-    // Determine whether the base environment satisfies the ephemeral requirements. If we don't have
-    // any `--with` requirements, and we already have a base environment, then there's no need to
-    // create an additional environment.
-    let skip_ephemeral = base_interpreter.as_ref().is_some_and(|base_interpreter| {
-        // No additional requirements.
-        let Some(spec) = spec.as_ref() else {
-            return true;
-        };
-
-        let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
-            return false;
-        };
-
-        if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
-            return false;
-        }
-
-        match site_packages.satisfies(&spec.requirements, &spec.constraints) {
-            // If the requirements are already satisfied, we're done.
-            Ok(SatisfiesResult::Fresh {
-                recursive_requirements,
-            }) => {
-                debug!(
-                    "Base environment satisfies requirements: {}",
-                    recursive_requirements
-                        .iter()
-                        .map(|entry| entry.requirement.to_string())
-                        .sorted()
-                        .join(" | ")
-                );
-                true
-            }
-            Ok(SatisfiesResult::Unsatisfied(requirement)) => {
-                debug!("At least one requirement is not satisfied in the base environment: {requirement}");
-                false
-            }
-            Err(err) => {
-                debug!("Failed to check requirements against base environment: {err}");
-                false
-            }
-        }
-    });
-
     // If necessary, create an environment for the ephemeral requirements or command.
     let temp_dir;
-    let ephemeral_env = if skip_ephemeral {
+    let ephemeral_env = if can_skip_ephemeral(spec.as_ref(), &base_interpreter, &settings) {
         None
     } else {
         debug!("Creating ephemeral environment");
-
-        // Discover an interpreter.
-        let interpreter = if let Some(base_interpreter) = &base_interpreter {
-            base_interpreter.clone()
-        } else {
-            let client_builder = BaseClientBuilder::new()
-                .connectivity(connectivity)
-                .native_tls(native_tls);
-
-            // Note we force preview on during `uv run` for now since the entire interface is in preview
-            PythonInstallation::find_or_download(
-                python.as_deref().map(PythonRequest::parse),
-                EnvironmentPreference::Any,
-                python_preference,
-                python_downloads,
-                &client_builder,
-                cache,
-                Some(&download_reporter),
-            )
-            .await?
-            .into_interpreter()
-        };
 
         Some(match spec.filter(|spec| !spec.is_empty()) {
             None => {
@@ -479,7 +412,7 @@ pub(crate) async fn run(
                 temp_dir = cache.environment()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    base_interpreter.clone(),
                     uv_virtualenv::Prompt::None,
                     false,
                     false,
@@ -491,7 +424,7 @@ pub(crate) async fn run(
 
                 CachedEnvironment::get_or_create(
                     spec,
-                    interpreter,
+                    base_interpreter.clone(),
                     &settings,
                     &state,
                     if show_resolution {
@@ -521,24 +454,22 @@ pub(crate) async fn run(
     // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
     // resolve `.pth` files in the base environment.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
-        if let Some(base_interpreter) = base_interpreter.as_ref() {
-            let ephemeral_site_packages = ephemeral_env
-                .site_packages()
-                .next()
-                .ok_or_else(|| anyhow!("Ephemeral environment has no site packages directory"))?;
-            let base_site_packages = base_interpreter
-                .site_packages()
-                .next()
-                .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
+        let ephemeral_site_packages = ephemeral_env
+            .site_packages()
+            .next()
+            .ok_or_else(|| anyhow!("Ephemeral environment has no site packages directory"))?;
+        let base_site_packages = base_interpreter
+            .site_packages()
+            .next()
+            .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
 
-            fs_err::write(
-                ephemeral_site_packages.join("sitecustomize.py"),
-                format!(
-                    "import site; site.addsitedir(\"{}\")",
-                    base_site_packages.escape_for_python()
-                ),
-            )?;
-        }
+        fs_err::write(
+            ephemeral_site_packages.join("sitecustomize.py"),
+            format!(
+                "import site; site.addsitedir(\"{}\")",
+                base_site_packages.escape_for_python()
+            ),
+        )?;
     }
 
     debug!("Running `{command}`");
@@ -550,12 +481,7 @@ pub(crate) async fn run(
             .as_ref()
             .map(PythonEnvironment::scripts)
             .into_iter()
-            .chain(
-                base_interpreter
-                    .as_ref()
-                    .map(Interpreter::scripts)
-                    .into_iter(),
-            )
+            .chain(std::iter::once(base_interpreter.scripts()))
             .map(PathBuf::from)
             .chain(
                 std::env::var_os("PATH")
@@ -589,6 +515,53 @@ pub(crate) async fn run(
         Ok(ExitStatus::Success)
     } else {
         Ok(ExitStatus::Failure)
+    }
+}
+
+/// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
+fn can_skip_ephemeral(
+    spec: Option<&RequirementsSpecification>,
+    base_interpreter: &Interpreter,
+    settings: &ResolverInstallerSettings,
+) -> bool {
+    // No additional requirements.
+    let Some(spec) = spec.as_ref() else {
+        return true;
+    };
+
+    let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
+        return false;
+    };
+
+    if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
+        return false;
+    }
+
+    match site_packages.satisfies(&spec.requirements, &spec.constraints) {
+        // If the requirements are already satisfied, we're done.
+        Ok(SatisfiesResult::Fresh {
+            recursive_requirements,
+        }) => {
+            debug!(
+                "Base environment satisfies requirements: {}",
+                recursive_requirements
+                    .iter()
+                    .map(|entry| entry.requirement.to_string())
+                    .sorted()
+                    .join(" | ")
+            );
+            true
+        }
+        Ok(SatisfiesResult::Unsatisfied(requirement)) => {
+            debug!(
+                "At least one requirement is not satisfied in the base environment: {requirement}"
+            );
+            false
+        }
+        Err(err) => {
+            debug!("Failed to check requirements against base environment: {err}");
+            false
+        }
     }
 }
 
