@@ -7,7 +7,7 @@
 [![Actions status](https://github.com/astral-sh/uv/actions/workflows/ci.yml/badge.svg)](https://github.com/astral-sh/uv/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
-An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
+[`/juː viː/`](https://en.wikipedia.org/wiki/Help:IPA/English#Key) -  An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
 replacement for common `pip` and `pip-tools` workflows.
 
 <p align="center">
