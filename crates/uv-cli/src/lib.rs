@@ -2556,6 +2556,7 @@ pub enum ToolCommand {
     /// Install a tool.
     Install(ToolInstallArgs),
     /// Upgrade a tool.
+    #[command(alias = "update")]
     Upgrade(ToolUpgradeArgs),
     /// List installed tools.
     List(ToolListArgs),
