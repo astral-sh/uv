@@ -714,7 +714,7 @@ fn sync_relative_wheel() -> Result<()> {
         context.temp_dir.join("wheels/ok-1.0.0-py3-none-any.whl"),
     )?;
 
-    uv_snapshot!(context.sync(), @r###"
+    uv_snapshot!(context.sync().arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
