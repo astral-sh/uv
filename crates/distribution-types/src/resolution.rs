@@ -119,8 +119,8 @@ impl Diagnostic for ResolutionDiagnostic {
             Self::MissingLowerBound { package_name: name } => {
                 format!(
                     "The transitive dependency `{name}` is unpinned. \
-                    Consider setting a lower bound when using `--resolution-strategy lowest` \
-                    to avoid using outdated versions."
+                    Consider setting a lower bound with a constraint when using \
+                    `--resolution-strategy lowest` to avoid using outdated versions."
                 )
             }
         }

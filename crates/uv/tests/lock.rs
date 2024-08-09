@@ -5864,9 +5864,9 @@ fn warn_missing_transitive_lower_bounds() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
-    warning: The transitive dependency `packaging` is unpinned. Consider setting a lower bound when using `--resolution-strategy lowest` to avoid using outdated versions.
-    warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound when using `--resolution-strategy lowest` to avoid using outdated versions.
-    warning: The transitive dependency `iniconfig` is unpinned. Consider setting a lower bound when using `--resolution-strategy lowest` to avoid using outdated versions.
+    warning: The transitive dependency `packaging` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    warning: The transitive dependency `iniconfig` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
     "###);
 
     Ok(())
