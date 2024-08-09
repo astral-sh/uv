@@ -137,7 +137,7 @@ $ uv python list --only-installed
 ## Discovery of virtual environments
 
 Some uv commands may use a Python interpreter from a virtual environment. When searching for virtual
-environments, uv uses a virtual environment from:
+environments, uv prioritizes (in order):
 
 - The `VIRTUAL_ENV` environment variable.
 - The `CONDA_PREFIX` environment variable.
@@ -146,7 +146,7 @@ environments, uv uses a virtual environment from:
 
 After exhausting these possibilities, uv will either
 [search for a Python installation](#discovery-of-python-versions) or exit with an error if the
-command requires using a virtual environment.
+command requires a virtual environment.
 
 ## Discovery of Python versions
 
