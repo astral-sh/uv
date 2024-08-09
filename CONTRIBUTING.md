@@ -137,9 +137,9 @@ To preview any changes to the documentation locally:
 
 1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install).
 
-1. Run `cargo dev generate-all`, to update any auto-generated documentation.
+2. Run `cargo dev generate-all`, to update any auto-generated documentation.
 
-1. Run the development server with:
+3. Run the development server with:
 
    ```shell
    # For contributors.
