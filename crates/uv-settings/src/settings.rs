@@ -11,7 +11,7 @@ use uv_configuration::{
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
-use uv_python::{PythonFetch, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
@@ -143,16 +143,16 @@ pub struct GlobalOptions {
         possible_values = true
     )]
     pub python_preference: Option<PythonPreference>,
-    /// Whether to automatically download Python when required.
+    /// Whether to allow Python downloads.
     #[option(
         default = "\"automatic\"",
         value_type = "str",
         example = r#"
-            python-fetch = "manual"
+            python-downloads = "manual"
         "#,
         possible_values = true
     )]
-    pub python_fetch: Option<PythonFetch>,
+    pub python_downloads: Option<PythonDownloads>,
 }
 
 /// Settings relevant to all installer operations.

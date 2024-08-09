@@ -47,7 +47,7 @@ Additionally, a specific system Python interpreter can be requested with:
 
 By default, uv will automatically download Python versions if they cannot be found on the system.
 This behavior can be
-[disabled with the `python-fetch` option](#disabling-automatic-python-downloads).
+[disabled with the `python-downloads` option](#disabling-automatic-python-downloads).
 
 ## Installing a Python version
 
@@ -155,7 +155,7 @@ version download.
 
 By default, uv will automatically download Python versions when needed.
 
-The `python-fetch` option can be used to disable this behavior. By default, it is set to
+The `python-downloads` option can be used to disable this behavior. By default, it is set to
 `automatic`; set to `manual` to only allow Python downloads during `uv python install`.
 
 ## Adjusting Python version preferences

@@ -18,7 +18,7 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
-use uv_python::{Interpreter, PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
+use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverMarkers,
@@ -50,7 +50,7 @@ pub(crate) async fn lock(
     settings: ResolverSettings,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -69,7 +69,7 @@ pub(crate) async fn lock(
         &workspace,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
-        python_fetch,
+        python_downloads,
         connectivity,
         native_tls,
         cache,

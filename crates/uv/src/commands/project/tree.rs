@@ -8,7 +8,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode, TargetTriple};
 use uv_fs::CWD;
-use uv_python::{PythonFetch, PythonPreference, PythonRequest, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -35,7 +35,7 @@ pub(crate) async fn tree(
     python: Option<String>,
     settings: ResolverSettings,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -55,7 +55,7 @@ pub(crate) async fn tree(
         &workspace,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
-        python_fetch,
+        python_downloads,
         connectivity,
         native_tls,
         cache,

@@ -10,7 +10,7 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
-use uv_python::{PythonEnvironment, PythonFetch, PythonPreference, PythonRequest};
+use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -35,7 +35,7 @@ pub(crate) async fn sync(
     modifications: Modifications,
     python: Option<String>,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
     connectivity: Connectivity,
@@ -65,7 +65,7 @@ pub(crate) async fn sync(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
         python_preference,
-        python_fetch,
+        python_downloads,
         connectivity,
         native_tls,
         cache,

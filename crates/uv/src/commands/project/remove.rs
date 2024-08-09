@@ -5,7 +5,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_fs::CWD;
-use uv_python::{PythonFetch, PythonPreference, PythonRequest};
+use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::PyProjectTomlMut;
@@ -29,7 +29,7 @@ pub(crate) async fn remove(
     python: Option<String>,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -101,7 +101,7 @@ pub(crate) async fn remove(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
         python_preference,
-        python_fetch,
+        python_downloads,
         connectivity,
         native_tls,
         cache,

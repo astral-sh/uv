@@ -235,6 +235,8 @@ uv run [OPTIONS] <COMMAND>
 
 <p>If a virtual environment is active or found in a current or parent directory, it will be used as if there was no project or workspace.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -268,15 +270,6 @@ uv run [OPTIONS] <COMMAND>
 
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -409,6 +402,8 @@ uv init [OPTIONS] [PATH]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-readme</code></dt><dd><p>Do not create a <code>README.md</code> file</p>
 
 </dd><dt><code>--no-workspace</code></dt><dd><p>Avoid discovering a workspace.</p>
@@ -425,15 +420,6 @@ uv init [OPTIONS] [PATH]
 
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -642,6 +628,8 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
@@ -679,15 +667,6 @@ uv add [OPTIONS] <REQUIREMENTS>...
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -915,6 +894,8 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--no-sync</code></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
@@ -948,15 +929,6 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -1168,6 +1140,8 @@ uv sync [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -1201,15 +1175,6 @@ uv sync [OPTIONS]
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -1409,6 +1374,8 @@ uv lock [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -1440,15 +1407,6 @@ uv lock [OPTIONS]
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -1649,6 +1607,8 @@ uv tree [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -1682,15 +1642,6 @@ uv tree [OPTIONS]
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform to use when filtering the tree.</p>
 
 <p>For example, pass <code>--platform windows</code> to display the dependencies that would be included when installing on Windows.</p>
@@ -1963,6 +1914,8 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -1990,15 +1943,6 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -2206,6 +2150,8 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -2233,15 +2179,6 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -2447,6 +2384,8 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -2469,15 +2408,6 @@ uv tool upgrade [OPTIONS] <NAME>
 <li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
 
 <li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
-</ul>
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
 </ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -2579,19 +2509,12 @@ uv tool list [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -2677,19 +2600,12 @@ uv tool uninstall [OPTIONS] <NAME>
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -2765,19 +2681,12 @@ uv tool update-shell [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -2857,19 +2766,12 @@ uv tool dir [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -2910,7 +2812,7 @@ executables.
 
 When preview is enabled, i.e., via `--preview` or by using a preview
 command, uv will download Python if a version cannot be found. This
-behavior can be disabled with the `--python-fetch` option.
+behavior can be disabled with the `--python-downloads` option.
 
 The `--python` option allows requesting a different interpreter.
 
@@ -3014,21 +2916,14 @@ uv python list [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 </dd><dt><code>--only-installed</code></dt><dd><p>Only show installed Python versions, exclude available downloads</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3114,19 +3009,12 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3212,19 +3100,12 @@ uv python find [OPTIONS] [REQUEST]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3310,21 +3191,14 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-workspace</code></dt><dd><p>Avoid validating the Python pin against the workspace in the current directory or any parent directory</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3404,19 +3278,12 @@ uv python dir [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3502,19 +3369,12 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -3770,6 +3630,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--no-strip-extras</code></dt><dd><p>Include extras in the output file.</p>
@@ -3825,15 +3687,6 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be resolved.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
@@ -4104,6 +3957,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -4126,15 +3981,6 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
@@ -4416,6 +4262,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
@@ -4461,15 +4309,6 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-platform</code> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
 
 <p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aaarch64-apple-darwin</code>.</p>
@@ -4668,6 +4507,8 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -4680,15 +4521,6 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -4776,6 +4608,8 @@ uv pip freeze [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -4786,15 +4620,6 @@ uv pip freeze [OPTIONS]
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -4896,6 +4721,8 @@ uv pip list [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -4906,15 +4733,6 @@ uv pip list [OPTIONS]
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -5004,6 +4822,8 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -5014,15 +4834,6 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -5113,6 +4924,8 @@ uv pip tree [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--no-system</code></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -5127,15 +4940,6 @@ uv pip tree [OPTIONS]
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -5221,6 +5025,8 @@ uv pip check [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -5231,15 +5037,6 @@ uv pip check [OPTIONS]
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -5406,6 +5203,8 @@ uv venv [OPTIONS] [NAME]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -5422,15 +5221,6 @@ uv venv [OPTIONS] [NAME]
 
 <p>See <code>uv python help</code> for details on Python discovery and supported request formats.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -5548,19 +5338,12 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -5642,19 +5425,12 @@ uv cache prune [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -5730,19 +5506,12 @@ uv cache dir [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
@@ -5818,20 +5587,13 @@ uv version [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--output-format</code> <i>output-format</i></dt><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
+</dd><dt><code>--output-format</code> <i>output-format</i></dt><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
 
@@ -5912,19 +5674,12 @@ uv help [OPTIONS] [COMMAND]...
 
 <p>For example, spinners or progress bars.</p>
 
+</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
+
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-fetch</code> <i>python-fetch</i></dt><dd><p>Whether to automatically download Python when required</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>automatic</code>:  Automatically fetch managed Python installations when needed</li>
-
-<li><code>manual</code>:  Do not automatically fetch managed Python installations; require explicit installation</li>
-</ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>

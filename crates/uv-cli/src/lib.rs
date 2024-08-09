@@ -15,7 +15,7 @@ use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
 use uv_normalize::{ExtraName, PackageName};
-use uv_python::{PythonFetch, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 pub mod compat;
@@ -119,9 +119,17 @@ pub struct GlobalArgs {
     )]
     pub python_preference: Option<PythonPreference>,
 
-    /// Whether to automatically download Python when required.
+    /// Allow automatically downloading Python when required.
+    #[arg(global = true, long, help_heading = "Python options", hide = true)]
+    pub allow_python_downloads: bool,
+
+    /// Disable automatic downloads of Python.
     #[arg(global = true, long, help_heading = "Python options")]
-    pub python_fetch: Option<PythonFetch>,
+    pub no_python_downloads: bool,
+
+    /// Deprecated version of [`Self::python_downloads`].
+    #[arg(global = true, long, hide = true)]
+    pub python_fetch: Option<PythonDownloads>,
 
     /// Do not print any output.
     #[arg(global = true, long, short, conflicts_with = "verbose")]
@@ -258,7 +266,7 @@ pub enum Commands {
     ///
     /// When preview is enabled, i.e., via `--preview` or by using a preview
     /// command, uv will download Python if a version cannot be found. This
-    /// behavior can be disabled with the `--python-fetch` option.
+    /// behavior can be disabled with the `--python-downloads` option.
     ///
     /// The `--python` option allows requesting a different interpreter.
     ///
