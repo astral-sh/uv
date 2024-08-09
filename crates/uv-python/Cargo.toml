@@ -14,14 +14,15 @@ workspace = true
 
 [dependencies]
 cache-key = { workspace = true }
+distribution-filename = { workspace = true }
 install-wheel-rs = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-cache = { workspace = true }
-uv-configuration = { workspace = true }
 uv-client = { workspace = true }
+uv-configuration = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-state = { workspace = true }

@@ -65,6 +65,9 @@ pub enum ResolveError {
     #[error(transparent)]
     DistributionType(#[from] distribution_types::Error),
 
+    #[error(transparent)]
+    ParsedUrl(#[from] pypi_types::ParsedUrlError),
+
     #[error("Failed to download `{0}`")]
     Fetch(Box<BuiltDist>, #[source] uv_distribution::Error),
 

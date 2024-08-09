@@ -391,6 +391,7 @@ impl VersionMapLazy {
                         let dist = RegistrySourceDist {
                             name: filename.name.clone(),
                             version: filename.version.clone(),
+                            ext: filename.extension,
                             file: Box::new(file),
                             index: self.index.clone(),
                             wheels: vec![],

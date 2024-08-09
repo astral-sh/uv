@@ -11482,7 +11482,7 @@ fn tool_uv_sources() -> Result<()> {
             "boltons==24.0.0"
         ]
         dont_install_me = [
-            "broken @ https://example.org/does/not/exist"
+            "broken @ https://example.org/does/not/exist.tar.gz"
         ]
 
         [tool.uv.sources]
@@ -11534,6 +11534,66 @@ fn tool_uv_sources() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_tool_uv_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write an invalid extension on a PEP 508 URL.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        dependencies = [
+          "urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--preview")
+        .arg(context.temp_dir.join("pyproject.toml")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse metadata from built wheel
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
+    urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    "###
+    );
+
+    // Write an invalid extension on a source.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        dependencies = [
+          "urllib3",
+        ]
+
+        [tool.uv.sources]
+        urllib3 = { url = "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--preview")
+        .arg(context.temp_dir.join("pyproject.toml")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse entry for: `urllib3`
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, or `.tar.zst`
     "###
     );
 

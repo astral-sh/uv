@@ -15,7 +15,7 @@ use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
 use cache_key::RepositoryUrl;
-use distribution_filename::WheelFilename;
+use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
     DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, Name,
@@ -791,6 +791,7 @@ impl Package {
                     let url = Url::from(ParsedArchiveUrl {
                         url: url.to_url(),
                         subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                        ext: DistExtension::Wheel,
                     });
                     let direct_dist = DirectUrlBuiltDist {
                         filename,
@@ -843,6 +844,7 @@ impl Package {
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     lock_path: path.clone(),
+                    ext: SourceDistExtension::from_path(path)?,
                 };
                 distribution_types::SourceDist::Path(path_dist)
             }
@@ -895,14 +897,18 @@ impl Package {
                 distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
+                let ext = SourceDistExtension::from_path(url.as_ref())?;
+                let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: url.to_url(),
-                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    subdirectory: subdirectory.clone(),
+                    ext: DistExtension::Source(ext),
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
                     location: url.clone(),
-                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    subdirectory: subdirectory.clone(),
+                    ext,
                     url: VerbatimUrl::from_url(url),
                 };
                 distribution_types::SourceDist::DirectUrl(direct_dist)
@@ -920,6 +926,7 @@ impl Package {
                     .ok_or_else(|| LockErrorKind::MissingFilename {
                         id: self.id.clone(),
                     })?;
+                let ext = SourceDistExtension::from_path(filename.as_ref())?;
                 let file = Box::new(distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
@@ -939,6 +946,7 @@ impl Package {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
                     file,
+                    ext,
                     index,
                     wheels: vec![],
                 };
@@ -2232,6 +2240,7 @@ impl Dependency {
                 let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl {
                     url: url.to_url(),
                     subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                    ext: DistExtension::from_path(url.as_ref())?,
                 });
                 RequirementSource::from_verbatim_parsed_url(parsed_url)
             }
@@ -2239,6 +2248,7 @@ impl Dependency {
                 lock_path: path.clone(),
                 install_path: workspace_root.join(path),
                 url: verbatim_url(workspace_root.join(path), &self.package_id)?,
+                ext: DistExtension::from_path(path)?,
             },
             Source::Directory(ref path) => RequirementSource::Directory {
                 editable: false,
@@ -2459,6 +2469,10 @@ enum LockErrorKind {
         #[source]
         ToUrlError,
     ),
+    /// An error that occurs when the extension can't be determined
+    /// for a given wheel or source distribution.
+    #[error("failed to parse file extension; expected one of: {0}")]
+    MissingExtension(#[from] ExtensionError),
     /// Failed to parse a git source URL.
     #[error("failed to parse source git URL")]
     InvalidGitSourceUrl(

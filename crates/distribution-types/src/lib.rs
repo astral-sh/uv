@@ -38,7 +38,7 @@ use std::str::FromStr;
 
 use url::Url;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{DistExtension, SourceDistExtension, WheelFilename};
 use pep440_rs::Version;
 use pep508_rs::{Pep508Url, VerbatimUrl};
 use pypi_types::{ParsedUrl, VerbatimParsedUrl};
@@ -228,6 +228,8 @@ pub struct RegistrySourceDist {
     pub name: PackageName,
     pub version: Version,
     pub file: Box<File>,
+    /// The file extension, e.g. `tar.gz`, `zip`, etc.
+    pub ext: SourceDistExtension,
     pub index: IndexUrl,
     /// When an sdist is selected, it may be the case that there were
     /// available wheels too. There are many reasons why a wheel might not
@@ -249,6 +251,8 @@ pub struct DirectUrlSourceDist {
     pub location: Url,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
+    /// The file extension, e.g. `tar.gz`, `zip`, etc.
+    pub ext: SourceDistExtension,
     /// The URL as it was provided by the user, including the subdirectory fragment.
     pub url: VerbatimUrl,
 }
@@ -275,6 +279,8 @@ pub struct PathSourceDist {
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
     /// are resolved, and unlike the install path, we did not yet join it on the base directory.
     pub lock_path: PathBuf,
+    /// The file extension, e.g. `tar.gz`, `zip`, etc.
+    pub ext: SourceDistExtension,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -303,33 +309,35 @@ impl Dist {
         url: VerbatimUrl,
         location: Url,
         subdirectory: Option<PathBuf>,
+        ext: DistExtension,
     ) -> Result<Dist, Error> {
-        if Path::new(url.path())
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-        {
-            // Validate that the name in the wheel matches that of the requirement.
-            let filename = WheelFilename::from_str(&url.filename()?)?;
-            if filename.name != name {
-                return Err(Error::PackageNameMismatch(
-                    name,
-                    filename.name,
-                    url.verbatim().to_string(),
-                ));
-            }
+        match ext {
+            DistExtension::Wheel => {
+                // Validate that the name in the wheel matches that of the requirement.
+                let filename = WheelFilename::from_str(&url.filename()?)?;
+                if filename.name != name {
+                    return Err(Error::PackageNameMismatch(
+                        name,
+                        filename.name,
+                        url.verbatim().to_string(),
+                    ));
+                }
 
-            Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
-                filename,
-                location,
-                url,
-            })))
-        } else {
-            Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
-                name,
-                location,
-                subdirectory,
-                url,
-            })))
+                Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                    filename,
+                    location,
+                    url,
+                })))
+            }
+            DistExtension::Source(ext) => {
+                Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
+                    name,
+                    location,
+                    subdirectory,
+                    ext,
+                    url,
+                })))
+            }
         }
     }
 
@@ -339,6 +347,7 @@ impl Dist {
         url: VerbatimUrl,
         install_path: &Path,
         lock_path: &Path,
+        ext: DistExtension,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
         let canonicalized_path = match install_path.canonicalize() {
@@ -350,31 +359,30 @@ impl Dist {
         };
 
         // Determine whether the path represents a built or source distribution.
-        if canonicalized_path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-        {
-            // Validate that the name in the wheel matches that of the requirement.
-            let filename = WheelFilename::from_str(&url.filename()?)?;
-            if filename.name != name {
-                return Err(Error::PackageNameMismatch(
-                    name,
-                    filename.name,
-                    url.verbatim().to_string(),
-                ));
+        match ext {
+            DistExtension::Wheel => {
+                // Validate that the name in the wheel matches that of the requirement.
+                let filename = WheelFilename::from_str(&url.filename()?)?;
+                if filename.name != name {
+                    return Err(Error::PackageNameMismatch(
+                        name,
+                        filename.name,
+                        url.verbatim().to_string(),
+                    ));
+                }
+                Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
+                    filename,
+                    path: canonicalized_path,
+                    url,
+                })))
             }
-            Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
-                filename,
-                path: canonicalized_path,
-                url,
-            })))
-        } else {
-            Ok(Self::Source(SourceDist::Path(PathSourceDist {
+            DistExtension::Source(ext) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
                 name,
                 install_path: canonicalized_path.clone(),
                 lock_path: lock_path.to_path_buf(),
+                ext,
                 url,
-            })))
+            }))),
         }
     }
 
@@ -423,12 +431,20 @@ impl Dist {
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: VerbatimParsedUrl) -> Result<Self, Error> {
         match url.parsed_url {
-            ParsedUrl::Archive(archive) => {
-                Self::from_http_url(name, url.verbatim, archive.url, archive.subdirectory)
-            }
-            ParsedUrl::Path(file) => {
-                Self::from_file_url(name, url.verbatim, &file.install_path, &file.lock_path)
-            }
+            ParsedUrl::Archive(archive) => Self::from_http_url(
+                name,
+                url.verbatim,
+                archive.url,
+                archive.subdirectory,
+                archive.ext,
+            ),
+            ParsedUrl::Path(file) => Self::from_file_url(
+                name,
+                url.verbatim,
+                &file.install_path,
+                &file.lock_path,
+                file.ext,
+            ),
             ParsedUrl::Directory(directory) => Self::from_directory_url(
                 name,
                 url.verbatim,
@@ -1262,7 +1278,7 @@ mod test {
             std::mem::size_of::<BuiltDist>()
         );
         assert!(
-            std::mem::size_of::<SourceDist>() <= 256,
+            std::mem::size_of::<SourceDist>() <= 264,
             "{}",
             std::mem::size_of::<SourceDist>()
         );

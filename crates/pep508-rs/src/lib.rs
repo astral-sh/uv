@@ -693,6 +693,11 @@ fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
         return true;
     }
 
+    // Ex) `foo/bar`
+    if expanded.contains('/') || expanded.contains('\\') {
+        return true;
+    }
+
     false
 }
 
@@ -1010,7 +1015,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
             // a package name. pip supports this in `requirements.txt`, but it doesn't adhere to
             // the PEP 508 grammar.
             let mut clone = cursor.clone().at(start);
-            return if parse_url::<T>(&mut clone, working_dir).is_ok() {
+            return if looks_like_unnamed_requirement(&mut clone) {
                 Err(Pep508Error {
                     message: Pep508ErrorSource::UnsupportedRequirement("URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).".to_string()),
                     start,

@@ -1,12 +1,11 @@
 use std::collections::hash_map::Entry;
-use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_filename::WheelFilename;
+use distribution_filename::{DistExtension, WheelFilename};
 use distribution_types::{
     CachedDirectUrlDist, CachedDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Error, GitSourceDist, Hashed, IndexLocations, InstalledDist, Name, PathBuiltDist,
@@ -152,85 +151,86 @@ impl<'a> Planner<'a> {
                     }
                 }
                 RequirementSource::Url {
-                    subdirectory,
                     location,
+                    subdirectory,
+                    ext,
                     url,
                 } => {
-                    // Check if we have a wheel or a source distribution.
-                    if Path::new(url.path())
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-                    {
-                        // Validate that the name in the wheel matches that of the requirement.
-                        let filename = WheelFilename::from_str(&url.filename()?)?;
-                        if filename.name != requirement.name {
-                            return Err(Error::PackageNameMismatch(
-                                requirement.name.clone(),
-                                filename.name,
-                                url.verbatim().to_string(),
-                            )
-                            .into());
-                        }
+                    match ext {
+                        DistExtension::Wheel => {
+                            // Validate that the name in the wheel matches that of the requirement.
+                            let filename = WheelFilename::from_str(&url.filename()?)?;
+                            if filename.name != requirement.name {
+                                return Err(Error::PackageNameMismatch(
+                                    requirement.name.clone(),
+                                    filename.name,
+                                    url.verbatim().to_string(),
+                                )
+                                .into());
+                            }
 
-                        let wheel = DirectUrlBuiltDist {
-                            filename,
-                            location: location.clone(),
-                            url: url.clone(),
-                        };
+                            let wheel = DirectUrlBuiltDist {
+                                filename,
+                                location: location.clone(),
+                                url: url.clone(),
+                            };
 
-                        if !wheel.filename.is_compatible(tags) {
-                            bail!(
+                            if !wheel.filename.is_compatible(tags) {
+                                bail!(
                                 "A URL dependency is incompatible with the current platform: {}",
                                 wheel.url
                             );
-                        }
+                            }
 
-                        if no_binary {
-                            bail!(
+                            if no_binary {
+                                bail!(
                                 "A URL dependency points to a wheel which conflicts with `--no-binary`: {}",
                                 wheel.url
                             );
+                            }
+
+                            // Find the exact wheel from the cache, since we know the filename in
+                            // advance.
+                            let cache_entry = cache
+                                .shard(
+                                    CacheBucket::Wheels,
+                                    WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+                                )
+                                .entry(format!("{}.http", wheel.filename.stem()));
+
+                            // Read the HTTP pointer.
+                            if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
+                                let archive = pointer.into_archive();
+                                if archive.satisfies(hasher.get(&wheel)) {
+                                    let cached_dist = CachedDirectUrlDist::from_url(
+                                        wheel.filename,
+                                        wheel.url,
+                                        archive.hashes,
+                                        cache.archive(&archive.id),
+                                    );
+
+                                    debug!("URL wheel requirement already cached: {cached_dist}");
+                                    cached.push(CachedDist::Url(cached_dist));
+                                    continue;
+                                }
+                            }
                         }
-
-                        // Find the exact wheel from the cache, since we know the filename in
-                        // advance.
-                        let cache_entry = cache
-                            .shard(
-                                CacheBucket::Wheels,
-                                WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                            )
-                            .entry(format!("{}.http", wheel.filename.stem()));
-
-                        // Read the HTTP pointer.
-                        if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
-                            let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.get(&wheel)) {
-                                let cached_dist = CachedDirectUrlDist::from_url(
-                                    wheel.filename,
-                                    wheel.url,
-                                    archive.hashes,
-                                    cache.archive(&archive.id),
-                                );
-
-                                debug!("URL wheel requirement already cached: {cached_dist}");
+                        DistExtension::Source(ext) => {
+                            let sdist = DirectUrlSourceDist {
+                                name: requirement.name.clone(),
+                                location: location.clone(),
+                                subdirectory: subdirectory.clone(),
+                                ext: *ext,
+                                url: url.clone(),
+                            };
+                            // Find the most-compatible wheel from the cache, since we don't know
+                            // the filename in advance.
+                            if let Some(wheel) = built_index.url(&sdist)? {
+                                let cached_dist = wheel.into_url_dist(url.clone());
+                                debug!("URL source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
-                        }
-                    } else {
-                        let sdist = DirectUrlSourceDist {
-                            name: requirement.name.clone(),
-                            location: location.clone(),
-                            subdirectory: subdirectory.clone(),
-                            url: url.clone(),
-                        };
-                        // Find the most-compatible wheel from the cache, since we don't know
-                        // the filename in advance.
-                        if let Some(wheel) = built_index.url(&sdist)? {
-                            let cached_dist = wheel.into_url_dist(url.clone());
-                            debug!("URL source requirement already cached: {cached_dist}");
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
                         }
                     }
                 }
@@ -300,6 +300,7 @@ impl<'a> Planner<'a> {
                 }
 
                 RequirementSource::Path {
+                    ext,
                     url,
                     install_path,
                     lock_path,
@@ -313,84 +314,86 @@ impl<'a> Planner<'a> {
                         Err(err) => return Err(err.into()),
                     };
 
-                    // Check if we have a wheel or a source distribution.
-                    if path
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-                    {
-                        // Validate that the name in the wheel matches that of the requirement.
-                        let filename = WheelFilename::from_str(&url.filename()?)?;
-                        if filename.name != requirement.name {
-                            return Err(Error::PackageNameMismatch(
-                                requirement.name.clone(),
-                                filename.name,
-                                url.verbatim().to_string(),
-                            )
-                            .into());
-                        }
+                    match ext {
+                        DistExtension::Wheel => {
+                            // Validate that the name in the wheel matches that of the requirement.
+                            let filename = WheelFilename::from_str(&url.filename()?)?;
+                            if filename.name != requirement.name {
+                                return Err(Error::PackageNameMismatch(
+                                    requirement.name.clone(),
+                                    filename.name,
+                                    url.verbatim().to_string(),
+                                )
+                                .into());
+                            }
 
-                        let wheel = PathBuiltDist {
-                            filename,
-                            url: url.clone(),
-                            path,
-                        };
+                            let wheel = PathBuiltDist {
+                                filename,
+                                url: url.clone(),
+                                path,
+                            };
 
-                        if !wheel.filename.is_compatible(tags) {
-                            bail!(
+                            if !wheel.filename.is_compatible(tags) {
+                                bail!(
                                 "A path dependency is incompatible with the current platform: {}",
                                 wheel.path.user_display()
                             );
-                        }
+                            }
 
-                        if no_binary {
-                            bail!(
+                            if no_binary {
+                                bail!(
                                 "A path dependency points to a wheel which conflicts with `--no-binary`: {}",
                                 wheel.url
                             );
-                        }
+                            }
 
-                        // Find the exact wheel from the cache, since we know the filename in
-                        // advance.
-                        let cache_entry = cache
-                            .shard(
-                                CacheBucket::Wheels,
-                                WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
-                            )
-                            .entry(format!("{}.rev", wheel.filename.stem()));
+                            // Find the exact wheel from the cache, since we know the filename in
+                            // advance.
+                            let cache_entry = cache
+                                .shard(
+                                    CacheBucket::Wheels,
+                                    WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
+                                )
+                                .entry(format!("{}.rev", wheel.filename.stem()));
 
-                        if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
-                            let timestamp = ArchiveTimestamp::from_file(&wheel.path)?;
-                            if pointer.is_up_to_date(timestamp) {
-                                let archive = pointer.into_archive();
-                                if archive.satisfies(hasher.get(&wheel)) {
-                                    let cached_dist = CachedDirectUrlDist::from_url(
-                                        wheel.filename,
-                                        wheel.url,
-                                        archive.hashes,
-                                        cache.archive(&archive.id),
-                                    );
+                            if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
+                                let timestamp = ArchiveTimestamp::from_file(&wheel.path)?;
+                                if pointer.is_up_to_date(timestamp) {
+                                    let archive = pointer.into_archive();
+                                    if archive.satisfies(hasher.get(&wheel)) {
+                                        let cached_dist = CachedDirectUrlDist::from_url(
+                                            wheel.filename,
+                                            wheel.url,
+                                            archive.hashes,
+                                            cache.archive(&archive.id),
+                                        );
 
-                                    debug!("Path wheel requirement already cached: {cached_dist}");
-                                    cached.push(CachedDist::Url(cached_dist));
-                                    continue;
+                                        debug!(
+                                            "Path wheel requirement already cached: {cached_dist}"
+                                        );
+                                        cached.push(CachedDist::Url(cached_dist));
+                                        continue;
+                                    }
                                 }
                             }
                         }
-                    } else {
-                        let sdist = PathSourceDist {
-                            name: requirement.name.clone(),
-                            url: url.clone(),
-                            install_path: path,
-                            lock_path: lock_path.clone(),
-                        };
+                        DistExtension::Source(ext) => {
+                            let sdist = PathSourceDist {
+                                name: requirement.name.clone(),
+                                url: url.clone(),
+                                install_path: path,
+                                lock_path: lock_path.clone(),
+                                ext: *ext,
+                            };
 
-                        // Find the most-compatible wheel from the cache, since we don't know
-                        // the filename in advance.
-                        if let Some(wheel) = built_index.path(&sdist)? {
-                            let cached_dist = wheel.into_url_dist(url.clone());
-                            debug!("Path source requirement already cached: {cached_dist}");
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
+                            // Find the most-compatible wheel from the cache, since we don't know
+                            // the filename in advance.
+                            if let Some(wheel) = built_index.path(&sdist)? {
+                                let cached_dist = wheel.into_url_dist(url.clone());
+                                debug!("Path source requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
                         }
                     }
                 }

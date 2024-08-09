@@ -5,11 +5,13 @@ use uv_normalize::PackageName;
 
 pub use build_tag::{BuildTag, BuildTagError};
 pub use egg::{EggInfoFilename, EggInfoFilenameError};
-pub use source_dist::{SourceDistExtension, SourceDistFilename, SourceDistFilenameError};
+pub use extension::{DistExtension, ExtensionError, SourceDistExtension};
+pub use source_dist::SourceDistFilename;
 pub use wheel::{WheelFilename, WheelFilenameError};
 
 mod build_tag;
 mod egg;
+mod extension;
 mod source_dist;
 mod wheel;
 
@@ -22,13 +24,20 @@ pub enum DistFilename {
 impl DistFilename {
     /// Parse a filename as wheel or source dist name.
     pub fn try_from_filename(filename: &str, package_name: &PackageName) -> Option<Self> {
-        if let Ok(filename) = WheelFilename::from_str(filename) {
-            Some(Self::WheelFilename(filename))
-        } else if let Ok(filename) = SourceDistFilename::parse(filename, package_name) {
-            Some(Self::SourceDistFilename(filename))
-        } else {
-            None
+        match DistExtension::from_path(filename) {
+            Ok(DistExtension::Wheel) => {
+                if let Ok(filename) = WheelFilename::from_str(filename) {
+                    return Some(Self::WheelFilename(filename));
+                }
+            }
+            Ok(DistExtension::Source(extension)) => {
+                if let Ok(filename) = SourceDistFilename::parse(filename, extension, package_name) {
+                    return Some(Self::SourceDistFilename(filename));
+                }
+            }
+            Err(_) => {}
         }
+        None
     }
 
     /// Like [`DistFilename::try_from_normalized_filename`], but without knowing the package name.

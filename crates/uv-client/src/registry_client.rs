@@ -718,30 +718,32 @@ impl SimpleMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            if let Some(filename) =
+            let Some(filename) =
                 DistFilename::try_from_filename(file.filename.as_str(), package_name)
-            {
-                let version = match filename {
-                    DistFilename::SourceDistFilename(ref inner) => &inner.version,
-                    DistFilename::WheelFilename(ref inner) => &inner.version,
-                };
-                let file = match File::try_from(file, base) {
-                    Ok(file) => file,
-                    Err(err) => {
-                        // Ignore files with unparsable version specifiers.
-                        warn!("Skipping file for {package_name}: {err}");
-                        continue;
-                    }
-                };
-                match map.entry(version.clone()) {
-                    std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        entry.get_mut().push(filename, file);
-                    }
-                    std::collections::btree_map::Entry::Vacant(entry) => {
-                        let mut files = VersionFiles::default();
-                        files.push(filename, file);
-                        entry.insert(files);
-                    }
+            else {
+                warn!("Skipping file for {package_name}: {}", file.filename);
+                continue;
+            };
+            let version = match filename {
+                DistFilename::SourceDistFilename(ref inner) => &inner.version,
+                DistFilename::WheelFilename(ref inner) => &inner.version,
+            };
+            let file = match File::try_from(file, base) {
+                Ok(file) => file,
+                Err(err) => {
+                    // Ignore files with unparsable version specifiers.
+                    warn!("Skipping file for {package_name}: {err}");
+                    continue;
+                }
+            };
+            match map.entry(version.clone()) {
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    entry.get_mut().push(filename, file);
+                }
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    let mut files = VersionFiles::default();
+                    files.push(filename, file);
+                    entry.insert(files);
                 }
             }
         }

@@ -2,13 +2,13 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use distribution_filename::DistExtension;
 use path_absolutize::Absolutize;
-use thiserror::Error;
-use url::Url;
-
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{VerbatimUrl, VersionOrUrl};
-use pypi_types::{Requirement, RequirementSource, VerbatimParsedUrl};
+use pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
+use thiserror::Error;
+use url::Url;
 use uv_configuration::PreviewMode;
 use uv_fs::{relative_to, Simplified};
 use uv_git::GitReference;
@@ -41,6 +41,8 @@ pub enum LoweringError {
     WorkspaceFalse,
     #[error("Editable must refer to a local directory, not a file: `{0}`")]
     EditableFile(String),
+    #[error(transparent)]
+    ParsedUrl(#[from] ParsedUrlError),
     #[error(transparent)] // Function attaches the context
     RelativeTo(io::Error),
 }
@@ -155,10 +157,14 @@ pub(crate) fn lower_requirement(
                 verbatim_url.set_fragment(Some(subdirectory));
             }
 
+            let ext = DistExtension::from_path(url.path())
+                .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
+
             let verbatim_url = VerbatimUrl::from_url(verbatim_url);
             RequirementSource::Url {
                 location: url,
                 subdirectory: subdirectory.map(PathBuf::from),
+                ext,
                 url: verbatim_url,
             }
         }
@@ -290,6 +296,8 @@ fn path_source(
         Ok(RequirementSource::Path {
             install_path: absolute_path,
             lock_path: relative_to_workspace,
+            ext: DistExtension::from_path(path)
+                .map_err(|err| ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err))?,
             url,
         })
     }

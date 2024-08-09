@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+distribution-filename = { workspace = true }
 pypi-types = { workspace = true }
 
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
