@@ -577,6 +577,7 @@ jobs:
           - target: powerpc64le-unknown-linux-musl
             arch: ppc64le
             toolchain: nightly
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
