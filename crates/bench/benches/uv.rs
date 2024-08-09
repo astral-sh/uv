@@ -32,29 +32,24 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     c.bench_function("resolve_warm_airflow", |b| b.iter(|| run(false)));
 }
 
-fn resolve_warm_airflow_universal(c: &mut Criterion<WallTime>) {
-    let run = setup(Manifest::simple(vec![
-        Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]").unwrap()),
-        Requirement::from(
-            pep508_rs::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
-        ),
-    ]));
-    c.bench_function("resolve_warm_airflow_universal", |b| b.iter(|| run(true)));
-}
+// This takes >5m to run in CodSpeed.
+// fn resolve_warm_airflow_universal(c: &mut Criterion<WallTime>) {
+//     let run = setup(Manifest::simple(vec![
+//         Requirement::from(pep508_rs::Requirement::from_str("apache-airflow[all]").unwrap()),
+//         Requirement::from(
+//             pep508_rs::Requirement::from_str("apache-airflow-providers-apache-beam>3.0.0").unwrap(),
+//         ),
+//     ]));
+//     c.bench_function("resolve_warm_airflow_universal", |b| b.iter(|| run(true)));
+// }
 
-criterion_group! {
-    name = resolve_jupyter;
-    config = Criterion::default().sample_size(100);
-    targets = resolve_warm_jupyter, resolve_warm_jupyter_universal
-}
-
-criterion_group! {
-    name = resolve_airflow;
-    config = Criterion::default().sample_size(20);
-    targets = resolve_warm_airflow, resolve_warm_airflow_universal
-}
-
-criterion_main!(resolve_jupyter, resolve_airflow);
+criterion_group!(
+    resolve,
+    resolve_warm_jupyter,
+    resolve_warm_jupyter_universal,
+    resolve_warm_airflow
+);
+criterion_main!(resolve);
 
 fn setup(manifest: Manifest) -> impl Fn(bool) {
     let runtime = tokio::runtime::Builder::new_current_thread()
