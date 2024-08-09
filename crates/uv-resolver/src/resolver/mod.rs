@@ -627,6 +627,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.index,
             &self.git,
             &self.python_requirement,
+            self.selector.resolution_strategy(),
             self.options,
         )
     }
@@ -2156,7 +2157,11 @@ impl ForkState {
                     ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
                 );
                 if !has_url && missing_lower_bound && strategy_lowest {
-                    warn_user_once!("The direct dependency `{package}` is unpinned. Consider setting a lower bound when using `--resolution-strategy lowest` to avoid using outdated versions.");
+                    warn_user_once!(
+                        "The direct dependency `{package}` is unpinned. \
+                        Consider setting a lower bound when using `--resolution-strategy lowest` \
+                        to avoid using outdated versions."
+                    );
                 }
             }
 
