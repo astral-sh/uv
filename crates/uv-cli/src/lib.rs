@@ -573,6 +573,13 @@ pub enum ProjectCommand {
     )]
     Sync(SyncArgs),
     /// Update the project's lockfile (experimental).
+    ///
+    /// If the project lockfile (`uv.lock`) does not exist, it will be created.
+    /// If a lockfile is present, its contents will be used as preferences for
+    /// the resolution.
+    ///
+    /// If there are no changes to the project's dependencies, locking will have
+    /// no effect unless the `--upgrade` flag is provided.
     #[command(
         after_help = "Use `uv help lock` for more details.",
         after_long_help = ""
@@ -2257,6 +2264,9 @@ pub struct SyncArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct LockArgs {
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
