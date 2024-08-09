@@ -160,8 +160,8 @@ impl From<&ResolvedDist> for Requirement {
                     }
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
-                    install_path: wheel.path.clone(),
-                    lock_path: wheel.path.clone(),
+                    install_path: wheel.install_path.clone(),
+                    lock_path: wheel.lock_path.clone(),
                     url: wheel.url.clone(),
                     ext: DistExtension::Wheel,
                 },

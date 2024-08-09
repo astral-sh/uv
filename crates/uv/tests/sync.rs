@@ -3,6 +3,7 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use insta::assert_snapshot;
 
 use common::{uv_snapshot, TestContext};
 
@@ -674,6 +675,112 @@ fn sync_build_isolation_package() -> Result<()> {
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Test that relative wheel paths are correctly preserved.
+#[test]
+fn sync_relative_wheel() -> Result<()> {
+    // TODO(charlie): On Windows, this test currently prepares two packages (vs. one of Unix). This
+    // is due to an error in path canonicalization, and GitHub Actions on Windows have a symlink
+    // in the path.
+    //
+    // See: https://github.com/astral-sh/uv/issues/5979
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let requirements = r#"[project]
+    name = "relative_wheel"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = ["ok"]
+
+    [tool.uv.sources]
+    ok = { path = "wheels/ok-1.0.0-py3-none-any.whl" }
+
+    [build-system]
+    requires = ["hatchling"]
+    build-backend = "hatchling.build"
+    "#;
+
+    context
+        .temp_dir
+        .child("src/relative_wheel/__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(requirements)?;
+
+    context.temp_dir.child("wheels").create_dir_all()?;
+    fs_err::copy(
+        "../../scripts/links/ok-1.0.0-py3-none-any.whl",
+        context.temp_dir.join("wheels/ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl)
+     + relative-wheel==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25 00:00:00 UTC"
+
+            [[package]]
+            name = "ok"
+            version = "1.0.0"
+            source = { path = "wheels/ok-1.0.0-py3-none-any.whl" }
+            wheels = [
+                { filename = "ok-1.0.0-py3-none-any.whl", hash = "sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f" },
+            ]
+
+            [[package]]
+            name = "relative-wheel"
+            version = "0.1.0"
+            source = { editable = "." }
+            dependencies = [
+                { name = "ok" },
+            ]
+            "###
+            );
+        }
+    );
+
+    // Check that we can re-read the lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
+    "###);
 
     Ok(())
 }
