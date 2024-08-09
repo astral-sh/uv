@@ -50,6 +50,8 @@ fn home_assistant_core() -> Result<()> {
 
 // Source: https://github.com/konstin/transformers/blob/da3c00433d93e43bf1e7360b1057e8c160e7978e/pyproject.toml
 #[test]
+// Takes too long on non-Linux in CI.
+#[cfg(target_os = "linux")]
 fn transformers() -> Result<()> {
     lock_ecosystem_package_non_deterministic("3.12", "transformers")
 }
@@ -117,6 +119,7 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
 /// a stop-gap to enable at least tracking the lock files of some
 /// ecosystem packages even if re-locking is producing different
 /// results.
+#[cfg(target_os = "linux")]
 fn lock_ecosystem_package_non_deterministic(python_version: &str, name: &str) -> Result<()> {
     let dir = PathBuf::from(format!("../../ecosystem/{name}"));
     let context = TestContext::new(python_version);
