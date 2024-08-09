@@ -5,9 +5,8 @@ expression: lock
 version = 1
 requires-python = ">=3.8"
 environment-markers = [
-    "implementation_name == 'pypy' and sys_platform == 'win32'",
-    "implementation_name == 'pypy' and sys_platform == 'win32' and (implementation_name != 'pypy' or sys_platform != 'win32')",
     "implementation_name != 'pypy' or sys_platform != 'win32'",
+    "implementation_name == 'pypy' and sys_platform == 'win32'",
 ]
 
 [options]
@@ -27,13 +26,13 @@ name = "aiohttp"
 version = "3.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiohappyeyeballs", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "aiosignal", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "aiohappyeyeballs" },
+    { name = "aiosignal" },
     { name = "async-timeout", marker = "python_version < '3.11'" },
-    { name = "attrs", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "frozenlist", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "multidict", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "yarl", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "attrs" },
+    { name = "frozenlist" },
+    { name = "multidict" },
+    { name = "yarl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f7/e1/bfcafd54dee859b2e6e690c5f8a8a30343d590a8822bb0669afba4c2c9e6/aiohttp-3.10.1.tar.gz", hash = "sha256:8b0d058e4e425d3b45e8ec70d49b402f4d6b21041e674798b1f91ba027c73f28", size = 7517572 }
 wheels = [
@@ -119,7 +118,7 @@ name = "aiosignal"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "frozenlist", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "frozenlist" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ae/67/0952ed97a9793b4958e5736f6d2b346b414a2cd63e82d05940032f45b32f/aiosignal-1.3.1.tar.gz", hash = "sha256:54cd96e15e1649b75d6c87526a6ff0b6c1b0dd3459f43d9ca11d48c339b68cfc", size = 19422 }
 wheels = [
@@ -140,7 +139,7 @@ name = "asttokens"
 version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/45/1d/f03bcb60c4a3212e15f99a56085d93093a497718adf828d050b9d675da81/asttokens-2.4.1.tar.gz", hash = "sha256:b03869718ba9a6eb027e134bfdf69f38a236d681c83c160d510768af11254ba0", size = 62284 }
 wheels = [
@@ -179,28 +178,28 @@ name = "black"
 version = "24.8.0"
 source = { editable = "." }
 dependencies = [
-    { name = "click", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "mypy-extensions", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "packaging", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "pathspec", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "platformdirs", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "click" },
+    { name = "mypy-extensions" },
+    { name = "packaging" },
+    { name = "pathspec" },
+    { name = "platformdirs" },
     { name = "tomli", marker = "python_version < '3.11'" },
     { name = "typing-extensions", marker = "python_version < '3.11'" },
 ]
 
 [package.optional-dependencies]
 colorama = [
-    { name = "colorama", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "colorama" },
 ]
 d = [
-    { name = "aiohttp", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "aiohttp" },
 ]
 jupyter = [
-    { name = "ipython", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "tokenize-rt", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "ipython" },
+    { name = "tokenize-rt" },
 ]
 uvloop = [
-    { name = "uvloop", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "uvloop" },
 ]
 
 [[package]]
@@ -341,17 +340,17 @@ version = "8.12.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "appnope", marker = "sys_platform == 'darwin'" },
-    { name = "backcall", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "backcall" },
     { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "decorator", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "jedi", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "matplotlib-inline", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "decorator" },
+    { name = "jedi" },
+    { name = "matplotlib-inline" },
     { name = "pexpect", marker = "sys_platform != 'win32'" },
-    { name = "pickleshare", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "prompt-toolkit", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "pygments", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "stack-data", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "traitlets", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "pickleshare" },
+    { name = "prompt-toolkit" },
+    { name = "pygments" },
+    { name = "stack-data" },
+    { name = "traitlets" },
     { name = "typing-extensions", marker = "python_version < '3.10'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9e/6a/44ef299b1762f5a73841e87fae8a73a8cc8aee538d6dc8c77a5afe1fd2ce/ipython-8.12.3.tar.gz", hash = "sha256:3910c4b54543c2ad73d06579aa771041b7d5707b033bd488669b4cf544e3b363", size = 5470171 }
@@ -364,7 +363,7 @@ name = "jedi"
 version = "0.19.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "parso", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "parso" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d6/99/99b493cec4bf43176b678de30f81ed003fd6a647a301b9c927280c600f0a/jedi-0.19.1.tar.gz", hash = "sha256:cf0496f3651bc65d7174ac1b7d043eff454892c708a87d1b683e57b569927ffd", size = 1227821 }
 wheels = [
@@ -376,7 +375,7 @@ name = "matplotlib-inline"
 version = "0.1.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "traitlets", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "traitlets" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/99/5b/a36a337438a14116b16480db471ad061c36c3694df7c2084a0da7ba538b7/matplotlib_inline-0.1.7.tar.gz", hash = "sha256:8423b23ec666be3d16e16b60bdd8ac4e86e840ebd1dd11a30b9f117f2fa0ab90", size = 8159 }
 wheels = [
@@ -495,6 +494,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pathlib2"
+version = "2.3.7.post1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/31/51/99caf463dc7c18eb18dad1fffe465a3cf3ee50ac3d1dccbd1781336fe9c7/pathlib2-2.3.7.post1.tar.gz", hash = "sha256:9fe0edad898b83c0c3e199c842b27ed216645d2e177757b2dd67384d4113c641", size = 211190 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/09/eb/4af4bcd5b8731366b676192675221c5324394a580dfae469d498313b5c4a/pathlib2-2.3.7.post1-py2.py3-none-any.whl", hash = "sha256:5266a0fd000452f1b3467d782f079a4343c63aaa119221fbdc4e39577489ca5b", size = 18027 },
+]
+
+[[package]]
 name = "pathspec"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -519,6 +530,9 @@ wheels = [
 name = "pickleshare"
 version = "0.7.5"
 source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pathlib2" },
+]
 sdist = { url = "https://files.pythonhosted.org/packages/d8/b6/df3c1c9b616e9c0edbc4fbab6ddd09df9535849c64ba51fcb6531c32d4d8/pickleshare-0.7.5.tar.gz", hash = "sha256:87683d47965c1da65cdacaf31c8441d12b8044cdec9aca500cd78fc2c683afca", size = 6161 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9a/41/220f49aaea88bc6fa6cba8d05ecf24676326156c23b991e80b3f2fc24c77/pickleshare-0.7.5-py2.py3-none-any.whl", hash = "sha256:9649af414d74d4df115d5d718f82acb59c9d418196b7b4290ed47a12ce62df56", size = 6877 },
@@ -538,7 +552,7 @@ name = "prompt-toolkit"
 version = "3.0.47"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "wcwidth", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "wcwidth" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/47/6d/0279b119dafc74c1220420028d490c4399b790fc1256998666e3a341879f/prompt_toolkit-3.0.47.tar.gz", hash = "sha256:1e1b29cb58080b1e69f207c893a1a7bf16d127a5c30c9d17a25a5d77792e5360", size = 425859 }
 wheels = [
@@ -586,9 +600,9 @@ name = "stack-data"
 version = "0.6.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "asttokens", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "executing", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "pure-eval", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "asttokens" },
+    { name = "executing" },
+    { name = "pure-eval" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/28/e3/55dcc2cfbc3ca9c29519eb6884dd1415ecb53b0e934862d3559ddcb7e20b/stack_data-0.6.3.tar.gz", hash = "sha256:836a778de4fec4dcd1dcd89ed8abff8a221f58308462e1c4aa2a3cf30148f0b9", size = 44707 }
 wheels = [
@@ -683,8 +697,8 @@ name = "yarl"
 version = "1.9.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "idna", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
-    { name = "multidict", marker = "implementation_name != 'pypy' or sys_platform != 'win32' or (implementation_name == 'pypy' and sys_platform == 'win32')" },
+    { name = "idna" },
+    { name = "multidict" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e0/ad/bedcdccbcbf91363fd425a948994f3340924145c2bc8ccb296f4a1e52c28/yarl-1.9.4.tar.gz", hash = "sha256:566db86717cf8080b99b58b083b773a908ae40f06681e87e589a976faf8246bf", size = 141869 }
 wheels = [

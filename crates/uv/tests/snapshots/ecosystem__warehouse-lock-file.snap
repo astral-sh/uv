@@ -5,10 +5,10 @@ expression: lock
 version = 1
 requires-python = ">=3.11, <3.12"
 environment-markers = [
-    "python_version < '3.13'",
+    "python_version < '3.11'",
     "python_version >= '3.13'",
-    "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')",
-    "python_version < '3.13' and python_version >= '3.12'",
+    "python_version >= '3.11.[X]' and python_version < '3.12'",
+    "python_version >= '3.12' and python_version < '3.13'",
 ]
 
 [options]
@@ -28,9 +28,9 @@ name = "alembic"
 version = "1.13.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mako", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sqlalchemy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "mako" },
+    { name = "sqlalchemy" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/e2/efa88e86029cada2da5941ec664d50d9a3b2a91f5066405c6f90e5016c16/alembic-1.13.2.tar.gz", hash = "sha256:1ff0ae32975f4fd96028c39ed9bb3c867fe3af956bd7bb37343b54c9fe7445ef", size = 1206463 }
 wheels = [
@@ -42,8 +42,8 @@ name = "alembic-postgresql-enum"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "alembic", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sqlalchemy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "alembic" },
+    { name = "sqlalchemy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c4/63/5188bd184cc7515090ca98686b97695f68aca403c119e688b66ceb0e653b/alembic_postgresql_enum-1.3.0.tar.gz", hash = "sha256:64d5de7ac2ea39433afd965b057ca882fb420eb5cd6a7db8e2b4d0e7e673cae1", size = 14084 }
 wheels = [
@@ -55,7 +55,7 @@ name = "amqp"
 version = "5.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "vine", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "vine" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/32/2c/6eb09fbdeb3c060b37bd33f8873832897a83e7a428afe01aad333fc405ec/amqp-5.2.0.tar.gz", hash = "sha256:a1ecff425ad063ad42a486c902807d1482311481c8ad95a72694b2975e75f7fd", size = 128754 }
 wheels = [
@@ -76,8 +76,8 @@ name = "anyio"
 version = "4.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "idna", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sniffio", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "idna" },
+    { name = "sniffio" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e6/e3/c4c8d473d6780ef1853d630d581f70d655b4f8d7553c6997958c283039a2/anyio-4.4.0.tar.gz", hash = "sha256:5aadc6a1bbb7cdb0bede386cac5e2940f5e2ff3aa20277e991cf028e0585ce94", size = 163930 }
 wheels = [
@@ -98,7 +98,7 @@ name = "argon2-cffi"
 version = "23.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "argon2-cffi-bindings", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "argon2-cffi-bindings" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/31/fa/57ec2c6d16ecd2ba0cf15f3c7d1c3c2e7b5fcb83555ff56d7ab10888ec8f/argon2_cffi-23.1.0.tar.gz", hash = "sha256:879c3e79a2729ce768ebb7d36d4609e3a78a4ca2ec3a9f12286ca057e3d0db08", size = 42798 }
 wheels = [
@@ -110,7 +110,7 @@ name = "argon2-cffi-bindings"
 version = "21.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cffi" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b9/e9/184b8ccce6683b0aa2fbb7ba5683ea4b9c5763f1356347f1312c32e3c66e/argon2-cffi-bindings-21.2.0.tar.gz", hash = "sha256:bb89ceffa6c791807d1305ceb77dbfacc5aa499891d2c55661c6459651fc39e3", size = 1779911 }
 wheels = [
@@ -167,7 +167,7 @@ name = "auto-click-auto"
 version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "click" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/85/bc/58ada0e0d9f96e44556ee8c355c8456fe8a2ae3106c70a47be14c2391618/auto_click_auto-0.1.5.tar.gz", hash = "sha256:fbe2025af8ae3447e052f3b8284e56bc54d737613da6e30e7c3660f06b79ac2c", size = 9439 }
 wheels = [
@@ -179,8 +179,8 @@ name = "automat"
 version = "22.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "attrs" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/7b/9c3d26d8a0416eefbc0428f168241b32657ca260fb7ef507596ff5c2f6c4/Automat-22.10.0.tar.gz", hash = "sha256:e56beb84edad19dcc11d30e8d9b895f75deeb5ef5e96b84a467066b3b84bb04e", size = 59099 }
 wheels = [
@@ -192,9 +192,9 @@ name = "b2sdk"
 version = "2.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "annotated-types", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "logfury", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "annotated-types" },
+    { name = "logfury" },
+    { name = "requests" },
     { name = "typing-extensions", marker = "python_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/53/2b4ac6ef318444bde570c36219ff0c8cd2207fb2fd8183d88fdf4f0445ab/b2sdk-2.5.0.tar.gz", hash = "sha256:d7c20125e64508a730e56307d75284790079cdb88e63851fff820a09b24fb1d9", size = 203212 }
@@ -246,10 +246,10 @@ name = "beaupy"
 version = "3.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "emoji", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "python-yakh", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "questo", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rich", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "emoji" },
+    { name = "python-yakh" },
+    { name = "questo" },
+    { name = "rich" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ab/c6/3097949e005025ca05b3ab885d72018b0dced3f8ac560c88fd38dbe46ae9/beaupy-3.9.1.tar.gz", hash = "sha256:4d9655aa93c099f12291290d8340dfb71796ab27a1706ce41c736c451cb9b88e", size = 16541 }
 wheels = [
@@ -261,7 +261,7 @@ name = "beautifulsoup4"
 version = "4.12.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "soupsieve", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "soupsieve" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b3/ca/824b1195773ce6166d388573fc106ce56d4a805bd7427b624e063596ec58/beautifulsoup4-4.12.3.tar.gz", hash = "sha256:74e3d1928edc070d21748185c46e3fb33490f22f52a3addee9aee0f4f7781051", size = 581181 }
 wheels = [
@@ -282,11 +282,11 @@ name = "black"
 version = "24.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mypy-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pathspec", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "platformdirs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "click" },
+    { name = "mypy-extensions" },
+    { name = "packaging" },
+    { name = "pathspec" },
+    { name = "platformdirs" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a2/47/c9997eb470a7f48f7aaddd3d9a828244a2e4199569e38128715c48059ac1/black-24.4.2.tar.gz", hash = "sha256:c872b53057f000085da66a19c55d68f6f8ddcac2642392ad3a355878406fbd4d", size = 642299 }
 wheels = [
@@ -306,9 +306,9 @@ name = "boto3"
 version = "1.34.156"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "botocore", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jmespath", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "s3transfer", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "botocore" },
+    { name = "jmespath" },
+    { name = "s3transfer" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/75/2f/8c716c4ec9410746a7f6b83f0eee6e88f97d7e19fc1af308cb900c36de2c/boto3-1.34.156.tar.gz", hash = "sha256:b33e9a8f8be80d3053b8418836a7c1900410b23a30c7cb040927d601a1082e68", size = 108623 }
 wheels = [
@@ -320,8 +320,8 @@ name = "boto3-stubs"
 version = "1.34.156"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "botocore-stubs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-s3transfer", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "botocore-stubs" },
+    { name = "types-s3transfer" },
     { name = "typing-extensions", marker = "python_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6e/d6/da4a554a6436944cb47cfb84754e8a2e37b04e3ff6dfea3c4958e2eb93ed/boto3_stubs-1.34.156.tar.gz", hash = "sha256:c34220a00b6bd00a3cd326bc5d7e3296b7d1dab1a15660df6f8fba4ae307ff39", size = 88866 }
@@ -334,8 +334,8 @@ name = "botocore"
 version = "1.34.156"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "jmespath", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "jmespath" },
+    { name = "python-dateutil" },
     { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/22/5b/b524a3109579262225c5954059538476d4b615930ca2f70e2dd9772b9bed/botocore-1.34.156.tar.gz", hash = "sha256:5d1478c41ab9681e660b3322432fe09c4055759c317984b7b8d3af9557ff769a", size = 12663276 }
@@ -348,7 +348,7 @@ name = "botocore-stubs"
 version = "1.34.156"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "types-awscrt", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "types-awscrt" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/96/09/c7e97a5b6ef17493b6b7aacab268c5917384c8228770f9c92f96e30d7736/botocore_stubs-1.34.156.tar.gz", hash = "sha256:bb5ad1687cd363035c3f000854542476040455629463d4e4db1ebf41048a4c06", size = 38156 }
 wheels = [
@@ -361,8 +361,8 @@ version = "1.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "os_name == 'nt'" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyproject-hooks", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "packaging" },
+    { name = "pyproject-hooks" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/9e/2d725d2f7729c6e79ca62aeb926492abbc06e25910dd30139d60a68bcb19/build-1.2.1.tar.gz", hash = "sha256:526263f4870c26f26c433545579475377b2b7588b6f1eac76a001e873ae3e19d", size = 44781 }
 wheels = [
@@ -383,8 +383,8 @@ name = "cachecontrol"
 version = "0.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "msgpack", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "msgpack" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/06/55/edea9d90ee57ca54d34707607d15c20f72576b96cb9f3e7fc266cb06b426/cachecontrol-0.14.0.tar.gz", hash = "sha256:7db1195b41c81f8274a7bbd97c956f44e8348265a1bc7641c37dfebc39f0c938", size = 28899 }
 wheels = [
@@ -393,7 +393,7 @@ wheels = [
 
 [package.optional-dependencies]
 filecache = [
-    { name = "filelock", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "filelock" },
 ]
 
 [[package]]
@@ -410,7 +410,7 @@ name = "cairocffi"
 version = "1.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cffi" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/70/c5/1a4dc131459e68a173cbdab5fad6b524f53f9c1ef7861b7698e998b837cc/cairocffi-1.7.1.tar.gz", hash = "sha256:2e48ee864884ec4a3a34bfa8c9ab9999f688286eb714a15a43ec9d068c36557b", size = 88096 }
 wheels = [
@@ -422,11 +422,11 @@ name = "cairosvg"
 version = "2.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cairocffi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "cssselect2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "defusedxml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pillow", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "tinycss2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cairocffi" },
+    { name = "cssselect2" },
+    { name = "defusedxml" },
+    { name = "pillow" },
+    { name = "tinycss2" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d5/e6/ec5900b724e3c44af7f6f51f719919137284e5da4aabe96508baec8a1b40/CairoSVG-2.7.1.tar.gz", hash = "sha256:432531d72347291b9a9ebfb6777026b607563fd8719c46ee742db0aef7271ba0", size = 8399085 }
 wheels = [
@@ -438,7 +438,7 @@ name = "cattrs"
 version = "23.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "attrs" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215 }
 wheels = [
@@ -473,15 +473,15 @@ name = "celery"
 version = "5.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "billiard", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "click-didyoumean", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "click-plugins", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "click-repl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "kombu", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "tzdata", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "vine", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "billiard" },
+    { name = "click" },
+    { name = "click-didyoumean" },
+    { name = "click-plugins" },
+    { name = "click-repl" },
+    { name = "kombu" },
+    { name = "python-dateutil" },
+    { name = "tzdata" },
+    { name = "vine" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a4/e2/102f8d3453a9f1c6918245a97b9b8e7352a2925d4c5477a7401de2bb54dc/celery-5.3.1.tar.gz", hash = "sha256:f84d1c21a1520c116c2b7d26593926581191435a03aa74b77c941b93ca1c6210", size = 1534734 }
 wheels = [
@@ -490,11 +490,11 @@ wheels = [
 
 [package.optional-dependencies]
 sqs = [
-    { name = "boto3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "kombu", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "boto3" },
+    { name = "kombu" },
     { name = "kombu", extra = ["sqs"] },
     { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32'" },
-    { name = "urllib3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "urllib3" },
 ]
 
 [[package]]
@@ -502,10 +502,10 @@ name = "celery-redbeat"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "celery", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "redis", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "tenacity", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "celery" },
+    { name = "python-dateutil" },
+    { name = "redis" },
+    { name = "tenacity" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/35/0d/63cf4db35c111554913199a54f32be3495526ff08189f9d79a879abcc6ad/celery-redbeat-2.2.0.tar.gz", hash = "sha256:71104729380d4eaefd91a9b7d270ba7851bfff9ad55a43ac8365acbb0c608b77", size = 21372 }
 
@@ -514,7 +514,7 @@ name = "celery-types"
 version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/57/0a/f7d6089e39b43528d74f99f3f58b9900fe76894e8208ec4f22ffa71e4a73/celery_types-0.22.0.tar.gz", hash = "sha256:0ecad2fa5a6eded0a1f919e5e1e381cc2ff0635fe4b21db53b4661b6876d5b30", size = 26654 }
 wheels = [
@@ -535,7 +535,7 @@ name = "cffi"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pycparser" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1e/bf/82c351342972702867359cfeba5693927efe0a8dd568165490144f554b18/cffi-1.17.0.tar.gz", hash = "sha256:f3157624b7558b914cb039fd1af735e5e8049a87c817cc215109ad1c8779df76", size = 516073 }
 wheels = [
@@ -631,7 +631,7 @@ name = "click-didyoumean"
 version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "click" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/30/ce/217289b77c590ea1e7c24242d9ddd6e249e52c795ff10fac2c50062c48cb/click_didyoumean-0.3.1.tar.gz", hash = "sha256:4f82fdff0dbe64ef8ab2279bd6aa3f6a99c3b28c05aa09cbfc07c9d7fbb5a463", size = 3089 }
 wheels = [
@@ -643,7 +643,7 @@ name = "click-plugins"
 version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "click" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5f/1d/45434f64ed749540af821fd7e42b8e4d23ac04b1eda7c26613288d6cd8a8/click-plugins-1.1.1.tar.gz", hash = "sha256:46ab999744a9d831159c3411bb0c79346d94a444df9a3a3742e9ed63645f264b", size = 8164 }
 wheels = [
@@ -655,8 +655,8 @@ name = "click-repl"
 version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "prompt-toolkit", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "click" },
+    { name = "prompt-toolkit" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cb/a2/57f4ac79838cfae6912f997b4d1a64a858fb0c86d7fcaae6f7b58d267fca/click-repl-0.3.0.tar.gz", hash = "sha256:17849c23dba3d667247dc4defe1757fff98694e90fe37474f3feebb69ced26a9", size = 10449 }
 wheels = [
@@ -668,7 +668,7 @@ name = "cmarkgfm"
 version = "2024.1.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cffi" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7d/57/0480532cf04f77ff6f34985109079e87b9028444540731a5380abd0a3325/cmarkgfm-2024.1.14.tar.gz", hash = "sha256:a208c1726e12ba385125cef2c6d375c41c5dea4cc2673a77af712b1dbf074e90", size = 146699 }
 wheels = [
@@ -708,7 +708,7 @@ name = "configobj"
 version = "5.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cb/87/17d4c6d634c044ab08b11c0cd2a8a136d103713d438f8792d7be2c5148fb/configobj-5.0.8.tar.gz", hash = "sha256:6f704434a07dc4f4dc7c9a745172c1cad449feb548febd9f7fe362629c627a97", size = 38012 }
 wheels = [
@@ -806,8 +806,8 @@ name = "cssselect2"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tinycss2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "webencodings", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "tinycss2" },
+    { name = "webencodings" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e7/fc/326cb6f988905998f09bb54a3f5d98d4462ba119363c0dfad29750d48c09/cssselect2-0.7.0.tar.gz", hash = "sha256:1ccd984dab89fc68955043aca4e1b03e0cf29cad9880f6e28e3ba7a74b14aa5a", size = 35888 }
 wheels = [
@@ -819,7 +819,7 @@ name = "cssutils"
 version = "2.11.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "more-itertools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "more-itertools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/33/9f/329d26121fe165be44b1dfff21aa0dc348f04633931f1d20ed6cf448a236/cssutils-2.11.1.tar.gz", hash = "sha256:0563a76513b6af6eebbe788c3bf3d01c920e46b3f90c8416738c5cfc773ff8e2", size = 711657 }
 wheels = [
@@ -831,11 +831,11 @@ name = "curlylint"
 version = "0.13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "parsy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pathspec", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "toml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "attrs" },
+    { name = "click" },
+    { name = "parsy" },
+    { name = "pathspec" },
+    { name = "toml" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/75/0a/0279da0b7d28614e0dd4aa5e9fcdb79edb73b59b6175aa6058fa4b479d81/curlylint-0.13.1.tar.gz", hash = "sha256:008b9d160f3920404ac12efb05c0a39e209cb972f9aafd956b79c5f4e2162752", size = 35291 }
 wheels = [
@@ -847,7 +847,7 @@ name = "datadog"
 version = "0.49.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/24/d4/fcf0894ebeac76698076f224e566b65f6be218d673ef4b5570728c5ce157/datadog-0.49.1.tar.gz", hash = "sha256:4cb7a7991af6cadb868fe450cd456473e65f11fc678b7d7cf61044ff1c6074d8", size = 345833 }
 wheels = [
@@ -859,7 +859,7 @@ name = "ddsketch"
 version = "3.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b8/c7/25f300ba359c7e723180ce962a30e1f820c3990e3f3e8bbed16ae9387cab/ddsketch-3.0.1.tar.gz", hash = "sha256:aa8f20b2965e61731ca4fee2ca9c209f397f5bbb23f9d192ec8bd7a2f5bd9824", size = 30010 }
 wheels = [
@@ -871,18 +871,18 @@ name = "ddtrace"
 version = "2.8.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "attrs" },
     { name = "bytecode" },
-    { name = "cattrs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "ddsketch", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "envier", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "opentelemetry-api", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "protobuf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cattrs" },
+    { name = "ddsketch" },
+    { name = "envier" },
+    { name = "opentelemetry-api" },
+    { name = "protobuf" },
     { name = "setuptools", marker = "python_version >= '3.12'" },
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sqlparse", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "xmltodict", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "six" },
+    { name = "sqlparse" },
+    { name = "typing-extensions" },
+    { name = "xmltodict" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a8/98/7846fce1b0de751c88b97a1273a5bd72d67312d6fffc536cc1e7a8226453/ddtrace-2.8.5.tar.gz", hash = "sha256:11e055acbc9de6d0d2fa26d9ca97a0256ede9ff36199419bce23837764c84559", size = 6981904 }
 wheels = [
@@ -922,7 +922,7 @@ name = "deprecated"
 version = "1.2.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "wrapt", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "wrapt" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/92/14/1e41f504a246fc224d2ac264c227975427a85caf37c3979979edb9b1b232/Deprecated-1.2.14.tar.gz", hash = "sha256:e5323eb936458dccc2582dc6f9c322c852a775a27065ff2b0c4970b9d53d01b3", size = 2974416 }
 wheels = [
@@ -952,10 +952,10 @@ name = "doc8"
 version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "docutils", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pygments", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "restructuredtext-lint", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "stevedore", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "docutils" },
+    { name = "pygments" },
+    { name = "restructuredtext-lint" },
+    { name = "stevedore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a1/b5/63a2f2ceba95be5cc15813fd310d560264e8662dbd7495669a1e26d59026/doc8-1.1.1.tar.gz", hash = "sha256:d97a93e8f5a2efc4713a0804657dedad83745cca4cd1d88de9186f77f9776004", size = 26514 }
 wheels = [
@@ -982,7 +982,7 @@ wheels = [
 
 [package.optional-dependencies]
 ini = [
-    { name = "configobj", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "configobj" },
 ]
 
 [[package]]
@@ -990,8 +990,8 @@ name = "elasticsearch"
 version = "7.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "certifi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "urllib3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "certifi" },
+    { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/65/6e/7d949d1801ae0ff84de0ed0ef3473bd061d0f26647282d632f2e65a05364/elasticsearch-7.10.1.tar.gz", hash = "sha256:a725dd923d349ca0652cf95d6ce23d952e2153740cf4ab6daf4a2d804feeed48", size = 215377 }
 wheels = [
@@ -1003,9 +1003,9 @@ name = "elasticsearch-dsl"
 version = "7.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "elasticsearch", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "elasticsearch" },
+    { name = "python-dateutil" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0c/7d/dcd5493c707db180c5fc71f0d69b34b590418ee4fd1b06284df552926609/elasticsearch-dsl-7.4.1.tar.gz", hash = "sha256:07ee9c87dc28cc3cae2daa19401e1e18a172174ad9e5ca67938f752e3902a1d5", size = 56722 }
 wheels = [
@@ -1017,8 +1017,8 @@ name = "email-validator"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "dnspython", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "idna", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "dnspython" },
+    { name = "idna" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/48/ce/13508a1ec3f8bb981ae4ca79ea40384becc868bfae97fd1c942bb3a001b1/email_validator-2.2.0.tar.gz", hash = "sha256:cb690f344c617a714f22e66ae771445a1ceb46821152df8e165c5f9a364582b7", size = 48967 }
 wheels = [
@@ -1030,7 +1030,7 @@ name = "emoji"
 version = "2.12.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1b/13/ae307086e7d761fb7fdb2e3439bdd4628b10b7b372639e33fac4e52cfbc2/emoji-2.12.1.tar.gz", hash = "sha256:4aa0488817691aa58d83764b6c209f8a27c0b3ab3f89d1b8dceca1a62e4973eb", size = 442019 }
 wheels = [
@@ -1051,7 +1051,7 @@ name = "factory-boy"
 version = "3.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "faker", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "faker" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ec/02/30796763f5661ef0028e12f09b66757b2c8dd1ab783d6b7e6d834a404884/factory_boy-3.3.0.tar.gz", hash = "sha256:bc76d97d1a65bbd9842a6d722882098eb549ec8ee1081f9fb2e8ff29f0c300f1", size = 163604 }
 wheels = [
@@ -1063,7 +1063,7 @@ name = "faker"
 version = "26.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "python-dateutil" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b2/c4/1c3ac64e86e92bb99fd4906d27e3a0d10bf14827df9f3e40243be58b3068/Faker-26.2.0.tar.gz", hash = "sha256:81768de19012147521140f0d8bf5353e501ac42c1065d25e0cac455d3615c0a7", size = 1764867 }
 wheels = [
@@ -1093,9 +1093,9 @@ name = "flake8"
 version = "7.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mccabe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pycodestyle", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyflakes", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "mccabe" },
+    { name = "pycodestyle" },
+    { name = "pyflakes" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/37/72/e8d66150c4fcace3c0a450466aa3480506ba2cae7b61e100a2613afc3907/flake8-7.1.1.tar.gz", hash = "sha256:049d058491e228e03e67b390f311bbf88fce2dbaa8fa673e7aea87b7198b8d38", size = 48054 }
 wheels = [
@@ -1107,8 +1107,8 @@ name = "forcediphttpsadapter"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "packaging" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0e/95/3594efe6b53469b19b6200d67066e1f11b8f7442ca5b67a44dd17a6c4145/forcediphttpsadapter-1.1.0.tar.gz", hash = "sha256:0d224cf6e8e50eb788c9f5994a7afa6d389bac6dbe540b7dfd77a32590ad0153", size = 4794 }
 wheels = [
@@ -1120,7 +1120,7 @@ name = "freezegun"
 version = "1.5.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "python-dateutil" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2c/ef/722b8d71ddf4d48f25f6d78aa2533d505bf3eec000a7cacb8ccc8de61f2f/freezegun-1.5.1.tar.gz", hash = "sha256:b29dedfcda6d5e8e083ce71b2b542753ad48cfec44037b3fc79702e2980a89e9", size = 33697 }
 wheels = [
@@ -1132,10 +1132,10 @@ name = "furo"
 version = "2024.8.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "beautifulsoup4", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pygments", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinx", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinx-basic-ng", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "beautifulsoup4" },
+    { name = "pygments" },
+    { name = "sphinx" },
+    { name = "sphinx-basic-ng" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a0/e2/d351d69a9a9e4badb4a5be062c2d0e87bd9e6c23b5e57337fef14bef34c8/furo-2024.8.6.tar.gz", hash = "sha256:b63e4cee8abfc3136d3bc03a3d45a76a850bada4d6374d24c1716b0e01394a01", size = 1661506 }
 wheels = [
@@ -1147,7 +1147,7 @@ name = "ghp-import"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "python-dateutil" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d9/29/d40217cbe2f6b1359e00c6c307bb3fc876ba74068cbab3dde77f03ca0dc4/ghp-import-2.1.0.tar.gz", hash = "sha256:9c535c4c61193c2df8871222567d7fd7e5014d835f97dc7b7439069e2413d343", size = 10943 }
 wheels = [
@@ -1159,7 +1159,7 @@ name = "gitdb"
 version = "4.0.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "smmap", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "smmap" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/19/0d/bbb5b5ee188dec84647a4664f3e11b06ade2bde568dbd489d9d64adef8ed/gitdb-4.0.11.tar.gz", hash = "sha256:bf5421126136d6d0af55bc1e7c1af1c397a34f5b7bd79e776cd3e89785c2b04b", size = 394469 }
 wheels = [
@@ -1180,7 +1180,7 @@ name = "gitpython"
 version = "3.1.43"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "gitdb", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "gitdb" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b6/a1/106fd9fa2dd989b6fb36e5893961f82992cf676381707253e0bf93eb1662/GitPython-3.1.43.tar.gz", hash = "sha256:35f314a9f878467f5453cc1fee295c3e18e52f1b99f10f6cf5b1682e968a9e7c", size = 214149 }
 wheels = [
@@ -1192,11 +1192,11 @@ name = "google-api-core"
 version = "2.19.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "google-auth", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "googleapis-common-protos", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "proto-plus", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "protobuf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "google-auth" },
+    { name = "googleapis-common-protos" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c2/41/42a127bf163d9bf1f21540a3bf41c69b231b88707d8d753680b8878201a6/google-api-core-2.19.1.tar.gz", hash = "sha256:f4695f1e3650b316a795108a76a1c416e6afb036199d1c1f1f110916df479ffd", size = 148925 }
 wheels = [
@@ -1214,9 +1214,9 @@ name = "google-auth"
 version = "2.33.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cachetools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyasn1-modules", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rsa", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cachetools" },
+    { name = "pyasn1-modules" },
+    { name = "rsa" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/28/4d/626b37c6bcc1f211aef23f47c49375072c0cb19148627d98c85e099acbc8/google_auth-2.33.0.tar.gz", hash = "sha256:d6a52342160d7290e334b4d47ba390767e4438ad0d45b7630774533e82655b95", size = 257157 }
 wheels = [
@@ -1228,14 +1228,13 @@ name = "google-cloud-bigquery"
 version = "3.25.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "google-api-core", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
     { name = "google-api-core", extra = ["grpc"] },
-    { name = "google-auth", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-cloud-core", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-resumable-media", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "google-auth" },
+    { name = "google-cloud-core" },
+    { name = "google-resumable-media" },
+    { name = "packaging" },
+    { name = "python-dateutil" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/39/07/d6f8c55f68d796a6a045cbb3c1783ed1c77ec641acbf9e6ff78b38b127a4/google-cloud-bigquery-3.25.0.tar.gz", hash = "sha256:5b2aff3205a854481117436836ae1403f11f2594e6810a98886afd57eda28509", size = 455186 }
 wheels = [
@@ -1247,8 +1246,8 @@ name = "google-cloud-core"
 version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "google-api-core", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-auth", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "google-api-core" },
+    { name = "google-auth" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b8/1f/9d1e0ba6919668608570418a9a51e47070ac15aeff64261fb092d8be94c0/google-cloud-core-2.4.1.tar.gz", hash = "sha256:9b7749272a812bde58fff28868d0c5e2f585b82f37e09a1f6ed2d4d10f134073", size = 35587 }
 wheels = [
@@ -1260,12 +1259,12 @@ name = "google-cloud-storage"
 version = "2.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "google-api-core", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-auth", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-cloud-core", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-crc32c", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-resumable-media", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "google-api-core" },
+    { name = "google-auth" },
+    { name = "google-cloud-core" },
+    { name = "google-crc32c" },
+    { name = "google-resumable-media" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/14/579c9cd7b14475ca7ae93a11c565cd4b2053cdf5f37b465829be16a0c22e/google_cloud_storage-2.18.1.tar.gz", hash = "sha256:6707a6f30a05aee36faca81296419ca2907ac750af1c0457f278bc9a6fb219ad", size = 5532795 }
 wheels = [
@@ -1295,7 +1294,7 @@ name = "google-resumable-media"
 version = "2.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "google-crc32c", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "google-crc32c" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/58/5a/0efdc02665dca14e0837b62c8a1a93132c264bd02054a15abb2218afe0ae/google_resumable_media-2.7.2.tar.gz", hash = "sha256:5280aed4629f2b60b847b0d42f9857fd4935c11af266744df33d8074cae92fe0", size = 2163099 }
 wheels = [
@@ -1307,7 +1306,7 @@ name = "googleapis-common-protos"
 version = "1.63.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "protobuf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "protobuf" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/1a/41723ae380fa9c561cbe7b61c4eef9091d5fe95486465ccfc84845877331/googleapis-common-protos-1.63.2.tar.gz", hash = "sha256:27c5abdffc4911f28101e635de1533fb4cfd2c37fbaa9174587c799fac90aa87", size = 112890 }
 wheels = [
@@ -1371,9 +1370,9 @@ name = "grpcio-status"
 version = "1.65.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "googleapis-common-protos", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "grpcio", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "protobuf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "googleapis-common-protos" },
+    { name = "grpcio" },
+    { name = "protobuf" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4f/70/f9d165fbc37cb198137bef6961c7f49556bc5c68429d521c6397daf742a0/grpcio_status-1.65.4.tar.gz", hash = "sha256:1803968c4f14d81b4b156f6f2b54e6959bac4f40b0a6ca2bd4c169978438b9dc", size = 13528 }
 wheels = [
@@ -1385,7 +1384,7 @@ name = "gunicorn"
 version = "22.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "packaging" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1e/88/e2f93c5738a4c1f56a458fc7a5b1676fc31dcdbb182bef6b40a141c17d66/gunicorn-22.0.0.tar.gz", hash = "sha256:4a0b436239ff76fb33f11c07a16482c521a7e09c1ce3cc293c2330afe01bec63", size = 3639760 }
 wheels = [
@@ -1444,8 +1443,8 @@ name = "html5lib"
 version = "1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "webencodings", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "six" },
+    { name = "webencodings" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ac/b6/b55c3f49042f1df3dcd422b7f224f939892ee94f22abcf503a9b7339eaf2/html5lib-1.1.tar.gz", hash = "sha256:b2e5b40261e20f354d198eae92afc10d750afb487ed5e50f9c4eaf07c184146f", size = 272215 }
 wheels = [
@@ -1502,7 +1501,7 @@ name = "importlib-metadata"
 version = "8.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/20/ff/bd28f70283b9cca0cbf0c2a6082acbecd822d1962ae7b2a904861b9965f8/importlib_metadata-8.0.0.tar.gz", hash = "sha256:188bd24e4c346d3f0a933f275c2fec67050326a856b9a359881d7c2a697e8812", size = 52667 }
 wheels = [
@@ -1532,7 +1531,7 @@ name = "isodate"
 version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/db/7a/c0a56c7d56c7fa723988f122fa1f1ccf8c5c4ccc48efad0d214b49e5b1af/isodate-0.6.1.tar.gz", hash = "sha256:48c5881de7e8b0a0d648cb024c8062dc84e7b840ed81e864c7614fd3c127bde9", size = 28443 }
 wheels = [
@@ -1562,7 +1561,7 @@ name = "jinja2"
 version = "3.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ed/55/39036716d19cab0747a5020fc7e907f362fbf48c984b14e62127f7e68e5d/jinja2-3.1.4.tar.gz", hash = "sha256:4a3aee7acbbe7303aede8e9648d13b8bf88a429282aa6122a993f0ac800cb369", size = 240245 }
 wheels = [
@@ -1583,10 +1582,10 @@ name = "jsonschema"
 version = "4.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jsonschema-specifications", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "referencing", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rpds-py", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "attrs" },
+    { name = "jsonschema-specifications" },
+    { name = "referencing" },
+    { name = "rpds-py" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/38/2e/03362ee4034a4c917f697890ccd4aec0800ccf9ded7f511971c75451deec/jsonschema-4.23.0.tar.gz", hash = "sha256:d71497fef26351a33265337fa77ffeb82423f3ea21283cd9467bb03999266bc4", size = 325778 }
 wheels = [
@@ -1598,10 +1597,10 @@ name = "jsonschema-path"
 version = "0.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pathable", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyyaml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "referencing", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pathable" },
+    { name = "pyyaml" },
+    { name = "referencing" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/85/39/3a58b63a997b0cf824536d6f84fff82645a1ca8de222ee63586adab44dfa/jsonschema_path-0.3.3.tar.gz", hash = "sha256:f02e5481a4288ec062f8e68c808569e427d905bedfecb7f2e4c69ef77957c382", size = 11589 }
 wheels = [
@@ -1613,7 +1612,7 @@ name = "jsonschema-specifications"
 version = "2023.12.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "referencing", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "referencing" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f8/b9/cc0cc592e7c195fb8a650c1d5990b10175cf13b4c97465c72ec841de9e4b/jsonschema_specifications-2023.12.1.tar.gz", hash = "sha256:48a76787b3e70f5ed53f1160d2b81f586e4ca6d1548c5de7085d1682674764cc", size = 13983 }
 wheels = [
@@ -1625,8 +1624,8 @@ name = "kombu"
 version = "5.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "amqp", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "vine", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "amqp" },
+    { name = "vine" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c8/69/b703f8ec8d0406be22534dad885cac847fe092b793c4893034e3308feb9b/kombu-5.3.1.tar.gz", hash = "sha256:fbd7572d92c0bf71c112a6b45163153dea5a7b6a701ec16b568c27d0fd2370f2", size = 434284 }
 wheels = [
@@ -1635,9 +1634,9 @@ wheels = [
 
 [package.optional-dependencies]
 sqs = [
-    { name = "boto3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "boto3" },
     { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32'" },
-    { name = "urllib3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "urllib3" },
 ]
 
 [[package]]
@@ -1668,10 +1667,10 @@ name = "limits"
 version = "3.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "deprecated", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "importlib-resources", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "deprecated" },
+    { name = "importlib-resources" },
+    { name = "packaging" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c4/5f/89fb5405ee37d8b172e48e357438dd79482731b0cd5db2f734ac58f019e4/limits-3.13.0.tar.gz", hash = "sha256:6571b0c567bfa175a35fed9f8a954c0c92f1c3200804282f1b8f1de4ad98a953", size = 70218 }
 wheels = [
@@ -1683,9 +1682,9 @@ name = "linehaul"
 version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cattrs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyparsing", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cattrs" },
+    { name = "packaging" },
+    { name = "pyparsing" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f8/e7/74d1bd36ed26ac43bfe22e97129edaa7066f7af4bf76084b9493cd581d58/linehaul-1.0.1.tar.gz", hash = "sha256:09d71b1f6a9ab92dd8c763b3d099e4ae05c2845ee783a02d5fe731e6e2a6a997", size = 19410 }
 wheels = [
@@ -1756,7 +1755,7 @@ name = "mako"
 version = "1.3.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/67/03/fb5ba97ff65ce64f6d35b582aacffc26b693a98053fa831ab43a437cbddb/Mako-1.3.5.tar.gz", hash = "sha256:48dbc20568c1d276a2698b36d968fa76161bf127194907ea6fc594fa81f943bc", size = 392738 }
 wheels = [
@@ -1777,7 +1776,7 @@ name = "markdown-it-py"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mdurl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "mdurl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/38/71/3b932df36c1a044d397a1f92d1cf91ee0a503d91e470cbd670aa66b07ed0/markdown-it-py-3.0.0.tar.gz", hash = "sha256:e3f60a94fa066dc52ec76661e37c851cb232d92f9886b15cb560aaada2df8feb", size = 74596 }
 wheels = [
@@ -1826,7 +1825,7 @@ name = "mdit-py-plugins"
 version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markdown-it-py", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "markdown-it-py" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/00/6c/79c52651b22b64dba5c7bbabd7a294cc410bfb2353250dc8ade44d7d8ad8/mdit_py_plugins-0.4.1.tar.gz", hash = "sha256:834b8ac23d1cd60cec703646ffd22ae97b7955a6d596eb1d304be1e251ae499c", size = 42713 }
 wheels = [
@@ -1877,19 +1876,19 @@ name = "mkdocs"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "click" },
     { name = "colorama", marker = "platform_system == 'Windows'" },
-    { name = "ghp-import", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jinja2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "markdown", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "markupsafe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mergedeep", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs-get-deps", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pathspec", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyyaml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyyaml-env-tag", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "watchdog", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "ghp-import" },
+    { name = "jinja2" },
+    { name = "markdown" },
+    { name = "markupsafe" },
+    { name = "mergedeep" },
+    { name = "mkdocs-get-deps" },
+    { name = "packaging" },
+    { name = "pathspec" },
+    { name = "pyyaml" },
+    { name = "pyyaml-env-tag" },
+    { name = "watchdog" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/6b/26b33cc8ad54e8bc0345cddc061c2c5c23e364de0ecd97969df23f95a673/mkdocs-1.6.0.tar.gz", hash = "sha256:a73f735824ef83a4f3bcb7a231dcab23f5a838f88b7efc54a0eef5fbdbc3c512", size = 3888392 }
 wheels = [
@@ -1901,9 +1900,9 @@ name = "mkdocs-get-deps"
 version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mergedeep", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "platformdirs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyyaml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "mergedeep" },
+    { name = "platformdirs" },
+    { name = "pyyaml" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/98/f5/ed29cd50067784976f25ed0ed6fcd3c2ce9eb90650aa3b2796ddf7b6870b/mkdocs_get_deps-0.2.0.tar.gz", hash = "sha256:162b3d129c7fad9b19abfdcb9c1458a651628e4b1dea628ac68790fb3061c60c", size = 10239 }
 wheels = [
@@ -1915,11 +1914,11 @@ name = "mkdocs-macros-plugin"
 version = "1.0.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "jinja2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "python-dateutil", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyyaml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "termcolor", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "jinja2" },
+    { name = "mkdocs" },
+    { name = "python-dateutil" },
+    { name = "pyyaml" },
+    { name = "termcolor" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c1/92/06948e4d60aac760c227f8fcc86d20dfc0cf9b1735b087302ac6c16a9479/mkdocs-macros-plugin-1.0.5.tar.gz", hash = "sha256:fe348d75f01c911f362b6d998c57b3d85b505876dde69db924f2c512c395c328", size = 566013 }
 wheels = [
@@ -1931,17 +1930,17 @@ name = "mkdocs-material"
 version = "9.5.31"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "babel", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "colorama", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jinja2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "markdown", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs-material-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "paginate", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pygments", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pymdown-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "regex", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "babel" },
+    { name = "colorama" },
+    { name = "jinja2" },
+    { name = "markdown" },
+    { name = "mkdocs" },
+    { name = "mkdocs-material-extensions" },
+    { name = "paginate" },
+    { name = "pygments" },
+    { name = "pymdown-extensions" },
+    { name = "regex" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/98/6b/ebc5dfe25614aabd3cfbd7bd18c4224194dfce0eb01d221fb3bf8988b380/mkdocs_material-9.5.31.tar.gz", hash = "sha256:31833ec664772669f5856f4f276bf3fdf0e642a445e64491eda459249c3a1ca8", size = 4103722 }
 wheels = [
@@ -1962,11 +1961,10 @@ name = "mkdocs-rss-plugin"
 version = "1.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cachecontrol", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
     { name = "cachecontrol", extra = ["filecache"] },
-    { name = "gitpython", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "gitpython" },
+    { name = "mkdocs" },
+    { name = "requests" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/97/7f/6d668a1f6210db0738c9043922e38c2ff8646559d200e94ad1b4766a677f/mkdocs_rss_plugin-1.15.0.tar.gz", hash = "sha256:92995ed6c77b2ae1f5f2913e62282c27e50c35d618c4291b5b939e50badd7504", size = 32566 }
@@ -2027,8 +2025,8 @@ name = "mypy"
 version = "1.11.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mypy-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "mypy-extensions" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b6/9c/a4b3bda53823439cf395db8ecdda6229a83f9bf201714a68a15190bb2919/mypy-1.11.1.tar.gz", hash = "sha256:f404a0b069709f18bbdb702eb3dcfe51910602995de00bd39cea3050b5772d08", size = 3078369 }
 wheels = [
@@ -2059,9 +2057,9 @@ name = "mypy-zope"
 version = "0.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mypy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-schema", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "mypy" },
+    { name = "zope-interface" },
+    { name = "zope-schema" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/77/45/ba2c0ac5487a70ba26209bc32773ead684092c40e122c5d3c50f8587fa0f/mypy-zope-0.1.3.tar.gz", hash = "sha256:4247f7ad0202cc82f12ee0b14a3d7b31adfeff1b6d5ca176168853d64c672dd1", size = 23600 }
 
@@ -2070,12 +2068,12 @@ name = "myst-parser"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "docutils", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jinja2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "markdown-it-py", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mdit-py-plugins", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyyaml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinx", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "docutils" },
+    { name = "jinja2" },
+    { name = "markdown-it-py" },
+    { name = "mdit-py-plugins" },
+    { name = "pyyaml" },
+    { name = "sphinx" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/85/55/6d1741a1780e5e65038b74bce6689da15f620261c490c3511eb4c12bac4b/myst_parser-4.0.0.tar.gz", hash = "sha256:851c9dfb44e36e56d15d05e72f02b80da21a9e0d07cba96baf5e2d476bb91531", size = 93858 }
 wheels = [
@@ -2119,14 +2117,14 @@ name = "openapi-core"
 version = "0.19.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "isodate", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jsonschema", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jsonschema-path", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "more-itertools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "openapi-schema-validator", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "openapi-spec-validator", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "parse", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "werkzeug", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "isodate" },
+    { name = "jsonschema" },
+    { name = "jsonschema-path" },
+    { name = "more-itertools" },
+    { name = "openapi-schema-validator" },
+    { name = "openapi-spec-validator" },
+    { name = "parse" },
+    { name = "werkzeug" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9f/ad/8ec5980178957abc9a3da1a58b68ae4b17fa14c2b859157e97165537ac68/openapi_core-0.19.2.tar.gz", hash = "sha256:db4e13dd3162d861d9485ae804f350586d9fd1d72808cdb264d6993d9b5ede3f", size = 108121 }
 wheels = [
@@ -2138,9 +2136,9 @@ name = "openapi-schema-validator"
 version = "0.6.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "jsonschema", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jsonschema-specifications", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rfc3339-validator", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "jsonschema" },
+    { name = "jsonschema-specifications" },
+    { name = "rfc3339-validator" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5c/b2/7d5bdf2b26b6a95ebf4fbec294acaf4306c713f3a47c2453962511110248/openapi_schema_validator-0.6.2.tar.gz", hash = "sha256:11a95c9c9017912964e3e5f2545a5b11c3814880681fcacfb73b1759bb4f2804", size = 11860 }
 wheels = [
@@ -2152,10 +2150,10 @@ name = "openapi-spec-validator"
 version = "0.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "jsonschema", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jsonschema-path", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "lazy-object-proxy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "openapi-schema-validator", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "jsonschema" },
+    { name = "jsonschema-path" },
+    { name = "lazy-object-proxy" },
+    { name = "openapi-schema-validator" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/67/fe/21954ff978239dc29ebb313f5c87eeb4ec929b694b9667323086730998e2/openapi_spec_validator-0.7.1.tar.gz", hash = "sha256:8577b85a8268685da6f8aa30990b83b7960d4d1117e901d451b5d572605e5ec7", size = 37985 }
 wheels = [
@@ -2167,8 +2165,8 @@ name = "opentelemetry-api"
 version = "1.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "deprecated", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "importlib-metadata", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "deprecated" },
+    { name = "importlib-metadata" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/48/d4/e9a0ddef6eed086c96e8265d864a46da099611b7be153b0cfb63fd47e1b4/opentelemetry_api-1.26.0.tar.gz", hash = "sha256:2bd639e4bed5b18486fef0b5a520aaffde5a18fc225e808a1ac4df363f43a1ce", size = 60904 }
 wheels = [
@@ -2219,7 +2217,7 @@ name = "packaging-legacy"
 version = "23.0.post0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "packaging" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f8/31/3a2fe3f5fc01a0671ba20560c556b4239b69bfef842a20bba99e3239fd3e/packaging_legacy-23.0.post0.tar.gz", hash = "sha256:c974a42291a77112313f0198b87ad96e07a3c357295d572560a4b9c368f7d9db", size = 8655 }
 wheels = [
@@ -2237,8 +2235,8 @@ name = "paginate-sqlalchemy"
 version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "paginate", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sqlalchemy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "paginate" },
+    { name = "sqlalchemy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7b/59/2ee2fd72e15306ccecc74fc6d0eec64a12bf6a9eb3ca3dfc7edaad7d7330/paginate_sqlalchemy-0.3.1.tar.gz", hash = "sha256:9ee349b74a5f2f52455cb1280d0ca24222c8137e638363df5877e6e76c369b5b", size = 3127 }
 wheels = [
@@ -2313,7 +2311,7 @@ name = "pep8-naming"
 version = "0.14.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "flake8", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "flake8" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/8e/1de32e908d8b008bb9352bfe7749aedecb71e2793d36c7ee342716acd1ec/pep8-naming-0.14.1.tar.gz", hash = "sha256:1ef228ae80875557eb6c1549deafed4dabbf3261cfcafa12f773fe0db9be8a36", size = 16546 }
 wheels = [
@@ -2375,7 +2373,7 @@ name = "pip-api"
 version = "0.0.34"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pip", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pip" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b9/f1/ee85f8c7e82bccf90a3c7aad22863cc6e20057860a1361083cd2adacb92e/pip_api-0.0.34.tar.gz", hash = "sha256:9b75e958f14c5a2614bae415f2adf7eeb54d50a2cfbe7e24fd4826471bac3625", size = 123017 }
 wheels = [
@@ -2387,12 +2385,12 @@ name = "pip-tools"
 version = "7.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "build", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pip", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyproject-hooks", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "wheel", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "build" },
+    { name = "click" },
+    { name = "pip" },
+    { name = "pyproject-hooks" },
+    { name = "setuptools" },
+    { name = "wheel" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1a/87/1ef453f10fb0772f43549686f924460cc0a2404b828b348f72c52cb2f5bf/pip-tools-7.4.1.tar.gz", hash = "sha256:864826f5073864450e24dbeeb85ce3920cdfb09848a3d69ebf537b521f14bcc9", size = 145417 }
 wheels = [
@@ -2413,8 +2411,8 @@ name = "plaster-pastedeploy"
 version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pastedeploy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "plaster", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pastedeploy" },
+    { name = "plaster" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c7/af/01a22f73ce97c6375c88d7ceaf6f5f4f345e940da93c94f98833d898a449/plaster_pastedeploy-1.0.1.tar.gz", hash = "sha256:be262e6d2e41a7264875daa2fe2850cbb0615728bcdc92828fdc72736e381412", size = 20915 }
 wheels = [
@@ -2462,11 +2460,11 @@ name = "premailer"
 version = "3.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cachetools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "cssselect", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "cssutils", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "lxml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cachetools" },
+    { name = "cssselect" },
+    { name = "cssutils" },
+    { name = "lxml" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a3/6f/e49bd31941eff2987076383fa6d811eb785a28f498f5bb131e981bd71e13/premailer-3.10.0.tar.gz", hash = "sha256:d1875a8411f5dc92b53ef9f193db6c0f879dc378d618e0ad292723e388bfe4c2", size = 24342 }
 wheels = [
@@ -2487,7 +2485,7 @@ name = "prompt-toolkit"
 version = "3.0.47"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "wcwidth", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "wcwidth" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/47/6d/0279b119dafc74c1220420028d490c4399b790fc1256998666e3a341879f/prompt_toolkit-3.0.47.tar.gz", hash = "sha256:1e1b29cb58080b1e69f207c893a1a7bf16d127a5c30c9d17a25a5d77792e5360", size = 425859 }
 wheels = [
@@ -2499,7 +2497,7 @@ name = "proto-plus"
 version = "1.24.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "protobuf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "protobuf" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3e/fc/e9a65cd52c1330d8d23af6013651a0bc50b6d76bcbdf91fae7cd19c68f29/proto-plus-1.24.0.tar.gz", hash = "sha256:30b72a5ecafe4406b0d339db35b56c4059064e69227b8c3bda7462397f966445", size = 55942 }
 wheels = [
@@ -2542,7 +2540,7 @@ name = "psycopg"
 version = "3.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "typing-extensions" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ff/8e/f176997fd790d3dce9fa0ca695391beaeee39af7ecd6d426c4c063cf6744/psycopg-3.2.1.tar.gz", hash = "sha256:dc8da6dc8729dacacda3cc2f17d2c9397a70a66cf0d2b69c91065d60d5f00cb7", size = 155313 }
@@ -2575,7 +2573,7 @@ name = "pyasn1-modules"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyasn1", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyasn1" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f7/00/e7bd1dec10667e3f2be602686537969a7ac92b0a7c5165be2e5875dc3971/pyasn1_modules-0.4.0.tar.gz", hash = "sha256:831dbcea1b177b28c9baddf4c6d1013c24c3accd14a1873fffaa6a2e905f17b6", size = 307859 }
 wheels = [
@@ -2627,8 +2625,8 @@ name = "pydantic"
 version = "2.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "annotated-types", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pydantic-core", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "annotated-types" },
+    { name = "pydantic-core" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8c/99/d0a5dca411e0a017762258013ba9905cd6e7baa9a3fd1fe8b6529472902e/pydantic-2.8.2.tar.gz", hash = "sha256:6f62c13d067b0755ad1c21a34bdd06c0c12625a22b0fc09c6b149816604f7c2a", size = 739834 }
@@ -2641,7 +2639,7 @@ name = "pydantic-core"
 version = "2.20.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/12/e3/0d5ad91211dba310f7ded335f4dad871172b9cc9ce204f5a56d76ccd6247/pydantic_core-2.20.1.tar.gz", hash = "sha256:26ca695eeee5f9f1aeeb211ffc12f10bcb6f71e2989988fda61dabd65db878d4", size = 388371 }
 wheels = [
@@ -2712,7 +2710,7 @@ wheels = [
 
 [package.optional-dependencies]
 crypto = [
-    { name = "cryptography", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cryptography" },
 ]
 
 [[package]]
@@ -2720,8 +2718,8 @@ name = "pymacaroons"
 version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pynacl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pynacl" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/37/b4/52ff00b59e91c4817ca60210c33caf11e85a7f68f7b361748ca2eb50923e/pymacaroons-0.13.0.tar.gz", hash = "sha256:1e6bba42a5f66c245adf38a5a4006a99dcc06a0703786ea636098667d42903b8", size = 21083 }
 wheels = [
@@ -2733,8 +2731,8 @@ name = "pymdown-extensions"
 version = "10.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markdown", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyyaml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "markdown" },
+    { name = "pyyaml" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d8/d3/fb86beeaa4416f73a28a5e8d440976b7cada2b2d7b5e715b2bd849d4de32/pymdown_extensions-10.9.tar.gz", hash = "sha256:6ff740bcd99ec4172a938970d42b96128bdc9d4b9bcad72494f29921dc69b753", size = 812128 }
 wheels = [
@@ -2746,7 +2744,7 @@ name = "pynacl"
 version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cffi" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/22/27582568be639dfe22ddb3902225f91f2f17ceff88ce80e4db396c8986da/PyNaCl-1.5.0.tar.gz", hash = "sha256:8ac7448f09ab85811607bdd21ec2464495ac8b7c66d146bf545b0f08fb9220ba", size = 3392854 }
 wheels = [
@@ -2766,7 +2764,7 @@ name = "pyopenssl"
 version = "24.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cryptography" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5d/70/ff56a63248562e77c0c8ee4aefc3224258f1856977e0c1472672b62dadb8/pyopenssl-24.2.1.tar.gz", hash = "sha256:4247f0dbe3748d560dcbb2ff3ea01af0f9a1a001ef5f7c4c647956ed8cbf0e95", size = 184323 }
 wheels = [
@@ -2802,15 +2800,15 @@ name = "pyramid"
 version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "hupper", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "plaster", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "plaster-pastedeploy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "translationstring", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "venusian", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "webob", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-deprecation", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "hupper" },
+    { name = "plaster" },
+    { name = "plaster-pastedeploy" },
+    { name = "setuptools" },
+    { name = "translationstring" },
+    { name = "venusian" },
+    { name = "webob" },
+    { name = "zope-deprecation" },
+    { name = "zope-interface" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/47/c3/5d5736e692fc7ff052577f03136b5edfdf1e2e177eff2f4b91206acae11d/pyramid-2.0.2.tar.gz", hash = "sha256:372138a738e4216535cc76dcce6eddd5a1aaca95130f2354fb834264c06f18de", size = 2637533 }
 wheels = [
@@ -2822,9 +2820,9 @@ name = "pyramid-debugtoolbar"
 version = "4.12.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pygments", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-mako", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pygments" },
+    { name = "pyramid" },
+    { name = "pyramid-mako" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/09/c2757fa0d1dd4d3f748e5160453bf5a50918f2fbeb22913e184998989644/pyramid_debugtoolbar-4.12.1.tar.gz", hash = "sha256:71e888d349c85fcca12b3e6dc4c7ae8e3f02a1d5acc05154fd9ba8c7f661b43d", size = 3081467 }
 wheels = [
@@ -2836,10 +2834,10 @@ name = "pyramid-jinja2"
 version = "2.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "jinja2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "markupsafe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-deprecation", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "jinja2" },
+    { name = "markupsafe" },
+    { name = "pyramid" },
+    { name = "zope-deprecation" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b9/18/bd33281543c1ea7b2b750d48049741c50dc5bf5aef29774dcf88d3071eab/pyramid_jinja2-2.10.1.tar.gz", hash = "sha256:8c508cb35c135f95149ca236110f9c8875343575740d16c5cb73a50ef1c21677", size = 77976 }
 wheels = [
@@ -2851,9 +2849,9 @@ name = "pyramid-mailer"
 version = "0.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "repoze-sendmail", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "transaction", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyramid" },
+    { name = "repoze-sendmail" },
+    { name = "transaction" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a0/f2/6febf5459dff4d7e653314d575469ad2e11b9d2af2c3606360e1c67202f2/pyramid_mailer-0.15.1.tar.gz", hash = "sha256:ec0aff54d9179b2aa2922ff82c2016a4dc8d1da5dc3408d6594f0e2096446f9b", size = 46836 }
 wheels = [
@@ -2865,8 +2863,8 @@ name = "pyramid-mako"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mako", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "mako" },
+    { name = "pyramid" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/63/7b/5e2af68f675071a6bad148c1c393928f0ef5fcd94e95cbf53b89d6471a83/pyramid_mako-1.1.0.tar.gz", hash = "sha256:0066c863441f1c3ddea60cee1ccc50d00a91a317a8052ca44131da1a12a840e2", size = 31236 }
 wheels = [
@@ -2878,8 +2876,8 @@ name = "pyramid-openapi3"
 version = "0.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "openapi-core", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "openapi-core" },
+    { name = "pyramid" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1f/69/6023bc9ba4fbbc3dc38971bdb055ac036c6de44c3be37398cbc751be893b/pyramid_openapi3-0.19.tar.gz", hash = "sha256:843c1666d7f57e29694c2deaf215c83b96d210a3a3b479d52fbf4575b38869b0", size = 20826 }
 wheels = [
@@ -2891,8 +2889,8 @@ name = "pyramid-retry"
 version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyramid" },
+    { name = "zope-interface" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/bf/02/2a084e7bc8ca3c50b67c6a6d58598c5771d93399e9ff2aadf6aa29c1adcc/pyramid_retry-2.1.1.tar.gz", hash = "sha256:baa8276ae68babad09e5f2f94efc4f7421f3b8fb526151df522052f8cd3ec0c9", size = 23266 }
 wheels = [
@@ -2904,8 +2902,8 @@ name = "pyramid-rpc"
 version = "0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "venusian", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyramid" },
+    { name = "venusian" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2d/6a/cd63ce9e4ee09b59061f889a6b4fe5981fe1e64e536127d3ad3abe9cc829/pyramid_rpc-0.8.tar.gz", hash = "sha256:5dcd59a52d28ed5594df897ddbd473f68e599d48d4c86546e688db9752fa1f3a", size = 30940 }
 wheels = [
@@ -2917,9 +2915,9 @@ name = "pyramid-services"
 version = "2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "wired", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyramid" },
+    { name = "wired" },
+    { name = "zope-interface" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a1/69/2564c19c3377eef855caa94ce7e31dbf8962532788c6b7de6b7a11640aa9/pyramid_services-2.2.tar.gz", hash = "sha256:459f4da035198592b776fe80f51e72439984f50abd4f2f1719584d37aa763639", size = 14023 }
 wheels = [
@@ -2931,8 +2929,8 @@ name = "pyramid-tm"
 version = "2.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "transaction", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyramid" },
+    { name = "transaction" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/65/93/601f4410a76026abf4d589c815ef6626b4923d004f30a7af105117c67d44/pyramid_tm-2.5.tar.gz", hash = "sha256:5c81dcecd33770f5e3596687d2be35ffc4f8ce5eda00a31acb00ae35a51430d0", size = 34524 }
 wheels = [
@@ -2945,9 +2943,9 @@ version = "8.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "iniconfig", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pluggy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b4/8c/9862305bdcd6020bc7b45b1b5e7397a6caf1a33d3025b9a003b39075ffb2/pytest-8.3.2.tar.gz", hash = "sha256:c132345d12ce551242c87269de812483f5bcc87cdbb4722e48487ba194f9fdce", size = 1439314 }
 wheels = [
@@ -2959,9 +2957,9 @@ name = "pytest-icdiff"
 version = "0.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "icdiff", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pprintpp", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytest", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "icdiff" },
+    { name = "pprintpp" },
+    { name = "pytest" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5a/0c/66e1e2590e98f4428e374a3b6448dc086a908d15b1e24b914539d13b7ac4/pytest-icdiff-0.9.tar.gz", hash = "sha256:13aede616202e57fcc882568b64589002ef85438046f012ac30a8d959dac8b75", size = 7110 }
 wheels = [
@@ -2973,11 +2971,11 @@ name = "pytest-postgresql"
 version = "6.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mirakuru", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "port-for", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "psycopg", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytest", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "mirakuru" },
+    { name = "port-for" },
+    { name = "psycopg" },
+    { name = "pytest" },
+    { name = "setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/a3/ed108b77370e53830dbeac0b14bce1637c21e8cfa3b4818194668ad0dd2f/pytest-postgresql-6.0.0.tar.gz", hash = "sha256:6a4d8e600a2eef273f3c0e846cd0b2ea577282e252de29b4ca854bfb929bb682", size = 46932 }
 wheels = [
@@ -2989,7 +2987,7 @@ name = "pytest-randomly"
 version = "3.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pytest", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pytest" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c9/d4/6e924a0b2855736d942703dec88dfc98b4fe0881c8fa849b6b0fbb9182fa/pytest_randomly-3.15.0.tar.gz", hash = "sha256:b908529648667ba5e54723088edd6f82252f540cc340d748d1fa985539687047", size = 21743 }
 wheels = [
@@ -3001,7 +2999,7 @@ name = "pytest-socket"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pytest", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pytest" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/05/ff/90c7e1e746baf3d62ce864c479fd53410b534818b9437413903596f81580/pytest_socket-0.7.0.tar.gz", hash = "sha256:71ab048cbbcb085c15a4423b73b619a8b35d6a307f46f78ea46be51b1b7e11b3", size = 12389 }
 wheels = [
@@ -3013,7 +3011,7 @@ name = "python-dateutil"
 version = "2.9.0.post0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432 }
 wheels = [
@@ -3025,7 +3023,7 @@ name = "python-slugify"
 version = "8.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "text-unidecode", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "text-unidecode" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/87/c7/5e1547c44e31da50a460df93af11a535ace568ef89d7a811069ead340c4a/python-slugify-8.0.4.tar.gz", hash = "sha256:59202371d1d05b54a9e7720c5e038f928f45daaffe41dd10822f3907b937c856", size = 10921 }
 wheels = [
@@ -3055,7 +3053,7 @@ name = "pyupgrade"
 version = "3.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tokenize-rt", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "tokenize-rt" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/79/15cd93e47b5d670f0e32a540eb3f11bac4b5800cf1f796590eb448c6a768/pyupgrade-3.17.0.tar.gz", hash = "sha256:d5dd1dcaf9a016c31508bb9d3d09fd335d736578092f91df52bb26ac30c37919", size = 45381 }
 wheels = [
@@ -3102,7 +3100,7 @@ name = "pyyaml-env-tag"
 version = "0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyyaml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyyaml" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fb/8e/da1c6c58f751b70f8ceb1eb25bc25d524e8f14fe16edcce3f4e3ba08629c/pyyaml_env_tag-0.1.tar.gz", hash = "sha256:70092675bda14fdec33b31ba77e7543de9ddc88f2e5b99160396572d11525bdb", size = 5631 }
 wheels = [
@@ -3114,8 +3112,8 @@ name = "questo"
 version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "python-yakh", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rich", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "python-yakh" },
+    { name = "rich" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/48/c5/4f6c79f770b12a67eb60d176c727e98312b5fce6f2a41af35bf08465b892/questo-0.3.0.tar.gz", hash = "sha256:b5cf16744b0e490ff93522a45fdd953ffc878d22aea404ff14ec4e9186b64c37", size = 8033 }
 wheels = [
@@ -3127,9 +3125,9 @@ name = "readme-renderer"
 version = "43.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "docutils", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "nh3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pygments", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "docutils" },
+    { name = "nh3" },
+    { name = "pygments" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fe/b5/536c775084d239df6345dccf9b043419c7e3308bc31be4c7882196abc62e/readme_renderer-43.0.tar.gz", hash = "sha256:1818dd28140813509eeed8d62687f7cd4f7bad90d4db586001c5dc09d4fde311", size = 31768 }
 wheels = [
@@ -3138,7 +3136,7 @@ wheels = [
 
 [package.optional-dependencies]
 md = [
-    { name = "cmarkgfm", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cmarkgfm" },
 ]
 
 [[package]]
@@ -3158,8 +3156,8 @@ name = "referencing"
 version = "0.35.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "attrs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rpds-py", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "attrs" },
+    { name = "rpds-py" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/99/5b/73ca1f8e72fff6fa52119dbd185f73a907b1989428917b24cff660129b6d/referencing-0.35.1.tar.gz", hash = "sha256:25b42124a6c8b632a425174f24087783efb348a6f1e0008e63cd4466fedf703c", size = 62991 }
 wheels = [
@@ -3209,19 +3207,17 @@ name = "repository-service-tuf"
 version = "0.13.1b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "auto-click-auto", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "beaupy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "dynaconf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "auto-click-auto" },
+    { name = "beaupy" },
+    { name = "click" },
     { name = "dynaconf", extra = ["ini"] },
-    { name = "pynacl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rich", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rich-click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "securesystemslib", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pynacl" },
+    { name = "requests" },
+    { name = "rich" },
+    { name = "rich-click" },
     { name = "securesystemslib", extra = ["crypto"] },
-    { name = "sigstore", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "tuf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "sigstore" },
+    { name = "tuf" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/2a/2b986c57a215f275b94cd3265222376164c71e5bdc66b7f8d4f6d9f05b78/repository_service_tuf-0.13.1b1.tar.gz", hash = "sha256:9560cacb1f6f9276797a05afad20215a638788b8b5ac0ef59e105b5ab8ca1425", size = 277443 }
 wheels = [
@@ -3233,9 +3229,9 @@ name = "repoze-sendmail"
 version = "4.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "transaction", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "setuptools" },
+    { name = "transaction" },
+    { name = "zope-interface" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/12/4e/8ef1fd5c42765d712427b9c391419a77bd48877886d2cbc5e9f23c8cad9b/repoze.sendmail-4.4.1.tar.gz", hash = "sha256:7a8ea37914a5d38bad38052a83eac1d867b171ff4cc8b4d4994e892c05b0d424", size = 41006 }
 wheels = [
@@ -3247,10 +3243,10 @@ name = "requests"
 version = "2.32.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "certifi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "charset-normalizer", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "idna", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "urllib3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "certifi" },
+    { name = "charset-normalizer" },
+    { name = "idna" },
+    { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/63/70/2bf7780ad2d390a8d301ad0b550f1581eadbd9a20f896afe06353c2a2913/requests-2.32.3.tar.gz", hash = "sha256:55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760", size = 131218 }
 wheels = [
@@ -3262,7 +3258,7 @@ name = "requests-aws4auth"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e5/0e/af3754c15e79a6279df256b56a805f8c7512f641839f68c2aa63dafc8f3c/requests_aws4auth-1.3.1.tar.gz", hash = "sha256:b6ad4882310e03ba2538ebf94d1f001ca9feabc5c52618539cf1eb6d5af76791", size = 25886 }
 wheels = [
@@ -3274,9 +3270,9 @@ name = "responses"
 version = "0.25.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyyaml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "urllib3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/67/24/1d67c8974daa502e860b4a5b57ad6de0d7dbc0b1160ef7148189a24a40e1/responses-0.25.3.tar.gz", hash = "sha256:617b9247abd9ae28313d57a75880422d55ec63c29d33d629697590a034358dba", size = 77798 }
 wheels = [
@@ -3288,7 +3284,7 @@ name = "restructuredtext-lint"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "docutils", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "docutils" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/48/9c/6d8035cafa2d2d314f34e6cd9313a299de095b26e96f1c7312878f988eec/restructuredtext_lint-1.4.0.tar.gz", hash = "sha256:1b235c0c922341ab6c530390892eb9e92f90b9b75046063e047cacfb0f050c45", size = 16723 }
 
@@ -3297,7 +3293,7 @@ name = "rfc3339-validator"
 version = "0.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/28/ea/a9387748e2d111c3c2b275ba970b735e04e15cdb1eb30693b6b5708c4dbd/rfc3339_validator-0.1.4.tar.gz", hash = "sha256:138a2abdf93304ad60530167e51d2dfb9549521a836871b88d7f4695d0022f6b", size = 5513 }
 wheels = [
@@ -3318,8 +3314,8 @@ name = "rich"
 version = "13.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markdown-it-py", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pygments", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "markdown-it-py" },
+    { name = "pygments" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b3/01/c954e134dc440ab5f96952fe52b4fdc64225530320a910473c1fe270d9aa/rich-13.7.1.tar.gz", hash = "sha256:9be308cb1fe2f1f57d67ce99e95af38a1e2bc71ad9813b0e247cf7ffbcc3a432", size = 221248 }
 wheels = [
@@ -3331,9 +3327,9 @@ name = "rich-click"
 version = "1.8.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rich", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "click" },
+    { name = "rich" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3a/a9/a1f1af87e83832d794342fbc09c96cc7cd6798b8dfb8adfbe6ccbef8d70c/rich_click-1.8.3.tar.gz", hash = "sha256:6d75bdfa7aa9ed2c467789a0688bc6da23fbe3a143e19aa6ad3f8bac113d2ab3", size = 38209 }
 wheels = [
@@ -3392,7 +3388,7 @@ name = "rsa"
 version = "4.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyasn1", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pyasn1" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/aa/65/7d973b89c4d2351d7fb232c2e452547ddfa243e93131e7cfa766da627b52/rsa-4.9.tar.gz", hash = "sha256:e38464a49c6c85d7f1351b0126661487a7e0a14a50f1675ec50eb34d4f20ef21", size = 29711 }
 wheels = [
@@ -3404,7 +3400,7 @@ name = "s3transfer"
 version = "0.10.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "botocore", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "botocore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cb/67/94c6730ee4c34505b14d94040e2f31edf144c230b6b49e971b4f25ff8fab/s3transfer-0.10.2.tar.gz", hash = "sha256:0711534e9356d3cc692fdde846b4a1e4b0cb6519971860796e6bc4c7aea00ef6", size = 144095 }
 wheels = [
@@ -3422,7 +3418,7 @@ wheels = [
 
 [package.optional-dependencies]
 crypto = [
-    { name = "cryptography", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cryptography" },
 ]
 
 [[package]]
@@ -3430,8 +3426,8 @@ name = "sentry-sdk"
 version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "certifi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "urllib3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "certifi" },
+    { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2e/39/eb97e463e372b38d0b9c7ae705822d1df717940c04cb6d998ae15bf3eb02/sentry_sdk-2.12.0.tar.gz", hash = "sha256:8763840497b817d44c49b3fe3f5f7388d083f2337ffedf008b2cdb63b5c86dc6", size = 274179 }
 wheels = [
@@ -3452,14 +3448,14 @@ name = "sigstore"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "appdirs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "cryptography", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pydantic", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyjwt", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyopenssl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "securesystemslib", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "tuf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "appdirs" },
+    { name = "cryptography" },
+    { name = "pydantic" },
+    { name = "pyjwt" },
+    { name = "pyopenssl" },
+    { name = "requests" },
+    { name = "securesystemslib" },
+    { name = "tuf" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/cb/581f9dda4635fce04cd7db9e3ca20c08c6bff83f58e1a901460b1f710233/sigstore-1.0.0.tar.gz", hash = "sha256:0803f44914d6d12dcd53a112ae7f63714c61f31fd91b07197b3703c28366eea8", size = 59359 }
 wheels = [
@@ -3516,22 +3512,22 @@ name = "sphinx"
 version = "8.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "alabaster", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "babel", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "alabaster" },
+    { name = "babel" },
     { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "docutils", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "imagesize", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jinja2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pygments", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "snowballstemmer", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinxcontrib-applehelp", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinxcontrib-devhelp", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinxcontrib-htmlhelp", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinxcontrib-jsmath", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinxcontrib-qthelp", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinxcontrib-serializinghtml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "docutils" },
+    { name = "imagesize" },
+    { name = "jinja2" },
+    { name = "packaging" },
+    { name = "pygments" },
+    { name = "requests" },
+    { name = "snowballstemmer" },
+    { name = "sphinxcontrib-applehelp" },
+    { name = "sphinxcontrib-devhelp" },
+    { name = "sphinxcontrib-htmlhelp" },
+    { name = "sphinxcontrib-jsmath" },
+    { name = "sphinxcontrib-qthelp" },
+    { name = "sphinxcontrib-serializinghtml" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/25/a7/3cc3d6dcad70aba2e32a3ae8de5a90026a0a2fdaaa0756925e3a120249b6/sphinx-8.0.2.tar.gz", hash = "sha256:0cce1ddcc4fd3532cf1dd283bc7d886758362c5c1de6598696579ce96d8ffa5b", size = 8189041 }
 wheels = [
@@ -3543,12 +3539,12 @@ name = "sphinx-autobuild"
 version = "2024.4.16"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinx", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "starlette", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "uvicorn", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "watchfiles", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "websockets", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "colorama" },
+    { name = "sphinx" },
+    { name = "starlette" },
+    { name = "uvicorn" },
+    { name = "watchfiles" },
+    { name = "websockets" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d2/bc/8016eee9ffb86069ae7e658c136bad31a9854b476a212492b5aab4d4d5f6/sphinx_autobuild-2024.4.16.tar.gz", hash = "sha256:1c0ed37a1970eed197f9c5a66d65759e7c4e4cba7b5a5d77940752bf1a59f2c7", size = 12892 }
 wheels = [
@@ -3560,7 +3556,7 @@ name = "sphinx-basic-ng"
 version = "1.0.0b2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "sphinx", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "sphinx" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/98/0b/a866924ded68efec7a1759587a4e478aec7559d8165fac8b2ad1c0e774d6/sphinx_basic_ng-1.0.0b2.tar.gz", hash = "sha256:9ec55a47c90c8c002b5960c57492ec3021f5193cb26cebc2dc4ea226848651c9", size = 20736 }
 wheels = [
@@ -3599,8 +3595,8 @@ name = "sphinxcontrib-httpdomain"
 version = "1.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinx", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "six" },
+    { name = "sphinx" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/ef/82d3cfafb7febce4f7df8dcf3cde9d072350b41066e05a4f559b4e9105d0/sphinxcontrib-httpdomain-1.8.1.tar.gz", hash = "sha256:6c2dfe6ca282d75f66df333869bb0ce7331c01b475db6809ff9d107b7cdfe04b", size = 19266 }
 wheels = [
@@ -3648,8 +3644,8 @@ name = "sqlalchemy"
 version = "2.0.32"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "greenlet", marker = "python_version < '3.13' and (platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64')" },
-    { name = "typing-extensions", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "greenlet", marker = "(python_version < '3.13' and platform_machine == 'AMD64') or (python_version < '3.13' and platform_machine == 'WIN32') or (python_version < '3.13' and platform_machine == 'aarch64') or (python_version < '3.13' and platform_machine == 'amd64') or (python_version < '3.13' and platform_machine == 'ppc64le') or (python_version < '3.13' and platform_machine == 'win32') or (python_version < '3.13' and platform_machine == 'x86_64')" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/af/6f/967e987683908af816aa3072c1a6997ac9933cf38d66b0474fb03f253323/SQLAlchemy-2.0.32.tar.gz", hash = "sha256:c1b88cc8b02b6a5f0efb0345a03672d4c897dc7d92585176f88c67346f565ea8", size = 9546691 }
 wheels = [
@@ -3674,7 +3670,7 @@ wheels = [
 
 [package.optional-dependencies]
 asyncio = [
-    { name = "greenlet", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "greenlet" },
 ]
 
 [[package]]
@@ -3691,7 +3687,7 @@ name = "starlette"
 version = "0.38.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "anyio" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/43/e2/d49a94ecb665b3a1c34b40c78165a737abc384fcabc843ccb14a3bd3dc37/starlette-0.38.2.tar.gz", hash = "sha256:c7c0441065252160993a1a37cf2a73bb64d271b17303e0b0c1eb7191cfb12d75", size = 2844770 }
 wheels = [
@@ -3712,7 +3708,7 @@ name = "stevedore"
 version = "5.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pbr", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pbr" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e7/c1/b210bf1071c96ecfcd24c2eeb4c828a2a24bf74b38af13896d02203b1eec/stevedore-5.2.0.tar.gz", hash = "sha256:46b93ca40e1114cea93d738a6c1e365396981bb6bb78c27045b7587c9473544d", size = 513817 }
 wheels = [
@@ -3773,7 +3769,7 @@ name = "tinycss2"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "webencodings", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "webencodings" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/44/6f/38d2335a2b70b9982d112bb177e3dbe169746423e33f718bf5e9c7b3ddd3/tinycss2-1.3.0.tar.gz", hash = "sha256:152f9acabd296a8375fbca5b84c961ff95971fcfc32e79550c8df8e29118c54d", size = 67360 }
 wheels = [
@@ -3803,7 +3799,7 @@ name = "transaction"
 version = "4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "zope-interface" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0f/b0/03d196e1d6e37056cca040d9694220641e8a78c4a85d7d80e6feb03be7f5/transaction-4.0.tar.gz", hash = "sha256:68035db913f60d1be12f6563d201daab36c83e763de15899ff8338f26e5e62f2", size = 69641 }
 wheels = [
@@ -3833,8 +3829,8 @@ name = "tuf"
 version = "5.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "securesystemslib", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "requests" },
+    { name = "securesystemslib" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/db/ea/5a89820ae36f8717ca3f12bfe369e92b51a5bd43efb3f2afec6cdd8e15ad/tuf-5.0.0.tar.gz", hash = "sha256:9c5d87d3822ae2f83c756d5a208c6942a2829ae1ea63c18c363124497d04da4f", size = 266998 }
 wheels = [
@@ -3855,8 +3851,8 @@ name = "types-babel"
 version = "2.11.0.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "types-pytz", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "types-pytz" },
+    { name = "types-setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/64/b5/b18d2dd9375515126069616096470fd9efd27434abac9e8d601e71f61b12/types-babel-2.11.0.15.tar.gz", hash = "sha256:282c184c8c9d81e8269212c1b8fa0d39ee88fb8bc43be47980412781c9c85f7e", size = 14392 }
 wheels = [
@@ -3868,7 +3864,7 @@ name = "types-boto3"
 version = "1.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "boto3-stubs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "boto3-stubs" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/49/0a/0d160bd310f86bfcf47eedfdc31b6078428c1e964981ec107ef38a1a3e06/types-boto3-1.0.2.tar.gz", hash = "sha256:15f3ffad0314e40a0708fec25f94891414f93260202422bf8b19b6913853c983", size = 5039 }
 wheels = [
@@ -3889,7 +3885,7 @@ name = "types-cffi"
 version = "1.16.0.20240331"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "types-setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "types-setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/91/c8/81e5699160b91f0f91eea852d84035c412bfb4b3a29389701044400ab379/types-cffi-1.16.0.20240331.tar.gz", hash = "sha256:b8b20d23a2b89cfed5f8c5bc53b0cb8677c3aac6d970dbc771e28b9c698f5dee", size = 11318 }
 wheels = [
@@ -3937,8 +3933,8 @@ name = "types-pyopenssl"
 version = "24.1.0.20240722"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-cffi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cryptography" },
+    { name = "types-cffi" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/93/29/47a346550fd2020dac9a7a6d033ea03fccb92fa47c726056618cc889745e/types-pyOpenSSL-24.1.0.20240722.tar.gz", hash = "sha256:47913b4678a01d879f503a12044468221ed8576263c1540dcb0484ca21b08c39", size = 8458 }
 wheels = [
@@ -3968,8 +3964,8 @@ name = "types-redis"
 version = "4.6.0.20240806"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-pyopenssl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "cryptography" },
+    { name = "types-pyopenssl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/06/a1/31d26b4fa5a46d8532df3406ce1dcb7d3236ffaa1e306b294f452a8c853d/types-redis-4.6.0.20240806.tar.gz", hash = "sha256:60dd02c2b91ea2d42ad079ac58dedc31d71d6eedb1c21d3796811b02baac655d", size = 49517 }
 wheels = [
@@ -3981,7 +3977,7 @@ name = "types-requests"
 version = "2.31.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "types-urllib3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "types-urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f9/b8/c1e8d39996b4929b918aba10dba5de07a8b3f4c8487bb61bb79882544e69/types-requests-2.31.0.6.tar.gz", hash = "sha256:cd74ce3b53c461f1228a9b783929ac73a666658f223e28ed29753771477b3bd0", size = 15535 }
 wheels = [
@@ -4038,7 +4034,7 @@ name = "types-wtforms"
 version = "3.1.0.20240425"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/d1/2025a77c29cd007c3cf810db8b5eb61da269f4093e2d4f758400fef544dc/types-WTForms-3.1.0.20240425.tar.gz", hash = "sha256:49ffc1fe5576ea0735b763fff77e7060dd39ecc661276cbd0b47099921b3a6f2", size = 11007 }
 wheels = [
@@ -4095,8 +4091,8 @@ name = "uvicorn"
 version = "0.30.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "h11", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "click" },
+    { name = "h11" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c3/ad/02b1b412e43605aa6aac8d0392c383ff3f6ae8267b7864e48e3b5f3f601e/uvicorn-0.30.5.tar.gz", hash = "sha256:ac6fdbd4425c5fd17a9fe39daf4d4d075da6fdc80f653e5894cdc2fd98752bee", size = 42835 }
 wheels = [
@@ -4135,157 +4131,150 @@ name = "warehouse"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
-    { name = "alembic", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "alembic-postgresql-enum", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "argon2-cffi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "automat", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "b2sdk", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "babel", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "bcrypt", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "boto3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "celery", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "alembic" },
+    { name = "alembic-postgresql-enum" },
+    { name = "argon2-cffi" },
+    { name = "automat" },
+    { name = "b2sdk" },
+    { name = "babel" },
+    { name = "bcrypt" },
+    { name = "boto3" },
     { name = "celery", extra = ["sqs"] },
-    { name = "celery-redbeat", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "certifi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "click", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "cryptography", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "datadog", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "disposable-email-domains", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "elasticsearch", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "elasticsearch-dsl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "first", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "forcediphttpsadapter", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "github-reserved-names", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-cloud-bigquery", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "google-cloud-storage", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "hiredis", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "html5lib", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "humanize", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "itsdangerous", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "jinja2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "kombu", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "celery-redbeat" },
+    { name = "certifi" },
+    { name = "click" },
+    { name = "cryptography" },
+    { name = "datadog" },
+    { name = "disposable-email-domains" },
+    { name = "elasticsearch" },
+    { name = "elasticsearch-dsl" },
+    { name = "first" },
+    { name = "forcediphttpsadapter" },
+    { name = "github-reserved-names" },
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
+    { name = "hiredis" },
+    { name = "html5lib" },
+    { name = "humanize" },
+    { name = "itsdangerous" },
+    { name = "jinja2" },
     { name = "kombu", extra = ["sqs"] },
-    { name = "limits", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "linehaul", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "lxml", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mistune", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "msgpack", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "natsort", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "orjson", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "packaging-legacy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "paginate", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "paginate-sqlalchemy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "passlib", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "premailer", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "psycopg", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "limits" },
+    { name = "linehaul" },
+    { name = "lxml" },
+    { name = "mistune" },
+    { name = "msgpack" },
+    { name = "natsort" },
+    { name = "orjson" },
+    { name = "packaging" },
+    { name = "packaging-legacy" },
+    { name = "paginate" },
+    { name = "paginate-sqlalchemy" },
+    { name = "passlib" },
+    { name = "premailer" },
     { name = "psycopg", extra = ["c"] },
-    { name = "pycurl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pydantic", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyjwt", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pycurl" },
+    { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
-    { name = "pymacaroons", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyqrcode", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-jinja2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-mailer", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-openapi3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-retry", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-rpc", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-services", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-tm", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "python-slugify", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytz", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "readme-renderer", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "pymacaroons" },
+    { name = "pyqrcode" },
+    { name = "pyramid" },
+    { name = "pyramid-jinja2" },
+    { name = "pyramid-mailer" },
+    { name = "pyramid-openapi3" },
+    { name = "pyramid-retry" },
+    { name = "pyramid-rpc" },
+    { name = "pyramid-services" },
+    { name = "pyramid-tm" },
+    { name = "python-slugify" },
+    { name = "pytz" },
     { name = "readme-renderer", extra = ["md"] },
-    { name = "redis", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "requests-aws4auth", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "rfc3986", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sentry-sdk", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sqlalchemy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "redis" },
+    { name = "requests" },
+    { name = "requests-aws4auth" },
+    { name = "rfc3986" },
+    { name = "sentry-sdk" },
+    { name = "setuptools" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "stdlib-list", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "stripe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "structlog", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "transaction", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "trove-classifiers", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "ua-parser", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "urllib3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "webauthn", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "whitenoise", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "wtforms", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "stdlib-list" },
+    { name = "stripe" },
+    { name = "structlog" },
+    { name = "transaction" },
+    { name = "trove-classifiers" },
+    { name = "ua-parser" },
+    { name = "urllib3" },
+    { name = "webauthn" },
+    { name = "whitenoise" },
     { name = "wtforms", extra = ["email"] },
-    { name = "zope-sqlalchemy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zxcvbn", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "zope-sqlalchemy" },
+    { name = "zxcvbn" },
 ]
 
 [package.optional-dependencies]
 deploy = [
-    { name = "ddtrace", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "gunicorn", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "ddtrace" },
+    { name = "gunicorn" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "asyncudp", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "black", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "cairosvg", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "celery-types", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "coverage", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "curlylint", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "doc8", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "factory-boy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "flake8", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "freezegun", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "furo", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "hupper", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "isort", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs-macros-plugin", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs-material", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mkdocs-rss-plugin", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "msgpack-types", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mypy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "mypy-zope", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "myst-parser", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pep8-naming", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pillow", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pip-api", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pip-tools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pretend", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyramid-debugtoolbar", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytest", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytest-icdiff", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytest-postgresql", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytest-randomly", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytest-socket", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pytz", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyupgrade", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "repository-service-tuf", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "responses", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinx", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinx-autobuild", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinxcontrib-httpdomain", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sphinxcontrib-mermaid", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-babel", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-boto3", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-certifi", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-first", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-html5lib", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-itsdangerous", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-passlib", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-python-slugify", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-pytz", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-redis", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-requests", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-stripe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-webob", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-wtforms", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "types-zxcvbn", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "webtest", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "asyncudp" },
+    { name = "black" },
+    { name = "cairosvg" },
+    { name = "celery-types" },
+    { name = "coverage" },
+    { name = "curlylint" },
+    { name = "doc8" },
+    { name = "factory-boy" },
+    { name = "flake8" },
+    { name = "freezegun" },
+    { name = "furo" },
+    { name = "hupper" },
+    { name = "isort" },
+    { name = "mkdocs" },
+    { name = "mkdocs-macros-plugin" },
+    { name = "mkdocs-material" },
+    { name = "mkdocs-rss-plugin" },
+    { name = "msgpack-types" },
+    { name = "mypy" },
+    { name = "mypy-zope" },
+    { name = "myst-parser" },
+    { name = "pep8-naming" },
+    { name = "pillow" },
+    { name = "pip-api" },
+    { name = "pip-tools" },
+    { name = "pretend" },
+    { name = "pyramid-debugtoolbar" },
+    { name = "pytest" },
+    { name = "pytest-icdiff" },
+    { name = "pytest-postgresql" },
+    { name = "pytest-randomly" },
+    { name = "pytest-socket" },
+    { name = "pytz" },
+    { name = "pyupgrade" },
+    { name = "repository-service-tuf" },
+    { name = "responses" },
+    { name = "sphinx" },
+    { name = "sphinx-autobuild" },
+    { name = "sphinxcontrib-httpdomain" },
+    { name = "sphinxcontrib-mermaid" },
+    { name = "types-babel" },
+    { name = "types-boto3" },
+    { name = "types-certifi" },
+    { name = "types-first" },
+    { name = "types-html5lib" },
+    { name = "types-itsdangerous" },
+    { name = "types-passlib" },
+    { name = "types-python-slugify" },
+    { name = "types-pytz" },
+    { name = "types-redis" },
+    { name = "types-requests" },
+    { name = "types-setuptools" },
+    { name = "types-stripe" },
+    { name = "types-webob" },
+    { name = "types-wtforms" },
+    { name = "types-zxcvbn" },
+    { name = "webtest" },
 ]
 
 [[package]]
@@ -4317,7 +4306,7 @@ name = "watchfiles"
 version = "0.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "anyio" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9e/1a/b06613ef620d7f5ca712a3d4928ec1c07182159a64277fcdf7738edb0b32/watchfiles-0.23.0.tar.gz", hash = "sha256:9338ade39ff24f8086bb005d16c29f8e9f19e55b18dcb04dfa26fcbc09da497b", size = 37384 }
 wheels = [
@@ -4375,10 +4364,10 @@ name = "webauthn"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "asn1crypto", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "cbor2", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "cryptography", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "pyopenssl", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "asn1crypto" },
+    { name = "cbor2" },
+    { name = "cryptography" },
+    { name = "pyopenssl" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8b/51/c3262e0a361b4f21b5f562f5705e74352e1c64dd9dc69d0cb3a232a50b5a/webauthn-2.2.0.tar.gz", hash = "sha256:70e4f318d293125e3a8609838be0561119f4f8846bc430d524f8da4052ee18cc", size = 113978 }
 wheels = [
@@ -4439,9 +4428,9 @@ name = "webtest"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "beautifulsoup4", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "waitress", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "webob", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "beautifulsoup4" },
+    { name = "waitress" },
+    { name = "webob" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/26/c8/8ffba1782700eb06e9b9169156698c6ba95c05b66cda3fc9e025b6b3b649/WebTest-3.0.0.tar.gz", hash = "sha256:54bd969725838d9861a9fa27f8d971f79d275d94ae255f5c501f53bb6d9929eb", size = 75871 }
 wheels = [
@@ -4453,7 +4442,7 @@ name = "werkzeug"
 version = "3.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/02/51/2e0fc149e7a810d300422ab543f87f2bcf64d985eb6f1228c4efd6e4f8d4/werkzeug-3.0.3.tar.gz", hash = "sha256:097e5bfda9f0aba8da6b8545146def481d06aa7d3266e7448e2cccf67dd8bd18", size = 803342 }
 wheels = [
@@ -4483,7 +4472,7 @@ name = "wired"
 version = "0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "zope-interface" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a4/1e/2689f71e21832c6f5ebfca70b5a5408fadd5b1e19202225dfb34b12f7da6/wired-0.4.tar.gz", hash = "sha256:2c8007863e9bfbc119da58a6d7d615a5a747986c5ce698916e44e19d88e905ff", size = 52390 }
 wheels = [
@@ -4524,7 +4513,7 @@ name = "wtforms"
 version = "3.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6a/c7/96d10183c3470f1836846f7b9527d6cb0b6c2226ebca40f36fa29f23de60/wtforms-3.1.2.tar.gz", hash = "sha256:f8d76180d7239c94c6322f7990ae1216dae3659b7aa1cee94b6318bdffb474b9", size = 134705 }
 wheels = [
@@ -4533,7 +4522,7 @@ wheels = [
 
 [package.optional-dependencies]
 email = [
-    { name = "email-validator", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "email-validator" },
 ]
 
 [[package]]
@@ -4559,7 +4548,7 @@ name = "zope-deprecation"
 version = "5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ba/de/a47e434ed1804d82f3fd7561aee5c55914c72d87f54cac6b99c15cbe7f89/zope.deprecation-5.0.tar.gz", hash = "sha256:b7c32d3392036b2145c40b3103e7322db68662ab09b7267afe1532a9d93f640f", size = 23353 }
 wheels = [
@@ -4571,7 +4560,7 @@ name = "zope-event"
 version = "5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/46/c2/427f1867bb96555d1d34342f1dd97f8c420966ab564d58d18469a1db8736/zope.event-5.0.tar.gz", hash = "sha256:bac440d8d9891b4068e2b5a2c5e2c9765a9df762944bda6955f96bb9b91e67cd", size = 17350 }
 wheels = [
@@ -4583,7 +4572,7 @@ name = "zope-interface"
 version = "7.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ab/45/70929649a48b49a71a470bdd84e078110fb5a91e5d74bfe07d65e02b4f03/zope.interface-7.0.1.tar.gz", hash = "sha256:f0f5fda7cbf890371a59ab1d06512da4f2c89a6ea194e595808123c863c38eff", size = 298400 }
 wheels = [
@@ -4609,9 +4598,9 @@ name = "zope-schema"
 version = "7.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-event", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "setuptools" },
+    { name = "zope-event" },
+    { name = "zope-interface" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/82/67/91585500260386df145b78532de588b41470d416bc6fa1cdc1b0f7a34e68/zope.schema-7.0.1.tar.gz", hash = "sha256:ead4dbcb03354d4e410c9a3b904451eb44d90254751b1cbdedf4a61aede9fbb9", size = 108737 }
 wheels = [
@@ -4623,11 +4612,11 @@ name = "zope-sqlalchemy"
 version = "3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "setuptools", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "sqlalchemy", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "transaction", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
-    { name = "zope-interface", marker = "python_version < '3.12' and (python_version < '3.11' or python_version >= '3.12')" },
+    { name = "packaging" },
+    { name = "setuptools" },
+    { name = "sqlalchemy" },
+    { name = "transaction" },
+    { name = "zope-interface" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/98/6f/f76bfaba0cab7362dad44c9af94913a8bee938a49d7e664a7195c822b916/zope.sqlalchemy-3.1.tar.gz", hash = "sha256:d9c2c3be695c213c5e22b7f7c6a4a214fa8eb5940b033465ba1c10a9d8b346db", size = 32407 }
 wheels = [
