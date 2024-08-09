@@ -83,6 +83,7 @@ dirs-sys = { version = "0.4.1" }
 dunce = { version = "1.0.4" }
 either = { version = "1.12.0" }
 encoding_rs_io = { version = "0.1.7" }
+etcetera = { version = "0.8.0" }
 flate2 = { version = "1.0.28", default-features = false }
 fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }

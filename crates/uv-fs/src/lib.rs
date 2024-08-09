@@ -100,6 +100,24 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     }
 }
 
+#[cfg(unix)]
+pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
+    fs_err::remove_file(path.as_ref())
+}
+
+#[cfg(windows)]
+pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
+    match junction::delete(dunce::simplified(path.as_ref())) {
+        Ok(()) => match fs_err::remove_dir_all(path.as_ref()) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err),
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
+}
+
 /// Return a [`NamedTempFile`] in the specified directory.
 ///
 /// Sets the permissions of the temporary file to `0o666`, to match the non-temporary file default.
@@ -281,6 +299,14 @@ pub fn files(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
         })
         .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_file()))
         .map(|entry| entry.path())
+}
+
+/// Returns `true` if a path is a temporary file or directory.
+pub fn is_temporary(path: impl AsRef<Path>) -> bool {
+    path.as_ref()
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map_or(false, |name| name.starts_with(".tmp"))
 }
 
 /// A file lock that is automatically released when dropped.

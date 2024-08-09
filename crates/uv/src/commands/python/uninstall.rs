@@ -28,10 +28,41 @@ pub(crate) async fn uninstall(
         warn_user_once!("`uv python uninstall` is experimental and may change without warning");
     }
 
-    let start = std::time::Instant::now();
-
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
     let _lock = installations.acquire_lock()?;
+
+    // Perform the uninstallation.
+    do_uninstall(&installations, targets, all, printer).await?;
+
+    // Clean up any empty directories.
+    if uv_fs::directories(installations.root()).all(|path| uv_fs::is_temporary(&path)) {
+        fs_err::tokio::remove_dir_all(&installations.root()).await?;
+
+        if let Some(top_level) = installations.root().parent() {
+            // Remove the `toolchains` symlink.
+            match uv_fs::remove_symlink(top_level.join("toolchains")) {
+                Ok(()) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
+
+            if uv_fs::directories(top_level).all(|path| uv_fs::is_temporary(&path)) {
+                fs_err::tokio::remove_dir_all(top_level).await?;
+            }
+        }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+/// Perform the uninstallation of managed Python installations.
+async fn do_uninstall(
+    installations: &ManagedPythonInstallations,
+    targets: Vec<String>,
+    all: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    let start = std::time::Instant::now();
 
     let requests = if all {
         vec![PythonRequest::Any]
@@ -114,6 +145,7 @@ pub(crate) async fn uninstall(
         }
     }
 
+    // Report on any uninstalled installations.
     if !uninstalled.is_empty() {
         if let [uninstalled] = uninstalled.as_slice() {
             // Ex) "Uninstalled Python 3.9.7 in 1.68s"
