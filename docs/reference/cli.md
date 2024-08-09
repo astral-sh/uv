@@ -2836,6 +2836,11 @@ e.g., if `pypy` is requested, uv will first check if the virtual
 environment contains a PyPy interpreter then check if each executable in
 the path is a PyPy interpreter.
 
+uv supports discovering CPython, PyPy, and GraalPy interpreters.
+Unsupported interpreters will be skipped during discovery. If an
+unsupported interpreter implementation is requested, uv will exit with
+an error.
+
 <h3 class="cli-reference">Usage</h3>
 
 ```
@@ -2860,7 +2865,15 @@ uv python [OPTIONS] <COMMAND>
 
 ### uv python list
 
-List the available Python installations
+List the available Python installations.
+
+By default, installed Python versions and the downloads for latest available patch version of each supported Python major version are shown.
+
+The displayed versions are filtered by the `--python-preference` option, i.e., if using `only-system`, no managed Python versions will be shown.
+
+Use `--all-versions` to view all available patch versions.
+
+Use `--only-installed` to omit available downloads.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -2870,9 +2883,13 @@ uv python list [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-platforms</code></dt><dd><p>List Python installations for all platforms</p>
+<dl class="cli-reference"><dt><code>--all-platforms</code></dt><dd><p>List Python downloads for all platforms.</p>
 
-</dd><dt><code>--all-versions</code></dt><dd><p>List all Python versions, including outdated patch versions</p>
+<p>By default, only downloads for the current platform are shown.</p>
+
+</dd><dt><code>--all-versions</code></dt><dd><p>List all Python versions, including old patch versions.</p>
+
+<p>By default, only the latest patch version is shown for each minor version.</p>
 
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
@@ -2918,7 +2935,9 @@ uv python list [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--only-installed</code></dt><dd><p>Only show installed Python versions, exclude available downloads</p>
+</dd><dt><code>--only-installed</code></dt><dd><p>Only show installed Python versions, exclude available downloads.</p>
+
+<p>By default, available downloads for the current platform are shown.</p>
 
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -2947,7 +2966,17 @@ uv python list [OPTIONS]
 
 ### uv python install
 
-Download and install Python versions
+Download and install Python versions.
+
+Multiple Python versions may be requested.
+
+Supports CPython and PyPy.
+
+CPython distributions are downloaded from the `python-build-standalone` project.
+
+Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`. A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments.
+
+See `uv help python` to view supported request formats.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -3028,7 +3057,9 @@ uv python install [OPTIONS] [TARGETS]...
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
-</dd><dt><code>--reinstall</code>, <code>-r</code></dt><dd><p>Reinstall the requested Python version, if it&#8217;s already installed</p>
+</dd><dt><code>--reinstall</code>, <code>-r</code></dt><dd><p>Reinstall the requested Python version, if it&#8217;s already installed.</p>
+
+<p>By default, uv will exit successfully if the version is already installed.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -3040,7 +3071,11 @@ uv python install [OPTIONS] [TARGETS]...
 
 ### uv python find
 
-Search for a Python installation
+Search for a Python installation.
+
+Displays the path to the Python executable.
+
+See `uv help python` to view supported request formats and details on discovery behavior.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -3129,7 +3164,11 @@ uv python find [OPTIONS] [REQUEST]
 
 ### uv python pin
 
-Pin to a specific Python version
+Pin to a specific Python version.
+
+Writes the pinned version to a `.python-version` file, which is then read by other uv commands when determining the required Python version.
+
+See `uv help python` to view supported request formats.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -3189,7 +3228,9 @@ uv python pin [OPTIONS] [REQUEST]
 
 </dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
 
-</dd><dt><code>--no-workspace</code></dt><dd><p>Avoid validating the Python pin against the workspace in the current directory or any parent directory</p>
+</dd><dt><code>--no-workspace</code></dt><dd><p>Avoid validating the Python pin is compatible with the workspace.</p>
+
+<p>By default, a workspace is discovered in the current directory or any parent directory. If a workspace is found, the Python pin is validated against the workspace&#8217;s <code>requires-python</code> constraint.</p>
 
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
@@ -3215,6 +3256,8 @@ uv python pin [OPTIONS] [REQUEST]
 </dd><dt><code>--resolved</code></dt><dd><p>Write the resolved Python interpreter path instead of the request.</p>
 
 <p>Ensures that the exact same interpreter is used.</p>
+
+<p>This option is usually not safe to use when committing the <code>.python-version</code> file to version control.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
