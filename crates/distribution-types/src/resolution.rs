@@ -92,6 +92,11 @@ pub enum ResolutionDiagnostic {
         /// The reason that the version was yanked, if any.
         reason: Option<String>,
     },
+    MissingLowerBound {
+        /// The name of the package that had no lower bound from any other package in the
+        /// resolution. For example, `black`.
+        package_name: PackageName,
+    },
 }
 
 impl Diagnostic for ResolutionDiagnostic {
@@ -111,6 +116,13 @@ impl Diagnostic for ResolutionDiagnostic {
                     format!("`{dist}` is yanked")
                 }
             }
+            Self::MissingLowerBound { package_name: name } => {
+                format!(
+                    "The transitive dependency `{name}` is unpinned. \
+                    Consider setting a lower bound when using `--resolution-strategy lowest` \
+                    to avoid using outdated versions."
+                )
+            }
         }
     }
 
@@ -120,6 +132,7 @@ impl Diagnostic for ResolutionDiagnostic {
             Self::MissingExtra { dist, .. } => name == dist.name(),
             Self::MissingDev { dist, .. } => name == dist.name(),
             Self::YankedVersion { dist, .. } => name == dist.name(),
+            Self::MissingLowerBound { package_name } => name == package_name,
         }
     }
 }
