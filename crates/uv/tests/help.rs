@@ -240,6 +240,11 @@ fn help_subcommand() {
     environment contains a PyPy interpreter then check if each executable in
     the path is a PyPy interpreter.
 
+    uv supports discovering CPython, PyPy, and GraalPy interpreters.
+    Unsupported interpreters will be skipped during discovert. If an
+    unsupported interpreter implementation is requested, uv will exit with
+    an error.
+
     Usage: uv python [OPTIONS] <COMMAND>
 
     Commands:
@@ -370,7 +375,19 @@ fn help_subsubcommand() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Download and install Python versions
+    Download and install Python versions.
+
+    Multiple Python versions may be requested.
+
+    Supports CPython and PyPy.
+
+    CPython distributions are downloaded from the `python-build-standalone` project.
+
+    Python versions are installed into the uv Python directory, which can be retrieved with `uv python
+    dir`. A `python` executable is not made globally available, managed Python versions are only used in
+    uv commands or in active virtual environments.
+
+    See `uv help python` to view supported request formats.
 
     Usage: uv python install [OPTIONS] [TARGETS]...
 
@@ -386,7 +403,9 @@ fn help_subsubcommand() {
 
     Options:
       -r, --reinstall
-              Reinstall the requested Python version, if it's already installed
+              Reinstall the requested Python version, if it's already installed.
+              
+              By default, uv will exit successfully if the version is already installed.
 
     Cache options:
       -n, --no-cache
