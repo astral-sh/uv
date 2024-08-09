@@ -35,6 +35,7 @@
 - Support relative path wheels ([#5969](https://github.com/astral-sh/uv/pull/5969))
 - Update the interface for declaring Python download preferences ([#5936](https://github.com/astral-sh/uv/pull/5936))
 - Use cached environments for `--with` layers ([#5897](https://github.com/astral-sh/uv/pull/5897))
+- Warn when project-specific settings are passed to non-project `uv run` commands ([#5977](https://github.com/astral-sh/uv/pull/5977))
 
 ## 0.2.34
 
