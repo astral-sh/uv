@@ -1,0 +1,845 @@
+[build-system]
+requires = ["setuptools==69.2.0", "wheel~=0.43.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name        = "homeassistant"
+version     = "2024.7.0.dev0"
+license     = {text = "Apache-2.0"}
+description = "Open-source home automation platform running on Python 3."
+readme      = "README.rst"
+authors     = [
+    {name = "The Home Assistant Authors", email = "hello@home-assistant.io"}
+]
+keywords    = ["home", "automation"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Home Automation",
+]
+requires-python = ">=3.12.0"
+dependencies    = [
+    "aiodns==3.2.0",
+    "aiohttp==3.9.5",
+    "aiohttp_cors==0.7.0",
+    "aiohttp-fast-url-dispatcher==0.3.0",
+    "aiohttp-fast-zlib==0.1.0",
+    "aiozoneinfo==0.2.0",
+    "astral==2.2",
+    "async-interrupt==1.1.1",
+    "attrs==23.2.0",
+    "atomicwrites-homeassistant==1.4.1",
+    "awesomeversion==24.2.0",
+    "bcrypt==4.1.2",
+    "certifi>=2021.5.30",
+    "ciso8601==2.3.1",
+    "fnv-hash-fast==0.5.0",
+    # hass-nabucasa is imported by helpers which don't depend on the cloud
+    # integration
+    "hass-nabucasa==0.81.1",
+    # When bumping httpx, please check the version pins of
+    # httpcore, anyio, and h11 in gen_requirements_all
+    "httpx==0.27.0",
+    "home-assistant-bluetooth==1.12.1",
+    "ifaddr==0.2.0",
+    "Jinja2==3.1.4",
+    "lru-dict==1.3.0",
+    "PyJWT==2.8.0",
+    # PyJWT has loose dependency. We want the latest one.
+    "cryptography==42.0.8",
+    "Pillow==10.3.0",
+    "pyOpenSSL==24.1.0",
+    "orjson==3.9.15",
+    "packaging>=23.1",
+    "pip>=21.3.1",
+    "psutil-home-assistant==0.0.1",
+    "python-slugify==8.0.4",
+    "PyYAML==6.0.1",
+    "requests==2.32.3",
+    "SQLAlchemy==2.0.31",
+    "typing-extensions>=4.12.2,<5.0",
+    "ulid-transform==0.9.0",
+    # Constrain urllib3 to ensure we deal with CVE-2020-26137 and CVE-2021-33503
+    # Temporary setting an upper bound, to prevent compat issues with urllib3>=2
+    # https://github.com/home-assistant/core/issues/97248
+    "urllib3>=1.26.5,<2",
+    "voluptuous==0.13.1",
+    "voluptuous-serialize==2.6.0",
+    "yarl==1.9.4",
+]
+
+[project.urls]
+"Homepage"    = "https://www.home-assistant.io/"
+"Source Code" = "https://github.com/home-assistant/core"
+"Bug Reports" = "https://github.com/home-assistant/core/issues"
+"Docs: Dev"   = "https://developers.home-assistant.io/"
+"Discord"     = "https://www.home-assistant.io/join-chat/"
+"Forum"       = "https://community.home-assistant.io/"
+
+[project.scripts]
+hass = "homeassistant.__main__:main"
+
+[tool.setuptools]
+platforms = ["any"]
+zip-safe  = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["homeassistant*"]
+
+[tool.pylint.MAIN]
+py-version = "3.12"
+ignore = [
+    "tests",
+]
+# Use a conservative default here; 2 should speed up most setups and not hurt
+# any too bad. Override on command line as appropriate.
+jobs = 2
+init-hook = """\
+    from pathlib import Path; \
+    import sys; \
+
+    from pylint.config import find_default_config_files; \
+
+    sys.path.append( \
+        str(Path(next(find_default_config_files())).parent.joinpath('pylint/plugins'))
+    ) \
+    """
+load-plugins = [
+    "pylint.extensions.code_style",
+    "pylint.extensions.typing",
+    "hass_enforce_coordinator_module",
+    "hass_enforce_sorted_platforms",
+    "hass_enforce_super_call",
+    "hass_enforce_type_hints",
+    "hass_inheritance",
+    "hass_imports",
+    "hass_logger",
+    "pylint_per_file_ignores",
+]
+persistent = false
+extension-pkg-allow-list = [
+    "av.audio.stream",
+    "av.logging",
+    "av.stream",
+    "ciso8601",
+    "orjson",
+    "cv2",
+]
+fail-on = [
+    "I",
+]
+
+[tool.pylint.BASIC]
+class-const-naming-style = "any"
+
+[tool.pylint."MESSAGES CONTROL"]
+# Reasons disabled:
+# format - handled by ruff
+# locally-disabled - it spams too much
+# duplicate-code - unavoidable
+# cyclic-import - doesn't test if both import on load
+# abstract-class-little-used - prevents from setting right foundation
+# unused-argument - generic callbacks and setup methods create a lot of warnings
+# too-many-* - are not enforced for the sake of readability
+# too-few-* - same as too-many-*
+# abstract-method - with intro of async there are always methods missing
+# inconsistent-return-statements - doesn't handle raise
+# too-many-ancestors - it's too strict.
+# wrong-import-order - isort guards this
+# consider-using-f-string - str.format sometimes more readable
+# possibly-used-before-assignment - too many errors / not necessarily issues
+# ---
+# Pylint CodeStyle plugin
+# consider-using-namedtuple-or-dataclass - too opinionated
+# consider-using-assignment-expr - decision to use := better left to devs
+disable = [
+    "format",
+    "abstract-method",
+    "cyclic-import",
+    "duplicate-code",
+    "inconsistent-return-statements",
+    "locally-disabled",
+    "not-context-manager",
+    "too-few-public-methods",
+    "too-many-ancestors",
+    "too-many-arguments",
+    "too-many-instance-attributes",
+    "too-many-lines",
+    "too-many-locals",
+    "too-many-public-methods",
+    "too-many-boolean-expressions",
+    "wrong-import-order",
+    "consider-using-f-string",
+    "consider-using-namedtuple-or-dataclass",
+    "consider-using-assignment-expr",
+    "possibly-used-before-assignment",
+
+    # Handled by ruff
+    # Ref: <https://github.com/astral-sh/ruff/issues/970>
+    "await-outside-async", # PLE1142
+    "bad-str-strip-call", # PLE1310
+    "bad-string-format-type", # PLE1307
+    "bidirectional-unicode", # PLE2502
+    "continue-in-finally", # PLE0116
+    "duplicate-bases", # PLE0241
+    "format-needs-mapping", # F502
+    "function-redefined", # F811
+    # Needed because ruff does not understand type of __all__ generated by a function
+    # "invalid-all-format", # PLE0605
+    "invalid-all-object", # PLE0604
+    "invalid-character-backspace", # PLE2510
+    "invalid-character-esc", # PLE2513
+    "invalid-character-nul", # PLE2514
+    "invalid-character-sub", # PLE2512
+    "invalid-character-zero-width-space", # PLE2515
+    "logging-too-few-args", # PLE1206
+    "logging-too-many-args", # PLE1205
+    "missing-format-string-key", # F524
+    "mixed-format-string", # F506
+    "no-method-argument", # N805
+    "no-self-argument", # N805
+    "nonexistent-operator", # B002
+    "nonlocal-without-binding", # PLE0117
+    "not-in-loop", # F701, F702
+    "notimplemented-raised", # F901
+    "return-in-init", # PLE0101
+    "return-outside-function", # F706
+    "syntax-error", # E999
+    "too-few-format-args", # F524
+    "too-many-format-args", # F522
+    "too-many-star-expressions", # F622
+    "truncated-format-string", # F501
+    "undefined-all-variable", # F822
+    "undefined-variable", # F821
+    "used-prior-global-declaration", # PLE0118
+    "yield-inside-async-function", # PLE1700
+    "yield-outside-function", # F704
+    "anomalous-backslash-in-string", # W605
+    "assert-on-string-literal", # PLW0129
+    "assert-on-tuple", # F631
+    "bad-format-string", # W1302, F
+    "bad-format-string-key", # W1300, F
+    "bare-except", # E722
+    "binary-op-exception", # PLW0711
+    "cell-var-from-loop", # B023
+    # "dangerous-default-value", # B006, ruff catches new occurrences, needs more work
+    "duplicate-except", # B014
+    "duplicate-key", # F601
+    "duplicate-string-formatting-argument", # F
+    "duplicate-value", # F
+    "eval-used", # S307
+    "exec-used", # S102
+    "expression-not-assigned", # B018
+    "f-string-without-interpolation", # F541
+    "forgotten-debug-statement", # T100
+    "format-string-without-interpolation", # F
+    # "global-statement", # PLW0603, ruff catches new occurrences, needs more work
+    "global-variable-not-assigned", # PLW0602
+    "implicit-str-concat", # ISC001
+    "import-self", # PLW0406
+    "inconsistent-quotes", # Q000
+    "invalid-envvar-default", # PLW1508
+    "keyword-arg-before-vararg", # B026
+    "logging-format-interpolation", # G
+    "logging-fstring-interpolation", # G
+    "logging-not-lazy", # G
+    "misplaced-future", # F404
+    "named-expr-without-context", # PLW0131
+    "nested-min-max", # PLW3301
+    "pointless-statement", # B018
+    "raise-missing-from", # B904
+    "redefined-builtin", # A001
+    "try-except-raise", # TRY302
+    "unused-argument", # ARG001, we don't use it
+    "unused-format-string-argument", #F507
+    "unused-format-string-key", # F504
+    "unused-import", # F401
+    "unused-variable", # F841
+    "useless-else-on-loop", # PLW0120
+    "wildcard-import", # F403
+    "bad-classmethod-argument", # N804
+    "consider-iterating-dictionary", # SIM118
+    "empty-docstring", # D419
+    "invalid-name", # N815
+    "line-too-long", # E501, disabled globally
+    "missing-class-docstring", # D101
+    "missing-final-newline", # W292
+    "missing-function-docstring", # D103
+    "missing-module-docstring", # D100
+    "multiple-imports", #E401
+    "singleton-comparison", # E711, E712
+    "subprocess-run-check", # PLW1510
+    "superfluous-parens", # UP034
+    "ungrouped-imports", # I001
+    "unidiomatic-typecheck", # E721
+    "unnecessary-direct-lambda-call", # PLC3002
+    "unnecessary-lambda-assignment", # PLC3001
+    "unnecessary-pass", # PIE790
+    "unneeded-not", # SIM208
+    "useless-import-alias", # PLC0414
+    "wrong-import-order", # I001
+    "wrong-import-position", # E402
+    "comparison-of-constants", # PLR0133
+    "comparison-with-itself", # PLR0124
+    "consider-alternative-union-syntax", # UP007
+    "consider-merging-isinstance", # PLR1701
+    "consider-using-alias", # UP006
+    "consider-using-dict-comprehension", # C402
+    "consider-using-generator", # C417
+    "consider-using-get", # SIM401
+    "consider-using-set-comprehension", # C401
+    "consider-using-sys-exit", # PLR1722
+    "consider-using-ternary", # SIM108
+    "literal-comparison", # F632
+    "property-with-parameters", # PLR0206
+    "super-with-arguments", # UP008
+    "too-many-branches", # PLR0912
+    "too-many-return-statements", # PLR0911
+    "too-many-statements", # PLR0915
+    "trailing-comma-tuple", # COM818
+    "unnecessary-comprehension", # C416
+    "use-a-generator", # C417
+    "use-dict-literal", # C406
+    "use-list-literal", # C405
+    "useless-object-inheritance", # UP004
+    "useless-return", # PLR1711
+    "no-else-break", # RET508
+    "no-else-continue", # RET507
+    "no-else-raise", # RET506
+    "no-else-return", # RET505
+    "broad-except", # BLE001
+    "protected-access", # SLF001
+    # "no-self-use", # PLR6301  # Optional plugin, not enabled
+
+    # Handled by mypy
+    # Ref: <https://github.com/antonagestam/pylint-mypy-overlap>
+    "abstract-class-instantiated",
+    "arguments-differ",
+    "assigning-non-slot",
+    "assignment-from-no-return",
+    "assignment-from-none",
+    "bad-exception-cause",
+    "bad-format-character",
+    "bad-reversed-sequence",
+    "bad-super-call",
+    "bad-thread-instantiation",
+    "catching-non-exception",
+    "comparison-with-callable",
+    "deprecated-class",
+    "dict-iter-missing-items",
+    "format-combined-specification",
+    "global-variable-undefined",
+    "import-error",
+    "inconsistent-mro",
+    "inherit-non-class",
+    "init-is-generator",
+    "invalid-class-object",
+    "invalid-enum-extension",
+    "invalid-envvar-value",
+    "invalid-format-returned",
+    "invalid-hash-returned",
+    "invalid-metaclass",
+    "invalid-overridden-method",
+    "invalid-repr-returned",
+    "invalid-sequence-index",
+    "invalid-slice-index",
+    "invalid-slots-object",
+    "invalid-slots",
+    "invalid-star-assignment-target",
+    "invalid-str-returned",
+    "invalid-unary-operand-type",
+    "invalid-unicode-codec",
+    "isinstance-second-argument-not-valid-type",
+    "method-hidden",
+    "misplaced-format-function",
+    "missing-format-argument-key",
+    "missing-format-attribute",
+    "missing-kwoa",
+    "no-member",
+    "no-value-for-parameter",
+    "non-iterator-returned",
+    "non-str-assignment-to-dunder-name",
+    "nonlocal-and-global",
+    "not-a-mapping",
+    "not-an-iterable",
+    "not-async-context-manager",
+    "not-callable",
+    "not-context-manager",
+    "overridden-final-method",
+    "raising-bad-type",
+    "raising-non-exception",
+    "redundant-keyword-arg",
+    "relative-beyond-top-level",
+    "self-cls-assignment",
+    "signature-differs",
+    "star-needs-assignment-target",
+    "subclassed-final-class",
+    "super-without-brackets",
+    "too-many-function-args",
+    "typevar-double-variance",
+    "typevar-name-mismatch",
+    "unbalanced-dict-unpacking",
+    "unbalanced-tuple-unpacking",
+    "unexpected-keyword-arg",
+    "unhashable-member",
+    "unpacking-non-sequence",
+    "unsubscriptable-object",
+    "unsupported-assignment-operation",
+    "unsupported-binary-operation",
+    "unsupported-delete-operation",
+    "unsupported-membership-test",
+    "used-before-assignment",
+    "using-final-decorator-in-unsupported-version",
+    "wrong-exception-operation",
+]
+enable = [
+    #"useless-suppression",  # temporarily every now and then to clean them up
+    "use-symbolic-message-instead",
+]
+per-file-ignores = [
+    # redefined-outer-name: Tests reference fixtures in the test function
+    # use-implicit-booleaness-not-comparison: Tests need to validate that a list
+    # or a dict is returned
+    "/tests/:redefined-outer-name,use-implicit-booleaness-not-comparison",
+]
+
+[tool.pylint.REPORTS]
+score = false
+
+[tool.pylint.TYPECHECK]
+ignored-classes = [
+    "_CountingAttr",  # for attrs
+]
+mixin-class-rgx = ".*[Mm]ix[Ii]n"
+
+[tool.pylint.FORMAT]
+expected-line-ending-format = "LF"
+
+[tool.pylint.EXCEPTIONS]
+overgeneral-exceptions = [
+    "builtins.BaseException",
+    "builtins.Exception",
+    # "homeassistant.exceptions.HomeAssistantError",  # too many issues
+]
+
+[tool.pylint.TYPING]
+runtime-typing = false
+
+[tool.pylint.CODE_STYLE]
+max-line-length-suggestions = 72
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+norecursedirs = [
+    ".git",
+    "testing_config",
+]
+log_format = "%(asctime)s.%(msecs)03d %(levelname)-8s %(threadName)s %(name)s:%(filename)s:%(lineno)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+asyncio_mode = "auto"
+filterwarnings = [
+    "error::sqlalchemy.exc.SAWarning",
+
+    # -- HomeAssistant - aiohttp
+    # Overwrite web.Application to pass a custom default argument to _make_request
+    "ignore:Inheritance class HomeAssistantApplication from web.Application is discouraged:DeprecationWarning",
+    # Hass wraps `ClientSession.close` to emit a warning if the session is closed accidentally
+    "ignore:Setting custom ClientSession.close attribute is discouraged:DeprecationWarning:homeassistant.helpers.aiohttp_client",
+    # Modify app state for testing
+    "ignore:Changing state of started or joined application is deprecated:DeprecationWarning:tests.components.http.test_ban",
+
+    # -- Tests
+    # Ignore custom pytest marks
+    "ignore:Unknown pytest.mark.disable_autouse_fixture:pytest.PytestUnknownMarkWarning:tests.components.met",
+    "ignore:Unknown pytest.mark.dataset:pytest.PytestUnknownMarkWarning:tests.components.screenlogic",
+
+    # -- design choice 3rd party
+    # https://github.com/gwww/elkm1/blob/2.2.7/elkm1_lib/util.py#L8-L19
+    "ignore:ssl.TLSVersion.TLSv1 is deprecated:DeprecationWarning:elkm1_lib.util",
+    # https://github.com/michaeldavie/env_canada/blob/v0.6.2/env_canada/ec_cache.py
+    "ignore:Inheritance class CacheClientSession from ClientSession is discouraged:DeprecationWarning:env_canada.ec_cache",
+    # https://github.com/allenporter/ical/pull/215
+    # https://github.com/allenporter/ical/blob/8.0.0/ical/util.py#L20-L22
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:ical.util",
+    # https://github.com/bachya/regenmaschine/blob/2024.03.0/regenmaschine/client.py#L52
+    "ignore:ssl.TLSVersion.SSLv3 is deprecated:DeprecationWarning:regenmaschine.client",
+
+    # -- Setuptools DeprecationWarnings
+    # https://github.com/googleapis/google-cloud-python/issues/11184
+    # https://github.com/zopefoundation/meta/issues/194
+    "ignore:Deprecated call to `pkg_resources.declare_namespace\\(('google.*'|'pywinusb'|'repoze'|'xbox'|'zope')\\)`:DeprecationWarning:pkg_resources",
+
+    # -- tracked upstream / open PRs
+    # https://github.com/certbot/certbot/issues/9828 - v2.10.0
+    "ignore:X509Extension support in pyOpenSSL is deprecated. You should use the APIs in cryptography:DeprecationWarning:acme.crypto_util",
+    # https://github.com/influxdata/influxdb-client-python/issues/603 - v1.42.0
+    # https://github.com/influxdata/influxdb-client-python/pull/652
+    "ignore:datetime.*utcfromtimestamp\\(\\) is deprecated and scheduled for removal:DeprecationWarning:influxdb_client.client.write.point",
+    # https://github.com/beetbox/mediafile/issues/67 - v0.12.0
+    "ignore:'imghdr' is deprecated and slated for removal in Python 3.13:DeprecationWarning:mediafile",
+    # https://github.com/foxel/python_ndms2_client/issues/6 - v0.1.3
+    # https://github.com/foxel/python_ndms2_client/pull/8
+    "ignore:'telnetlib' is deprecated and slated for removal in Python 3.13:DeprecationWarning:ndms2_client.connection",
+
+    # -- fixed, waiting for release / update
+    # https://github.com/mkmer/AIOAladdinConnect/commit/8851fff4473d80d70ac518db2533f0fbef63b69c - >=0.2.0
+    "ignore:module 'sre_constants' is deprecated:DeprecationWarning:AIOAladdinConnect",
+    # https://github.com/bachya/aiopurpleair/pull/200 - >=2023.10.0
+    "ignore:datetime.*utcfromtimestamp\\(\\) is deprecated and scheduled for removal:DeprecationWarning:aiopurpleair.helpers.validators",
+    # https://github.com/DataDog/datadogpy/pull/290 - >=0.23.0
+    "ignore:invalid escape sequence:SyntaxWarning:.*datadog.dogstatsd.base",
+    # https://github.com/DataDog/datadogpy/pull/566/files - >=0.37.0
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:datadog.util.compat",
+    # https://github.com/fwestenberg/devialet/pull/6 - >1.4.5
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:devialet.devialet_api",
+    # https://github.com/httplib2/httplib2/pull/226 - >=0.21.0
+    "ignore:ssl.PROTOCOL_TLS is deprecated:DeprecationWarning:httplib2",
+    # https://github.com/jaraco/jaraco.abode/commit/9e3e789efc96cddcaa15f920686bbeb79a7469e0 - update jaraco.abode to >=5.1.0
+    "ignore:`jaraco.functools.call_aside` is deprecated, use `jaraco.functools.invoke` instead:DeprecationWarning:jaraco.abode.helpers.timeline",
+    # https://github.com/majuss/lupupy/pull/15 - >0.3.2
+    "ignore:\"is not\" with 'str' literal. Did you mean \"!=\"?:SyntaxWarning:.*lupupy.devices.alarm",
+    # https://github.com/nextcord/nextcord/pull/1095 - >2.6.1
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:nextcord.health_check",
+    # https://github.com/eclipse/paho.mqtt.python/issues/653 - >=2.0.0
+    # https://github.com/eclipse/paho.mqtt.python/pull/665
+    "ignore:ssl.PROTOCOL_TLS is deprecated:DeprecationWarning:paho.mqtt.client",
+    # https://github.com/rytilahti/python-miio/pull/1809 - >=0.6.0.dev0
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:miio.protocol",
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:miio.miioprotocol",
+    # https://github.com/hunterjm/python-onvif-zeep-async/pull/51 - >3.1.12
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:onvif.client",
+    # https://github.com/pkkid/python-plexapi/pull/1404 - >4.15.13
+    "ignore:invalid escape sequence:SyntaxWarning:.*plexapi.base",
+    # https://github.com/googleapis/python-pubsub/commit/060f00bcea5cd129be3a2d37078535cc97b4f5e8 - >=2.13.12
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:google.pubsub_v1.services.publisher.client",
+    # https://github.com/okunishinishi/python-stringcase/commit/6a5c5bbd3fe5337862abc7fd0853a0f36e18b2e1 - >1.2.0
+    "ignore:invalid escape sequence:SyntaxWarning:.*stringcase",
+    # https://github.com/timmo001/system-bridge-connector/pull/27 - >=4.1.0
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:systembridgeconnector.version",
+    # https://github.com/jschlyter/ttls/commit/d64f1251397b8238cf6a35bea64784de25e3386c - >=1.8.1
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:ttls",
+    # https://github.com/mvantellingen/python-zeep/pull/1364 - >4.2.1
+    "ignore:'cgi' is deprecated and slated for removal in Python 3.13:DeprecationWarning:zeep.utils",
+    # https://github.com/vacanza/python-holidays/discussions/1800
+    "ignore::DeprecationWarning:holidays",
+
+    # -- fixed for Python 3.13
+    # https://github.com/rhasspy/wyoming/commit/e34af30d455b6f2bb9e5cfb25fad8d276914bc54 - >=1.4.2
+    "ignore:'audioop' is deprecated and slated for removal in Python 3.13:DeprecationWarning:wyoming.audio",
+
+    # -- other
+    # Locale changes might take some time to resolve upstream
+    "ignore:'locale.getdefaultlocale' is deprecated and slated for removal in Python 3.15:DeprecationWarning:micloud.micloud",
+    # https://github.com/protocolbuffers/protobuf - v4.25.1
+    "ignore:Type google._upb._message.(Message|Scalar)MapContainer uses PyType_Spec with a metaclass that has custom tp_new. .* Python 3.14:DeprecationWarning",
+    # https://github.com/MatsNl/pyatag/issues/11 - v0.3.7.1
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:pyatag.gateway",
+    # https://github.com/lidatong/dataclasses-json/issues/328
+    # https://github.com/lidatong/dataclasses-json/pull/351
+    "ignore:The 'default' argument to fields is deprecated. Use 'dump_default' instead:DeprecationWarning:dataclasses_json.mm",
+    # https://pypi.org/project/emulated-roku/ - v0.3.0 - 2023-12-19
+    # https://github.com/martonperei/emulated_roku
+    "ignore:loop argument is deprecated:DeprecationWarning:emulated_roku",
+    # https://github.com/thecynic/pylutron - v0.2.13
+    "ignore:setDaemon\\(\\) is deprecated, set the daemon attribute instead:DeprecationWarning:pylutron",
+    # Wrong stacklevel
+    # https://bugs.launchpad.net/beautifulsoup/+bug/2034451
+    "ignore:It looks like you're parsing an XML document using an HTML parser:UserWarning:html.parser",
+    # New in aiohttp - v3.9.0
+    "ignore:It is recommended to use web.AppKey instances for keys:UserWarning:(homeassistant|tests|aiohttp_cors)",
+    # - SyntaxWarnings
+    # https://pypi.org/project/aprslib/ - v0.7.2 - 2022-07-10
+    "ignore:invalid escape sequence:SyntaxWarning:.*aprslib.parsing.common",
+    # https://pypi.org/project/pyblackbird/ - v0.6 - 2023-03-15
+    # https://github.com/koolsb/pyblackbird/pull/9 -> closed
+    "ignore:invalid escape sequence:SyntaxWarning:.*pyblackbird",
+    # https://pypi.org/project/pyws66i/ - v1.1 - 2022-04-05
+    "ignore:invalid escape sequence:SyntaxWarning:.*pyws66i",
+    # https://pypi.org/project/sanix/ - v1.0.6 - 2024-05-01
+    # https://github.com/tomaszsluszniak/sanix_py/blob/v1.0.6/sanix/__init__.py#L42
+    "ignore:invalid escape sequence:SyntaxWarning:.*sanix",
+    # https://pypi.org/project/sleekxmppfs/ - v1.4.1 - 2022-08-18
+    "ignore:invalid escape sequence:SyntaxWarning:.*sleekxmppfs.thirdparty.mini_dateutil",  # codespell:ignore thirdparty
+    # https://pypi.org/project/vobject/ - v0.9.7 - 2024-03-25
+    # https://github.com/py-vobject/vobject
+    "ignore:invalid escape sequence:SyntaxWarning:.*vobject.base",
+    # - pkg_resources
+    # https://pypi.org/project/aiomusiccast/ - v0.14.8 - 2023-03-20
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:aiomusiccast",
+    # https://pypi.org/project/habitipy/ - v0.3.1 - 2019-01-14 / 2024-04-28
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:habitipy.api",
+    # https://github.com/eavanvalkenburg/pysiaalarm/blob/v3.1.1/src/pysiaalarm/data/data.py#L7 - v3.1.1 - 2023-04-17
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:pysiaalarm.data.data",
+    # https://pypi.org/project/pybotvac/ - v0.0.25 - 2024-04-11
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:pybotvac.version",
+    # https://github.com/home-assistant-ecosystem/python-mystrom/blob/2.2.0/pymystrom/__init__.py#L10 - v2.2.0 - 2023-05-21
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:pymystrom",
+    # https://pypi.org/project/velbus-aio/ - v2024.4.1
+    # https://github.com/Cereal2nd/velbus-aio/blob/2024.4.1/velbusaio/handler.py#L12
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:velbusaio.handler",
+
+    # -- Python 3.13
+    # HomeAssistant
+    "ignore:'audioop' is deprecated and slated for removal in Python 3.13:DeprecationWarning:homeassistant.components.assist_pipeline.websocket_api",
+    # https://pypi.org/project/nextcord/ - v2.6.0 - 2023-09-23
+    # https://github.com/nextcord/nextcord/issues/1174
+    # https://github.com/nextcord/nextcord/blob/v2.6.1/nextcord/player.py#L5
+    "ignore:'audioop' is deprecated and slated for removal in Python 3.13:DeprecationWarning:nextcord.player",
+    # https://pypi.org/project/pylutron/ - v0.2.12 - 2024-02-12
+    # https://github.com/thecynic/pylutron/issues/89
+    "ignore:'telnetlib' is deprecated and slated for removal in Python 3.13:DeprecationWarning:pylutron",
+    # https://pypi.org/project/SpeechRecognition/ - v3.10.4 - 2024-05-05
+    # https://github.com/Uberi/speech_recognition/blob/3.10.4/speech_recognition/__init__.py#L7
+    "ignore:'aifc' is deprecated and slated for removal in Python 3.13:DeprecationWarning:speech_recognition",
+    # https://pypi.org/project/voip-utils/ - v0.1.0 - 2023-06-28
+    # https://github.com/home-assistant-libs/voip-utils/blob/v0.1.0/voip_utils/rtp_audio.py#L2
+    "ignore:'audioop' is deprecated and slated for removal in Python 3.13:DeprecationWarning:voip_utils.rtp_audio",
+
+    # -- Python 3.13 - unmaintained projects, last release about 2+ years
+    # https://pypi.org/project/pydub/ - v0.25.1 - 2021-03-10
+    "ignore:'audioop' is deprecated and slated for removal in Python 3.13:DeprecationWarning:pydub.utils",
+    # https://github.com/heathbar/plum-lightpad-python/issues/7 - v0.0.11 - 2018-10-16
+    "ignore:'telnetlib' is deprecated and slated for removal in Python 3.13:DeprecationWarning:plumlightpad.lightpad",
+    # https://pypi.org/project/pyws66i/ - v1.1 - 2022-04-05
+    # https://github.com/ssaenger/pyws66i/blob/v1.1/pyws66i/__init__.py#L2
+    "ignore:'telnetlib' is deprecated and slated for removal in Python 3.13:DeprecationWarning:pyws66i",
+
+    # -- unmaintained projects, last release about 2+ years
+    # https://pypi.org/project/agent-py/ - v0.0.23 - 2020-06-04
+    "ignore:with timeout\\(\\) is deprecated:DeprecationWarning:agent.a",
+    # https://pypi.org/project/aiomodernforms/ - v0.1.8 - 2021-06-27
+    "ignore:with timeout\\(\\) is deprecated:DeprecationWarning:aiomodernforms.modernforms",
+    # https://pypi.org/project/alarmdecoder/ - v1.13.11 - 2021-06-01
+    "ignore:invalid escape sequence:SyntaxWarning:.*alarmdecoder",
+    # https://pypi.org/project/directv/ - v0.4.0 - 2020-09-12
+    "ignore:with timeout\\(\\) is deprecated:DeprecationWarning:directv.directv",
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:directv.models",
+    # https://pypi.org/project/foobot_async/ - v1.0.0 - 2020-11-24
+    "ignore:with timeout\\(\\) is deprecated:DeprecationWarning:foobot_async",
+    # https://pypi.org/project/httpsig/ - v1.3.0 - 2018-11-28
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:httpsig",
+    # https://pypi.org/project/influxdb/ - v5.3.2 - 2024-04-18 (archived)
+    "ignore:datetime.*utcfromtimestamp\\(\\) is deprecated and scheduled for removal:DeprecationWarning:influxdb.line_protocol",
+    # https://pypi.org/project/lark-parser/ - v0.12.0 - 2021-08-30 -> moved to `lark`
+    # https://pypi.org/project/commentjson/ - v0.9.0 - 2020-10-05
+    # https://github.com/vaidik/commentjson/issues/51
+    # https://github.com/vaidik/commentjson/pull/52
+    # Fixed upstream, commentjson depends on old version and seems to be unmaintained
+    "ignore:module '(sre_parse|sre_constants)' is deprecate:DeprecationWarning:lark.utils",
+    # https://pypi.org/project/lomond/ - v0.3.3 - 2018-09-21
+    "ignore:ssl.PROTOCOL_TLS is deprecated:DeprecationWarning:lomond.session",
+    # https://pypi.org/project/oauth2client/ - v4.1.3 - 2018-09-07 (archived)
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:oauth2client.client",
+    # https://pypi.org/project/opuslib/ - v3.0.1 - 2018-01-16
+    "ignore:\"is not\" with 'int' literal. Did you mean \"!=\"?:SyntaxWarning:.*opuslib.api.decoder",
+    # https://pypi.org/project/passlib/ - v1.7.4 - 2020-10-08
+    "ignore:'crypt' is deprecated and slated for removal in Python 3.13:DeprecationWarning:passlib.utils",
+    # https://pypi.org/project/pilight/ - v0.1.1 - 2016-10-19
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:pilight",
+    # https://pypi.org/project/plumlightpad/ - v0.0.11 - 2018-10-16
+    "ignore:invalid escape sequence:SyntaxWarning:.*plumlightpad.plumdiscovery",
+    "ignore:\"is\" with 'int' literal. Did you mean \"==\"?:SyntaxWarning:.*plumlightpad.(lightpad|logicalload)",
+    # https://pypi.org/project/pure-python-adb/ - v0.3.0.dev0 - 2020-08-05
+    "ignore:invalid escape sequence:SyntaxWarning:.*ppadb",
+    # https://pypi.org/project/pydub/ - v0.25.1 - 2021-03-10
+    "ignore:invalid escape sequence:SyntaxWarning:.*pydub.utils",
+    # https://pypi.org/project/pyiss/ - v1.0.1 - 2016-12-19
+    "ignore:\"is\" with 'int' literal. Did you mean \"==\"?:SyntaxWarning:.*pyiss",
+    # https://pypi.org/project/PyMetEireann/ - v2021.8.0 - 2021-08-16
+    "ignore:datetime.*utcnow\\(\\) is deprecated and scheduled for removal:DeprecationWarning:meteireann",
+    # https://pypi.org/project/pyowm/ - v3.3.0 - 2022-02-14
+    # https://github.com/csparpa/pyowm/issues/435
+    # https://github.com/csparpa/pyowm/blob/3.3.0/pyowm/commons/cityidregistry.py#L7
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:pyowm.commons.cityidregistry",
+    # https://pypi.org/project/PyPasser/ - v0.0.5 - 2021-10-21
+    "ignore:invalid escape sequence:SyntaxWarning:.*pypasser.utils",
+    # https://pypi.org/project/pyqwikswitch/ - v0.94 - 2019-08-19
+    "ignore:client.loop property is deprecated:DeprecationWarning:pyqwikswitch.async_",
+    "ignore:with timeout\\(\\) is deprecated:DeprecationWarning:pyqwikswitch.async_",
+    # https://pypi.org/project/Rx/ - v3.2.0 - 2021-04-25
+    "ignore:datetime.*utcfromtimestamp\\(\\) is deprecated and scheduled for removal:DeprecationWarning:rx.internal.constants",
+    # https://pypi.org/project/rxv/ - v0.7.0 - 2021-10-10
+    "ignore:defusedxml.cElementTree is deprecated, import from defusedxml.ElementTree instead:DeprecationWarning:rxv.ssdp",
+    # https://pypi.org/project/webrtcvad/ - v2.0.10 - 2017-01-08
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:webrtcvad",
+]
+
+[tool.ruff]
+required-version = ">=0.4.8"
+
+[tool.ruff.lint]
+select = [
+    "A001", # Variable {name} is shadowing a Python builtin
+    "B002", # Python does not support the unary prefix increment
+    "B005", # Using .strip() with multi-character strings is misleading
+    "B007", # Loop control variable {name} not used within loop body
+    "B014", # Exception handler with duplicate exception
+    "B015", # Pointless comparison. Did you mean to assign a value? Otherwise, prepend assert or remove it.
+    "B017", # pytest.raises(BaseException) should be considered evil
+    "B018", # Found useless attribute access. Either assign it to a variable or remove it.
+    "B023", # Function definition does not bind loop variable {name}
+    "B026", # Star-arg unpacking after a keyword argument is strongly discouraged
+    "B032", # Possible unintentional type annotation (using :). Did you mean to assign (using =)?
+    "B904", # Use raise from to specify exception cause
+    "B905", # zip() without an explicit strict= parameter
+    "BLE",
+    "C", # complexity
+    "COM818", # Trailing comma on bare tuple prohibited
+    "D", # docstrings
+    "DTZ003", # Use datetime.now(tz=) instead of datetime.utcnow()
+    "DTZ004", # Use datetime.fromtimestamp(ts, tz=) instead of datetime.utcfromtimestamp(ts)
+    "E", # pycodestyle
+    "F", # pyflakes/autoflake
+    "FLY", # flynt
+    "G", # flake8-logging-format
+    "I", # isort
+    "INP", # flake8-no-pep420
+    "ISC", # flake8-implicit-str-concat
+    "ICN001", # import concentions; {name} should be imported as {asname}
+    "LOG", # flake8-logging
+    "N804", # First argument of a class method should be named cls
+    "N805", # First argument of a method should be named self
+    "N815", # Variable {name} in class scope should not be mixedCase
+    "PERF", # Perflint
+    "PGH", # pygrep-hooks
+    "PIE", # flake8-pie
+    "PL", # pylint
+    "PT", # flake8-pytest-style
+    "PYI", # flake8-pyi
+    "RET", # flake8-return
+    "RSE", # flake8-raise
+    "RUF005", # Consider iterable unpacking instead of concatenation
+    "RUF006", # Store a reference to the return value of asyncio.create_task
+    "RUF010", # Use explicit conversion flag
+    "RUF013", # PEP 484 prohibits implicit Optional
+    "RUF018", # Avoid assignment expressions in assert statements
+    "RUF019", # Unnecessary key check before dictionary access
+    # "RUF100", # Unused `noqa` directive; temporarily every now and then to clean them up
+    "S102", # Use of exec detected
+    "S103", # bad-file-permissions
+    "S108", # hardcoded-temp-file
+    "S306", # suspicious-mktemp-usage
+    "S307", # suspicious-eval-usage
+    "S313", # suspicious-xmlc-element-tree-usage
+    "S314", # suspicious-xml-element-tree-usage
+    "S315", # suspicious-xml-expat-reader-usage
+    "S316", # suspicious-xml-expat-builder-usage
+    "S317", # suspicious-xml-sax-usage
+    "S318", # suspicious-xml-mini-dom-usage
+    "S319", # suspicious-xml-pull-dom-usage
+    "S320", # suspicious-xmle-tree-usage
+    "S601", # paramiko-call
+    "S602", # subprocess-popen-with-shell-equals-true
+    "S604", # call-with-shell-equals-true
+    "S608", # hardcoded-sql-expression
+    "S609", # unix-command-wildcard-injection
+    "SIM", # flake8-simplify
+    "SLF", # flake8-self
+    "SLOT", # flake8-slots
+    "T100", # Trace found: {name} used
+    "T20", # flake8-print
+    "TID251", # Banned imports
+    "TRY", # tryceratops
+    "UP", # pyupgrade
+    "W", # pycodestyle
+]
+
+ignore = [
+    "D202", # No blank lines allowed after function docstring
+    "D203", # 1 blank line required before class docstring
+    "D213", # Multi-line docstring summary should start at the second line
+    "D406", # Section name should end with a newline
+    "D407", # Section name underlining
+    "E501", # line too long
+
+    "PLC1901", # {existing} can be simplified to {replacement} as an empty string is falsey; too many false positives
+    "PLR0911", # Too many return statements ({returns} > {max_returns})
+    "PLR0912", # Too many branches ({branches} > {max_branches})
+    "PLR0913", # Too many arguments to function call ({c_args} > {max_args})
+    "PLR0915", # Too many statements ({statements} > {max_statements})
+    "PLR2004", # Magic value used in comparison, consider replacing {value} with a constant variable
+    "PLW2901", # Outer {outer_kind} variable {name} overwritten by inner {inner_kind} target
+    "PT004", # Fixture {fixture} does not return anything, add leading underscore
+    "PT011", # pytest.raises({exception}) is too broad, set the `match` parameter or use a more specific exception
+    "PT018", # Assertion should be broken down into multiple parts
+    "RUF001", # String contains ambiguous unicode character.
+    "RUF002", # Docstring contains ambiguous unicode character.
+    "RUF003", # Comment contains ambiguous unicode character.
+    "RUF015", # Prefer next(...) over single element slice
+    "SIM102", # Use a single if statement instead of nested if statements
+    "SIM103", # Return the condition {condition} directly
+    "SIM108", # Use ternary operator {contents} instead of if-else-block
+    "SIM115", # Use context handler for opening files
+    "TRY003", # Avoid specifying long messages outside the exception class
+    "TRY400", # Use `logging.exception` instead of `logging.error`
+    # Ignored due to performance: https://github.com/charliermarsh/ruff/issues/2923
+    "UP038", # Use `X | Y` in `isinstance` call instead of `(X, Y)`
+
+    # May conflict with the formatter, https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    "W191",
+    "E111",
+    "E114",
+    "E117",
+    "D206",
+    "D300",
+    "Q",
+    "COM812",
+    "COM819",
+    "ISC001",
+
+    # Disabled because ruff does not understand type of __all__ generated by a function
+    "PLE0605",
+
+    # temporarily disabled
+    "PT019",
+    "PYI024", # Use typing.NamedTuple instead of collections.namedtuple
+    "RET503",
+    "RET501",
+    "TRY002",
+    "TRY301"
+]
+
+[tool.ruff.lint.flake8-import-conventions.extend-aliases]
+voluptuous = "vol"
+"homeassistant.helpers.area_registry" = "ar"
+"homeassistant.helpers.category_registry" = "cr"
+"homeassistant.helpers.config_validation" = "cv"
+"homeassistant.helpers.device_registry" = "dr"
+"homeassistant.helpers.entity_registry" = "er"
+"homeassistant.helpers.floor_registry" = "fr"
+"homeassistant.helpers.issue_registry" = "ir"
+"homeassistant.helpers.label_registry" = "lr"
+"homeassistant.util.dt" = "dt_util"
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"async_timeout".msg = "use asyncio.timeout instead"
+"pytz".msg = "use zoneinfo instead"
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = [
+    "homeassistant",
+]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+[tool.ruff.lint.per-file-ignores]
+
+# Allow for main entry & scripts to write to stdout
+"homeassistant/__main__.py" = ["T201"]
+"homeassistant/scripts/*" = ["T201"]
+"script/*" = ["T20"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25

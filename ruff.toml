@@ -3,6 +3,7 @@ exclude = [
   "crates/uv-virtualenv/src/activator/activate_this.py",
   "crates/uv-virtualenv/src/_virtualenv.py",
   "crates/uv-python/python",
+  "ecosystem",
   "scripts/workspaces",
 ]
 

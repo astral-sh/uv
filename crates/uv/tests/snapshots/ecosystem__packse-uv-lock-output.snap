@@ -1,0 +1,11 @@
+---
+source: crates/uv/tests/ecosystem.rs
+expression: snapshot
+---
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+warning: `uv lock` is experimental and may change without warning
+Resolved 49 packages in [TIME]
