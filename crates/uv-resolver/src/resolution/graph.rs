@@ -718,7 +718,7 @@ fn has_lower_bound(
             .iter()
             .chain(neighbor_dist.metadata.dev_dependencies.values().flatten())
         {
-            if &requirement.name != package_name {
+            if requirement.name != *package_name {
                 continue;
             }
             let Some(specifiers) = requirement.source.version_specifiers() else {
