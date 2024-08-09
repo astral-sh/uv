@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use distribution_types::IndexUrl;
 use install_wheel_rs::linker::LinkMode;
 use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple};
-use uv_python::{PythonFetch, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 use crate::{FilesystemOptions, PipOptions};
@@ -70,7 +70,7 @@ impl_combine_or!(ResolutionMode);
 impl_combine_or!(String);
 impl_combine_or!(TargetTriple);
 impl_combine_or!(PythonPreference);
-impl_combine_or!(PythonFetch);
+impl_combine_or!(PythonDownloads);
 impl_combine_or!(bool);
 
 impl<T> Combine for Option<Vec<T>> {

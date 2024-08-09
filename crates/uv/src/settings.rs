@@ -27,7 +27,7 @@ use uv_configuration::{
     SourceStrategy, TargetTriple, Upgrade,
 };
 use uv_normalize::PackageName;
-use uv_python::{Prefix, PythonFetch, PythonPreference, PythonVersion, Target};
+use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_requirements::RequirementsSource;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
@@ -50,7 +50,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) show_settings: bool,
     pub(crate) preview: PreviewMode,
     pub(crate) python_preference: PythonPreference,
-    pub(crate) python_fetch: PythonFetch,
+    pub(crate) python_downloads: PythonDownloads,
     pub(crate) no_progress: bool,
 }
 
@@ -117,9 +117,9 @@ impl GlobalSettings {
                 .python_preference
                 .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
                 .unwrap_or(default_python_preference),
-            python_fetch: args
-                .python_fetch
-                .combine(workspace.and_then(|workspace| workspace.globals.python_fetch))
+            python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
+                .map(PythonDownloads::from)
+                .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
                 .unwrap_or_default(),
             no_progress: args.no_progress,
         }

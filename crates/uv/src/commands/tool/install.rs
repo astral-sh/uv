@@ -11,7 +11,7 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_tool::InstalledTools;
@@ -40,7 +40,7 @@ pub(crate) async fn install(
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -61,11 +61,11 @@ pub(crate) async fn install(
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
-    let interpreter = PythonInstallation::find_or_fetch(
+    let interpreter = PythonInstallation::find_or_download(
         python_request.clone(),
         EnvironmentPreference::OnlySystem,
         python_preference,
-        python_fetch,
+        python_downloads,
         &client_builder,
         cache,
         Some(&reporter),

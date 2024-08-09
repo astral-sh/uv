@@ -15,7 +15,7 @@ use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
 use crate::{
-    downloads, Error, Interpreter, PythonFetch, PythonPreference, PythonSource, PythonVersion,
+    downloads, Error, Interpreter, PythonDownloads, PythonPreference, PythonSource, PythonVersion,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -77,11 +77,11 @@ impl PythonInstallation {
     /// Find or fetch a [`PythonInstallation`].
     ///
     /// Unlike [`PythonInstallation::find`], if the required Python is not installed it will be installed automatically.
-    pub async fn find_or_fetch<'a>(
+    pub async fn find_or_download<'a>(
         request: Option<PythonRequest>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
-        python_fetch: PythonFetch,
+        python_downloads: PythonDownloads,
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
@@ -94,7 +94,7 @@ impl PythonInstallation {
             // If missing and allowed, perform a fetch
             Err(Error::MissingPython(err))
                 if preference.allows_managed()
-                    && python_fetch.is_automatic()
+                    && python_downloads.is_automatic()
                     && client_builder.connectivity.is_online() =>
             {
                 if let Some(request) = PythonDownloadRequest::from_request(&request) {
