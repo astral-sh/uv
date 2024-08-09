@@ -5273,7 +5273,13 @@ uv pip check [OPTIONS]
 
 ## uv venv
 
-Create a virtual environment
+Create a virtual environment.
+
+By default, creates a virtual environment named `.venv` in the working directory. An alternative path may be provided positionally.
+
+If a virtual environment exists at the target path, it will be removed and a new, empty virtual environment will be created.
+
+When using uv, the virtual environment does not need to be activated. uv will find a virtual environment (named `.venv`) in the working directory or any parent directories.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -5406,21 +5412,9 @@ uv venv [OPTIONS] [NAME]
 
 </dd><dt><code>--prompt</code> <i>prompt</i></dt><dd><p>Provide an alternative prompt prefix for the virtual environment.</p>
 
-<p>The default behavior depends on whether the virtual environment path is provided:</p>
+<p>By default, the prompt is dependent on whether a path was provided to <code>uv venv</code>. If provided (e.g, <code>uv venv project</code>), the prompt is set to the directory name. If not provided (<code>uv venv</code>), the prompt is set to the current directory&#8217;s name.</p>
 
-<ul>
-<li>If provided (<code>uv venv project</code>), the prompt is set to the virtual environment&#8217;s directory name.</li>
-
-<li>If not provided (<code>uv venv</code>), the prompt is set to the current directory&#8217;s name.</li>
-</ul>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>.</code>: Use the current directory name.</li>
-
-<li>Any string: Use the given string.</li>
-</ul>
+<p>If &quot;.&quot; is provided, the the current directory name will be used regardless of whether a path was provided to <code>uv venv</code>.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the virtual environment.</p>
 
@@ -5468,7 +5462,7 @@ uv venv [OPTIONS] [NAME]
 
 </dd><dt><code>--system-site-packages</code></dt><dd><p>Give the virtual environment access to the system site packages directory.</p>
 
-<p>Unlike <code>pip</code>, when a virtual environment is created with <code>--system-site-packages</code>, uv will <em>not</em> take system site packages into account when running commands like <code>uv pip list</code> or <code>uv pip install</code>. The <code>--system-site-packages</code> flag will provide the virtual environment with access to the system site packages directory at runtime, but it will not affect the behavior of uv commands.</p>
+<p>Unlike <code>pip</code>, when a virtual environment is created with <code>--system-site-packages</code>, uv will <em>not</em> take system site packages into account when running commands like <code>uv pip list</code> or <code>uv pip install</code>. The <code>--system-site-packages</code> flag will provide the virtual environment with access to the system site packages directory at runtime, but will not affect the behavior of uv commands.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
