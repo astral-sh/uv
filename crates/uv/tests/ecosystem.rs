@@ -56,6 +56,9 @@ fn transformers() -> Result<()> {
 
 // Source: https://github.com/konstin/warehouse/blob/baae127d90417104c8dee3fdd3855e2ba17aa428/pyproject.toml
 #[test]
+// Interestingly only works on Linux because the build
+// tries to run `pg_config`.
+#[cfg(target_os = "linux")]
 fn warehouse() -> Result<()> {
     lock_ecosystem_package_non_deterministic("3.11", "warehouse")
 }
