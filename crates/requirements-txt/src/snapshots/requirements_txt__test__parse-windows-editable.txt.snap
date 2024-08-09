@@ -168,26 +168,7 @@ RequirementsTxt {
                         ),
                     ],
                     marker: Some(
-                        And(
-                            [
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: GreaterThanEqual,
-                                            version: "3.9",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    String {
-                                        key: OsName,
-                                        operator: Equal,
-                                        value: "posix",
-                                    },
-                                ),
-                            ],
-                        ),
+                        python_version >= '3.9' and os_name == 'posix',
                     ),
                     origin: Some(
                         File(
@@ -246,26 +227,7 @@ RequirementsTxt {
                         ),
                     ],
                     marker: Some(
-                        And(
-                            [
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: GreaterThanEqual,
-                                            version: "3.9",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    String {
-                                        key: OsName,
-                                        operator: Equal,
-                                        value: "posix",
-                                    },
-                                ),
-                            ],
-                        ),
+                        python_version >= '3.9' and os_name == 'posix',
                     ),
                     origin: Some(
                         File(
@@ -317,26 +279,7 @@ RequirementsTxt {
                     },
                     extras: [],
                     marker: Some(
-                        And(
-                            [
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: GreaterThanEqual,
-                                            version: "3.9",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    String {
-                                        key: OsName,
-                                        operator: Equal,
-                                        value: "posix",
-                                    },
-                                ),
-                            ],
-                        ),
+                        python_version >= '3.9' and os_name == 'posix',
                     ),
                     origin: Some(
                         File(

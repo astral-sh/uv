@@ -136,7 +136,7 @@ impl<Url: UnnamedRequirementUrl> Display for UnnamedRequirement<Url> {
                     .join(",")
             )?;
         }
-        if let Some(marker) = &self.marker {
+        if let Some(marker) = self.marker.as_ref().and_then(MarkerTree::contents) {
             write!(f, " ; {marker}")?;
         }
         Ok(())
@@ -172,7 +172,7 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        Some(parse::parse_markers_cursor(cursor, reporter)?)
+        parse::parse_markers_cursor(cursor, reporter)?
     } else {
         None
     };

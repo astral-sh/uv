@@ -87,8 +87,8 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -295,8 +295,8 @@ fn fork_basic() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -580,8 +580,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -873,7 +873,7 @@ fn fork_incomplete_markers() -> Result<()> {
         environment-markers = [
             "python_version < '3.10'",
             "python_version >= '3.11'",
-            "python_version < '3.11' and python_version >= '3.10'",
+            "python_version >= '3.10' and python_version < '3.11'",
         ]
 
         [[package]]
@@ -928,7 +928,7 @@ fn fork_incomplete_markers() -> Result<()> {
         dependencies = [
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version < '3.10'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version >= '3.11'" },
-            { name = "package-b", marker = "python_version < '3.10' or python_version >= '3.11' or (python_version < '3.11' and python_version >= '3.10')" },
+            { name = "package-b" },
         ]
         "###
         );
@@ -1221,10 +1221,10 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'linux'",
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
-            "implementation_name == 'pypy' and sys_platform == 'darwin'",
-            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
 
         [[package]]
@@ -1232,8 +1232,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         environment-markers = [
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
@@ -1265,7 +1265,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-c", marker = "implementation_name == 'pypy' or sys_platform == 'linux'" },
+            { name = "package-c", marker = "sys_platform == 'linux' or implementation_name == 'pypy'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-1.0.0.tar.gz", hash = "sha256:d6bd196a0a152c1b32e09f08e554d22ae6a6b3b916e39ad4552572afae5f5492" }
         wheels = [
@@ -1397,10 +1397,10 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'linux'",
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
-            "implementation_name == 'pypy' and sys_platform == 'darwin'",
-            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
 
         [[package]]
@@ -1408,8 +1408,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         environment-markers = [
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
@@ -1562,10 +1562,10 @@ fn fork_marker_inherit_combined() -> Result<()> {
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'linux'",
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
-            "implementation_name == 'pypy' and sys_platform == 'darwin'",
-            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
 
         [[package]]
@@ -1573,8 +1573,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         environment-markers = [
-            "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
@@ -1719,8 +1719,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -1863,8 +1863,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2015,8 +2015,8 @@ fn fork_marker_inherit() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2149,8 +2149,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2206,7 +2206,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         dependencies = [
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
-            { name = "package-b", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "package-b" },
         ]
         "###
         );
@@ -2299,8 +2299,8 @@ fn fork_marker_selection() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2342,7 +2342,7 @@ fn fork_marker_selection() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "package-a" },
             { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
@@ -2449,8 +2449,8 @@ fn fork_marker_track() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2504,7 +2504,7 @@ fn fork_marker_track() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "package-a" },
             { name = "package-b", version = "2.7", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-b", version = "2.8", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
@@ -3056,8 +3056,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform != 'linux'",
+            "sys_platform == 'linux'",
         ]
 
         [[package]]
@@ -3434,8 +3434,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform != 'linux'",
+            "sys_platform == 'linux'",
         ]
 
         [[package]]
@@ -3712,8 +3712,8 @@ fn preferences_dependent_forking() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform != 'linux'",
+            "sys_platform == 'linux'",
         ]
 
         [[package]]
@@ -3882,10 +3882,10 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         requires-python = ">=3.8"
         environment-markers = [
             "sys_platform == 'windows'",
+            "sys_platform != 'illumos' and sys_platform != 'windows'",
             "os_name == 'darwin' and sys_platform == 'illumos'",
             "os_name == 'linux' and sys_platform == 'illumos'",
             "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
-            "sys_platform != 'illumos' and sys_platform != 'windows'",
         ]
 
         [[package]]

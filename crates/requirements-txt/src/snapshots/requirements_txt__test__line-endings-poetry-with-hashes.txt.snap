@@ -24,28 +24,7 @@ RequirementsTxt {
                         ),
                     ),
                     marker: Some(
-                        And(
-                            [
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: GreaterThanEqual,
-                                            version: "3.8",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: LessThan,
-                                            version: "4.0",
-                                        },
-                                    },
-                                ),
-                            ],
-                        ),
+                        python_version >= '3.8' and python_version < '4.0',
                     ),
                     origin: Some(
                         File(
@@ -78,28 +57,7 @@ RequirementsTxt {
                         ),
                     ),
                     marker: Some(
-                        And(
-                            [
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: GreaterThanEqual,
-                                            version: "3.8",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: LessThan,
-                                            version: "4",
-                                        },
-                                    },
-                                ),
-                            ],
-                        ),
+                        python_version >= '3.8' and python_version < '4.0',
                     ),
                     origin: Some(
                         File(
@@ -132,35 +90,7 @@ RequirementsTxt {
                         ),
                     ),
                     marker: Some(
-                        And(
-                            [
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: GreaterThanEqual,
-                                            version: "3.8",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: LessThan,
-                                            version: "4",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    String {
-                                        key: PlatformSystem,
-                                        operator: Equal,
-                                        value: "Windows",
-                                    },
-                                ),
-                            ],
-                        ),
+                        python_version >= '3.8' and python_version < '4.0' and platform_system == 'Windows',
                     ),
                     origin: Some(
                         File(
@@ -193,28 +123,7 @@ RequirementsTxt {
                         ),
                     ),
                     marker: Some(
-                        And(
-                            [
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: GreaterThanEqual,
-                                            version: "3.8",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: LessThan,
-                                            version: "4.0",
-                                        },
-                                    },
-                                ),
-                            ],
-                        ),
+                        python_version >= '3.8' and python_version < '4.0',
                     ),
                     origin: Some(
                         File(
@@ -248,28 +157,7 @@ RequirementsTxt {
                         ),
                     ),
                     marker: Some(
-                        And(
-                            [
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: GreaterThanEqual,
-                                            version: "3.8",
-                                        },
-                                    },
-                                ),
-                                Expression(
-                                    Version {
-                                        key: PythonVersion,
-                                        specifier: VersionSpecifier {
-                                            operator: LessThan,
-                                            version: "4.0",
-                                        },
-                                    },
-                                ),
-                            ],
-                        ),
+                        python_version >= '3.8' and python_version < '4.0',
                     ),
                     origin: Some(
                         File(

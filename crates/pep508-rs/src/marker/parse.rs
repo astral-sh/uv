@@ -118,7 +118,7 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
 pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
-) -> Result<MarkerExpression, Pep508Error<T>> {
+) -> Result<Option<MarkerExpression>, Pep508Error<T>> {
     cursor.eat_whitespace();
     let l_value = parse_marker_value(cursor)?;
     cursor.eat_whitespace();
@@ -139,25 +139,14 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     MarkerWarningKind::Pep440Error,
                     format!(
                         "Expected double quoted PEP 440 version to compare with {key},
-                        found {r_value}, will evaluate to false"
+                        found {r_value}, will be ignored"
                     ),
                 );
 
-                return Ok(MarkerExpression::arbitrary(
-                    MarkerValue::MarkerEnvVersion(key),
-                    operator,
-                    r_value,
-                ));
+                return Ok(None);
             };
 
-            match parse_version_expr(key.clone(), operator, &value, reporter) {
-                Some(expr) => expr,
-                None => MarkerExpression::arbitrary(
-                    MarkerValue::MarkerEnvVersion(key),
-                    operator,
-                    MarkerValue::QuotedString(value),
-                ),
-            }
+            parse_version_expr(key.clone(), operator, &value, reporter)
         }
         // The only sound choice for this is `<env key> <op> <string>`
         MarkerValue::MarkerEnvString(key) => {
@@ -168,24 +157,29 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     reporter.report(
                         MarkerWarningKind::MarkerMarkerComparison,
                         "Comparing two markers with each other doesn't make any sense,
-                            will evaluate to false"
+                            will be ignored"
                             .to_string(),
                     );
 
-                    return Ok(MarkerExpression::arbitrary(
-                        MarkerValue::MarkerEnvString(key),
-                        operator,
-                        r_value,
-                    ));
+                    return Ok(None);
                 }
                 MarkerValue::QuotedString(r_string) => r_string,
             };
 
-            MarkerExpression::String {
+            if operator == MarkerOperator::TildeEqual {
+                reporter.report(
+                    MarkerWarningKind::LexicographicComparison,
+                    "Can't compare strings with `~=`, will be ignored".to_string(),
+                );
+
+                return Ok(None);
+            }
+
+            Some(MarkerExpression::String {
                 key,
                 operator,
                 value,
-            }
+            })
         }
         // `extra == '...'`
         MarkerValue::Extra => {
@@ -196,73 +190,46 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     reporter.report(
                         MarkerWarningKind::ExtraInvalidComparison,
                         "Comparing extra with something other than a quoted string is wrong,
-                            will evaluate to false"
+                            will be ignored"
                             .to_string(),
                     );
 
-                    return Ok(MarkerExpression::arbitrary(l_value, operator, r_value));
+                    return Ok(None);
                 }
                 MarkerValue::QuotedString(value) => value,
             };
 
-            match parse_extra_expr(operator, &value, reporter) {
-                Some(expr) => expr,
-                None => MarkerExpression::arbitrary(
-                    MarkerValue::Extra,
-                    operator,
-                    MarkerValue::QuotedString(value),
-                ),
-            }
+            parse_extra_expr(operator, &value, reporter)
         }
         // This is either MarkerEnvVersion, MarkerEnvString or Extra inverted
         MarkerValue::QuotedString(l_string) => {
             match r_value {
                 // The only sound choice for this is `<quoted PEP 440 version> <version op>` <version key>
                 MarkerValue::MarkerEnvVersion(key) => {
-                    match parse_inverted_version_expr(&l_string, operator, key.clone(), reporter) {
-                        Some(expr) => expr,
-                        None => MarkerExpression::arbitrary(
-                            MarkerValue::QuotedString(l_string),
-                            operator,
-                            MarkerValue::MarkerEnvVersion(key),
-                        ),
-                    }
+                    parse_inverted_version_expr(&l_string, operator, key.clone(), reporter)
                 }
                 // '...' == <env key>
-                MarkerValue::MarkerEnvString(key) => MarkerExpression::String {
+                MarkerValue::MarkerEnvString(key) => Some(MarkerExpression::String {
                     key,
                     // Invert the operator to normalize the expression order.
                     operator: operator.invert(),
                     value: l_string,
-                },
+                }),
                 // `'...' == extra`
-                MarkerValue::Extra => match parse_extra_expr(operator, &l_string, reporter) {
-                    Some(expr) => expr,
-                    None => MarkerExpression::arbitrary(
-                        MarkerValue::QuotedString(l_string),
-                        operator,
-                        MarkerValue::Extra,
-                    ),
-                },
+                MarkerValue::Extra => parse_extra_expr(operator, &l_string, reporter),
                 // `'...' == '...'`, doesn't make much sense
                 MarkerValue::QuotedString(_) => {
                     // Not even pypa/packaging 22.0 supports this
                     // https://github.com/pypa/packaging/issues/632
-                    let expr = MarkerExpression::arbitrary(
-                        MarkerValue::QuotedString(l_string),
-                        operator,
-                        r_value,
-                    );
-
                     reporter.report(
                         MarkerWarningKind::StringStringComparison,
                         format!(
                             "Comparing two quoted strings with each other doesn't make sense:
-                            {expr}, will evaluate to false"
+                            '{l_string}' {operator} {r_value}, will be ignored"
                         ),
                     );
 
-                    expr
+                    None
                 }
             }
         }
@@ -287,7 +254,7 @@ fn parse_version_expr(
                 MarkerWarningKind::Pep440Error,
                 format!(
                     "Expected PEP 440 version to compare with {key}, found {value},
-                    will evaluate to false: {err}"
+                    will be ignored: {err}"
                 ),
             );
 
@@ -300,7 +267,7 @@ fn parse_version_expr(
             MarkerWarningKind::Pep440Error,
             format!(
                 "Expected PEP 440 version operator to compare {key} with '{version}',
-                    found '{marker_operator}', will evaluate to false",
+                    found '{marker_operator}', will be ignored",
                 version = pattern.version()
             ),
         );
@@ -342,7 +309,7 @@ fn parse_inverted_version_expr(
                 MarkerWarningKind::Pep440Error,
                 format!(
                     "Expected PEP 440 version to compare with {key}, found {value},
-                    will evaluate to false: {err}"
+                    will be ignored: {err}"
                 ),
             );
 
@@ -355,7 +322,7 @@ fn parse_inverted_version_expr(
             MarkerWarningKind::Pep440Error,
             format!(
                 "Expected PEP 440 version operator to compare {key} with '{version}',
-                    found '{marker_operator}', will evaluate to false"
+                    found '{marker_operator}', will be ignored"
             ),
         );
 
@@ -388,7 +355,7 @@ fn parse_extra_expr(
         Err(err) => {
             reporter.report(
                 MarkerWarningKind::ExtraInvalidComparison,
-                format!("Expected extra name, found '{value}', will evaluate to false: {err}"),
+                format!("Expected extra name, found '{value}', will be ignored: {err}"),
             );
 
             return None;
@@ -402,9 +369,10 @@ fn parse_extra_expr(
     reporter.report(
         MarkerWarningKind::ExtraInvalidComparison,
         "Comparing extra with something other than a quoted string is wrong,
-        will evaluate to false"
+        will be ignored"
             .to_string(),
     );
+
     None
 }
 
@@ -415,16 +383,14 @@ fn parse_extra_expr(
 fn parse_marker_expr<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
-) -> Result<MarkerTree, Pep508Error<T>> {
+) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     cursor.eat_whitespace();
     if let Some(start_pos) = cursor.eat_char('(') {
         let marker = parse_marker_or(cursor, reporter)?;
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(MarkerTree::Expression(parse_marker_key_op_value(
-            cursor, reporter,
-        )?))
+        Ok(parse_marker_key_op_value(cursor, reporter)?.map(MarkerTree::expression))
     }
 }
 
@@ -435,8 +401,8 @@ fn parse_marker_expr<T: Pep508Url>(
 fn parse_marker_and<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
-) -> Result<MarkerTree, Pep508Error<T>> {
-    parse_marker_op(cursor, "and", MarkerTree::And, parse_marker_expr, reporter)
+) -> Result<Option<MarkerTree>, Pep508Error<T>> {
+    parse_marker_op(cursor, "and", MarkerTree::and, parse_marker_expr, reporter)
 }
 
 /// ```text
@@ -446,29 +412,37 @@ fn parse_marker_and<T: Pep508Url>(
 fn parse_marker_or<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
-) -> Result<MarkerTree, Pep508Error<T>> {
-    parse_marker_op(cursor, "or", MarkerTree::Or, parse_marker_and, reporter)
+) -> Result<Option<MarkerTree>, Pep508Error<T>> {
+    parse_marker_op(
+        cursor,
+        "or",
+        MarkerTree::or,
+        |cursor, reporter| parse_marker_and(cursor, reporter),
+        reporter,
+    )
 }
 
 /// Parses both `marker_and` and `marker_or`
+#[allow(clippy::type_complexity)]
 fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
     op: &str,
-    op_constructor: fn(Vec<MarkerTree>) -> MarkerTree,
-    parse_inner: fn(&mut Cursor, &mut R) -> Result<MarkerTree, Pep508Error<T>>,
+    apply: fn(&mut MarkerTree, MarkerTree),
+    parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
     reporter: &mut R,
-) -> Result<MarkerTree, Pep508Error<T>> {
+) -> Result<Option<MarkerTree>, Pep508Error<T>> {
+    let mut tree = None;
+
     // marker_and or marker_expr
     let first_element = parse_inner(cursor, reporter)?;
-    // wsp*
-    cursor.eat_whitespace();
-    // Check if we're done here instead of invoking the whole vec allocating loop
-    if matches!(cursor.peek_char(), None | Some(')')) {
-        return Ok(first_element);
+
+    if let Some(expression) = first_element {
+        match tree {
+            Some(ref mut tree) => apply(tree, expression),
+            None => tree = Some(expression),
+        }
     }
 
-    let mut expressions = Vec::with_capacity(1);
-    expressions.push(first_element);
     loop {
         // wsp*
         cursor.eat_whitespace();
@@ -477,17 +451,15 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
         match cursor.slice(start, len) {
             value if value == op => {
                 cursor.take_while(|c| !c.is_whitespace());
-                let expression = parse_inner(cursor, reporter)?;
-                expressions.push(expression);
+
+                if let Some(expression) = parse_inner(cursor, reporter)? {
+                    match tree {
+                        Some(ref mut tree) => apply(tree, expression),
+                        None => tree = Some(expression),
+                    }
+                }
             }
-            _ => {
-                // Build minimal trees
-                return if expressions.len() == 1 {
-                    Ok(expressions.remove(0))
-                } else {
-                    Ok(op_constructor(expressions))
-                };
-            }
+            _ => return Ok(tree),
         }
     }
 }
@@ -498,7 +470,7 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
 pub(crate) fn parse_markers_cursor<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
-) -> Result<MarkerTree, Pep508Error<T>> {
+) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     let marker = parse_marker_or(cursor, reporter)?;
     cursor.eat_whitespace();
     if let Some((pos, unexpected)) = cursor.next() {
@@ -513,6 +485,7 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
             input: cursor.to_string(),
         });
     };
+
     Ok(marker)
 }
 
@@ -523,5 +496,8 @@ pub(crate) fn parse_markers<T: Pep508Url>(
     reporter: &mut impl Reporter,
 ) -> Result<MarkerTree, Pep508Error<T>> {
     let mut chars = Cursor::new(markers);
-    parse_markers_cursor(&mut chars, reporter)
+
+    // If the tree consisted entirely of arbitrary expressions
+    // that were ignored, it evaluates to true.
+    parse_markers_cursor(&mut chars, reporter).map(|result| result.unwrap_or(MarkerTree::TRUE))
 }

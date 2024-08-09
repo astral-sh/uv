@@ -63,8 +63,7 @@ impl Constraints {
             let Some(extra_expression) = requirement
                 .marker
                 .as_ref()
-                .and_then(|marker| marker.top_level_extra())
-                .cloned()
+                .and_then(MarkerTree::top_level_extra)
             else {
                 // Case 2: A non-optional dependency with constraint(s).
                 return Either::Right(Either::Right(
@@ -79,7 +78,7 @@ impl Constraints {
             Either::Right(Either::Left(std::iter::once(requirement).chain(
                 constraints.iter().cloned().map(move |constraint| {
                     // Add the extra to the override marker.
-                    let mut joint_marker = MarkerTree::Expression(extra_expression.clone());
+                    let mut joint_marker = MarkerTree::expression(extra_expression.clone());
                     if let Some(marker) = &constraint.marker {
                         joint_marker.and(marker.clone());
                     }
