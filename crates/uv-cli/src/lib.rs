@@ -2578,7 +2578,9 @@ pub enum ToolCommand {
     #[command(
         hide = true,
         override_usage = "uvx [OPTIONS] <COMMAND>",
-        about = "Run a tool."
+        about = "Run a tool.",
+        after_help = "Use `uv help tool run` for more details.",
+        after_long_help = ""
     )]
     Uvx(ToolRunArgs),
     /// Install a tool.
