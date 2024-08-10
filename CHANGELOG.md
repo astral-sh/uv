@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.35
+
+### Enhancements
+
+### CLI
+
+- Deprecate `--system` and `--no-system` in `uv venv` ([#5925](https://github.com/astral-sh/uv/pull/5925))
+- Make `--upgrade` imply `--refresh` ([#5943](https://github.com/astral-sh/uv/pull/5943))
+- Warn when there are missing bounds on transitive dependencies with `--resolution-strategy lowest` ([#5953](https://github.com/astral-sh/uv/pull/5953))
+
+### Configuration
+
+- Add support for `no-build-isolation-package` ([#5894](https://github.com/astral-sh/uv/pull/5894))
+
+### Performance
+
+- Enable LTO optimizations in release builds to reduce binary size ([#5904](https://github.com/astral-sh/uv/pull/5904))
+- Prefetch metadata in `--no-deps` mode ([#5918](https://github.com/astral-sh/uv/pull/5918))
+
+### Bug fixes
+
+- Display portable paths in POSIX virtual environment activation commands ([#5956](https://github.com/astral-sh/uv/pull/5956))
+- Respect subdirectories when locating Git workspaces ([#5944](https://github.com/astral-sh/uv/pull/5944))
+
+### Documentation
+
+- Improve the `uv venv` CLI documentation ([#5963](https://github.com/astral-sh/uv/pull/5963))
+
 ## 0.2.34
 
 ### Enhancements
@@ -1779,3 +1807,4 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Fix diagram alignment ([#1354](https://github.com/astral-sh/uv/pull/1354))
 - Grammar nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
 <!-- prettier-ignore-end -->
+
