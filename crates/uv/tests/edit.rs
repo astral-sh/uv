@@ -2975,6 +2975,108 @@ fn add_script() -> Result<()> {
     Ok(())
 }
 
+/// Add to a script without metadata table
+#[test]
+fn add_script_without_metadata_table() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg(script.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    "###);
+
+    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "rich",
+        #     "requests<3",
+        # ]
+        # ///
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Add to a script without metadata table
+#[test]
+fn add_script_without_metadata_table_with_shebang() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        #!/usr/bin/env python3
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg(script.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    "###);
+
+    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        #!/usr/bin/env python3
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "rich",
+        #     "requests<3",
+        # ]
+        # ///
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Remove from a PEP732 script
 #[test]
 fn remove_script() -> Result<()> {

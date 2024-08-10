@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use memchr::memmem::Finder;
+use pep440_rs::VersionSpecifiers;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -20,7 +21,11 @@ static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"))
 pub struct Pep723Script {
     pub path: PathBuf,
     pub metadata: Pep723Metadata,
+    /// The content of the script after the metadata table.
     pub raw: String,
+
+    /// The content of the script before the metadata table.
+    pub prelude: String,
 }
 
 impl Pep723Script {
@@ -35,7 +40,7 @@ impl Pep723Script {
         };
 
         // Extract the `script` tag.
-        let Some((metadata, raw)) = extract_script_tag(&contents)? else {
+        let Some((prelude, metadata, raw)) = extract_script_tag(&contents)? else {
             return Ok(None);
         };
 
@@ -46,12 +51,55 @@ impl Pep723Script {
             path: file.as_ref().to_path_buf(),
             metadata,
             raw,
+            prelude,
         }))
+    }
+
+    /// Reads a Python script and generates a default PEP 723 metadata table.
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    pub async fn create(
+        file: impl AsRef<Path>,
+        requires_python: &VersionSpecifiers,
+    ) -> Result<Self, Pep723Error> {
+        let contents = match fs_err::tokio::read(&file).await {
+            Ok(contents) => contents,
+            Err(err) => return Err(err.into()),
+        };
+
+        // Extract the `script` tag.
+        let default_metadata = indoc::formatdoc! {r#"
+            requires-python = "{requires_python}"
+            dependencies = []
+            "#,
+            requires_python = requires_python,
+        };
+
+        let (raw, prelude) = extract_shebang(&contents)?;
+
+        // Parse the metadata.
+        let metadata = Pep723Metadata::from_str(&default_metadata)?;
+
+        Ok(Self {
+            path: file.as_ref().to_path_buf(),
+            metadata,
+            raw,
+            prelude: prelude.unwrap_or(String::new()),
+        })
     }
 
     /// Replace the existing metadata in the file with new metadata and write the updated content.
     pub async fn replace_metadata(&self, new_metadata: &str) -> Result<(), Pep723Error> {
-        let new_content = format!("{}{}", serialize_metadata(new_metadata), self.raw);
+        let new_content = format!(
+            "{}{}{}",
+            if self.prelude.is_empty() {
+                String::new()
+            } else {
+                format!("{}\n", self.prelude)
+            },
+            serialize_metadata(new_metadata),
+            self.raw
+        );
 
         fs_err::tokio::write(&self.path, new_content)
             .await
@@ -111,18 +159,20 @@ pub enum Pep723Error {
     Toml(#[from] toml::de::Error),
 }
 
-/// Given the contents of a Python file, extract the `script` metadata block, with leading comment
-/// hashes removed, and the remaining Python script code.
+/// Given the contents of a Python file, extract the `script` metadata block with leading comment
+/// hashes removed, any preceding shebang or content (prelude), and the remaining Python script code.
 ///
 /// The function returns a tuple where:
-/// - The first element is the extracted metadata as a string, with comment hashes removed.
-/// - The second element is the remaining Python code of the script.
+/// - The first element is the preceding content, which may include a shebang or other lines before the `script` metadata block.
+/// - The second element is the extracted metadata as a string with comment hashes removed.
+/// - The third element is the remaining Python code of the script.
 ///
 /// # Example
 ///
 /// Given the following input string representing the contents of a Python script:
 ///
 /// ```python
+/// #!/usr/bin/env python3
 /// # /// script
 /// # requires-python = '>=3.11'
 /// # dependencies = [
@@ -140,12 +190,14 @@ pub enum Pep723Error {
 ///
 /// ```rust
 /// (
+///     "#!/usr/bin/env python3\n",
 ///     "requires-python = '>=3.11'\ndependencies = [\n  'requests<3',\n  'rich',\n]",
 ///     "import requests\n\nprint(\"Hello, World!\")\n"
 /// )
 /// ```
+///
 /// See: <https://peps.python.org/pep-0723/>
-fn extract_script_tag(contents: &[u8]) -> Result<Option<(String, String)>, Pep723Error> {
+fn extract_script_tag(contents: &[u8]) -> Result<Option<(String, String, String)>, Pep723Error> {
     // Identify the opening pragma.
     let Some(index) = FINDER.find(contents) else {
         return Ok(None);
@@ -157,6 +209,12 @@ fn extract_script_tag(contents: &[u8]) -> Result<Option<(String, String)>, Pep72
     }
 
     // Decode as UTF-8.
+    let prelude = if index != 0 {
+        std::str::from_utf8(&contents[..index])?
+    } else {
+        ""
+    }
+    .to_string();
     let contents = &contents[index..];
     let contents = std::str::from_utf8(contents)?;
 
@@ -235,7 +293,25 @@ fn extract_script_tag(contents: &[u8]) -> Result<Option<(String, String)>, Pep72
     let toml = toml.join("\n") + "\n";
     let python_script = python_script.join("\n") + "\n";
 
-    Ok(Some((toml, python_script)))
+    Ok(Some((prelude, toml, python_script)))
+}
+
+/// Extracts the shebang line from the given file contents and returns it along with the remaining content.
+fn extract_shebang(contents: &[u8]) -> Result<(String, Option<String>), Pep723Error> {
+    let contents = std::str::from_utf8(contents)?;
+
+    let mut lines = contents.lines();
+
+    // Check the first line for a shebang
+    if let Some(first_line) = lines.next() {
+        if first_line.starts_with("#!") {
+            let shebang = first_line.to_string();
+            let remaining_content: String = lines.collect::<Vec<&str>>().join("\n");
+            return Ok((remaining_content, Some(shebang)));
+        }
+    }
+
+    Ok((contents.to_string(), None))
 }
 
 /// Formats the provided metadata by prefixing each line with `#` and wrapping it with script markers.

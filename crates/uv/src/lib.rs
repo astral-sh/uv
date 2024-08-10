@@ -135,12 +135,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     let script = if let Commands::Project(command) = &*cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
             parse_script(command).await?
-        } else if let ProjectCommand::Add(uv_cli::AddArgs {
-            script: Some(script),
-            ..
-        }) = &**command
-        {
-            Pep723Script::read(&script).await?
         } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {
             script: Some(script),
             ..
@@ -1169,7 +1163,7 @@ async fn run_project(
                 args.package,
                 args.python,
                 args.settings,
-                script,
+                args.script,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.preview,

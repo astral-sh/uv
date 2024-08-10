@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
@@ -20,7 +21,7 @@ use uv_python::{
     PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::FlatIndex;
+use uv_resolver::{FlatIndex, RequiresPython};
 use uv_scripts::Pep723Script;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -60,7 +61,7 @@ pub(crate) async fn add(
     package: Option<PackageName>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
-    script: Option<Pep723Script>,
+    script: Option<PathBuf>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     preview: PreviewMode,
@@ -100,7 +101,40 @@ pub(crate) async fn add(
                 "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
 
+        let script = if let Some(script) = Pep723Script::read(&script).await? {
+            script
+        } else {
+            // As no metadata was found in the script, we will create a default metadata table for the script.
+
+            // (1) Explicit request from user
+            let python_request = if let Some(request) = python.as_deref() {
+                PythonRequest::parse(request)
+            // (2) Request from `.python-version`
+            } else if let Some(request) = request_from_version_file(&CWD).await? {
+                request
+            } else {
+                PythonRequest::Any
+            };
+            let reporter = PythonDownloadReporter::single(printer);
+            let interpreter = PythonInstallation::find_or_download(
+                Some(python_request),
+                EnvironmentPreference::Any,
+                python_preference,
+                python_downloads,
+                &client_builder,
+                cache,
+                Some(&reporter),
+            )
+            .await?
+            .into_interpreter();
+            let requires_python =
+                RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+            Pep723Script::create(&script, requires_python.specifiers()).await?
+        };
         // (1) Explicit request from user
         let python_request = if let Some(request) = python.as_deref() {
             Some(PythonRequest::parse(request))
@@ -117,10 +151,6 @@ pub(crate) async fn add(
                     PythonRequest::Version(VersionRequest::Range(requires_python))
                 })
         };
-
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls);
 
         let interpreter = PythonInstallation::find_or_download(
             python_request,
