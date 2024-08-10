@@ -254,6 +254,144 @@ pub(crate) fn lower_requirement(
     })
 }
 
+/// Lower a requirement in a non-workspace setting.
+pub fn lower_non_workspace_requirement(
+    requirement: pep508_rs::Requirement<VerbatimParsedUrl>,
+    dir: &Path,
+    sources: &BTreeMap<PackageName, Source>,
+    preview: PreviewMode,
+) -> Result<Requirement, LoweringError> {
+    let source = sources
+        .get(&requirement.name)
+        .cloned();
+
+    let Some(source) = source else {
+        return Ok(Requirement::from(requirement));
+    };
+
+    if preview.is_disabled() {
+        warn_user_once!("`uv.sources` is experimental and may change without warning");
+    }
+
+    let source = match source {
+        Source::Git {
+            git,
+            subdirectory,
+            rev,
+            tag,
+            branch,
+        } => {
+            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                return Err(LoweringError::ConflictingUrls);
+            }
+            let reference = match (rev, tag, branch) {
+                (None, None, None) => GitReference::DefaultBranch,
+                (Some(rev), None, None) => {
+                    if rev.starts_with("refs/") {
+                        GitReference::NamedRef(rev.clone())
+                    } else if rev.len() == 40 {
+                        GitReference::FullCommit(rev.clone())
+                    } else {
+                        GitReference::ShortCommit(rev.clone())
+                    }
+                }
+                (None, Some(tag), None) => GitReference::Tag(tag),
+                (None, None, Some(branch)) => GitReference::Branch(branch),
+                _ => return Err(LoweringError::MoreThanOneGitRef),
+            };
+
+            // Create a PEP 508-compatible URL.
+            let mut url = Url::parse(&format!("git+{git}"))?;
+            if let Some(rev) = reference.as_str() {
+                url.set_path(&format!("{}@{}", url.path(), rev));
+            }
+            if let Some(subdirectory) = &subdirectory {
+                url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
+            }
+            let url = VerbatimUrl::from_url(url);
+
+            let repository = git.clone();
+
+            RequirementSource::Git {
+                url,
+                repository,
+                reference,
+                precise: None,
+                subdirectory: subdirectory.map(PathBuf::from),
+            }
+        }
+        Source::Url { url, subdirectory } => {
+            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                return Err(LoweringError::ConflictingUrls);
+            }
+
+            let mut verbatim_url = url.clone();
+            if verbatim_url.fragment().is_some() {
+                return Err(LoweringError::ForbiddenFragment(url));
+            }
+            if let Some(subdirectory) = &subdirectory {
+                verbatim_url.set_fragment(Some(subdirectory));
+            }
+
+            let ext = DistExtension::from_path(url.path())
+                .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
+
+            let verbatim_url = VerbatimUrl::from_url(verbatim_url);
+            RequirementSource::Url {
+                location: url,
+                subdirectory: subdirectory.map(PathBuf::from),
+                ext,
+                url: verbatim_url,
+            }
+        }
+        Source::Path { path, editable } => {
+            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                return Err(LoweringError::ConflictingUrls);
+            }
+            path_source(
+                path,
+                dir,
+                dir,
+                editable.unwrap_or(false),
+            )?
+        }
+        Source::Registry { index } => match requirement.version_or_url {
+            None => {
+                warn_user_once!(
+                    "Missing version constraint (e.g., a lower bound) for `{}`",
+                    requirement.name
+                );
+                RequirementSource::Registry {
+                    specifier: VersionSpecifiers::empty(),
+                    index: Some(index),
+                }
+            }
+            Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
+                specifier: version,
+                index: Some(index),
+            },
+            Some(VersionOrUrl::Url(_)) => return Err(LoweringError::ConflictingUrls),
+        },
+        Source::Workspace {
+            ..
+        } => {
+            // STOPSHIP(charlie): Dedicated error.
+            return Err(LoweringError::InvalidEntry);
+        }
+        Source::CatchAll { .. } => {
+            // Emit a dedicated error message, which is an improvement over Serde's default error.
+            return Err(LoweringError::InvalidEntry);
+        }
+    };
+    Ok(Requirement {
+        name: requirement.name,
+        extras: requirement.extras,
+        marker: requirement.marker,
+        source,
+        origin: requirement.origin,
+    })
+}
+
 /// Convert a path string to a file or directory source.
 fn path_source(
     path: impl AsRef<Path>,

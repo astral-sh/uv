@@ -23,11 +23,12 @@ use uv_cli::{SelfCommand, SelfNamespace};
 use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
+use uv_scripts::Pep723Script;
 use uv_settings::{Combine, FilesystemOptions};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
-use crate::commands::{ExitStatus, ToolRunCommand};
+use crate::commands::{parse_script, ExitStatus, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -129,6 +130,27 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         let user = FilesystemOptions::user()?;
         project.combine(user)
     };
+
+    // If the target is a PEP 723 script, parse it.
+    let script = if let Commands::Project(command) = &*cli.command {
+        if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
+            parse_script(command).await?
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // If the target is a PEP 723 script, merge the metadata into the filesystem metadata.
+    let filesystem = script
+        .as_ref()
+        .map(|script| &script.metadata)
+        .and_then(|metadata| metadata.tool.as_ref())
+        .and_then(|tool| tool.uv.as_ref())
+        .map(|uv| uv.options.clone())
+        .map(FilesystemOptions::from)
+        .combine(filesystem);
 
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(&cli.command, &cli.global_args, filesystem.as_ref());
@@ -682,7 +704,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Project(project) => {
-            run_project(project, globals, filesystem, cache, printer).await
+            run_project(project, script, globals, filesystem, cache, printer).await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
@@ -957,6 +979,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 /// Run a [`ProjectCommand`].
 async fn run_project(
     project_command: Box<ProjectCommand>,
+    script: Option<Pep723Script>,
     globals: GlobalSettings,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
@@ -1026,7 +1049,8 @@ async fn run_project(
                 )
                 .collect::<Vec<_>>();
 
-            commands::run(
+            Box::pin(commands::run(
+                script,
                 args.command,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
@@ -1047,7 +1071,7 @@ async fn run_project(
                 globals.native_tls,
                 &cache,
                 printer,
-            )
+            ))
             .await
         }
         ProjectCommand::Sync(args) => {

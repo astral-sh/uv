@@ -1,9 +1,9 @@
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use memchr::memmem::Finder;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 
 use pypi_types::VerbatimParsedUrl;
@@ -11,6 +11,26 @@ use uv_settings::Options as SettingsOptions;
 use uv_workspace::pyproject::ToolUv as WorkspaceOptions;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
+
+/// A PEP 723 script, including its [`Pep723Metadata`].
+#[derive(Debug)]
+pub struct Pep723Script {
+    pub path: PathBuf,
+    pub metadata: Pep723Metadata,
+}
+
+impl Pep723Script {
+    /// Read the PEP 723 `script` metadata from a Python file, if it exists.
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
+        let metadata = Pep723Metadata::read(&file).await?;
+        Ok(metadata.map(|metadata| Self {
+            path: file.as_ref().to_path_buf(),
+            metadata,
+        }))
+    }
+}
 
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
@@ -23,21 +43,43 @@ pub struct Pep723Metadata {
     pub tool: Option<Tool>,
 }
 
+impl Pep723Metadata {
+    /// Read the PEP 723 `script` metadata from a Python file, if it exists.
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
+        let contents = match fs_err::tokio::read(file).await {
+            Ok(contents) => contents,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+
+        // Extract the `script` tag.
+        let Some(contents) = extract_script_tag(&contents)? else {
+            return Ok(None);
+        };
+
+        // Parse the metadata.
+        let metadata = toml::from_str(&contents)?;
+
+        Ok(Some(metadata))
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
-struct Tool {
+pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ToolUv {
+pub struct ToolUv {
     #[serde(flatten)]
     pub options: SettingsOptions,
     #[serde(flatten)]
     pub workspace: WorkspaceOptions,
 }
-
 
 #[derive(Debug, Error)]
 pub enum Pep723Error {

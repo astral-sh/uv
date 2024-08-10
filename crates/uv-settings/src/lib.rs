@@ -154,6 +154,12 @@ impl FilesystemOptions {
     }
 }
 
+impl From<Options> for FilesystemOptions {
+    fn from(options: Options) -> Self {
+        Self(options)
+    }
+}
+
 /// Returns the path to the user configuration directory.
 ///
 /// This is similar to the `config_dir()` returned by the `dirs` crate, but it uses the
