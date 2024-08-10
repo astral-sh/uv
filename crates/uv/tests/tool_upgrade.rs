@@ -52,7 +52,7 @@ fn test_tool_upgrade_name() {
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.14.0
     Removed pytz v2018.5
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 }
 
@@ -123,9 +123,9 @@ fn test_tool_upgrade_all() {
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.14.0
     Removed pytz v2018.5
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     Updated python-dotenv v0.10.2.post2 -> v1.0.1
-    Updated 1 executable: dotenv
+    Installed 1 executable: dotenv
     "###);
 }
 
@@ -213,7 +213,7 @@ fn test_tool_upgrade_settings() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Updated 2 executables: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     // Upgrade `black`, but override the resolution.
@@ -230,7 +230,7 @@ fn test_tool_upgrade_settings() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated black v23.1.0 -> v24.3.0
-    Updated 2 executables: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 }
 
@@ -280,7 +280,7 @@ fn test_tool_upgrade_respect_constraints() {
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.9.1
     Updated pytz v2018.5 -> v2024.1
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 }
 
@@ -333,7 +333,7 @@ fn test_tool_upgrade_constraint() {
     Updated babel v2.6.0 -> v2.13.1
     Removed pytz v2018.5
     Added setuptools v69.2.0
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 
     // Upgrade `babel` without a constraint.
@@ -352,7 +352,7 @@ fn test_tool_upgrade_constraint() {
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.13.1 -> v2.14.0
     Removed setuptools v69.2.0
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 
     // Passing `--upgrade` explicitly should warn.
@@ -371,6 +371,6 @@ fn test_tool_upgrade_constraint() {
     ----- stderr -----
     warning: `--upgrade` is enabled by default on `uv tool upgrade`
     warning: `uv tool upgrade` is experimental and may change without warning
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 }

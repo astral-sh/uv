@@ -15,7 +15,7 @@ use uv_warnings::warn_user_once;
 
 use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
 use crate::commands::project::update_environment;
-use crate::commands::tool::common::{remove_entrypoints, InstallAction};
+use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -151,7 +151,6 @@ pub(crate) async fn upgrade(
             true,
             existing_tool_receipt.python().to_owned(),
             requirements.to_vec(),
-            InstallAction::Update,
             printer,
         )?;
     }
