@@ -24,7 +24,7 @@ use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_scripts::Pep723Script;
-use uv_settings::{Combine, FilesystemOptions};
+use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
@@ -148,7 +148,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         .map(|script| &script.metadata)
         .and_then(|metadata| metadata.tool.as_ref())
         .and_then(|tool| tool.uv.as_ref())
-        .map(|uv| uv.options.clone())
+        .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
         .map(FilesystemOptions::from)
         .combine(filesystem);
 

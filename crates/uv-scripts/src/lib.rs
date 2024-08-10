@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -6,9 +7,10 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
 
+use pep508_rs::PackageName;
 use pypi_types::VerbatimParsedUrl;
-use uv_settings::Options as SettingsOptions;
-use uv_workspace::pyproject::ToolUv as WorkspaceOptions;
+use uv_settings::{GlobalOptions, ResolverInstallerOptions};
+use uv_workspace::pyproject::Source;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
@@ -76,9 +78,10 @@ pub struct Tool {
 #[serde(deny_unknown_fields)]
 pub struct ToolUv {
     #[serde(flatten)]
-    pub options: SettingsOptions,
+    pub globals: GlobalOptions,
     #[serde(flatten)]
-    pub workspace: WorkspaceOptions,
+    pub top_level: ResolverInstallerOptions,
+    pub sources: Option<BTreeMap<PackageName, Source>>,
 }
 
 #[derive(Debug, Error)]

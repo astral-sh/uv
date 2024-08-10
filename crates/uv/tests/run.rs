@@ -335,6 +335,76 @@ fn run_pep723_script() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723-compatible script with `tool.uv` metadata.
+#[test]
+fn run_pep723_script_metadata() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig>1",
+        # ]
+        #
+        # [tool.uv]
+        # resolution = "lowest-direct"
+        # ///
+
+        import iniconfig
+       "#
+    })?;
+
+    // Running the script should fail without network access.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.1
+    "###);
+
+    // Respect `tool.uv.sources`.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "uv-public-pypackage",
+        # ]
+        #
+        # [tool.uv.sources]
+        # uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", rev = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        # ///
+
+        import uv_public_pypackage
+       "#
+    })?;
+
+    // The script should succeed with the specified source.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###);
+
+    Ok(())
+}
+
 /// With `managed = false`, we should avoid installing the project itself.
 #[test]
 fn run_managed_false() -> Result<()> {

@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_distribution::lower_non_workspace_requirement;
+use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -37,19 +37,6 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
-
-/// Read a [`Pep723Script`] from the given command.
-pub(crate) async fn parse_script(command: &ExternalCommand) -> Result<Option<Pep723Script>> {
-    // Parse the input command.
-    let command = RunCommand::from(command);
-
-    let RunCommand::Python(target, _) = &command else {
-        return Ok(None);
-    };
-
-    // Read the PEP 723 `script` metadata from the target script.
-    Ok(Pep723Script::read(&target).await?)
-}
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -153,22 +140,25 @@ pub(crate) async fn run(
         if let Some(dependencies) = script.metadata.dependencies {
             // // Collect any `tool.uv.sources` from the script.
             let empty = BTreeMap::default();
-            let script_sources = script.metadata.tool
+            let script_sources = script
+                .metadata
+                .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.workspace.sources.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
                 .unwrap_or(&empty);
             let script_dir = script.path.parent().expect("script path has no parent");
 
             let requirements = dependencies
                 .into_iter()
                 .map(|requirement| {
-                    lower_non_workspace_requirement(
+                    LoweredRequirement::from_non_workspace_requirement(
                         requirement,
                         script_dir,
                         script_sources,
                         preview,
                     )
+                    .map(LoweredRequirement::into_inner)
                 })
                 .collect::<Result<_, _>>()?;
             let spec = RequirementsSpecification::from_requirements(requirements);
@@ -619,6 +609,19 @@ pub(crate) async fn run(
     } else {
         Ok(ExitStatus::Failure)
     }
+}
+
+/// Read a [`Pep723Script`] from the given command.
+pub(crate) async fn parse_script(command: &ExternalCommand) -> Result<Option<Pep723Script>> {
+    // Parse the input command.
+    let command = RunCommand::from(command);
+
+    let RunCommand::Python(target, _) = &command else {
+        return Ok(None);
+    };
+
+    // Read the PEP 723 `script` metadata from the target script.
+    Ok(Pep723Script::read(&target).await?)
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

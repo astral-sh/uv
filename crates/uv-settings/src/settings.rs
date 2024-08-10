@@ -69,6 +69,17 @@ pub struct Options {
     managed: serde::de::IgnoredAny,
 }
 
+impl Options {
+    /// Construct an [`Options`] with the given global and top-level settings.
+    pub fn simple(globals: GlobalOptions, top_level: ResolverInstallerOptions) -> Self {
+        Self {
+            globals,
+            top_level,
+            ..Default::default()
+        }
+    }
+}
+
 /// Global settings, relevant to all invocations.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
