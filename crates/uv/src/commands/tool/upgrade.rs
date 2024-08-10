@@ -14,7 +14,7 @@ use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
 
 use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
-use crate::commands::project::update_environment;
+use crate::commands::project::{update_environment, EnvironmentUpdate};
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -57,6 +57,9 @@ pub(crate) async fn upgrade(
         writeln!(printer.stderr(), "Nothing to upgrade")?;
         return Ok(ExitStatus::Success);
     }
+
+    // Determine whether we applied any upgrades.
+    let mut updated = false;
 
     for name in names {
         debug!("Upgrading tool: `{name}`");
@@ -123,7 +126,10 @@ pub(crate) async fn upgrade(
 
         // TODO(zanieb): Build the environment in the cache directory then copy into the tool
         // directory.
-        let environment = update_environment(
+        let EnvironmentUpdate {
+            environment,
+            changed,
+        } = update_environment(
             existing_environment,
             spec,
             &settings,
@@ -139,20 +145,28 @@ pub(crate) async fn upgrade(
         )
         .await?;
 
-        // At this point, we updated the existing environment, so we should remove any of its
-        // existing executables.
-        remove_entrypoints(&existing_tool_receipt);
+        if changed {
+            updated = true;
 
-        install_executables(
-            &environment,
-            &name,
-            &installed_tools,
-            ToolOptions::from(options),
-            true,
-            existing_tool_receipt.python().to_owned(),
-            requirements.to_vec(),
-            printer,
-        )?;
+            // At this point, we updated the existing environment, so we should remove any of its
+            // existing executables.
+            remove_entrypoints(&existing_tool_receipt);
+
+            install_executables(
+                &environment,
+                &name,
+                &installed_tools,
+                ToolOptions::from(options),
+                true,
+                existing_tool_receipt.python().to_owned(),
+                requirements.to_vec(),
+                printer,
+            )?;
+        }
+    }
+
+    if !updated {
+        writeln!(printer.stderr(), "Nothing to upgrade")?;
     }
 
     Ok(ExitStatus::Success)

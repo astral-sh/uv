@@ -283,6 +283,9 @@ pub(crate) enum Modifications {
 }
 
 /// Install a set of requirements into the current environment.
+///
+/// Returns `true` if modifications were made to the environment (or would have been made, in the
+/// case of a dry-run).
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
@@ -304,7 +307,7 @@ pub(crate) async fn install(
     dry_run: bool,
     printer: Printer,
     preview: PreviewMode,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let start = std::time::Instant::now();
 
     // Extract the requirements from the resolution.
@@ -345,7 +348,7 @@ pub(crate) async fn install(
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         logger.on_audit(resolution.len(), start, printer)?;
-        return Ok(());
+        return Ok(false);
     }
 
     // Map any registry-based requirements back to those returned by the resolver.
@@ -435,10 +438,12 @@ pub(crate) async fn install(
         compile_bytecode(venv, cache, printer).await?;
     }
 
+    let num_changes = reinstalls.len() + wheels.len() + extraneous.len();
+
     // Notify the user of any environment modifications.
     logger.on_complete(wheels, reinstalls, extraneous, printer)?;
 
-    Ok(())
+    Ok(num_changes > 0)
 }
 
 /// Report on the results of a dry-run installation.
@@ -448,7 +453,7 @@ fn report_dry_run(
     modifications: Modifications,
     start: std::time::Instant,
     printer: Printer,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let Plan {
         cached,
         remote,
@@ -476,7 +481,7 @@ fn report_dry_run(
             .dimmed()
         )?;
         writeln!(printer.stderr(), "Would make no changes")?;
-        return Ok(());
+        return Ok(false);
     }
 
     // Map any registry-based requirements back to those returned by the resolver.
@@ -537,6 +542,8 @@ fn report_dry_run(
         )?;
     }
 
+    let num_changes = reinstalls.len() + wheels.len() + cached.len() + extraneous.len();
+
     // TDOO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
     for event in reinstalls
         .into_iter()
@@ -579,7 +586,7 @@ fn report_dry_run(
         }
     }
 
-    Ok(())
+    Ok(num_changes > 0)
 }
 
 /// Report on any modifications to the Python environment.

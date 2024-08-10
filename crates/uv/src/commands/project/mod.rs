@@ -775,6 +775,22 @@ pub(crate) async fn sync_environment(
     Ok(venv)
 }
 
+/// The result of updating a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
+#[derive(Debug)]
+pub(crate) struct EnvironmentUpdate {
+    /// The updated [`PythonEnvironment`].
+    pub(crate) environment: PythonEnvironment,
+    /// Whether the environment was changed during the update operation.
+    pub(crate) changed: bool,
+}
+
+impl EnvironmentUpdate {
+    /// Convert the [`EnvironmentUpdate`] into a [`PythonEnvironment`].
+    pub(crate) fn into_environment(self) -> PythonEnvironment {
+        self.environment
+    }
+}
+
 /// Update a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
 pub(crate) async fn update_environment(
     venv: PythonEnvironment,
@@ -789,7 +805,7 @@ pub(crate) async fn update_environment(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<PythonEnvironment> {
+) -> anyhow::Result<EnvironmentUpdate> {
     warn_on_requirements_txt_setting(&spec, settings.as_ref().into());
 
     let ResolverInstallerSettings {
@@ -836,7 +852,10 @@ pub(crate) async fn update_environment(
                         .sorted()
                         .join(" | ")
                 );
-                return Ok(venv);
+                return Ok(EnvironmentUpdate {
+                    environment: venv,
+                    changed: false,
+                });
             }
             SatisfiesResult::Unsatisfied(requirement) => {
                 debug!("At least one requirement is not satisfied: {requirement}");
@@ -956,7 +975,7 @@ pub(crate) async fn update_environment(
     };
 
     // Sync the environment.
-    pip::operations::install(
+    let changed = pip::operations::install(
         &resolution,
         site_packages,
         Modifications::Exact,
@@ -983,7 +1002,10 @@ pub(crate) async fn update_environment(
     // Notify the user of any resolution diagnostics.
     pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    Ok(venv)
+    Ok(EnvironmentUpdate {
+        environment: venv,
+        changed,
+    })
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.

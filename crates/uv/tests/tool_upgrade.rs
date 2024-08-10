@@ -219,7 +219,7 @@ fn test_tool_upgrade_settings() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Installed 2 executables: black, blackd
+    Nothing to upgrade
     "###);
 
     // Upgrade `black`, but override the resolution.
@@ -386,6 +386,6 @@ fn test_tool_upgrade_constraint() {
     ----- stderr -----
     warning: `--upgrade` is enabled by default on `uv tool upgrade`
     warning: `uv tool upgrade` is experimental and may change without warning
-    Installed 1 executable: pybabel
+    Nothing to upgrade
     "###);
 }
