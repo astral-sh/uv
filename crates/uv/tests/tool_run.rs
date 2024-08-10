@@ -902,3 +902,25 @@ fn warn_no_executables_found() {
     warning: Package `requests` does not provide any executables.
     "###);
 }
+
+/// If we fail to resolve the tool, we should include "tool" in the error message.
+#[test]
+fn tool_run_resolution_error() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("add")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool run` is experimental and may change without warning
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that the requirements are unsatisfiable.
+    "###);
+}
