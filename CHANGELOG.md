@@ -2,8 +2,6 @@
 
 ## 0.2.35
 
-### Enhancements
-
 ### CLI
 
 - Deprecate `--system` and `--no-system` in `uv venv` ([#5925](https://github.com/astral-sh/uv/pull/5925))
