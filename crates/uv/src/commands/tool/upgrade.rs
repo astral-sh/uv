@@ -4,12 +4,6 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::project::update_environment;
-use crate::commands::tool::common::{remove_entrypoints, InstallAction};
-use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
@@ -18,6 +12,13 @@ use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user_once;
+
+use crate::commands::pip::loggers::{SummaryResolveLogger, UpgradeInstallLogger};
+use crate::commands::project::update_environment;
+use crate::commands::tool::common::{remove_entrypoints, InstallAction};
+use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
@@ -127,8 +128,8 @@ pub(crate) async fn upgrade(
             spec,
             &settings,
             &state,
-            Box::new(DefaultResolveLogger),
-            Box::new(DefaultInstallLogger),
+            Box::new(SummaryResolveLogger),
+            Box::new(UpgradeInstallLogger),
             preview,
             connectivity,
             concurrency,

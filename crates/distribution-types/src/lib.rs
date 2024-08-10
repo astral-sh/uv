@@ -124,6 +124,24 @@ pub enum InstalledVersion<'a> {
     Url(&'a Url, &'a Version),
 }
 
+impl<'a> InstalledVersion<'a> {
+    /// If it is a URL, return its value.
+    pub fn url(&self) -> Option<&Url> {
+        match self {
+            InstalledVersion::Version(_) => None,
+            InstalledVersion::Url(url, _) => Some(url),
+        }
+    }
+
+    /// If it is a version, return its value.
+    pub fn version(&self) -> &Version {
+        match self {
+            InstalledVersion::Version(version) => version,
+            InstalledVersion::Url(_, version) => version,
+        }
+    }
+}
+
 impl std::fmt::Display for InstalledVersion<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

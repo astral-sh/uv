@@ -1,13 +1,15 @@
+use std::collections::BTreeSet;
 use std::fmt;
 use std::fmt::Write;
 
-use itertools::Itertools;
-use owo_colors::OwoColorize;
-
-use distribution_types::{CachedDist, InstalledDist, InstalledMetadata, LocalDist, Name};
-
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
+use distribution_types::{CachedDist, InstalledDist, InstalledMetadata, LocalDist, Name};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use pep440_rs::Version;
+use rustc_hash::{FxBuildHasher, FxHashMap};
+use uv_normalize::PackageName;
 
 /// A trait to handle logging during install operations.
 pub(crate) trait InstallLogger {
@@ -219,6 +221,161 @@ impl InstallLogger for SummaryInstallLogger {
         _uninstalled: Vec<InstalledDist>,
         _printer: Printer,
     ) -> fmt::Result {
+        Ok(())
+    }
+}
+
+/// A logger that only shows installs and uninstalls, the minimal logging necessary to understand
+/// environment changes.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct UpgradeInstallLogger;
+
+impl InstallLogger for UpgradeInstallLogger {
+    fn on_audit(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+
+    fn on_prepare(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+
+    fn on_uninstall(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+
+    fn on_install(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+
+    fn on_complete(
+        &self,
+        installed: Vec<CachedDist>,
+        reinstalled: Vec<InstalledDist>,
+        uninstalled: Vec<InstalledDist>,
+        printer: Printer,
+    ) -> fmt::Result {
+        // Index the removals by package name.
+        let removals: FxHashMap<&PackageName, BTreeSet<Version>> =
+            reinstalled.iter().chain(uninstalled.iter()).fold(
+                FxHashMap::with_capacity_and_hasher(
+                    reinstalled.len() + uninstalled.len(),
+                    FxBuildHasher,
+                ),
+                |mut acc, distribution| {
+                    acc.entry(distribution.name())
+                        .or_default()
+                        .insert(distribution.installed_version().version().clone());
+                    acc
+                },
+            );
+
+        // Index the additions by package name.
+        let additions: FxHashMap<&PackageName, BTreeSet<Version>> = installed.iter().fold(
+            FxHashMap::with_capacity_and_hasher(installed.len(), FxBuildHasher),
+            |mut acc, distribution| {
+                acc.entry(distribution.name())
+                    .or_default()
+                    .insert(distribution.installed_version().version().clone());
+                acc
+            },
+        );
+
+        // Summarize the changes.
+        for name in removals
+            .keys()
+            .chain(additions.keys())
+            .collect::<BTreeSet<_>>()
+        {
+            match (removals.get(name), additions.get(name)) {
+                (Some(removals), Some(additions)) => {
+                    if removals == additions {
+                        let reinstalls = additions
+                            .iter()
+                            .map(|version| format!("v{version}"))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        writeln!(
+                            printer.stderr(),
+                            "{} {} {}",
+                            "Reinstalled".yellow().bold(),
+                            name,
+                            reinstalls
+                        )?;
+                    } else {
+                        let removals = removals
+                            .iter()
+                            .map(|version| format!("v{version}"))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        let additions = additions
+                            .iter()
+                            .map(|version| format!("v{version}"))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        writeln!(
+                            printer.stderr(),
+                            "{} {} {} -> {}",
+                            "Updated".green().bold(),
+                            name,
+                            removals,
+                            additions
+                        )?;
+                    }
+                }
+                (Some(removals), None) => {
+                    let removals = removals
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    writeln!(
+                        printer.stderr(),
+                        "{} {} {}",
+                        "Removed".red().bold(),
+                        name,
+                        removals
+                    )?;
+                }
+                (None, Some(additions)) => {
+                    let additions = additions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    writeln!(
+                        printer.stderr(),
+                        "{} {} {}",
+                        "Added".green().bold(),
+                        name,
+                        additions
+                    )?;
+                }
+                (None, None) => {
+                    unreachable!("The key `{name}` should exist in at least one of the maps");
+                }
+            }
+        }
+
         Ok(())
     }
 }
