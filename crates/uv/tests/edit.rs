@@ -1367,7 +1367,7 @@ fn add_workspace_editable() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        child2 = { workspace = true, editable = true }
+        child2 = { workspace = true }
         "###
         );
     });

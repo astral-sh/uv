@@ -1210,13 +1210,6 @@
             "workspace"
           ],
           "properties": {
-            "editable": {
-              "description": "`true` by default.",
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
             "workspace": {
               "description": "When set to `false`, the package will be fetched from the remote index, rather than included as a workspace package.",
               "type": "boolean"
