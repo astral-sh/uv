@@ -19,7 +19,7 @@ static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"))
 pub struct Pep723Script {
     pub path: PathBuf,
     pub metadata: Pep723Metadata,
-    pub data: String,
+    pub raw: String,
 }
 
 impl Pep723Script {
@@ -34,7 +34,7 @@ impl Pep723Script {
         };
 
         // Extract the `script` tag.
-        let Some((metadata, data)) = extract_script_tag(&contents)? else {
+        let Some((metadata, raw)) = extract_script_tag(&contents)? else {
             return Ok(None);
         };
 
@@ -44,13 +44,13 @@ impl Pep723Script {
         Ok(Some(Self {
             path: file.as_ref().to_path_buf(),
             metadata,
-            data,
+            raw,
         }))
     }
 
     /// Replace the existing metadata in the file with new metadata and write the updated content.
     pub async fn replace_metadata(&self, new_metadata: &str) -> Result<(), Pep723Error> {
-        let new_content = format!("{}{}", serialize_metadata(new_metadata), self.data);
+        let new_content = format!("{}{}", serialize_metadata(new_metadata), self.raw);
 
         fs_err::tokio::write(&self.path, new_content)
             .await
@@ -107,8 +107,38 @@ pub enum Pep723Error {
 }
 
 /// Given the contents of a Python file, extract the `script` metadata block, with leading comment
-/// hashes removed and the python script.
+/// hashes removed, and the remaining Python script code.
 ///
+/// The function returns a tuple where:
+/// - The first element is the extracted metadata as a string, with comment hashes removed.
+/// - The second element is the remaining Python code of the script.
+///
+/// # Example
+///
+/// Given the following input string representing the contents of a Python script:
+///
+/// ```python
+/// # /// script
+/// # requires-python = '>=3.11'
+/// # dependencies = [
+/// #   'requests<3',
+/// #   'rich',
+/// # ]
+/// # ///
+///
+/// import requests
+///
+/// print("Hello, World!")
+/// ```
+///
+/// This function would return:
+///
+/// ```rust
+/// (
+///     "requires-python = '>=3.11'\ndependencies = [\n  'requests<3',\n  'rich',\n]",
+///     "import requests\n\nprint(\"Hello, World!\")\n"
+/// )
+/// ```
 /// See: <https://peps.python.org/pep-0723/>
 fn extract_script_tag(contents: &[u8]) -> Result<Option<(String, String)>, Pep723Error> {
     // Identify the opening pragma.

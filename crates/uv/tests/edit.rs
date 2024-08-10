@@ -3093,3 +3093,85 @@ fn remove_last_dep_script() -> Result<()> {
     });
     Ok(())
 }
+
+/// Add a Git requirement to PEP732 script.
+#[test]
+#[cfg(feature = "git")]
+fn add_git_to_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "rich",
+        # ]
+        # ///
+
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+    "#})?;
+
+    // Adding with an ambiguous Git reference will fail.
+    uv_snapshot!(context.filters(), context
+        .add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1"])
+        .arg("--preview")
+        .arg("--script")
+        .arg("script.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot resolve Git reference `0.0.1` for requirement `uv-public-pypackage`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.
+    "###);
+
+    uv_snapshot!(context.filters(), context
+        .add(&["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"])
+        .arg("--tag=0.0.1")
+        .arg("--preview")
+        .arg("--script")
+        .arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+
+    let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "rich",
+        #   "uv-public-pypackage",
+        # ]
+
+        # [tool.uv.sources]
+        # uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
+        # ///
+
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "###
+        );
+    });
+    Ok(())
+}

@@ -76,6 +76,31 @@ pub(crate) async fn add(
 
     let download_reporter = PythonDownloadReporter::single(printer);
     let (dependency_destination, venv) = if let Some(script) = script {
+        // If we found a PEP 723 script and the user provided a project-only setting, warn.
+        if !extras.is_empty() {
+            warn_user_once!("Extras are not supported for Python scripts with inline metadata");
+        }
+        if package.is_some() {
+            warn_user_once!(
+                "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if locked {
+            warn_user_once!(
+                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if frozen {
+            warn_user_once!(
+                "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if no_sync {
+            warn_user_once!(
+                "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+
         // (1) Explicit request from user
         let python_request = if let Some(request) = python.as_deref() {
             Some(PythonRequest::parse(request))
@@ -261,39 +286,30 @@ pub(crate) async fn add(
         requirement.extras.dedup();
 
         let (requirement, source) = match dependency_destination {
-            DependencyDestination::Script(_) => (pep508_rs::Requirement::from(requirement), None),
-            DependencyDestination::Project(_) if raw_sources => {
+            DependencyDestination::Script(_) | DependencyDestination::Project(_) if raw_sources => {
                 (pep508_rs::Requirement::from(requirement), None)
             }
+            DependencyDestination::Script(_) => resolve_and_process_requirement(
+                requirement,
+                false,
+                editable,
+                rev.clone(),
+                tag.clone(),
+                branch.clone(),
+            )?,
             DependencyDestination::Project(ref project) => {
-                // Otherwise, try to construct the source.
                 let workspace = project
                     .workspace()
                     .packages()
                     .contains_key(&requirement.name);
-                let result = Source::from_requirement(
-                    &requirement.name,
-                    requirement.source.clone(),
+                resolve_and_process_requirement(
+                    requirement,
                     workspace,
                     editable,
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
-                );
-
-                let source = match result {
-                    Ok(source) => source,
-                    Err(SourceError::UnresolvedReference(rev)) => {
-                        anyhow::bail!("Cannot resolve Git reference `{rev}` for requirement `{name}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.", name = requirement.name)
-                    }
-                    Err(err) => return Err(err.into()),
-                };
-
-                // Ignore the PEP 508 source.
-                let mut requirement = pep508_rs::Requirement::from(requirement);
-                requirement.clear_url();
-
-                (requirement, source)
+                )?
             }
         };
         // Update the `pyproject.toml`.
@@ -511,6 +527,43 @@ pub(crate) async fn add(
     .await?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
+fn resolve_and_process_requirement(
+    requirement: pypi_types::Requirement,
+    workspace: bool,
+    editable: Option<bool>,
+    rev: Option<String>,
+    tag: Option<String>,
+    branch: Option<String>,
+) -> Result<(pep508_rs::Requirement, Option<Source>), anyhow::Error> {
+    let result = Source::from_requirement(
+        &requirement.name,
+        requirement.source.clone(),
+        workspace,
+        editable,
+        rev,
+        tag,
+        branch,
+    );
+
+    let source = match result {
+        Ok(source) => source,
+        Err(SourceError::UnresolvedReference(rev)) => {
+            anyhow::bail!(
+                "Cannot resolve Git reference `{rev}` for requirement `{name}`. Specify the reference with one of `--tag`, `--branch`, or `--rev`, or use the `--raw-sources` flag.",
+                name = requirement.name
+            )
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    // Ignore the PEP 508 source by clearing the URL.
+    let mut processed_requirement = pep508_rs::Requirement::from(requirement);
+    processed_requirement.clear_url();
+
+    Ok((processed_requirement, source))
 }
 
 #[derive(Debug, Clone)]
