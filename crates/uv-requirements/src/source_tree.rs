@@ -104,10 +104,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .into_iter()
             .map(|requirement| Requirement {
                 origin: Some(origin.clone()),
-                marker: requirement
-                    .marker
-                    .map(|marker| marker.simplify_extras(extras))
-                    .filter(|marker| !marker.is_true()),
+                marker: requirement.marker.simplify_extras(extras),
                 ..requirement
             })
             .collect();
@@ -117,7 +114,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             // Find the first recursive requirement.
             // TODO(charlie): Respect markers on recursive extras.
             let Some(index) = requirements.iter().position(|requirement| {
-                requirement.name == metadata.name && requirement.marker.is_none()
+                requirement.name == metadata.name && requirement.marker.is_true()
             }) else {
                 break;
             };
@@ -129,9 +126,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             for requirement in &mut requirements {
                 requirement.marker = requirement
                     .marker
-                    .take()
-                    .map(|marker| marker.simplify_extras(&recursive.extras))
-                    .filter(|marker| !marker.is_true());
+                    .clone()
+                    .simplify_extras(&recursive.extras);
             }
         }
 

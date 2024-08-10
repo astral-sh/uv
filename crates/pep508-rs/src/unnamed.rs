@@ -75,7 +75,7 @@ pub struct UnnamedRequirement<Url: UnnamedRequirementUrl = VerbatimUrl> {
     /// The markers such as `python_version > "3.8"` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
-    pub marker: Option<MarkerTree>,
+    pub marker: MarkerTree,
     /// The source file containing the requirement.
     pub origin: Option<RequirementOrigin>,
 }
@@ -92,11 +92,7 @@ impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
         env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
     ) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate_optional_environment(env, extras)
-        } else {
-            true
-        }
+        self.marker.evaluate_optional_environment(env, extras)
     }
 
     /// Set the source file containing the requirement.
@@ -136,7 +132,7 @@ impl<Url: UnnamedRequirementUrl> Display for UnnamedRequirement<Url> {
                     .join(",")
             )?;
         }
-        if let Some(marker) = self.marker.as_ref().and_then(MarkerTree::contents) {
+        if let Some(marker) = self.marker.contents() {
             write!(f, " ; {marker}")?;
         }
         Ok(())
@@ -207,7 +203,7 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     Ok(UnnamedRequirement {
         url,
         extras,
-        marker,
+        marker: marker.unwrap_or_default(),
         origin: None,
     })
 }

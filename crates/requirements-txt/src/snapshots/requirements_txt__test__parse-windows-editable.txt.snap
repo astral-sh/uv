@@ -53,7 +53,7 @@ RequirementsTxt {
                             "dev",
                         ),
                     ],
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",
@@ -110,7 +110,7 @@ RequirementsTxt {
                             "dev",
                         ),
                     ],
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",
@@ -167,9 +167,7 @@ RequirementsTxt {
                             "dev",
                         ),
                     ],
-                    marker: Some(
-                        python_version >= '3.9' and os_name == 'posix',
-                    ),
+                    marker: python_version >= '3.9' and os_name == 'posix',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",
@@ -226,9 +224,7 @@ RequirementsTxt {
                             "dev",
                         ),
                     ],
-                    marker: Some(
-                        python_version >= '3.9' and os_name == 'posix',
-                    ),
+                    marker: python_version >= '3.9' and os_name == 'posix',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",
@@ -278,9 +274,7 @@ RequirementsTxt {
                         },
                     },
                     extras: [],
-                    marker: Some(
-                        python_version >= '3.9' and os_name == 'posix',
-                    ),
+                    marker: python_version >= '3.9' and os_name == 'posix',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",
@@ -330,7 +324,7 @@ RequirementsTxt {
                         },
                     },
                     extras: [],
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",

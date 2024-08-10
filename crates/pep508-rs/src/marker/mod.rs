@@ -21,3 +21,24 @@ pub use tree::{
     MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValue, MarkerValueString,
     MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
+
+/// `serde` helpers for [`MarkerTree`].
+pub mod ser {
+    use super::MarkerTree;
+    use serde::Serialize;
+
+    /// A helper for `serde(skip_serializing_if)`.
+    pub fn is_empty(marker: &MarkerTree) -> bool {
+        marker.contents().is_none()
+    }
+
+    /// A helper for `serde(serialize_with)`.
+    ///
+    /// Note this will panic if `marker.contents()` is `None`, and so should be paired with `is_empty`.
+    pub fn serialize<S>(marker: &MarkerTree, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        marker.contents().unwrap().serialize(s)
+    }
+}

@@ -8,7 +8,7 @@ use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 
-use pep508_rs::{RequirementOrigin, VerbatimUrl};
+use pep508_rs::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use pypi_types::{Requirement, RequirementSource};
 use uv_fs::{absolutize_path, normalize_path, relative_to, Simplified};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
@@ -282,7 +282,7 @@ impl Workspace {
             Some(Requirement {
                 name: project.name.clone(),
                 extras,
-                marker: None,
+                marker: MarkerTree::TRUE,
                 source: RequirementSource::Directory {
                     install_path: member.root.clone(),
                     lock_path: member

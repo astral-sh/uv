@@ -23,7 +23,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/basic.txt",
@@ -52,7 +52,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/basic.txt",
@@ -81,7 +81,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/basic.txt",
@@ -110,7 +110,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/basic.txt",
@@ -139,7 +139,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/basic.txt",
@@ -168,7 +168,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/basic.txt",

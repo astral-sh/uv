@@ -3,12 +3,13 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use distribution_filename::DistExtension;
-use serde::Serialize;
 use thiserror::Error;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
+use pep508_rs::{
+    marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
+};
 use uv_fs::PortablePathBuf;
 use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
@@ -40,26 +41,15 @@ pub struct Requirement {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub extras: Vec<ExtraName>,
     #[serde(
-        skip_serializing_if = "marker_is_empty",
-        serialize_with = "serialize_marker",
+        skip_serializing_if = "marker::ser::is_empty",
+        serialize_with = "marker::ser::serialize",
         default
     )]
-    pub marker: Option<MarkerTree>,
+    pub marker: MarkerTree,
     #[serde(flatten)]
     pub source: RequirementSource,
     #[serde(skip)]
     pub origin: Option<RequirementOrigin>,
-}
-
-fn marker_is_empty(marker: &Option<MarkerTree>) -> bool {
-    marker.as_ref().and_then(MarkerTree::contents).is_none()
-}
-
-fn serialize_marker<S>(marker: &Option<MarkerTree>, s: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    marker.as_ref().unwrap().contents().unwrap().serialize(s)
 }
 
 impl Requirement {
@@ -69,11 +59,7 @@ impl Requirement {
     /// expressions based on the environment to `true`. That is, this provides
     /// environment independent marker evaluation.
     pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate_optional_environment(env, extras)
-        } else {
-            true
-        }
+        self.marker.evaluate_optional_environment(env, extras)
     }
 
     /// Returns `true` if the requirement is editable.
@@ -256,7 +242,7 @@ impl Display for Requirement {
                 write!(f, " @ {url}")?;
             }
         }
-        if let Some(marker) = self.marker.as_ref().and_then(MarkerTree::contents) {
+        if let Some(marker) = self.marker.contents() {
             write!(f, " ; {marker}")?;
         }
         Ok(())
@@ -715,7 +701,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use pep508_rs::VerbatimUrl;
+    use pep508_rs::{MarkerTree, VerbatimUrl};
 
     use crate::{Requirement, RequirementSource};
 
@@ -724,7 +710,7 @@ mod tests {
         let requirement = Requirement {
             name: "foo".parse().unwrap(),
             extras: vec![],
-            marker: None,
+            marker: MarkerTree::TRUE,
             source: RequirementSource::Registry {
                 specifier: ">1,<2".parse().unwrap(),
                 index: None,
@@ -744,7 +730,7 @@ mod tests {
         let requirement = Requirement {
             name: "foo".parse().unwrap(),
             extras: vec![],
-            marker: None,
+            marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
                 install_path: PathBuf::from(path),
                 lock_path: PathBuf::from(path),
