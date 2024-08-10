@@ -46,8 +46,6 @@ impl RequiresDist {
             SourceStrategy::Enabled => {
                 // TODO(konsti): Limit discovery for Git checkouts to Git root.
                 // TODO(konsti): Cache workspace discovery.
-                println!("Using install path: {:?}", install_path);
-                println!("Using lock path: {:?}", lock_path);
                 let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
                     install_path,
                     lock_path,

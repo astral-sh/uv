@@ -36,11 +36,12 @@ impl VerbatimUrl {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
         let path = path.as_ref();
 
-        // Normalize the path.
-        let path = normalize_absolute_path(path)
-            .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
-
-        let path = path.simple_canonicalize().unwrap();
+        // Normalize the path (and canonicalize it, if possible).
+        let path = match path.simple_canonicalize() {
+            Ok(path) => path,
+            Err(_) => normalize_absolute_path(&path)
+                .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?,
+        };
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -53,10 +54,6 @@ impl VerbatimUrl {
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
-
-        println!("from_path");
-        println!("path: {:?}", path);
-        println!("url: {:?}", url);
 
         Ok(Self { url, given: None })
     }
@@ -83,11 +80,12 @@ impl VerbatimUrl {
             base_dir.as_ref().join(path)
         };
 
-        // Normalize the path.
-        let path = normalize_absolute_path(&path)
-            .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?;
-
-        let path = path.simple_canonicalize().unwrap();
+        // Normalize the path (and canonicalize it, if possible).
+        let path = match path.simple_canonicalize() {
+            Ok(path) => path,
+            Err(_) => normalize_absolute_path(&path)
+                .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?,
+        };
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -100,10 +98,6 @@ impl VerbatimUrl {
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
-
-        println!("parse_path");
-        println!("path: {:?}", path);
-        println!("url: {:?}", url);
 
         Ok(Self { url, given: None })
     }
@@ -119,12 +113,12 @@ impl VerbatimUrl {
             return Err(VerbatimUrlError::WorkingDirectory(path.to_path_buf()));
         };
 
-        // Normalize the path.
-        let Ok(path) = normalize_absolute_path(&path) else {
-            return Err(VerbatimUrlError::WorkingDirectory(path));
+        // Normalize the path (and canonicalize it, if possible).
+        let path = match path.simple_canonicalize() {
+            Ok(path) => path,
+            Err(_) => normalize_absolute_path(&path)
+                .map_err(|_| VerbatimUrlError::WorkingDirectory(path))?,
         };
-
-        let path = path.simple_canonicalize().unwrap();
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -137,10 +131,6 @@ impl VerbatimUrl {
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
-
-        println!("parse_absolute_path");
-        println!("path: {:?}", path);
-        println!("url: {:?}", url);
 
         Ok(Self { url, given: None })
     }
@@ -258,8 +248,6 @@ impl Pep508Url for VerbatimUrl {
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                     let path = normalize_url_path(path);
 
-                    println!("Pep508Url: {:?}", path);
-
                     #[cfg(feature = "non-pep508-extensions")]
                     if let Some(working_dir) = working_dir {
                         return Ok(VerbatimUrl::parse_path(path.as_ref(), working_dir)?
@@ -292,7 +280,6 @@ impl Pep508Url for VerbatimUrl {
             }
         } else {
             // Ex) `../editable/`
-            println!("Pep508Url editable : {:?}", expanded.as_ref());
             #[cfg(feature = "non-pep508-extensions")]
             if let Some(working_dir) = working_dir {
                 return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)?

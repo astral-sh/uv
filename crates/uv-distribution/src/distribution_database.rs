@@ -350,8 +350,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
                 );
-                println!("Creating entry: {:?}", wheel);
-                println!("Creating entry: {:?}", cache_entry);
 
                 self.load_wheel(
                     &wheel.install_path,

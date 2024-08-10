@@ -714,7 +714,7 @@ fn sync_relative_wheel() -> Result<()> {
         context.temp_dir.join("wheels/ok-1.0.0-py3-none-any.whl"),
     )?;
 
-    uv_snapshot!(context.sync().arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -722,9 +722,9 @@ fn sync_relative_wheel() -> Result<()> {
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning
     warning: `uv.sources` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
      + ok==1.0.0 (from file://[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl)
      + relative-wheel==0.1.0 (from file://[TEMP_DIR]/)
     "###);
@@ -773,8 +773,8 @@ fn sync_relative_wheel() -> Result<()> {
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning
     warning: `uv.sources` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     "###);
 
     Ok(())

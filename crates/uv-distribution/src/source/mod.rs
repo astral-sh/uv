@@ -423,7 +423,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub(crate) async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
-        println!("reading requires_dist for {:?}", project_root);
         let requires_dist = read_requires_dist(project_root).await?;
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
