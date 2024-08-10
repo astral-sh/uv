@@ -637,10 +637,11 @@ jobs:
           TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+          PROFILE="${{ matrix.platform.arch == 'ppc64le' && 'release-no-lto' || 'release' }}"
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp target/$TARGET/$PROFILE/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/$PROFILE/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
