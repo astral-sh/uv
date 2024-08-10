@@ -5110,6 +5110,8 @@ dependencies = [
  "serde",
  "thiserror",
  "toml",
+ "uv-settings",
+ "uv-workspace",
 ]
 
 [[package]]

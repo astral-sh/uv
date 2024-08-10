@@ -1,21 +1,87 @@
-use memchr::memmem::Finder;
-use pypi_types::VerbatimParsedUrl;
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+
+use memchr::memmem::Finder;
+use serde::Deserialize;
 use thiserror::Error;
 
+use pep508_rs::PackageName;
+use pypi_types::VerbatimParsedUrl;
+use uv_settings::{GlobalOptions, ResolverInstallerOptions};
+use uv_workspace::pyproject::Source;
+
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
+
+/// A PEP 723 script, including its [`Pep723Metadata`].
+#[derive(Debug)]
+pub struct Pep723Script {
+    pub path: PathBuf,
+    pub metadata: Pep723Metadata,
+}
+
+impl Pep723Script {
+    /// Read the PEP 723 `script` metadata from a Python file, if it exists.
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
+        let metadata = Pep723Metadata::read(&file).await?;
+        Ok(metadata.map(|metadata| Self {
+            path: file.as_ref().to_path_buf(),
+            metadata,
+        }))
+    }
+}
 
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
 /// See: <https://peps.python.org/pep-0723/>
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
     pub dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
     pub requires_python: Option<pep440_rs::VersionSpecifiers>,
+    pub tool: Option<Tool>,
+}
+
+impl Pep723Metadata {
+    /// Read the PEP 723 `script` metadata from a Python file, if it exists.
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
+        let contents = match fs_err::tokio::read(file).await {
+            Ok(contents) => contents,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+
+        // Extract the `script` tag.
+        let Some(contents) = extract_script_tag(&contents)? else {
+            return Ok(None);
+        };
+
+        // Parse the metadata.
+        let metadata = toml::from_str(&contents)?;
+
+        Ok(Some(metadata))
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub struct Tool {
+    pub uv: Option<ToolUv>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolUv {
+    #[serde(flatten)]
+    pub globals: GlobalOptions,
+    #[serde(flatten)]
+    pub top_level: ResolverInstallerOptions,
+    pub sources: Option<BTreeMap<PackageName, Source>>,
 }
 
 #[derive(Debug, Error)]

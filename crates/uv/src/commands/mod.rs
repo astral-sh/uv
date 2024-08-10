@@ -22,7 +22,7 @@ pub(crate) use project::add::add;
 pub(crate) use project::init::init;
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
-pub(crate) use project::run::run;
+pub(crate) use project::run::{parse_script, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
 pub(crate) use python::dir::dir as python_dir;

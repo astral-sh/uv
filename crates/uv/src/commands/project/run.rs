@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -9,11 +10,11 @@ use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::debug;
 
-use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
+use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -22,6 +23,7 @@ use uv_python::{
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_scripts::Pep723Script;
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
@@ -39,6 +41,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
+    script: Option<Pep723Script>,
     command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
@@ -87,7 +90,7 @@ pub(crate) async fn run(
     }
 
     // Parse the input command.
-    let command = RunCommand::from(command);
+    let command = RunCommand::from(&command);
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -97,88 +100,106 @@ pub(crate) async fn run(
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
-    let script_interpreter = if let RunCommand::Python(target, _) = &command {
-        if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
-            writeln!(
-                printer.stderr(),
-                "Reading inline script metadata from: {}",
-                target.user_display().cyan()
+    let script_interpreter = if let Some(script) = script {
+        writeln!(
+            printer.stderr(),
+            "Reading inline script metadata from: {}",
+            script.path.user_display().cyan()
+        )?;
+
+        // (1) Explicit request from user
+        let python_request = if let Some(request) = python.as_deref() {
+            Some(PythonRequest::parse(request))
+            // (2) Request from `.python-version`
+        } else if let Some(request) = request_from_version_file(&CWD).await? {
+            Some(request)
+            // (3) `Requires-Python` in `pyproject.toml`
+        } else {
+            script.metadata.requires_python.map(|requires_python| {
+                PythonRequest::Version(VersionRequest::Range(requires_python))
+            })
+        };
+
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+
+        let interpreter = PythonInstallation::find_or_download(
+            python_request,
+            EnvironmentPreference::Any,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&download_reporter),
+        )
+        .await?
+        .into_interpreter();
+
+        // Install the script requirements, if necessary. Otherwise, use an isolated environment.
+        if let Some(dependencies) = script.metadata.dependencies {
+            // // Collect any `tool.uv.sources` from the script.
+            let empty = BTreeMap::default();
+            let script_sources = script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+                .unwrap_or(&empty);
+            let script_dir = script.path.parent().expect("script path has no parent");
+
+            let requirements = dependencies
+                .into_iter()
+                .map(|requirement| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir,
+                        script_sources,
+                        preview,
+                    )
+                    .map(LoweredRequirement::into_inner)
+                })
+                .collect::<Result<_, _>>()?;
+            let spec = RequirementsSpecification::from_requirements(requirements);
+            let environment = CachedEnvironment::get_or_create(
+                spec,
+                interpreter,
+                &settings,
+                &state,
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            Some(environment.into_interpreter())
+        } else {
+            // Create a virtual environment.
+            temp_dir = cache.environment()?;
+            let environment = uv_virtualenv::create_venv(
+                temp_dir.path(),
+                interpreter,
+                uv_virtualenv::Prompt::None,
+                false,
+                false,
+                false,
             )?;
 
-            // (1) Explicit request from user
-            let python_request = if let Some(request) = python.as_deref() {
-                Some(PythonRequest::parse(request))
-                // (2) Request from `.python-version`
-            } else if let Some(request) = request_from_version_file(&CWD).await? {
-                Some(request)
-                // (3) `Requires-Python` in `pyproject.toml`
-            } else {
-                metadata.requires_python.map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python))
-                })
-            };
-
-            let client_builder = BaseClientBuilder::new()
-                .connectivity(connectivity)
-                .native_tls(native_tls);
-
-            let interpreter = PythonInstallation::find_or_download(
-                python_request,
-                EnvironmentPreference::Any,
-                python_preference,
-                python_downloads,
-                &client_builder,
-                cache,
-                Some(&download_reporter),
-            )
-            .await?
-            .into_interpreter();
-
-            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(dependencies) = metadata.dependencies {
-                let requirements = dependencies.into_iter().map(Requirement::from).collect();
-                let spec = RequirementsSpecification::from_requirements(requirements);
-                let environment = CachedEnvironment::get_or_create(
-                    spec,
-                    interpreter,
-                    &settings,
-                    &state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    preview,
-                    connectivity,
-                    concurrency,
-                    native_tls,
-                    cache,
-                    printer,
-                )
-                .await?;
-
-                Some(environment.into_interpreter())
-            } else {
-                // Create a virtual environment.
-                temp_dir = cache.environment()?;
-                let environment = uv_virtualenv::create_venv(
-                    temp_dir.path(),
-                    interpreter,
-                    uv_virtualenv::Prompt::None,
-                    false,
-                    false,
-                    false,
-                )?;
-
-                Some(environment.into_interpreter())
-            }
-        } else {
-            None
+            Some(environment.into_interpreter())
         }
     } else {
         None
@@ -590,6 +611,19 @@ pub(crate) async fn run(
     }
 }
 
+/// Read a [`Pep723Script`] from the given command.
+pub(crate) async fn parse_script(command: &ExternalCommand) -> Result<Option<Pep723Script>> {
+    // Parse the input command.
+    let command = RunCommand::from(command);
+
+    let RunCommand::Python(target, _) = &command else {
+        return Ok(None);
+    };
+
+    // Read the PEP 723 `script` metadata from the target script.
+    Ok(Pep723Script::read(&target).await?)
+}
+
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
 fn can_skip_ephemeral(
     spec: Option<&RequirementsSpecification>,
@@ -682,8 +716,8 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
-impl From<ExternalCommand> for RunCommand {
-    fn from(command: ExternalCommand) -> Self {
+impl From<&ExternalCommand> for RunCommand {
+    fn from(command: &ExternalCommand) -> Self {
         let (target, args) = command.split();
 
         let Some(target) = target else {
