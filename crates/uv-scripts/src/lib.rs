@@ -167,8 +167,6 @@ pub enum Pep723Error {
 /// - The second element is the extracted metadata as a string with comment hashes removed.
 /// - The third element is the remaining Python code of the script.
 ///
-/// # Example
-///
 /// Given the following input string representing the contents of a Python script:
 ///
 /// ```python
@@ -188,13 +186,11 @@ pub enum Pep723Error {
 ///
 /// This function would return:
 ///
-/// ```rust
 /// (
 ///     "#!/usr/bin/env python3\n",
 ///     "requires-python = '>=3.11'\ndependencies = [\n  'requests<3',\n  'rich',\n]",
 ///     "import requests\n\nprint(\"Hello, World!\")\n"
 /// )
-/// ```
 ///
 /// See: <https://peps.python.org/pep-0723/>
 fn extract_script_tag(contents: &[u8]) -> Result<Option<(String, String, String)>, Pep723Error> {
@@ -429,10 +425,55 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(actual.0, expected_metadata);
-        assert_eq!(actual.1, expected_data);
+        assert_eq!(actual.0, String::new());
+        assert_eq!(actual.1, expected_metadata);
+        assert_eq!(actual.2, expected_data);
     }
 
+    #[test]
+    fn simple_with_shebang() {
+        let contents = indoc::indoc! {r"
+            #!/usr/bin/env python3
+            # /// script
+            # requires-python = '>=3.11'
+            # dependencies = [
+            #   'requests<3',
+            #   'rich',
+            # ]
+            # ///
+
+            import requests
+            from rich.pretty import pprint
+
+            resp = requests.get('https://peps.python.org/api/peps.json')
+            data = resp.json()
+        "};
+
+        let expected_metadata = indoc::indoc! {r"
+            requires-python = '>=3.11'
+            dependencies = [
+              'requests<3',
+              'rich',
+            ]
+        "};
+
+        let expected_data = indoc::indoc! {r"
+
+            import requests
+            from rich.pretty import pprint
+
+            resp = requests.get('https://peps.python.org/api/peps.json')
+            data = resp.json()
+        "};
+
+        let actual = super::extract_script_tag(contents.as_bytes())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(actual.0, "#!/usr/bin/env python3\n".to_string());
+        assert_eq!(actual.1, expected_metadata);
+        assert_eq!(actual.2, expected_data);
+    }
     #[test]
     fn embedded_comment() {
         let contents = indoc::indoc! {r"
@@ -460,7 +501,7 @@ mod tests {
         let actual = super::extract_script_tag(contents.as_bytes())
             .unwrap()
             .unwrap()
-            .0;
+            .1;
 
         assert_eq!(actual, expected);
     }
@@ -490,7 +531,7 @@ mod tests {
         let actual = super::extract_script_tag(contents.as_bytes())
             .unwrap()
             .unwrap()
-            .0;
+            .1;
 
         assert_eq!(actual, expected);
     }
