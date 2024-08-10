@@ -2,7 +2,6 @@ use pep508_rs::{MarkerTree, PackageName};
 use pypi_types::Requirement;
 use rustc_hash::FxHashMap;
 
-use crate::marker::is_disjoint;
 use crate::ResolverMarkers;
 
 /// A set of package names associated with a given fork.
@@ -72,7 +71,7 @@ impl<T> ForkMap<T> {
                     !entry
                         .marker
                         .as_ref()
-                        .is_some_and(|marker| is_disjoint(fork, marker))
+                        .is_some_and(|marker| fork.is_disjoint(marker))
                 })
                 .map(|entry| &entry.value)
                 .collect(),

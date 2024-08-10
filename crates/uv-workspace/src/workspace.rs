@@ -1555,8 +1555,7 @@ mod tests {
                 },
                 "sources": {
                   "bird-feeder": {
-                    "workspace": true,
-                    "editable": null
+                    "workspace": true
                   }
                 },
                 "pyproject_toml": {
@@ -1569,8 +1568,7 @@ mod tests {
                     "uv": {
                       "sources": {
                         "bird-feeder": {
-                          "workspace": true,
-                          "editable": null
+                          "workspace": true
                         }
                       },
                       "workspace": {

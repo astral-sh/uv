@@ -2129,8 +2129,8 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
             version = 1
             requires-python = ">=3.12"
             environment-markers = [
-                "sys_platform == 'win32'",
                 "sys_platform != 'win32'",
+                "sys_platform == 'win32'",
             ]
 
             [options]
@@ -3061,7 +3061,7 @@ fn lock_requires_python() -> Result<()> {
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
-    uv_snapshot!(filters, context38.sync().arg("--frozen").arg("--python-fetch").arg("manual"), @r###"
+    uv_snapshot!(filters, context38.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3586,14 +3586,12 @@ fn lock_python_version_marker_complement() -> Result<()> {
             version = 1
             requires-python = ">=3.8"
             environment-markers = [
-                "python_full_version <= '3.10' and python_version == '3.10'",
-                "python_full_version <= '3.10' and python_version < '3.10'",
-                "python_full_version <= '3.10' and python_version < '3.10' and python_version > '3.10'",
-                "python_full_version <= '3.10' and python_version > '3.10'",
+                "python_full_version > '3.10' and python_version > '3.10'",
                 "python_full_version > '3.10' and python_version == '3.10'",
                 "python_full_version > '3.10' and python_version < '3.10'",
-                "python_full_version > '3.10' and python_version < '3.10' and python_version > '3.10'",
-                "python_full_version > '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version > '3.10'",
+                "python_full_version <= '3.10' and python_version == '3.10'",
+                "python_full_version <= '3.10' and python_version < '3.10'",
             ]
 
             [options]
@@ -3624,7 +3622,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
             dependencies = [
                 { name = "attrs" },
                 { name = "iniconfig" },
-                { name = "typing-extensions", marker = "python_full_version <= '3.10' or python_full_version > '3.10'" },
+                { name = "typing-extensions" },
             ]
 
             [[package]]
@@ -4791,8 +4789,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         environment-markers = [
-            "sys_platform == 'darwin'",
             "sys_platform != 'darwin'",
+            "sys_platform == 'darwin'",
         ]
 
         [options]
@@ -5839,5 +5837,37 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
         .success();
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     assert!(!lock.contains("environment-markers"));
+    Ok(())
+}
+
+/// Warn when there are missing bounds on transitive dependencies with `--resolution lowest`.
+#[test]
+fn warn_missing_transitive_lower_bounds() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pytest>8"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    warning: The transitive dependency `packaging` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    warning: The transitive dependency `iniconfig` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    "###);
+
     Ok(())
 }

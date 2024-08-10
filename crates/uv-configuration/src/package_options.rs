@@ -6,7 +6,8 @@ use rustc_hash::FxHashMap;
 use uv_cache::{Refresh, Timestamp};
 
 /// Whether to reinstall packages.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Reinstall {
     /// Don't reinstall any packages; respect the existing installation.
     #[default]
@@ -58,7 +59,8 @@ impl From<Reinstall> for Refresh {
 }
 
 /// Whether to allow package upgrades.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Upgrade {
     /// Prefer pinned versions from the existing lockfile, if possible.
     #[default]

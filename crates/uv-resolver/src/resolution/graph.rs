@@ -3,8 +3,9 @@ use std::collections::BTreeSet;
 use indexmap::IndexSet;
 use petgraph::{
     graph::{Graph, NodeIndex},
-    Directed,
+    Directed, Direction,
 };
+use pubgrub::Range;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use distribution_types::{
@@ -12,7 +13,7 @@ use distribution_types::{
     VersionOrUrlRef,
 };
 use pep440_rs::{Version, VersionSpecifier};
-use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl};
+use pep508_rs::{MarkerEnvironment, MarkerTree, MarkerTreeKind, VerbatimUrl};
 use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
@@ -24,6 +25,7 @@ use crate::preferences::Preferences;
 use crate::python_requirement::PythonTarget;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
+use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
@@ -85,6 +87,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
+        resolution_strategy: &ResolutionStrategy,
         options: Options,
     ) -> Result<Self, ResolveError> {
         let size_guess = resolutions[0].nodes.len();
@@ -158,12 +161,14 @@ impl ResolutionGraph {
             .cloned();
 
         // Normalize any markers.
-        for edge in petgraph.edge_indices() {
-            if let Some(marker) = petgraph[edge].take() {
-                petgraph[edge] = crate::marker::normalize(
-                    marker,
-                    requires_python.as_ref().map(RequiresPython::bound),
-                );
+        if let Some(ref requires_python) = requires_python {
+            for edge in petgraph.edge_indices() {
+                if let Some(marker) = petgraph[edge].take() {
+                    petgraph[edge] = Some(marker.simplify_python_versions(
+                        Range::from(requires_python.bound_major_minor().clone()),
+                        Range::from(requires_python.bound().clone()),
+                    ));
+                }
             }
         }
 
@@ -185,9 +190,15 @@ impl ResolutionGraph {
                             .expect("A non-forking resolution exists in forking mode")
                             .clone()
                     })
+                    // Any unsatisfiable forks were skipped.
+                    .filter(|fork| !fork.is_false())
                     .collect(),
             )
         };
+
+        if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
+            report_missing_lower_bounds(&petgraph, &mut diagnostics);
+        }
 
         Ok(Self {
             petgraph,
@@ -511,16 +522,31 @@ impl ResolutionGraph {
 
         /// Add all marker parameters from the given tree to the given set.
         fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut IndexSet<MarkerParam>) {
-            match marker_tree {
-                MarkerTree::Expression(MarkerExpression::Version { key, .. }) => {
-                    set.insert(MarkerParam::Version(key.clone()));
+            match marker_tree.kind() {
+                MarkerTreeKind::True => {}
+                MarkerTreeKind::False => {}
+                MarkerTreeKind::Version(marker) => {
+                    set.insert(MarkerParam::Version(marker.key().clone()));
+                    for (_, tree) in marker.edges() {
+                        add_marker_params_from_tree(&tree, set);
+                    }
                 }
-                MarkerTree::Expression(MarkerExpression::String { key, .. }) => {
-                    set.insert(MarkerParam::String(key.clone()));
+                MarkerTreeKind::String(marker) => {
+                    set.insert(MarkerParam::String(marker.key().clone()));
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(&tree, set);
+                    }
                 }
-                MarkerTree::And(ref exprs) | MarkerTree::Or(ref exprs) => {
-                    for expr in exprs {
-                        add_marker_params_from_tree(expr, set);
+                MarkerTreeKind::In(marker) => {
+                    set.insert(MarkerParam::String(marker.key().clone()));
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(&tree, set);
+                    }
+                }
+                MarkerTreeKind::Contains(marker) => {
+                    set.insert(MarkerParam::String(marker.key().clone()));
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(&tree, set);
                     }
                 }
                 // We specifically don't care about these for the
@@ -528,9 +554,11 @@ impl ResolutionGraph {
                 // file. Quoted strings are marker values given by the
                 // user. We don't track those here, since we're only
                 // interested in which markers are used.
-                MarkerTree::Expression(
-                    MarkerExpression::Extra { .. } | MarkerExpression::Arbitrary { .. },
-                ) => {}
+                MarkerTreeKind::Extra(marker) => {
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(&tree, set);
+                    }
+                }
             }
         }
 
@@ -579,7 +607,7 @@ impl ResolutionGraph {
 
         // Generate the final marker expression as a conjunction of
         // strict equality terms.
-        let mut conjuncts = vec![];
+        let mut conjunction = MarkerTree::TRUE;
         for marker_param in seen_marker_values {
             let expr = match marker_param {
                 MarkerParam::Version(value_version) => {
@@ -598,9 +626,9 @@ impl ResolutionGraph {
                     }
                 }
             };
-            conjuncts.push(MarkerTree::Expression(expr));
+            conjunction.and(MarkerTree::expression(expr));
         }
-        Ok(MarkerTree::And(conjuncts))
+        Ok(conjunction)
     }
 
     /// If there are multiple distributions for the same package name, return the markers of the
@@ -634,4 +662,73 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
             graph.diagnostics,
         )
     }
+}
+
+/// Find any packages that don't have any lower bound on them when in resolution-lowest mode.
+fn report_missing_lower_bounds(
+    petgraph: &Graph<ResolutionGraphNode, Option<MarkerTree>>,
+    diagnostics: &mut Vec<ResolutionDiagnostic>,
+) {
+    for node_index in petgraph.node_indices() {
+        let ResolutionGraphNode::Dist(dist) = petgraph.node_weight(node_index).unwrap() else {
+            // Ignore the root package.
+            continue;
+        };
+        if dist.dev.is_some() {
+            // TODO(konsti): Dev dependencies are modelled incorrectly in the graph. There should
+            // be an edge from root to project-with-dev, just like to project-with-extra, but
+            // currently there is only an edge from project to to project-with-dev that we then
+            // have to drop.
+            continue;
+        }
+        if !has_lower_bound(node_index, dist.name(), petgraph) {
+            diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
+                package_name: dist.name().clone(),
+            });
+        }
+    }
+}
+
+/// Whether the given package has a lower version bound by another package.
+fn has_lower_bound(
+    node_index: NodeIndex,
+    package_name: &PackageName,
+    petgraph: &Graph<ResolutionGraphNode, Option<MarkerTree>>,
+) -> bool {
+    for neighbor_index in petgraph.neighbors_directed(node_index, Direction::Incoming) {
+        let neighbor_dist = match petgraph.node_weight(neighbor_index).unwrap() {
+            ResolutionGraphNode::Root => {
+                // We already handled direct dependencies with a missing constraint
+                // separately.
+                return true;
+            }
+            ResolutionGraphNode::Dist(neighbor_dist) => neighbor_dist,
+        };
+
+        if neighbor_dist.name() == package_name {
+            // Only warn for real packages, not for virtual packages such as dev nodes.
+            return true;
+        }
+
+        // Get all individual specifier for the current package and check if any has a lower
+        // bound.
+        for requirement in neighbor_dist
+            .metadata
+            .requires_dist
+            .iter()
+            .chain(neighbor_dist.metadata.dev_dependencies.values().flatten())
+        {
+            if requirement.name != *package_name {
+                continue;
+            }
+            let Some(specifiers) = requirement.source.version_specifiers() else {
+                // URL requirements are a bound.
+                return true;
+            };
+            if specifiers.iter().any(VersionSpecifier::has_lower_bound) {
+                return true;
+            }
+        }
+    }
+    false
 }

@@ -1,5 +1,5 @@
 pub use dependency_mode::DependencyMode;
-pub use error::{NoSolutionError, ResolveError};
+pub use error::{NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::FlatIndex;

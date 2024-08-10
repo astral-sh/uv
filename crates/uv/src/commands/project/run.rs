@@ -1,33 +1,37 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anstream::eprint;
+use anyhow::{anyhow, bail, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::debug;
 
-use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
+use uv_distribution::LoweredRequirement;
 use uv_fs::{PythonExt, Simplified, CWD};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, Interpreter, PythonEnvironment, PythonFetch,
-    PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_scripts::{Pep723Error, Pep723Script};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
+use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{ProjectError, WorkspacePython};
@@ -39,6 +43,7 @@ use crate::settings::ResolverInstallerSettings;
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
+    script: Option<Pep723Script>,
     command: ExternalCommand,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
@@ -53,13 +58,13 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<ExitStatus> {
+) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`uv run` is experimental and may change without warning");
     }
@@ -87,7 +92,7 @@ pub(crate) async fn run(
     }
 
     // Parse the input command.
-    let command = RunCommand::from(command);
+    let command = RunCommand::from(&command);
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -97,88 +102,119 @@ pub(crate) async fn run(
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
-    let script_interpreter = if let RunCommand::Python(target, _) = &command {
-        if let Some(metadata) = uv_scripts::read_pep723_metadata(&target).await? {
-            writeln!(
-                printer.stderr(),
-                "Reading inline script metadata from: {}",
-                target.user_display().cyan()
-            )?;
+    let script_interpreter = if let Some(script) = script {
+        writeln!(
+            printer.stderr(),
+            "Reading inline script metadata from: {}",
+            script.path.user_display().cyan()
+        )?;
 
-            // (1) Explicit request from user
-            let python_request = if let Some(request) = python.as_deref() {
-                Some(PythonRequest::parse(request))
-                // (2) Request from `.python-version`
-            } else if let Some(request) = request_from_version_file(&CWD).await? {
-                Some(request)
-                // (3) `Requires-Python` in `pyproject.toml`
-            } else {
-                metadata.requires_python.map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python))
+        // (1) Explicit request from user
+        let python_request = if let Some(request) = python.as_deref() {
+            Some(PythonRequest::parse(request))
+            // (2) Request from `.python-version`
+        } else if let Some(request) = request_from_version_file(&CWD).await? {
+            Some(request)
+            // (3) `Requires-Python` in `pyproject.toml`
+        } else {
+            script.metadata.requires_python.map(|requires_python| {
+                PythonRequest::Version(VersionRequest::Range(requires_python))
+            })
+        };
+
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(connectivity)
+            .native_tls(native_tls);
+
+        let interpreter = PythonInstallation::find_or_download(
+            python_request,
+            EnvironmentPreference::Any,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&download_reporter),
+        )
+        .await?
+        .into_interpreter();
+
+        // Install the script requirements, if necessary. Otherwise, use an isolated environment.
+        if let Some(dependencies) = script.metadata.dependencies {
+            // // Collect any `tool.uv.sources` from the script.
+            let empty = BTreeMap::default();
+            let script_sources = script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+                .unwrap_or(&empty);
+            let script_dir = script.path.parent().expect("script path has no parent");
+
+            let requirements = dependencies
+                .into_iter()
+                .map(|requirement| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir,
+                        script_sources,
+                        preview,
+                    )
+                    .map(LoweredRequirement::into_inner)
                 })
+                .collect::<Result<_, _>>()?;
+            let spec = RequirementsSpecification::from_requirements(requirements);
+            let result = CachedEnvironment::get_or_create(
+                spec,
+                interpreter,
+                &settings,
+                &state,
+                if show_resolution {
+                    Box::new(DefaultResolveLogger)
+                } else {
+                    Box::new(SummaryResolveLogger)
+                },
+                if show_resolution {
+                    Box::new(DefaultInstallLogger)
+                } else {
+                    Box::new(SummaryInstallLogger)
+                },
+                preview,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await;
+
+            let environment = match result {
+                Ok(resolution) => resolution,
+                Err(ProjectError::Operation(operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                ))) => {
+                    let report = miette::Report::msg(format!("{err}"))
+                        .context(err.header().with_context("script"));
+                    eprint!("{report:?}");
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(err) => return Err(err.into()),
             };
 
-            let client_builder = BaseClientBuilder::new()
-                .connectivity(connectivity)
-                .native_tls(native_tls);
-
-            let interpreter = PythonInstallation::find_or_fetch(
-                python_request,
-                EnvironmentPreference::Any,
-                python_preference,
-                python_fetch,
-                &client_builder,
-                cache,
-                Some(&download_reporter),
-            )
-            .await?
-            .into_interpreter();
-
-            // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(dependencies) = metadata.dependencies {
-                let requirements = dependencies.into_iter().map(Requirement::from).collect();
-                let spec = RequirementsSpecification::from_requirements(requirements);
-                let environment = CachedEnvironment::get_or_create(
-                    spec,
-                    interpreter,
-                    &settings,
-                    &state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    if show_resolution {
-                        Box::new(DefaultInstallLogger)
-                    } else {
-                        Box::new(SummaryInstallLogger)
-                    },
-                    preview,
-                    connectivity,
-                    concurrency,
-                    native_tls,
-                    cache,
-                    printer,
-                )
-                .await?;
-
-                Some(environment.into_interpreter())
-            } else {
-                // Create a virtual environment.
-                temp_dir = cache.environment()?;
-                let environment = uv_virtualenv::create_venv(
-                    temp_dir.path(),
-                    interpreter,
-                    uv_virtualenv::Prompt::None,
-                    false,
-                    false,
-                    false,
-                )?;
-
-                Some(environment.into_interpreter())
-            }
+            Some(environment.into_interpreter())
         } else {
-            None
+            // Create a virtual environment.
+            temp_dir = cache.environment()?;
+            let environment = uv_virtualenv::create_venv(
+                temp_dir.path(),
+                interpreter,
+                uv_virtualenv::Prompt::None,
+                false,
+                false,
+                false,
+            )?;
+
+            Some(environment.into_interpreter())
         }
     } else {
         None
@@ -187,11 +223,42 @@ pub(crate) async fn run(
     // Discover and sync the base environment.
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
-        Some(script_interpreter)
+        // If we found a PEP 723 script and the user provided a project-only setting, warn.
+        if !extras.is_empty() {
+            warn_user_once!("Extras are not supported for Python scripts with inline metadata");
+        }
+        if !dev {
+            warn_user_once!("`--no-dev` is not supported for Python scripts with inline metadata");
+        }
+        if no_project {
+            warn_user_once!(
+                "`--no-project` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if package.is_some() {
+            warn_user_once!(
+                "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if locked {
+            warn_user_once!(
+                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if frozen {
+            warn_user_once!(
+                "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if isolated {
+            warn_user_once!(
+                "`--isolated` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+
+        script_interpreter
     } else {
-        let project = if no_project {
-            None
-        } else if let Some(package) = package {
+        let project = if let Some(package) = package {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
@@ -207,6 +274,47 @@ pub(crate) async fn run(
                 Err(WorkspaceError::NonWorkspace(_)) => None,
                 Err(err) => return Err(err.into()),
             }
+        };
+
+        let project = if no_project {
+            // If the user runs with `--no-project` and we can't find a project, warn.
+            if project.is_none() {
+                warn_user_once!("`--no-project` was provided, but no project was found");
+            }
+
+            // If the user ran with `--no-project` and provided a project-only setting, warn.
+            if !extras.is_empty() {
+                warn_user_once!("Extras have no effect when used alongside `--no-project`");
+            }
+            if !dev {
+                warn_user_once!("`--no-dev` has no effect when used alongside `--no-project`");
+            }
+            if locked {
+                warn_user_once!("`--locked` has no effect when used alongside `--no-project`");
+            }
+            if frozen {
+                warn_user_once!("`--frozen` has no effect when used alongside `--no-project`");
+            }
+
+            None
+        } else {
+            // If we can't find a project and the user provided a project-only setting, warn.
+            if project.is_none() {
+                if !extras.is_empty() {
+                    warn_user_once!("Extras have no effect when used outside of a project");
+                }
+                if !dev {
+                    warn_user_once!("`--no-dev` has no effect when used outside of a project");
+                }
+                if locked {
+                    warn_user_once!("`--locked` has no effect when used outside of a project");
+                }
+                if frozen {
+                    warn_user_once!("`--frozen` has no effect when used outside of a project");
+                }
+            }
+
+            project
         };
 
         let interpreter = if let Some(project) = project {
@@ -240,11 +348,11 @@ pub(crate) async fn run(
                     .await?;
 
                     // Note we force preview on during `uv run` for now since the entire interface is in preview.
-                    PythonInstallation::find_or_fetch(
+                    PythonInstallation::find_or_download(
                         python_request,
                         EnvironmentPreference::Any,
                         python_preference,
-                        python_fetch,
+                        python_downloads,
                         &client_builder,
                         cache,
                         Some(&download_reporter),
@@ -270,7 +378,7 @@ pub(crate) async fn run(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
                     python_preference,
-                    python_fetch,
+                    python_downloads,
                     connectivity,
                     native_tls,
                     cache,
@@ -342,12 +450,12 @@ pub(crate) async fn run(
                     .connectivity(connectivity)
                     .native_tls(native_tls);
 
-                let python = PythonInstallation::find_or_fetch(
+                let python = PythonInstallation::find_or_download(
                     python.as_deref().map(PythonRequest::parse),
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,
-                    python_fetch,
+                    python_downloads,
                     &client_builder,
                     cache,
                     Some(&download_reporter),
@@ -376,16 +484,14 @@ pub(crate) async fn run(
             }
         };
 
-        Some(interpreter)
+        interpreter
     };
 
-    if let Some(base_interpreter) = &base_interpreter {
-        debug!(
-            "Using Python {} interpreter at: {}",
-            base_interpreter.python_version(),
-            base_interpreter.sys_executable().display()
-        );
-    }
+    debug!(
+        "Using Python {} interpreter at: {}",
+        base_interpreter.python_version(),
+        base_interpreter.sys_executable().display()
+    );
 
     // Read the requirements.
     let spec = if requirements.is_empty() {
@@ -401,77 +507,12 @@ pub(crate) async fn run(
         Some(spec)
     };
 
-    // Determine whether the base environment satisfies the ephemeral requirements. If we don't have
-    // any `--with` requirements, and we already have a base environment, then there's no need to
-    // create an additional environment.
-    let skip_ephemeral = base_interpreter.as_ref().is_some_and(|base_interpreter| {
-        // No additional requirements.
-        let Some(spec) = spec.as_ref() else {
-            return true;
-        };
-
-        let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
-            return false;
-        };
-
-        if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
-            return false;
-        }
-
-        match site_packages.satisfies(&spec.requirements, &spec.constraints) {
-            // If the requirements are already satisfied, we're done.
-            Ok(SatisfiesResult::Fresh {
-                recursive_requirements,
-            }) => {
-                debug!(
-                    "Base environment satisfies requirements: {}",
-                    recursive_requirements
-                        .iter()
-                        .map(|entry| entry.requirement.to_string())
-                        .sorted()
-                        .join(" | ")
-                );
-                true
-            }
-            Ok(SatisfiesResult::Unsatisfied(requirement)) => {
-                debug!("At least one requirement is not satisfied in the base environment: {requirement}");
-                false
-            }
-            Err(err) => {
-                debug!("Failed to check requirements against base environment: {err}");
-                false
-            }
-        }
-    });
-
     // If necessary, create an environment for the ephemeral requirements or command.
     let temp_dir;
-    let ephemeral_env = if skip_ephemeral {
+    let ephemeral_env = if can_skip_ephemeral(spec.as_ref(), &base_interpreter, &settings) {
         None
     } else {
         debug!("Creating ephemeral environment");
-
-        // Discover an interpreter.
-        let interpreter = if let Some(base_interpreter) = &base_interpreter {
-            base_interpreter.clone()
-        } else {
-            let client_builder = BaseClientBuilder::new()
-                .connectivity(connectivity)
-                .native_tls(native_tls);
-
-            // Note we force preview on during `uv run` for now since the entire interface is in preview
-            PythonInstallation::find_or_fetch(
-                python.as_deref().map(PythonRequest::parse),
-                EnvironmentPreference::Any,
-                python_preference,
-                python_fetch,
-                &client_builder,
-                cache,
-                Some(&download_reporter),
-            )
-            .await?
-            .into_interpreter()
-        };
 
         Some(match spec.filter(|spec| !spec.is_empty()) {
             None => {
@@ -479,7 +520,7 @@ pub(crate) async fn run(
                 temp_dir = cache.environment()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
-                    interpreter,
+                    base_interpreter.clone(),
                     uv_virtualenv::Prompt::None,
                     false,
                     false,
@@ -489,9 +530,9 @@ pub(crate) async fn run(
             Some(spec) => {
                 debug!("Syncing ephemeral requirements");
 
-                CachedEnvironment::get_or_create(
+                let result = CachedEnvironment::get_or_create(
                     spec,
-                    interpreter,
+                    base_interpreter.clone(),
                     &settings,
                     &state,
                     if show_resolution {
@@ -511,8 +552,22 @@ pub(crate) async fn run(
                     cache,
                     printer,
                 )
-                .await?
-                .into()
+                .await;
+
+                let environment = match result {
+                    Ok(resolution) => resolution,
+                    Err(ProjectError::Operation(operations::Error::Resolve(
+                        uv_resolver::ResolveError::NoSolution(err),
+                    ))) => {
+                        let report = miette::Report::msg(format!("{err}"))
+                            .context(err.header().with_context("`--with`"));
+                        eprint!("{report:?}");
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+
+                environment.into()
             }
         })
     };
@@ -521,24 +576,22 @@ pub(crate) async fn run(
     // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
     // resolve `.pth` files in the base environment.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
-        if let Some(base_interpreter) = base_interpreter.as_ref() {
-            let ephemeral_site_packages = ephemeral_env
-                .site_packages()
-                .next()
-                .ok_or_else(|| anyhow!("Ephemeral environment has no site packages directory"))?;
-            let base_site_packages = base_interpreter
-                .site_packages()
-                .next()
-                .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
+        let ephemeral_site_packages = ephemeral_env
+            .site_packages()
+            .next()
+            .ok_or_else(|| anyhow!("Ephemeral environment has no site packages directory"))?;
+        let base_site_packages = base_interpreter
+            .site_packages()
+            .next()
+            .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
 
-            fs_err::write(
-                ephemeral_site_packages.join("sitecustomize.py"),
-                format!(
-                    "import site; site.addsitedir(\"{}\")",
-                    base_site_packages.escape_for_python()
-                ),
-            )?;
-        }
+        fs_err::write(
+            ephemeral_site_packages.join("sitecustomize.py"),
+            format!(
+                "import site; site.addsitedir(\"{}\")",
+                base_site_packages.escape_for_python()
+            ),
+        )?;
     }
 
     debug!("Running `{command}`");
@@ -550,12 +603,7 @@ pub(crate) async fn run(
             .as_ref()
             .map(PythonEnvironment::scripts)
             .into_iter()
-            .chain(
-                base_interpreter
-                    .as_ref()
-                    .map(Interpreter::scripts)
-                    .into_iter(),
-            )
+            .chain(std::iter::once(base_interpreter.scripts()))
             .map(PathBuf::from)
             .chain(
                 std::env::var_os("PATH")
@@ -589,6 +637,68 @@ pub(crate) async fn run(
         Ok(ExitStatus::Success)
     } else {
         Ok(ExitStatus::Failure)
+    }
+}
+
+/// Read a [`Pep723Script`] from the given command.
+pub(crate) async fn parse_script(
+    command: &ExternalCommand,
+) -> Result<Option<Pep723Script>, Pep723Error> {
+    // Parse the input command.
+    let command = RunCommand::from(command);
+
+    let RunCommand::Python(target, _) = &command else {
+        return Ok(None);
+    };
+
+    // Read the PEP 723 `script` metadata from the target script.
+    Pep723Script::read(&target).await
+}
+
+/// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
+fn can_skip_ephemeral(
+    spec: Option<&RequirementsSpecification>,
+    base_interpreter: &Interpreter,
+    settings: &ResolverInstallerSettings,
+) -> bool {
+    // No additional requirements.
+    let Some(spec) = spec.as_ref() else {
+        return true;
+    };
+
+    let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
+        return false;
+    };
+
+    if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
+        return false;
+    }
+
+    match site_packages.satisfies(&spec.requirements, &spec.constraints) {
+        // If the requirements are already satisfied, we're done.
+        Ok(SatisfiesResult::Fresh {
+            recursive_requirements,
+        }) => {
+            debug!(
+                "Base environment satisfies requirements: {}",
+                recursive_requirements
+                    .iter()
+                    .map(|entry| entry.requirement.to_string())
+                    .sorted()
+                    .join(" | ")
+            );
+            true
+        }
+        Ok(SatisfiesResult::Unsatisfied(requirement)) => {
+            debug!(
+                "At least one requirement is not satisfied in the base environment: {requirement}"
+            );
+            false
+        }
+        Err(err) => {
+            debug!("Failed to check requirements against base environment: {err}");
+            false
+        }
     }
 }
 
@@ -637,8 +747,8 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
-impl From<ExternalCommand> for RunCommand {
-    fn from(command: ExternalCommand) -> Self {
+impl From<&ExternalCommand> for RunCommand {
+    fn from(command: &ExternalCommand) -> Self {
         let (target, args) = command.split();
 
         let Some(target) = target else {

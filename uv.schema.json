@@ -254,11 +254,11 @@
         "null"
       ]
     },
-    "python-fetch": {
-      "description": "Whether to automatically download Python when required.",
+    "python-downloads": {
+      "description": "Whether to allow Python downloads.",
       "anyOf": [
         {
-          "$ref": "#/definitions/PythonFetch"
+          "$ref": "#/definitions/PythonDownloads"
         },
         {
           "type": "null"
@@ -1015,20 +1015,27 @@
         }
       ]
     },
-    "PythonFetch": {
+    "PythonDownloads": {
       "oneOf": [
         {
-          "description": "Automatically fetch managed Python installations when needed.",
+          "description": "Automatically download managed Python installations when needed.",
           "type": "string",
           "enum": [
             "automatic"
           ]
         },
         {
-          "description": "Do not automatically fetch managed Python installations; require explicit installation.",
+          "description": "Do not automatically download managed Python installations; require explicit installation.",
           "type": "string",
           "enum": [
             "manual"
+          ]
+        },
+        {
+          "description": "Do not ever allow Python downloads.",
+          "type": "string",
+          "enum": [
+            "never"
           ]
         }
       ]
@@ -1203,13 +1210,6 @@
             "workspace"
           ],
           "properties": {
-            "editable": {
-              "description": "`true` by default.",
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
             "workspace": {
               "description": "When set to `false`, the package will be fetched from the remote index, rather than included as a workspace package.",
               "type": "boolean"

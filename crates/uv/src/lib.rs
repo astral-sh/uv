@@ -12,7 +12,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, instrument};
 
 use settings::PipTreeSettings;
-use uv_cache::{Cache, Refresh};
+use uv_cache::{Cache, Refresh, Timestamp};
 use uv_cli::{
     compat::CompatArgs, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand,
@@ -23,11 +23,12 @@ use uv_cli::{SelfCommand, SelfNamespace};
 use uv_configuration::Concurrency;
 use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
-use uv_settings::{Combine, FilesystemOptions};
+use uv_scripts::Pep723Script;
+use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
-use crate::commands::{ExitStatus, ToolRunCommand};
+use crate::commands::{parse_script, ExitStatus, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -129,6 +130,27 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         let user = FilesystemOptions::user()?;
         project.combine(user)
     };
+
+    // If the target is a PEP 723 script, parse it.
+    let script = if let Commands::Project(command) = &*cli.command {
+        if let ProjectCommand::Run(uv_cli::RunArgs { command, .. }) = &**command {
+            parse_script(command).await?
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // If the target is a PEP 723 script, merge the metadata into the filesystem metadata.
+    let filesystem = script
+        .as_ref()
+        .map(|script| &script.metadata)
+        .and_then(|metadata| metadata.tool.as_ref())
+        .and_then(|tool| tool.uv.as_ref())
+        .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
+        .map(FilesystemOptions::from)
+        .combine(filesystem);
 
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(&cli.command, &cli.global_args, filesystem.as_ref());
@@ -662,7 +684,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &args.name,
                 args.settings.python.as_deref(),
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 args.settings.link_mode,
                 &args.settings.index_locations,
                 args.settings.index_strategy,
@@ -682,7 +704,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Project(project) => {
-            run_project(project, globals, filesystem, cache, printer).await
+            run_project(project, script, globals, filesystem, cache, printer).await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
@@ -739,7 +761,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.isolated,
                 globals.preview,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -780,10 +802,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 args.python,
                 args.force,
+                args.options,
                 args.settings,
                 globals.preview,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -812,12 +835,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             // Initialize the cache.
-            let cache = cache.init()?.with_refresh(args.refresh);
+            let cache = cache.init()?.with_refresh(Refresh::All(Timestamp::now()));
 
             commands::tool_upgrade(
                 args.name,
                 globals.connectivity,
-                args.settings,
+                args.args,
+                args.filesystem,
                 Concurrency::default(),
                 globals.native_tls,
                 &cache,
@@ -866,7 +890,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.all_versions,
                 args.all_platforms,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.preview,
                 &cache,
                 printer,
@@ -886,6 +910,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::python_install(
                 args.targets,
                 args.reinstall,
+                globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,
                 globals.preview,
@@ -954,6 +979,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 /// Run a [`ProjectCommand`].
 async fn run_project(
     project_command: Box<ProjectCommand>,
+    script: Option<Pep723Script>,
     globals: GlobalSettings,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
@@ -992,7 +1018,7 @@ async fn run_project(
                 args.no_workspace,
                 globals.preview,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.connectivity,
                 globals.native_tls,
                 &cache,
@@ -1023,7 +1049,8 @@ async fn run_project(
                 )
                 .collect::<Vec<_>>();
 
-            commands::run(
+            Box::pin(commands::run(
+                script,
                 args.command,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
@@ -1038,13 +1065,13 @@ async fn run_project(
                 args.settings,
                 globals.preview,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
                 &cache,
                 printer,
-            )
+            ))
             .await
         }
         ProjectCommand::Sync(args) => {
@@ -1068,7 +1095,7 @@ async fn run_project(
                 args.modifications,
                 args.python,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 args.settings,
                 globals.preview,
                 globals.connectivity,
@@ -1094,7 +1121,7 @@ async fn run_project(
                 args.settings,
                 globals.preview,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.connectivity,
                 Concurrency::default(),
                 globals.native_tls,
@@ -1131,7 +1158,7 @@ async fn run_project(
                 args.python,
                 args.settings,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -1163,7 +1190,7 @@ async fn run_project(
                 args.python,
                 args.settings,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),
@@ -1195,7 +1222,7 @@ async fn run_project(
                 args.python,
                 args.resolver,
                 globals.python_preference,
-                globals.python_fetch,
+                globals.python_downloads,
                 globals.preview,
                 globals.connectivity,
                 Concurrency::default(),

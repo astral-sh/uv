@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_fs::{normalize_absolute_path, normalize_url_path};
+use uv_fs::{normalize_absolute_path, normalize_url_path, Simplified};
 
 use crate::Pep508Url;
 
@@ -36,9 +36,12 @@ impl VerbatimUrl {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
         let path = path.as_ref();
 
-        // Normalize the path.
-        let path = normalize_absolute_path(path)
-            .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
+        // Normalize the path (and canonicalize it, if possible).
+        let path = match path.simple_canonicalize() {
+            Ok(path) => path,
+            Err(_) => normalize_absolute_path(path)
+                .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?,
+        };
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -77,9 +80,12 @@ impl VerbatimUrl {
             base_dir.as_ref().join(path)
         };
 
-        // Normalize the path.
-        let path = normalize_absolute_path(&path)
-            .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?;
+        // Normalize the path (and canonicalize it, if possible).
+        let path = match path.simple_canonicalize() {
+            Ok(path) => path,
+            Err(_) => normalize_absolute_path(&path)
+                .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?,
+        };
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -107,9 +113,11 @@ impl VerbatimUrl {
             return Err(VerbatimUrlError::WorkingDirectory(path.to_path_buf()));
         };
 
-        // Normalize the path.
-        let Ok(path) = normalize_absolute_path(&path) else {
-            return Err(VerbatimUrlError::WorkingDirectory(path));
+        // Normalize the path (and canonicalize it, if possible).
+        let path = match path.simple_canonicalize() {
+            Ok(path) => path,
+            Err(_) => normalize_absolute_path(&path)
+                .map_err(|_| VerbatimUrlError::WorkingDirectory(path))?,
         };
 
         // Extract the fragment, if it exists.
@@ -194,6 +202,27 @@ impl Deref for VerbatimUrl {
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
         VerbatimUrl::from_url(url)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for VerbatimUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.url.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for VerbatimUrl {
+    fn deserialize<D>(deserializer: D) -> Result<VerbatimUrl, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let url = Url::deserialize(deserializer)?;
+        Ok(VerbatimUrl::from_url(url))
     }
 }
 

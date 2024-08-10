@@ -216,8 +216,12 @@ pub struct DirectUrlBuiltDist {
 #[derive(Debug, Clone, Hash)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
-    /// The path to the wheel.
-    pub path: PathBuf,
+    /// The absolute, canonicalized path to the wheel which we use for installing.
+    pub install_path: PathBuf,
+    /// The absolute path or path relative to the workspace root pointing to the wheel
+    /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
+    /// are resolved, and unlike the install path, we did not yet join it on the base directory.
+    pub lock_path: PathBuf,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -273,7 +277,7 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone, Hash)]
 pub struct PathSourceDist {
     pub name: PackageName,
-    /// The resolved, absolute path to the distribution which we use for installing.
+    /// The absolute, canonicalized path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The absolute path or path relative to the workspace root pointing to the distribution
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -289,7 +293,7 @@ pub struct PathSourceDist {
 #[derive(Debug, Clone, Hash)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
-    /// The resolved, absolute path to the distribution which we use for installing.
+    /// The absolute, canonicalized path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The absolute path or path relative to the workspace root pointing to the distribution
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -350,7 +354,7 @@ impl Dist {
         ext: DistExtension,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
-        let canonicalized_path = match install_path.canonicalize() {
+        let install_path = match install_path.canonicalize() {
             Ok(path) => path,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::NotFound(url.to_url()));
@@ -372,13 +376,14 @@ impl Dist {
                 }
                 Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                     filename,
-                    path: canonicalized_path,
+                    install_path,
+                    lock_path: lock_path.to_path_buf(),
                     url,
                 })))
             }
             DistExtension::Source(ext) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
                 name,
-                install_path: canonicalized_path.clone(),
+                install_path,
                 lock_path: lock_path.to_path_buf(),
                 ext,
                 url,
@@ -395,7 +400,7 @@ impl Dist {
         editable: bool,
     ) -> Result<Dist, Error> {
         // Store the canonicalized path, which also serves to validate that it exists.
-        let canonicalized_path = match install_path.canonicalize() {
+        let install_path = match install_path.canonicalize() {
             Ok(path) => path,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(Error::NotFound(url.to_url()));
@@ -406,7 +411,7 @@ impl Dist {
         // Determine whether the path represents an archive or a directory.
         Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
             name,
-            install_path: canonicalized_path.clone(),
+            install_path,
             lock_path: lock_path.to_path_buf(),
             editable,
             url,

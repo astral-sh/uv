@@ -66,7 +66,7 @@ impl Display for ResolverMarkers {
             ResolverMarkers::Universal { .. } => f.write_str("universal"),
             ResolverMarkers::SpecificEnvironment(_) => f.write_str("specific environment"),
             ResolverMarkers::Fork(markers) => {
-                write!(f, "({markers})")
+                write!(f, "({markers:?})")
             }
         }
     }

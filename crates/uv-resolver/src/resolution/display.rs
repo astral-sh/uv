@@ -11,7 +11,7 @@ use pep508_rs::MarkerTree;
 use uv_normalize::PackageName;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
-use crate::{marker, ResolutionGraph, ResolverMarkers};
+use crate::{ResolutionGraph, ResolverMarkers};
 
 static UNIVERSAL_MARKERS: ResolverMarkers = ResolverMarkers::Universal {
     fork_preferences: None,
@@ -410,7 +410,7 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
         }
 
         if let DisplayResolutionGraphNode::Dist(node) = &mut graph[index] {
-            node.markers = marker_tree.and_then(|marker| marker::normalize(marker, None));
+            node.markers = marker_tree;
         };
     }
 

@@ -79,12 +79,25 @@ pub enum PythonPreference {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub enum PythonFetch {
-    /// Automatically fetch managed Python installations when needed.
+pub enum PythonDownloads {
+    /// Automatically download managed Python installations when needed.
     #[default]
+    #[serde(alias = "auto")]
     Automatic,
-    /// Do not automatically fetch managed Python installations; require explicit installation.
+    /// Do not automatically download managed Python installations; require explicit installation.
     Manual,
+    /// Do not ever allow Python downloads.
+    Never,
+}
+
+impl From<bool> for PythonDownloads {
+    fn from(value: bool) -> Self {
+        if value {
+            PythonDownloads::Automatic
+        } else {
+            PythonDownloads::Never
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1298,7 +1311,7 @@ impl PythonPreference {
     }
 }
 
-impl PythonFetch {
+impl PythonDownloads {
     pub fn is_automatic(self) -> bool {
         matches!(self, Self::Automatic)
     }

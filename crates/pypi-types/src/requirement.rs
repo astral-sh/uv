@@ -3,10 +3,12 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use distribution_filename::DistExtension;
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
+use serde::Serialize;
 use thiserror::Error;
 use url::Url;
+
+use pep440_rs::VersionSpecifiers;
+use pep508_rs::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl};
 use uv_fs::PortablePathBuf;
 use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
@@ -37,11 +39,27 @@ pub struct Requirement {
     pub name: PackageName,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub extras: Vec<ExtraName>,
+    #[serde(
+        skip_serializing_if = "marker_is_empty",
+        serialize_with = "serialize_marker",
+        default
+    )]
     pub marker: Option<MarkerTree>,
     #[serde(flatten)]
     pub source: RequirementSource,
     #[serde(skip)]
     pub origin: Option<RequirementOrigin>,
+}
+
+fn marker_is_empty(marker: &Option<MarkerTree>) -> bool {
+    marker.as_ref().and_then(MarkerTree::contents).is_none()
+}
+
+fn serialize_marker<S>(marker: &Option<MarkerTree>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    marker.as_ref().unwrap().contents().unwrap().serialize(s)
 }
 
 impl Requirement {
@@ -238,7 +256,7 @@ impl Display for Requirement {
                 write!(f, " @ {url}")?;
             }
         }
-        if let Some(marker) = &self.marker {
+        if let Some(marker) = self.marker.as_ref().and_then(MarkerTree::contents) {
             write!(f, " ; {marker}")?;
         }
         Ok(())
@@ -295,7 +313,7 @@ pub enum RequirementSource {
     /// be a binary distribution (a `.whl` file) or a source distribution archive (a `.zip` or
     /// `.tar.gz` file).
     Path {
-        /// The resolved, absolute path to the distribution which we use for installing.
+        /// The absolute, canonicalized path to the distribution which we use for installing.
         install_path: PathBuf,
         /// The absolute path or path relative to the workspace root pointing to the distribution
         /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -310,7 +328,7 @@ pub enum RequirementSource {
     /// A local source tree (a directory with a pyproject.toml in, or a legacy
     /// source distribution with only a setup.py but non pyproject.toml in it).
     Directory {
-        /// The resolved, absolute path to the distribution which we use for installing.
+        /// The absolute, canonicalized path to the distribution which we use for installing.
         install_path: PathBuf,
         /// The absolute path or path relative to the workspace root pointing to the distribution
         /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -447,6 +465,17 @@ impl RequirementSource {
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Directory { editable: true, .. })
+    }
+
+    /// If the source is the registry, return the version specifiers
+    pub fn version_specifiers(&self) -> Option<&VersionSpecifiers> {
+        match self {
+            RequirementSource::Registry { specifier, .. } => Some(specifier),
+            RequirementSource::Url { .. }
+            | RequirementSource::Git { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => None,
+        }
     }
 }
 

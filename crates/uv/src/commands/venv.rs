@@ -22,7 +22,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, PythonFetch, PythonInstallation,
+    request_from_version_file, EnvironmentPreference, PythonDownloads, PythonInstallation,
     PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
@@ -42,7 +42,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
@@ -72,7 +72,7 @@ pub(crate) async fn venv(
         seed,
         preview,
         python_preference,
-        python_fetch,
+        python_downloads,
         allow_existing,
         exclude_newer,
         native_tls,
@@ -124,7 +124,7 @@ async fn venv_impl(
     seed: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
@@ -174,11 +174,11 @@ async fn venv_impl(
     }
 
     // Locate the Python interpreter to use in the environment
-    let python = PythonInstallation::find_or_fetch(
+    let python = PythonInstallation::find_or_download(
         interpreter_request,
         EnvironmentPreference::OnlySystem,
         python_preference,
-        python_fetch,
+        python_downloads,
         &client_builder,
         cache,
         Some(&reporter),

@@ -40,9 +40,8 @@ fn help() {
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations [possible values:
               only-managed, managed, system, only-system]
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required [possible values: automatic,
-              manual]
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -103,9 +102,8 @@ fn help_flag() {
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations [possible values:
               only-managed, managed, system, only-system]
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required [possible values: automatic,
-              manual]
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -165,9 +163,8 @@ fn help_short_flag() {
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations [possible values:
               only-managed, managed, system, only-system]
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required [possible values: automatic,
-              manual]
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -212,7 +209,7 @@ fn help_subcommand() {
 
     When preview is enabled, i.e., via `--preview` or by using a preview
     command, uv will download Python if a version cannot be found. This
-    behavior can be disabled with the `--python-fetch` option.
+    behavior can be disabled with the `--python-downloads` option.
 
     The `--python` option allows requesting a different interpreter.
 
@@ -239,6 +236,11 @@ fn help_subcommand() {
     e.g., if `pypy` is requested, uv will first check if the virtual
     environment contains a PyPy interpreter then check if each executable in
     the path is a PyPy interpreter.
+
+    uv supports discovering CPython, PyPy, and GraalPy interpreters.
+    Unsupported interpreters will be skipped during discovery. If an
+    unsupported interpreter implementation is requested, uv will exit with
+    an error.
 
     Usage: uv python [OPTIONS] <COMMAND>
 
@@ -281,13 +283,8 @@ fn help_subcommand() {
               - only-system:  Only use system Python installations; never use managed Python
                 installations
 
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required
-
-              Possible values:
-              - automatic: Automatically fetch managed Python installations when needed
-              - manual:    Do not automatically fetch managed Python installations; require explicit
-                installation
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet
@@ -370,7 +367,19 @@ fn help_subsubcommand() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Download and install Python versions
+    Download and install Python versions.
+
+    Multiple Python versions may be requested.
+
+    Supports CPython and PyPy.
+
+    CPython distributions are downloaded from the `python-build-standalone` project.
+
+    Python versions are installed into the uv Python directory, which can be retrieved with `uv python
+    dir`. A `python` executable is not made globally available, managed Python versions are only used in
+    uv commands or in active virtual environments.
+
+    See `uv help python` to view supported request formats.
 
     Usage: uv python install [OPTIONS] [TARGETS]...
 
@@ -386,7 +395,9 @@ fn help_subsubcommand() {
 
     Options:
       -r, --reinstall
-              Reinstall the requested Python version, if it's already installed
+              Reinstall the requested Python version, if it's already installed.
+              
+              By default, uv will exit successfully if the version is already installed.
 
     Cache options:
       -n, --no-cache
@@ -419,13 +430,8 @@ fn help_subsubcommand() {
               - only-system:  Only use system Python installations; never use managed Python
                 installations
 
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required
-
-              Possible values:
-              - automatic: Automatically fetch managed Python installations when needed
-              - manual:    Do not automatically fetch managed Python installations; require explicit
-                installation
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet
@@ -527,9 +533,8 @@ fn help_flag_subcommand() {
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations [possible values:
               only-managed, managed, system, only-system]
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required [possible values: automatic,
-              manual]
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -580,9 +585,8 @@ fn help_flag_subsubcommand() {
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations [possible values:
               only-managed, managed, system, only-system]
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required [possible values: automatic,
-              manual]
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -710,9 +714,8 @@ fn help_with_global_option() {
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations [possible values:
               only-managed, managed, system, only-system]
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required [possible values: automatic,
-              manual]
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output
@@ -809,9 +812,8 @@ fn help_with_no_pager() {
           --python-preference <PYTHON_PREFERENCE>
               Whether to prefer uv-managed or system Python installations [possible values:
               only-managed, managed, system, only-system]
-          --python-fetch <PYTHON_FETCH>
-              Whether to automatically download Python when required [possible values: automatic,
-              manual]
+          --no-python-downloads
+              Disable automatic downloads of Python
 
     Global options:
       -q, --quiet                      Do not print any output

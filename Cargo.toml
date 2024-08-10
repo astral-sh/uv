@@ -45,6 +45,7 @@ uv-options-metadata = { path = "crates/uv-options-metadata" }
 uv-python = { path = "crates/uv-python" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
+uv-pubgrub = { path = "crates/uv-pubgrub" }
 uv-scripts = { path = "crates/uv-scripts" }
 uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }
@@ -66,6 +67,7 @@ async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b
 axoupdater = { version = "0.7.0", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.0" }
+boxcar = { version = "0.2.5" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.8" }
 chrono = { version = "0.4.31" }
@@ -130,6 +132,7 @@ seahash = { version = "4.1.0" }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = { version = "1.0.114" }
 sha2 = { version = "0.10.8" }
+smallvec = { version = "1.13.2" }
 syn = { version = "2.0.66" }
 sys-info = { version = "0.9.1" }
 target-lexicon = {version = "0.12.14" }
@@ -207,6 +210,11 @@ rest_pat_in_fully_bound_structs = "warn"
 strip = true
 lto = "fat"
 opt-level = "s"
+
+# This profile disables LTO and is used for ppc64le musl cross builds which fail otherwise
+[profile.release-no-lto]
+inherits = "release"
+lto = false
 
 # This profile is meant to mimic the `release` profile as closely as
 # possible, but using settings that are more beneficial for iterative

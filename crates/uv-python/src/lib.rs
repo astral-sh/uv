@@ -2,7 +2,7 @@
 use thiserror::Error;
 
 pub use crate::discovery::{
-    find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonFetch,
+    find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
     PythonNotFound, PythonPreference, PythonRequest, PythonSource, VersionRequest,
 };
 pub use crate::environment::PythonEnvironment;

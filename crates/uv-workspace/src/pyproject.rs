@@ -224,8 +224,6 @@ pub enum Source {
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: bool,
-        /// `true` by default.
-        editable: Option<bool>,
     },
     /// A catch-all variant used to emit precise error messages when deserializing.
     CatchAll {
@@ -286,10 +284,7 @@ impl Source {
         if workspace {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
-                    Ok(Some(Source::Workspace {
-                        editable,
-                        workspace: true,
-                    }))
+                    Ok(Some(Source::Workspace { workspace: true }))
                 }
                 RequirementSource::Url { .. } => {
                     Err(SourceError::WorkspacePackageUrl(name.to_string()))

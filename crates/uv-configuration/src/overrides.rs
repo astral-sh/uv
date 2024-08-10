@@ -53,7 +53,7 @@ impl Overrides {
             let Some(extra_expression) = requirement
                 .marker
                 .as_ref()
-                .and_then(|marker| marker.top_level_extra())
+                .and_then(MarkerTree::top_level_extra)
             else {
                 // Case 2: A non-optional dependency with override(s).
                 return Either::Right(Either::Right(overrides.iter().map(Cow::Borrowed)));
@@ -63,17 +63,19 @@ impl Overrides {
             //
             // When the original requirement is an optional dependency, the override(s) need to
             // be optional for the same extra, otherwise we activate extras that should be inactive.
-            Either::Right(Either::Left(overrides.iter().map(|override_requirement| {
-                // Add the extra to the override marker.
-                let mut joint_marker = MarkerTree::Expression(extra_expression.clone());
-                if let Some(marker) = &override_requirement.marker {
-                    joint_marker.and(marker.clone());
-                }
-                Cow::Owned(Requirement {
-                    marker: Some(joint_marker.clone()),
-                    ..override_requirement.clone()
-                })
-            })))
+            Either::Right(Either::Left(overrides.iter().map(
+                move |override_requirement| {
+                    // Add the extra to the override marker.
+                    let mut joint_marker = MarkerTree::expression(extra_expression.clone());
+                    if let Some(marker) = &override_requirement.marker {
+                        joint_marker.and(marker.clone());
+                    }
+                    Cow::Owned(Requirement {
+                        marker: Some(joint_marker.clone()),
+                        ..override_requirement.clone()
+                    })
+                },
+            )))
         })
     }
 }

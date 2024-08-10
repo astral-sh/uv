@@ -9,7 +9,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::{
-    find_python_installations, DiscoveryError, EnvironmentPreference, PythonFetch,
+    find_python_installations, DiscoveryError, EnvironmentPreference, PythonDownloads,
     PythonInstallation, PythonNotFound, PythonPreference, PythonRequest, PythonSource,
 };
 use uv_warnings::warn_user_once;
@@ -32,7 +32,7 @@ pub(crate) async fn list(
     all_versions: bool,
     all_platforms: bool,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
@@ -46,7 +46,7 @@ pub(crate) async fn list(
         let download_request = match kinds {
             PythonListKinds::Installed => None,
             PythonListKinds::Default => {
-                if python_fetch.is_automatic() {
+                if python_downloads.is_automatic() {
                     Some(if all_platforms {
                         PythonDownloadRequest::default()
                     } else {

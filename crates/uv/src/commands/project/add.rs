@@ -15,7 +15,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
-use uv_python::{PythonFetch, PythonPreference, PythonRequest};
+use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
 use uv_types::{BuildIsolation, HashStrategy};
@@ -51,7 +51,7 @@ pub(crate) async fn add(
     python: Option<String>,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     preview: PreviewMode,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -93,7 +93,7 @@ pub(crate) async fn add(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
         python_preference,
-        python_fetch,
+        python_downloads,
         connectivity,
         native_tls,
         cache,
@@ -440,7 +440,7 @@ struct DependencyEdit<'a> {
 #[diagnostic()]
 struct WithHelp {
     /// The header to render in the error message.
-    header: String,
+    header: uv_resolver::NoSolutionHeader,
 
     /// The underlying error.
     #[source]

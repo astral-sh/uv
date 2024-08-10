@@ -17,7 +17,7 @@ pub enum PubGrubSpecifierError {
 pub struct PubGrubSpecifier(Range<Version>);
 
 impl PubGrubSpecifier {
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
         self.0.iter()
     }
 }
@@ -38,7 +38,7 @@ impl From<PubGrubSpecifier> for Range<Version> {
 impl PubGrubSpecifier {
     /// Convert [`VersionSpecifiers`] to a PubGrub-compatible version range, using PEP 440
     /// semantics.
-    pub(crate) fn from_pep440_specifiers(
+    pub fn from_pep440_specifiers(
         specifiers: &VersionSpecifiers,
     ) -> Result<Self, PubGrubSpecifierError> {
         let range = specifiers
@@ -52,7 +52,7 @@ impl PubGrubSpecifier {
 
     /// Convert the [`VersionSpecifier`] to a PubGrub-compatible version range, using PEP 440
     /// semantics.
-    pub(crate) fn from_pep440_specifier(
+    pub fn from_pep440_specifier(
         specifier: &VersionSpecifier,
     ) -> Result<Self, PubGrubSpecifierError> {
         let ranges = match specifier.operator() {
@@ -159,7 +159,7 @@ impl PubGrubSpecifier {
     /// is allowed for projects that declare `requires-python = ">3.13"`.
     ///
     /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
-    pub(crate) fn from_release_specifiers(
+    pub fn from_release_specifiers(
         specifiers: &VersionSpecifiers,
     ) -> Result<Self, PubGrubSpecifierError> {
         let range = specifiers
@@ -182,7 +182,7 @@ impl PubGrubSpecifier {
     /// is allowed for projects that declare `requires-python = ">3.13"`.
     ///
     /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
-    pub(crate) fn from_release_specifier(
+    pub fn from_release_specifier(
         specifier: &VersionSpecifier,
     ) -> Result<Self, PubGrubSpecifierError> {
         let ranges = match specifier.operator() {

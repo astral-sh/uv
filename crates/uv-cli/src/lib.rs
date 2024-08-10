@@ -15,7 +15,7 @@ use uv_configuration::{
     ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
 use uv_normalize::{ExtraName, PackageName};
-use uv_python::{PythonFetch, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 pub mod compat;
@@ -119,9 +119,17 @@ pub struct GlobalArgs {
     )]
     pub python_preference: Option<PythonPreference>,
 
-    /// Whether to automatically download Python when required.
+    /// Allow automatically downloading Python when required.
+    #[arg(global = true, long, help_heading = "Python options", hide = true)]
+    pub allow_python_downloads: bool,
+
+    /// Disable automatic downloads of Python.
     #[arg(global = true, long, help_heading = "Python options")]
-    pub python_fetch: Option<PythonFetch>,
+    pub no_python_downloads: bool,
+
+    /// Deprecated version of [`Self::python_downloads`].
+    #[arg(global = true, long, hide = true)]
+    pub python_fetch: Option<PythonDownloads>,
 
     /// Do not print any output.
     #[arg(global = true, long, short, conflicts_with = "verbose")]
@@ -238,6 +246,7 @@ pub enum Commands {
     /// Manage Python projects.
     #[command(flatten)]
     Project(Box<ProjectCommand>),
+
     /// Run and manage tools provided by Python packages (experimental).
     #[command(
         after_help = "Use `uv help tool` for more details.",
@@ -258,7 +267,7 @@ pub enum Commands {
     ///
     /// When preview is enabled, i.e., via `--preview` or by using a preview
     /// command, uv will download Python if a version cannot be found. This
-    /// behavior can be disabled with the `--python-fetch` option.
+    /// behavior can be disabled with the `--python-downloads` option.
     ///
     /// The `--python` option allows requesting a different interpreter.
     ///
@@ -285,6 +294,11 @@ pub enum Commands {
     /// e.g., if `pypy` is requested, uv will first check if the virtual
     /// environment contains a PyPy interpreter then check if each executable in
     /// the path is a PyPy interpreter.
+    ///
+    /// uv supports discovering CPython, PyPy, and GraalPy interpreters.
+    /// Unsupported interpreters will be skipped during discovery. If an
+    /// unsupported interpreter implementation is requested, uv will exit with
+    /// an error.
     #[clap(verbatim_doc_comment)]
     #[command(
         after_help = "Use `uv help python` for more details.",
@@ -298,6 +312,16 @@ pub enum Commands {
     )]
     Pip(PipNamespace),
     /// Create a virtual environment.
+    ///
+    /// By default, creates a virtual environment named `.venv` in the working
+    /// directory. An alternative path may be provided positionally.
+    ///
+    /// If a virtual environment exists at the target path, it will be removed
+    /// and a new, empty virtual environment will be created.
+    ///
+    /// When using uv, the virtual environment does not need to be activated. uv
+    /// will find a virtual environment (named `.venv`) in the working directory
+    /// or any parent directories.
     #[command(
         alias = "virtualenv",
         alias = "v",
@@ -567,6 +591,19 @@ pub enum ProjectCommand {
     )]
     Remove(RemoveArgs),
     /// Update the project's environment (experimental).
+    ///
+    /// Syncing ensures that all project dependencies are installed and
+    /// up-to-date with the lockfile. Syncing also removes packages that are not
+    /// declared as dependencies of the project.
+    ///
+    /// If the project virtual environment (`.venv`) does not exist, it will be
+    /// created.
+    ///
+    /// The project is re-locked before syncing unless the `--locked` or
+    /// `--frozen` flag is provided.
+    ///
+    /// uv will search for a project in the current directory or any parent
+    /// directory. If a project cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help sync` for more details.",
         after_long_help = ""
@@ -1887,13 +1924,13 @@ pub struct VenvArgs {
 
     /// Provide an alternative prompt prefix for the virtual environment.
     ///
-    /// The default behavior depends on whether the virtual environment path is provided:
-    /// - If provided (`uv venv project`), the prompt is set to the virtual environment's directory name.
-    /// - If not provided (`uv venv`), the prompt is set to the current directory's name.
+    /// By default, the prompt is dependent on whether a path was provided to
+    /// `uv venv`. If provided (e.g, `uv venv project`), the prompt is set to
+    /// the directory name. If not provided (`uv venv`), the prompt is set to
+    /// the current directory's name.
     ///
-    /// Possible values:
-    /// - `.`: Use the current directory name.
-    /// - Any string: Use the given string.
+    /// If "." is provided, the the current directory name will be used
+    /// regardless of whether a path was provided to `uv venv`.
     #[arg(long, verbatim_doc_comment)]
     pub prompt: Option<String>,
 
@@ -1902,7 +1939,7 @@ pub struct VenvArgs {
     /// Unlike `pip`, when a virtual environment is created with `--system-site-packages`, uv will
     /// _not_ take system site packages into account when running commands like `uv pip list` or
     /// `uv pip install`. The `--system-site-packages` flag will provide the virtual environment
-    /// with access to the system site packages directory at runtime, but it will not affect the
+    /// with access to the system site packages directory at runtime, but will not affect the
     /// behavior of uv commands.
     #[arg(long)]
     pub system_site_packages: bool,
@@ -2130,9 +2167,9 @@ pub struct RunArgs {
     ///
     /// Instead of checking if the lockfile is up-to-date, uses the versions in
     /// the lockfile as the source of truth. If the lockfile is missing, uv will
-    /// exit with an error. If the `pyproject.toml` includes new dependencies
-    /// that have not been included in the lockfile yet, they will not be
-    /// present in the environment.
+    /// exit with an error. If the `pyproject.toml` includes changes to
+    /// dependencies that have not been included in the lockfile yet, they will
+    /// not be present in the environment.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2188,15 +2225,13 @@ pub struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the extra group name.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// May be provided more than once.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
-    ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
@@ -2211,18 +2246,31 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// When syncing, make the minimum necessary changes to satisfy the requirements.
+    /// Do not remove extraneous packages.
     ///
-    /// By default, `uv sync` will remove any extraneous packages from the environment, unless
-    /// `--no-build-isolation` is enabled.
+    /// When enabled, uv will make the minimum necessary changes to satisfy the
+    /// requirements.
+    ///
+    /// By default, syncing will remove any extraneous packages from the
+    /// environment, unless `--no-build-isolation` is enabled, in which case
+    /// extra packages are considered necessary for builds.
     #[arg(long)]
     pub no_clean: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or
+    /// needs to be updated, uv will exit with an error.
     #[arg(long, conflicts_with = "frozen")]
     pub locked: bool,
 
-    /// Install without updating the `uv.lock` file.
+    /// Sync without updating the `uv.lock` file.
+    ///
+    /// Instead of checking if the lockfile is up-to-date, uses the versions in
+    /// the lockfile as the source of truth. If the lockfile is missing, uv will
+    /// exit with an error. If the `pyproject.toml` includes changes to dependencies
+    /// that have not been included in the lockfile yet, they will not be
+    /// present in the environment.
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
@@ -2235,7 +2283,13 @@ pub struct SyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Sync a specific package in the workspace.
+    /// Sync for a specific package in the workspace.
+    ///
+    /// The workspace's environment (`.venv`) is updated to reflect the subset
+    /// of dependencies declared by the specified workspace member package.
+    ///
+    /// If not in a workspace, or if the workspace member does not exist, uv
+    /// will exit with an error.
     #[arg(long)]
     pub package: Option<PackageName>,
 
@@ -2346,8 +2400,6 @@ pub struct AddArgs {
     pub raw_sources: bool,
 
     /// Commit to use when adding a dependency from Git.
-    ///
-    ///
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub rev: Option<String>,
 
@@ -2560,7 +2612,9 @@ pub enum ToolCommand {
     #[command(
         hide = true,
         override_usage = "uvx [OPTIONS] <COMMAND>",
-        about = "Run a tool."
+        about = "Run a tool.",
+        after_help = "Use `uv help tool run` for more details.",
+        after_long_help = ""
     )]
     Uvx(ToolRunArgs),
     /// Install a tool.
@@ -2741,9 +2795,6 @@ pub struct ToolUpgradeArgs {
 
     #[command(flatten)]
     pub build: BuildArgs,
-
-    #[command(flatten)]
-    pub refresh: RefreshArgs,
 }
 
 #[derive(Args)]
@@ -2756,15 +2807,49 @@ pub struct PythonNamespace {
 #[derive(Subcommand)]
 pub enum PythonCommand {
     /// List the available Python installations.
+    ///
+    /// By default, installed Python versions and the downloads for latest
+    /// available patch version of each supported Python major version are
+    /// shown.
+    ///
+    /// The displayed versions are filtered by the `--python-preference` option,
+    /// i.e., if using `only-system`, no managed Python versions will be shown.
+    ///
+    /// Use `--all-versions` to view all available patch versions.
+    ///
+    /// Use `--only-installed` to omit available downloads.
     List(PythonListArgs),
 
     /// Download and install Python versions.
+    ///
+    /// Multiple Python versions may be requested.
+    ///
+    /// Supports CPython and PyPy.
+    ///
+    /// CPython distributions are downloaded from the `python-build-standalone` project.
+    ///
+    /// Python versions are installed into the uv Python directory, which can be
+    /// retrieved with `uv python dir`. A `python` executable is not made
+    /// globally available, managed Python versions are only used in uv
+    /// commands or in active virtual environments.
+    ///
+    /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
 
     /// Search for a Python installation.
+    ///
+    /// Displays the path to the Python executable.
+    ///
+    /// See `uv help python` to view supported request formats and details on
+    /// discovery behavior.
     Find(PythonFindArgs),
 
     /// Pin to a specific Python version.
+    ///
+    /// Writes the pinned version to a `.python-version` file, which is then
+    /// read by other uv commands when determining the required Python version.
+    ///
+    /// See `uv help python` to view supported request formats.
     Pin(PythonPinArgs),
 
     /// Show the uv Python installation directory.
@@ -2777,15 +2862,21 @@ pub enum PythonCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonListArgs {
-    /// List all Python versions, including outdated patch versions.
+    /// List all Python versions, including old patch versions.
+    ///
+    /// By default, only the latest patch version is shown for each minor version.
     #[arg(long)]
     pub all_versions: bool,
 
-    /// List Python installations for all platforms.
+    /// List Python downloads for all platforms.
+    ///
+    /// By default, only downloads for the current platform are shown.
     #[arg(long)]
     pub all_platforms: bool,
 
     /// Only show installed Python versions, exclude available downloads.
+    ///
+    /// By default, available downloads for the current platform are shown.
     #[arg(long)]
     pub only_installed: bool,
 }
@@ -2804,6 +2895,9 @@ pub struct PythonInstallArgs {
     pub targets: Vec<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
+    ///
+    /// By default, uv will exit successfully if the version is already
+    /// installed.
     #[arg(long, short, alias = "force")]
     pub reinstall: bool,
 }
@@ -2846,14 +2940,20 @@ pub struct PythonPinArgs {
     /// Write the resolved Python interpreter path instead of the request.
     ///
     /// Ensures that the exact same interpreter is used.
+    ///
+    /// This option is usually not safe to use when committing the
+    /// `.python-version` file to version control.
     #[arg(long, overrides_with("resolved"))]
     pub resolved: bool,
 
     #[arg(long, overrides_with("no_resolved"), hide = true)]
     pub no_resolved: bool,
 
-    /// Avoid validating the Python pin against the workspace in the current directory or any parent
-    /// directory.
+    /// Avoid validating the Python pin is compatible with the workspace.
+    ///
+    /// By default, a workspace is discovered in the current directory or any parent
+    /// directory. If a workspace is found, the Python pin is validated against
+    /// the workspace's `requires-python` constraint.
     #[arg(long)]
     pub no_workspace: bool,
 }

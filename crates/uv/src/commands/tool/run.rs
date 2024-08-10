@@ -4,15 +4,16 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::{bail, Context, Result};
+use anstream::eprint;
+use anyhow::{bail, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pypi_types::Requirement;
 use tokio::process::Command;
 use tracing::{debug, warn};
 
 use distribution_types::{Name, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
+use pypi_types::Requirement;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -20,19 +21,19 @@ use uv_configuration::{Concurrency, PreviewMode};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonFetch, PythonInstallation, PythonPreference,
-    PythonRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::{warn_user, warn_user_once};
 
-use crate::commands::reporters::PythonDownloadReporter;
-
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::project::resolve_names;
+use crate::commands::pip::operations;
+use crate::commands::project::{resolve_names, ProjectError};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{
     project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
 };
@@ -70,13 +71,13 @@ pub(crate) async fn run(
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<ExitStatus> {
+) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`{invocation_source}` is experimental and may change without warning");
     }
@@ -98,7 +99,7 @@ pub(crate) async fn run(
     };
 
     // Get or create a compatible environment in which to execute the tool.
-    let (from, environment) = get_or_create_environment(
+    let result = get_or_create_environment(
         &from,
         with,
         show_resolution,
@@ -107,14 +108,27 @@ pub(crate) async fn run(
         isolated,
         preview,
         python_preference,
-        python_fetch,
+        python_downloads,
         connectivity,
         concurrency,
         native_tls,
         cache,
         printer,
     )
-    .await?;
+    .await;
+
+    let (from, environment) = match result {
+        Ok(resolution) => resolution,
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::NoSolution(err),
+        ))) => {
+            let report =
+                miette::Report::msg(format!("{err}")).context(err.header().with_context("tool"));
+            eprint!("{report:?}");
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     // TODO(zanieb): Determine the executable command via the package entry points
     let executable = target;
@@ -218,7 +232,7 @@ pub(crate) async fn run(
 fn get_entrypoints(
     from: &PackageName,
     site_packages: &SitePackages,
-) -> Result<Vec<(String, PathBuf)>> {
+) -> anyhow::Result<Vec<(String, PathBuf)>> {
     let installed = site_packages.get_packages(from);
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
@@ -280,6 +294,42 @@ fn warn_executable_not_provided_by_package(
     }
 }
 
+/// Parse a target into a command name and a requirement.
+fn parse_target(target: &OsString) -> anyhow::Result<(Cow<OsString>, Cow<str>)> {
+    let Some(target_str) = target.to_str() else {
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+    };
+
+    // e.g. uv, no special handling
+    let Some((name, version)) = target_str.split_once('@') else {
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    };
+
+    // e.g. `uv@`, warn and treat the whole thing as the command
+    if version.is_empty() {
+        debug!("Ignoring empty version request in command");
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    }
+
+    // e.g. ignore `git+https://github.com/uv/uv.git@main`
+    if PackageName::from_str(name).is_err() {
+        debug!("Ignoring non-package name `{name}` in command");
+        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    }
+
+    // e.g. `uv@0.1.0`, convert to `uv==0.1.0`
+    if let Ok(version) = Version::from_str(version) {
+        return Ok((
+            Cow::Owned(OsString::from(name)),
+            Cow::Owned(format!("{name}=={version}")),
+        ));
+    }
+
+    // e.g. `uv@invalid`, warn and treat the whole thing as the command
+    debug!("Ignoring invalid version request `{version}` in command");
+    Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)))
+}
+
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
@@ -293,13 +343,13 @@ async fn get_or_create_environment(
     isolated: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<(Requirement, PythonEnvironment)> {
+) -> Result<(Requirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls);
@@ -309,11 +359,11 @@ async fn get_or_create_environment(
     let python_request = python.map(PythonRequest::parse);
 
     // Discover an interpreter.
-    let interpreter = PythonInstallation::find_or_fetch(
+    let interpreter = PythonInstallation::find_or_download(
         python_request.clone(),
         EnvironmentPreference::OnlySystem,
         python_preference,
-        python_fetch,
+        python_downloads,
         &client_builder,
         cache,
         Some(&reporter),
@@ -444,40 +494,4 @@ async fn get_or_create_environment(
     .await?;
 
     Ok((from, environment.into()))
-}
-
-/// Parse a target into a command name and a requirement.
-fn parse_target(target: &OsString) -> Result<(Cow<OsString>, Cow<str>)> {
-    let Some(target_str) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
-    };
-
-    // e.g. uv, no special handling
-    let Some((name, version)) = target_str.split_once('@') else {
-        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
-    };
-
-    // e.g. `uv@`, warn and treat the whole thing as the command
-    if version.is_empty() {
-        debug!("Ignoring empty version request in command");
-        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
-    }
-
-    // e.g. ignore `git+https://github.com/uv/uv.git@main`
-    if PackageName::from_str(name).is_err() {
-        debug!("Ignoring non-package name `{name}` in command");
-        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
-    }
-
-    // e.g. `uv@0.1.0`, convert to `uv==0.1.0`
-    if let Ok(version) = Version::from_str(version) {
-        return Ok((
-            Cow::Owned(OsString::from(name)),
-            Cow::Owned(format!("{name}=={version}")),
-        ));
-    }
-
-    // e.g. `uv@invalid`, warn and treat the whole thing as the command
-    debug!("Ignoring invalid version request `{version}` in command");
-    Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)))
 }

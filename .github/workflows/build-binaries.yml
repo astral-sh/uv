@@ -577,6 +577,7 @@ jobs:
           - target: powerpc64le-unknown-linux-musl
             arch: ppc64le
             toolchain: nightly
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
@@ -592,7 +593,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
-          args: --release --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
+          args: ${{ matrix.platform.arch == 'ppc64le' && '--profile release-no-lto' || '--release'}} --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || 'stable' }}
       - uses: uraimo/run-on-arch-action@v2
@@ -636,10 +637,11 @@ jobs:
           TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+          PROFILE="${{ matrix.platform.arch == 'ppc64le' && 'release-no-lto' || 'release' }}"
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
-          cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
+          cp target/$TARGET/$PROFILE/uv $ARCHIVE_NAME/uv
+          cp target/$TARGET/$PROFILE/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"

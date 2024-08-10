@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use distribution_types::IndexUrl;
 use install_wheel_rs::linker::LinkMode;
 use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, TargetTriple};
-use uv_python::{PythonFetch, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
-use crate::{FilesystemOptions, PipOptions};
+use crate::{FilesystemOptions, Options, PipOptions};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.
@@ -32,6 +32,16 @@ impl Combine for Option<FilesystemOptions> {
             (Some(a), Some(b)) => Some(FilesystemOptions(
                 a.into_options().combine(b.into_options()),
             )),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<Options> {
+    /// Combine the options used in two [`Options`]s. Retains the root of `self`.
+    fn combine(self, other: Option<Options>) -> Option<Options> {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
         }
     }
@@ -70,7 +80,7 @@ impl_combine_or!(ResolutionMode);
 impl_combine_or!(String);
 impl_combine_or!(TargetTriple);
 impl_combine_or!(PythonPreference);
-impl_combine_or!(PythonFetch);
+impl_combine_or!(PythonDownloads);
 impl_combine_or!(bool);
 
 impl<T> Combine for Option<Vec<T>> {

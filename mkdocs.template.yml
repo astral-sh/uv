@@ -82,9 +82,9 @@ extra:
 nav:
   - Introduction: index.md
   - Getting started:
-      - Installation: installation.md
-      - First steps: first-steps.md
-      - Features: features.md
+      - Installation: getting-started/installation.md
+      - First steps: getting-started/first-steps.md
+      - Features: getting-started/features.md
   - Guides:
       - guides/index.md
       - Installing Python: guides/install-python.md
@@ -124,5 +124,5 @@ nav:
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Resolver: reference/resolver-internals.md
-      - Versioning: versioning.md
-      - Platform support: platforms.md
+      - Versioning: reference/versioning.md
+      - Platform support: reference/platforms.md

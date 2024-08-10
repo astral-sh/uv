@@ -66,4 +66,4 @@ $ uv pip --version  # Can be used with a subcommand
 ## Next steps
 
 Now that you've confirmed uv is installed and know how to get help, check out an
-[overview of features](./features.md) or jump to the [guides](./guides/index.md) to start using uv.
+[overview of features](./features.md) or jump to the [guides](../guides/index.md) to start using uv.

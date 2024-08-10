@@ -5,8 +5,7 @@ use uv_configuration::{PreviewMode, SourceStrategy};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
-use crate::metadata::lowering::lower_requirement;
-use crate::metadata::MetadataError;
+use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
 
 #[derive(Debug, Clone)]
@@ -91,7 +90,7 @@ impl RequiresDist {
                 .cloned()
                 .map(|requirement| {
                     let requirement_name = requirement.name.clone();
-                    lower_requirement(
+                    LoweredRequirement::from_requirement(
                         requirement,
                         &metadata.name,
                         project_workspace.project_root(),
@@ -99,6 +98,7 @@ impl RequiresDist {
                         project_workspace.workspace(),
                         preview_mode,
                     )
+                    .map(LoweredRequirement::into_inner)
                     .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -114,7 +114,7 @@ impl RequiresDist {
             .into_iter()
             .map(|requirement| {
                 let requirement_name = requirement.name.clone();
-                lower_requirement(
+                LoweredRequirement::from_requirement(
                     requirement,
                     &metadata.name,
                     project_workspace.project_root(),
@@ -122,6 +122,7 @@ impl RequiresDist {
                     project_workspace.workspace(),
                     preview_mode,
                 )
+                .map(LoweredRequirement::into_inner)
                 .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
             })
             .collect::<Result<_, _>>()?;

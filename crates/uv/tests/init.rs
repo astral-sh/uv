@@ -704,6 +704,47 @@ fn init_no_workspace() -> Result<()> {
     Ok(())
 }
 
+/// Warn if the user provides `--no-workspace` outside of a workspace.
+#[test]
+fn init_no_workspace_warning() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--no-workspace").arg("--name").arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv init` is experimental and may change without warning
+    warning: `--no-workspace` was provided, but no workspace was found
+    Initialized project `project`
+    "###);
+
+    let workspace = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 #[test]
 fn init_project_inside_project() -> Result<()> {
     let context = TestContext::new("3.12");

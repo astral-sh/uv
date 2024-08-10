@@ -56,7 +56,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -192,7 +192,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -329,7 +329,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -498,7 +498,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -636,7 +636,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -760,7 +760,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -921,7 +921,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -1082,7 +1082,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -1288,7 +1288,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -1448,7 +1448,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -1578,7 +1578,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -1736,7 +1736,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -1918,7 +1918,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -2038,7 +2038,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -2158,7 +2158,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -2280,7 +2280,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -2421,7 +2421,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -2444,6 +2444,39 @@ fn resolve_tool() -> anyhow::Result<()> {
                 },
             ),
         ),
+        options: ResolverInstallerOptions {
+            index_url: None,
+            extra_index_url: None,
+            no_index: None,
+            find_links: None,
+            index_strategy: None,
+            keyring_provider: None,
+            resolution: Some(
+                LowestDirect,
+            ),
+            prerelease: None,
+            config_settings: None,
+            no_build_isolation: None,
+            no_build_isolation_package: None,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            link_mode: Some(
+                Clone,
+            ),
+            compile_bytecode: None,
+            no_sources: None,
+            upgrade: None,
+            upgrade_package: None,
+            reinstall: None,
+            reinstall_package: None,
+            no_build: None,
+            no_build_package: None,
+            no_binary: None,
+            no_binary_package: None,
+        },
         settings: ResolverInstallerSettings {
             index_locations: IndexLocations {
                 index: None,
@@ -2534,7 +2567,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -2682,7 +2715,7 @@ fn resolve_both() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -2845,7 +2878,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -3083,7 +3116,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {
@@ -3206,7 +3239,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         show_settings: true,
         preview: Disabled,
         python_preference: OnlySystem,
-        python_fetch: Automatic,
+        python_downloads: Automatic,
         no_progress: false,
     }
     CacheSettings {

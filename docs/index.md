@@ -46,12 +46,12 @@ $ curl -LsSf https://astral.sh/uv/install.sh | sh
 $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Then, check out the [first steps](./first-steps.md) or read on for a brief overview.
+Then, check out the [first steps](./getting-started/first-steps.md) or read on for a brief overview.
 
 !!! tip
 
     uv may also be installed with pip, Homebrew, and more. See all of the methods on the
-    [installation page](./installation.md).
+    [installation page](./getting-started/installation.md).
 
 ## Project management
 
@@ -203,5 +203,5 @@ See the [pip interface documentation](./pip/index.md) to get started.
 
 ## Learn more
 
-See the [first steps](./first-steps.md) or jump straight to the [guides](./guides/index.md) to start
-using uv.
+See the [first steps](./getting-started/first-steps.md) or jump straight to the
+[guides](./guides/index.md) to start using uv.

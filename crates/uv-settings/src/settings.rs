@@ -1,6 +1,6 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
@@ -11,7 +11,7 @@ use uv_configuration::{
 };
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
-use uv_python::{PythonFetch, PythonPreference, PythonVersion};
+use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
@@ -67,6 +67,17 @@ pub struct Options {
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
     managed: serde::de::IgnoredAny,
+}
+
+impl Options {
+    /// Construct an [`Options`] with the given global and top-level settings.
+    pub fn simple(globals: GlobalOptions, top_level: ResolverInstallerOptions) -> Self {
+        Self {
+            globals,
+            top_level,
+            ..Default::default()
+        }
+    }
 }
 
 /// Global settings, relevant to all invocations.
@@ -143,16 +154,16 @@ pub struct GlobalOptions {
         possible_values = true
     )]
     pub python_preference: Option<PythonPreference>,
-    /// Whether to automatically download Python when required.
+    /// Whether to allow Python downloads.
     #[option(
         default = "\"automatic\"",
         value_type = "str",
         example = r#"
-            python-fetch = "manual"
+            python-downloads = "manual"
         "#,
         possible_values = true
     )]
-    pub python_fetch: Option<PythonFetch>,
+    pub python_downloads: Option<PythonDownloads>,
 }
 
 /// Settings relevant to all installer operations.
@@ -212,7 +223,9 @@ pub struct ResolverOptions {
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
+)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverInstallerOptions {
@@ -1240,6 +1253,93 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             no_binary_package: value.no_binary_package,
             no_build_isolation: value.no_build_isolation,
             no_sources: value.no_sources,
+        }
+    }
+}
+
+/// The options persisted alongside an installed tool.
+///
+/// A mirror of [`ResolverInstallerOptions`], without upgrades and reinstalls, which shouldn't be
+/// persisted in a tool receipt.
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
+)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ToolOptions {
+    pub index_url: Option<IndexUrl>,
+    pub extra_index_url: Option<Vec<IndexUrl>>,
+    pub no_index: Option<bool>,
+    pub find_links: Option<Vec<FlatIndexLocation>>,
+    pub index_strategy: Option<IndexStrategy>,
+    pub keyring_provider: Option<KeyringProviderType>,
+    pub resolution: Option<ResolutionMode>,
+    pub prerelease: Option<PrereleaseMode>,
+    pub config_settings: Option<ConfigSettings>,
+    pub no_build_isolation: Option<bool>,
+    pub no_build_isolation_package: Option<Vec<PackageName>>,
+    pub exclude_newer: Option<ExcludeNewer>,
+    pub link_mode: Option<LinkMode>,
+    pub compile_bytecode: Option<bool>,
+    pub no_sources: Option<bool>,
+    pub no_build: Option<bool>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_binary: Option<bool>,
+    pub no_binary_package: Option<Vec<PackageName>>,
+}
+
+impl From<ResolverInstallerOptions> for ToolOptions {
+    fn from(value: ResolverInstallerOptions) -> Self {
+        Self {
+            index_url: value.index_url,
+            extra_index_url: value.extra_index_url,
+            no_index: value.no_index,
+            find_links: value.find_links,
+            index_strategy: value.index_strategy,
+            keyring_provider: value.keyring_provider,
+            resolution: value.resolution,
+            prerelease: value.prerelease,
+            config_settings: value.config_settings,
+            no_build_isolation: value.no_build_isolation,
+            no_build_isolation_package: value.no_build_isolation_package,
+            exclude_newer: value.exclude_newer,
+            link_mode: value.link_mode,
+            compile_bytecode: value.compile_bytecode,
+            no_sources: value.no_sources,
+            no_build: value.no_build,
+            no_build_package: value.no_build_package,
+            no_binary: value.no_binary,
+            no_binary_package: value.no_binary_package,
+        }
+    }
+}
+
+impl From<ToolOptions> for ResolverInstallerOptions {
+    fn from(value: ToolOptions) -> Self {
+        Self {
+            index_url: value.index_url,
+            extra_index_url: value.extra_index_url,
+            no_index: value.no_index,
+            find_links: value.find_links,
+            index_strategy: value.index_strategy,
+            keyring_provider: value.keyring_provider,
+            resolution: value.resolution,
+            prerelease: value.prerelease,
+            config_settings: value.config_settings,
+            no_build_isolation: value.no_build_isolation,
+            no_build_isolation_package: value.no_build_isolation_package,
+            exclude_newer: value.exclude_newer,
+            link_mode: value.link_mode,
+            compile_bytecode: value.compile_bytecode,
+            no_sources: value.no_sources,
+            upgrade: None,
+            upgrade_package: None,
+            reinstall: None,
+            reinstall_package: None,
+            no_build: value.no_build,
+            no_build_package: value.no_build_package,
+            no_binary: value.no_binary,
+            no_binary_package: value.no_binary_package,
         }
     }
 }

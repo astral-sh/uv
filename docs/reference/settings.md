@@ -693,16 +693,17 @@ Whether to enable experimental, preview features.
 
 ---
 
-#### [`python-fetch`](#python-fetch) {: #python-fetch }
+#### [`python-downloads`](#python-downloads) {: #python-downloads }
 
-Whether to automatically download Python when required.
+Whether to allow Python downloads.
 
 **Default value**: `"automatic"`
 
 **Possible values**:
 
-- `"automatic"`: Automatically fetch managed Python installations when needed
-- `"manual"`: Do not automatically fetch managed Python installations; require explicit installation
+- `"automatic"`: Automatically download managed Python installations when needed
+- `"manual"`: Do not automatically download managed Python installations; require explicit installation
+- `"never"`: Do not ever allow Python downloads
 
 **Example usage**:
 
@@ -710,13 +711,13 @@ Whether to automatically download Python when required.
 
     ```toml
     [tool.uv]
-    python-fetch = "manual"
+    python-downloads = "manual"
     ```
 === "uv.toml"
 
     ```toml
     
-    python-fetch = "manual"
+    python-downloads = "manual"
     ```
 
 ---

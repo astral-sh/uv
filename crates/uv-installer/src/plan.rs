@@ -269,7 +269,7 @@ impl<'a> Planner<'a> {
                     lock_path,
                 } => {
                     // Store the canonicalized path, which also serves to validate that it exists.
-                    let path = match install_path.canonicalize() {
+                    let install_path = match install_path.canonicalize() {
                         Ok(path) => path,
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                             return Err(Error::NotFound(url.to_url()).into());
@@ -280,7 +280,7 @@ impl<'a> Planner<'a> {
                     let sdist = DirectorySourceDist {
                         name: requirement.name.clone(),
                         url: url.clone(),
-                        install_path: path,
+                        install_path,
                         lock_path: lock_path.clone(),
                         editable: *editable,
                     };
@@ -306,7 +306,7 @@ impl<'a> Planner<'a> {
                     lock_path,
                 } => {
                     // Store the canonicalized path, which also serves to validate that it exists.
-                    let path = match install_path.canonicalize() {
+                    let install_path = match install_path.canonicalize() {
                         Ok(path) => path,
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                             return Err(Error::NotFound(url.to_url()).into());
@@ -330,13 +330,14 @@ impl<'a> Planner<'a> {
                             let wheel = PathBuiltDist {
                                 filename,
                                 url: url.clone(),
-                                path,
+                                install_path,
+                                lock_path: lock_path.clone(),
                             };
 
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
                                 "A path dependency is incompatible with the current platform: {}",
-                                wheel.path.user_display()
+                                wheel.lock_path.user_display()
                             );
                             }
 
@@ -357,7 +358,7 @@ impl<'a> Planner<'a> {
                                 .entry(format!("{}.rev", wheel.filename.stem()));
 
                             if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
-                                let timestamp = ArchiveTimestamp::from_file(&wheel.path)?;
+                                let timestamp = ArchiveTimestamp::from_file(&wheel.install_path)?;
                                 if pointer.is_up_to_date(timestamp) {
                                     let archive = pointer.into_archive();
                                     if archive.satisfies(hasher.get(&wheel)) {
@@ -381,7 +382,7 @@ impl<'a> Planner<'a> {
                             let sdist = PathSourceDist {
                                 name: requirement.name.clone(),
                                 url: url.clone(),
-                                install_path: path,
+                                install_path,
                                 lock_path: lock_path.clone(),
                                 ext: *ext,
                             };

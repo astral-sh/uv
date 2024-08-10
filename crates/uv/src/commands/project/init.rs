@@ -11,7 +11,7 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::PreviewMode;
 use uv_fs::{absolutize_path, Simplified, CWD};
 use uv_python::{
-    EnvironmentPreference, PythonFetch, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
     VersionRequest,
 };
 use uv_resolver::RequiresPython;
@@ -35,7 +35,7 @@ pub(crate) async fn init(
     no_workspace: bool,
     preview: PreviewMode,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
@@ -86,7 +86,7 @@ pub(crate) async fn init(
             python,
             no_workspace,
             python_preference,
-            python_fetch,
+            python_downloads,
             connectivity,
             native_tls,
             cache,
@@ -160,17 +160,14 @@ async fn init_project(
     python: Option<String>,
     no_workspace: bool,
     python_preference: PythonPreference,
-    python_fetch: PythonFetch,
+    python_downloads: PythonDownloads,
     connectivity: Connectivity,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
-    let workspace = if no_workspace {
-        None
-    } else {
-        // Attempt to find a workspace root.
+    let workspace = {
         let parent = path.parent().expect("Project path has no parent");
         match Workspace::discover(
             parent,
@@ -186,6 +183,17 @@ async fn init_project(
             Err(WorkspaceError::NonWorkspace(_)) => None,
             Err(err) => return Err(err.into()),
         }
+    };
+
+    // Ignore the current workspace, if `--no-workspace` was provided.
+    let workspace = if no_workspace {
+        // If the user runs with `--no-workspace` and we can't find a workspace, warn.
+        if workspace.is_none() {
+            warn_user_once!("`--no-workspace` was provided, but no workspace was found");
+        }
+        None
+    } else {
+        workspace
     };
 
     // Add a `requires-python` field to the `pyproject.toml`.
@@ -213,11 +221,11 @@ async fn init_project(
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
                     .native_tls(native_tls);
-                let interpreter = PythonInstallation::find_or_fetch(
+                let interpreter = PythonInstallation::find_or_download(
                     Some(request),
                     EnvironmentPreference::Any,
                     python_preference,
-                    python_fetch,
+                    python_downloads,
                     &client_builder,
                     cache,
                     Some(&reporter),
@@ -240,11 +248,11 @@ async fn init_project(
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
             .native_tls(native_tls);
-        let interpreter = PythonInstallation::find_or_fetch(
+        let interpreter = PythonInstallation::find_or_download(
             Some(request),
             EnvironmentPreference::Any,
             python_preference,
-            python_fetch,
+            python_downloads,
             &client_builder,
             cache,
             Some(&reporter),
