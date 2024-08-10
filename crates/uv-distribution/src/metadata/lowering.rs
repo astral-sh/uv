@@ -198,7 +198,6 @@ pub(crate) fn lower_requirement(
         },
         Source::Workspace {
             workspace: is_workspace,
-            editable,
         } => {
             if !is_workspace {
                 return Err(LoweringError::WorkspaceFalse);
@@ -238,7 +237,7 @@ pub(crate) fn lower_requirement(
                 install_path: member.root().clone(),
                 lock_path: relative_to_main_workspace,
                 url,
-                editable: editable.unwrap_or(true),
+                editable: true,
             }
         }
         Source::CatchAll { .. } => {
