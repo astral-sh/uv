@@ -12,7 +12,7 @@ use pep508_rs::RequirementOrigin;
 use pypi_types::Requirement;
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
-use uv_fs::Simplified;
+use uv_fs::{absolutize_path, Simplified};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
@@ -151,12 +151,13 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// dependencies.
     async fn resolve_requires_dist(&self, path: &Path) -> Result<RequiresDist> {
         // Convert to a buildable source.
-        let source_tree = fs_err::canonicalize(path).with_context(|| {
+        let source_tree = absolutize_path(path).with_context(|| {
             format!(
                 "Failed to canonicalize path to source tree: {}",
                 path.user_display()
             )
         })?;
+        println!("source_tree: {:?}", source_tree);
         let source_tree = source_tree.parent().ok_or_else(|| {
             anyhow::anyhow!(
                 "The file `{}` appears to be a `pyproject.toml`, `setup.py`, or `setup.cfg` file, which must be in a directory",

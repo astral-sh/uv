@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_fs::{normalize_absolute_path, normalize_url_path};
+use uv_fs::{normalize_absolute_path, normalize_url_path, Simplified};
 
 use crate::Pep508Url;
 
@@ -40,6 +40,8 @@ impl VerbatimUrl {
         let path = normalize_absolute_path(path)
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
+        let path = path.simple_canonicalize().unwrap();
+
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
 
@@ -51,6 +53,10 @@ impl VerbatimUrl {
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
+
+        println!("from_path");
+        println!("path: {:?}", path);
+        println!("url: {:?}", url);
 
         Ok(Self { url, given: None })
     }
@@ -81,6 +87,8 @@ impl VerbatimUrl {
         let path = normalize_absolute_path(&path)
             .map_err(|err| VerbatimUrlError::Normalization(path.clone(), err))?;
 
+        let path = path.simple_canonicalize().unwrap();
+
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
 
@@ -92,6 +100,10 @@ impl VerbatimUrl {
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
+
+        println!("parse_path");
+        println!("path: {:?}", path);
+        println!("url: {:?}", url);
 
         Ok(Self { url, given: None })
     }
@@ -112,6 +124,8 @@ impl VerbatimUrl {
             return Err(VerbatimUrlError::WorkingDirectory(path));
         };
 
+        let path = path.simple_canonicalize().unwrap();
+
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
 
@@ -123,6 +137,10 @@ impl VerbatimUrl {
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
+
+        println!("parse_absolute_path");
+        println!("path: {:?}", path);
+        println!("url: {:?}", url);
 
         Ok(Self { url, given: None })
     }
@@ -240,6 +258,8 @@ impl Pep508Url for VerbatimUrl {
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                     let path = normalize_url_path(path);
 
+                    println!("Pep508Url: {:?}", path);
+
                     #[cfg(feature = "non-pep508-extensions")]
                     if let Some(working_dir) = working_dir {
                         return Ok(VerbatimUrl::parse_path(path.as_ref(), working_dir)?
@@ -272,6 +292,7 @@ impl Pep508Url for VerbatimUrl {
             }
         } else {
             // Ex) `../editable/`
+            println!("Pep508Url editable : {:?}", expanded.as_ref());
             #[cfg(feature = "non-pep508-extensions")]
             if let Some(working_dir) = working_dir {
                 return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)?

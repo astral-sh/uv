@@ -60,6 +60,7 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         path: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, Self::Err> {
+        println!("UnnamedRequirementUrl: {:?}", path.as_ref());
         let verbatim = VerbatimUrl::parse_path(&path, &working_dir)?;
         let verbatim_path = verbatim.as_path()?;
         let is_dir = if let Ok(metadata) = verbatim_path.metadata() {

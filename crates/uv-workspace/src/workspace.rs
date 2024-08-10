@@ -883,9 +883,13 @@ impl ProjectWorkspace {
         project_pyproject_toml: &PyProjectToml,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Self, WorkspaceError> {
+        println!("install_path: {:?}", install_path);
+
         let project_path = absolutize_path(install_path)
             .map_err(WorkspaceError::Normalize)?
             .to_path_buf();
+
+        println!("project_path: {:?}", project_path);
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml

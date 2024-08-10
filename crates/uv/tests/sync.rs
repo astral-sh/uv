@@ -682,12 +682,7 @@ fn sync_build_isolation_package() -> Result<()> {
 /// Test that relative wheel paths are correctly preserved.
 #[test]
 fn sync_relative_wheel() -> Result<()> {
-    // TODO(charlie): On Windows, this test currently prepares two packages (vs. one of Unix). This
-    // is due to an error in path canonicalization, and GitHub Actions on Windows have a symlink
-    // in the path.
-    //
-    // See: https://github.com/astral-sh/uv/issues/5979
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = TestContext::new("3.12");
 
     let requirements = r#"[project]
     name = "relative_wheel"
@@ -719,7 +714,7 @@ fn sync_relative_wheel() -> Result<()> {
         context.temp_dir.join("wheels/ok-1.0.0-py3-none-any.whl"),
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.sync().arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

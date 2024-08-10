@@ -263,6 +263,8 @@ fn path_source(
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let path = path.as_ref();
+    println!("path_source: {:?}", path);
+    println!("project_dir: {:?}", project_dir);
     let url = VerbatimUrl::parse_path(path, project_dir)?.with_given(path.to_string_lossy());
     let absolute_path = path
         .to_path_buf()
