@@ -185,7 +185,7 @@ impl ParsedUrl {
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedPathUrl {
     pub url: Url,
-    /// The resolved, absolute path to the distribution which we use for installing.
+    /// The absolute, canonicalized path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The absolute path or path relative to the workspace root pointing to the distribution
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -219,7 +219,7 @@ impl ParsedPathUrl {
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedDirectoryUrl {
     pub url: Url,
-    /// The resolved, absolute path to the distribution which we use for installing.
+    /// The absolute, canonicalized path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The absolute path or path relative to the workspace root pointing to the distribution
     /// which we use for locking. Unlike `given` on the verbatim URL all environment variables

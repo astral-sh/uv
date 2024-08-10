@@ -313,7 +313,7 @@ pub enum RequirementSource {
     /// be a binary distribution (a `.whl` file) or a source distribution archive (a `.zip` or
     /// `.tar.gz` file).
     Path {
-        /// The resolved, absolute path to the distribution which we use for installing.
+        /// The absolute, canonicalized path to the distribution which we use for installing.
         install_path: PathBuf,
         /// The absolute path or path relative to the workspace root pointing to the distribution
         /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
@@ -328,7 +328,7 @@ pub enum RequirementSource {
     /// A local source tree (a directory with a pyproject.toml in, or a legacy
     /// source distribution with only a setup.py but non pyproject.toml in it).
     Directory {
-        /// The resolved, absolute path to the distribution which we use for installing.
+        /// The absolute, canonicalized path to the distribution which we use for installing.
         install_path: PathBuf,
         /// The absolute path or path relative to the workspace root pointing to the distribution
         /// which we use for locking. Unlike `given` on the verbatim URL all environment variables
