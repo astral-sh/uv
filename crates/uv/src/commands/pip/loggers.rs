@@ -225,10 +225,18 @@ impl InstallLogger for SummaryInstallLogger {
     }
 }
 
-/// A logger that only shows installs and uninstalls, the minimal logging necessary to understand
-/// environment changes.
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct UpgradeInstallLogger;
+/// A logger that shows special output for the modification of the given target.
+#[derive(Debug, Clone)]
+pub(crate) struct UpgradeInstallLogger {
+    target: PackageName,
+}
+
+impl UpgradeInstallLogger {
+    /// Create a new logger for the given target.
+    pub(crate) fn new(target: PackageName) -> Self {
+        Self { target }
+    }
+}
 
 impl InstallLogger for UpgradeInstallLogger {
     fn on_audit(
@@ -300,50 +308,11 @@ impl InstallLogger for UpgradeInstallLogger {
             },
         );
 
-        // Summarize the changes.
-        for name in removals
-            .keys()
-            .chain(additions.keys())
-            .collect::<BTreeSet<_>>()
-        {
-            match (removals.get(name), additions.get(name)) {
-                (Some(removals), Some(additions)) => {
-                    if removals == additions {
-                        let reinstalls = additions
-                            .iter()
-                            .map(|version| format!("v{version}"))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        writeln!(
-                            printer.stderr(),
-                            "{} {} {}",
-                            "Reinstalled".yellow().bold(),
-                            name,
-                            reinstalls
-                        )?;
-                    } else {
-                        let removals = removals
-                            .iter()
-                            .map(|version| format!("v{version}"))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        let additions = additions
-                            .iter()
-                            .map(|version| format!("v{version}"))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        writeln!(
-                            printer.stderr(),
-                            "{} {} {} -> {}",
-                            "Updated".green().bold(),
-                            name,
-                            removals,
-                            additions
-                        )?;
-                    }
-                }
-                (Some(removals), None) => {
-                    let removals = removals
+        // Summarize the change for the target.
+        match (removals.get(&self.target), additions.get(&self.target)) {
+            (Some(removals), Some(additions)) => {
+                if removals == additions {
+                    let reinstalls = additions
                         .iter()
                         .map(|version| format!("v{version}"))
                         .collect::<Vec<_>>()
@@ -351,12 +320,16 @@ impl InstallLogger for UpgradeInstallLogger {
                     writeln!(
                         printer.stderr(),
                         "{} {} {}",
-                        "Removed".red().bold(),
-                        name,
-                        removals
+                        "Reinstalled".yellow().bold(),
+                        &self.target,
+                        reinstalls
                     )?;
-                }
-                (None, Some(additions)) => {
+                } else {
+                    let removals = removals
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     let additions = additions
                         .iter()
                         .map(|version| format!("v{version}"))
@@ -364,17 +337,55 @@ impl InstallLogger for UpgradeInstallLogger {
                         .join(", ");
                     writeln!(
                         printer.stderr(),
-                        "{} {} {}",
-                        "Added".green().bold(),
-                        name,
+                        "{} {} {} -> {}",
+                        "Updated".green().bold(),
+                        &self.target,
+                        removals,
                         additions
                     )?;
                 }
-                (None, None) => {
-                    unreachable!("The key `{name}` should exist in at least one of the maps");
-                }
+            }
+            (Some(removals), None) => {
+                let removals = removals
+                    .iter()
+                    .map(|version| format!("v{version}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {} {}",
+                    "Removed".red().bold(),
+                    &self.target,
+                    removals
+                )?;
+            }
+            (None, Some(additions)) => {
+                let additions = additions
+                    .iter()
+                    .map(|version| format!("v{version}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {} {}",
+                    "Added".green().bold(),
+                    &self.target,
+                    additions
+                )?;
+            }
+            (None, None) => {
+                writeln!(
+                    printer.stderr(),
+                    "{} {} {}",
+                    "Modified".dimmed(),
+                    &self.target.dimmed().bold(),
+                    "environment".dimmed()
+                )?;
             }
         }
+
+        // Follow-up with a detailed summary of all changes.
+        DefaultInstallLogger.on_complete(installed, reinstalled, uninstalled, printer)?;
 
         Ok(())
     }

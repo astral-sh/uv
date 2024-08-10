@@ -129,7 +129,7 @@ pub(crate) async fn upgrade(
             &settings,
             &state,
             Box::new(SummaryResolveLogger),
-            Box::new(UpgradeInstallLogger),
+            Box::new(UpgradeInstallLogger::new(name.clone())),
             preview,
             connectivity,
             concurrency,

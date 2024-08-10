@@ -51,7 +51,9 @@ fn test_tool_upgrade_name() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.14.0
-    Removed pytz v2018.5
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
     Installed 1 executable: pybabel
     "###);
 }
@@ -122,9 +124,13 @@ fn test_tool_upgrade_all() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.14.0
-    Removed pytz v2018.5
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
     Installed 1 executable: pybabel
     Updated python-dotenv v0.10.2.post2 -> v1.0.1
+     - python-dotenv==0.10.2.post2
+     + python-dotenv==1.0.1
     Installed 1 executable: dotenv
     "###);
 }
@@ -230,6 +236,8 @@ fn test_tool_upgrade_settings() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated black v23.1.0 -> v24.3.0
+     - black==23.1.0
+     + black==24.3.0
     Installed 2 executables: black, blackd
     "###);
 }
@@ -279,7 +287,10 @@ fn test_tool_upgrade_respect_constraints() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.9.1
-    Updated pytz v2018.5 -> v2024.1
+     - babel==2.6.0
+     + babel==2.9.1
+     - pytz==2018.5
+     + pytz==2024.1
     Installed 1 executable: pybabel
     "###);
 }
@@ -331,8 +342,10 @@ fn test_tool_upgrade_constraint() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.6.0 -> v2.13.1
-    Removed pytz v2018.5
-    Added setuptools v69.2.0
+     - babel==2.6.0
+     + babel==2.13.1
+     - pytz==2018.5
+     + setuptools==69.2.0
     Installed 1 executable: pybabel
     "###);
 
@@ -351,7 +364,9 @@ fn test_tool_upgrade_constraint() {
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
     Updated babel v2.13.1 -> v2.14.0
-    Removed setuptools v69.2.0
+     - babel==2.13.1
+     + babel==2.14.0
+     - setuptools==69.2.0
     Installed 1 executable: pybabel
     "###);
 
