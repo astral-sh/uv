@@ -440,7 +440,7 @@ struct DependencyEdit<'a> {
 #[diagnostic()]
 struct WithHelp {
     /// The header to render in the error message.
-    header: String,
+    header: uv_resolver::NoSolutionHeader,
 
     /// The underlying error.
     #[source]

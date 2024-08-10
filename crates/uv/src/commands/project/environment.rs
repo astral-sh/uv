@@ -1,10 +1,5 @@
 use tracing::debug;
 
-use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::project::{resolve_environment, sync_environment};
-use crate::commands::SharedState;
-use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
 use cache_key::{cache_digest, hash_digest};
 use distribution_types::Resolution;
 use uv_cache::{Cache, CacheBucket};
@@ -12,6 +7,12 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::RequirementsSpecification;
+
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
+use crate::commands::project::{resolve_environment, sync_environment, ProjectError};
+use crate::commands::SharedState;
+use crate::printer::Printer;
+use crate::settings::ResolverInstallerSettings;
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -39,7 +40,7 @@ impl CachedEnvironment {
         native_tls: bool,
         cache: &Cache,
         printer: Printer,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, ProjectError> {
         // When caching, always use the base interpreter, rather than that of the virtual
         // environment.
         let interpreter = if let Some(interpreter) = interpreter.to_base_interpreter(cache)? {

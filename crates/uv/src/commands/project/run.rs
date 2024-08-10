@@ -4,7 +4,8 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anstream::eprint;
+use anyhow::{anyhow, bail, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
@@ -23,13 +24,14 @@ use uv_python::{
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_scripts::Pep723Script;
+use uv_scripts::{Pep723Error, Pep723Script};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
+use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{ProjectError, WorkspacePython};
@@ -62,7 +64,7 @@ pub(crate) async fn run(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<ExitStatus> {
+) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`uv run` is experimental and may change without warning");
     }
@@ -162,7 +164,7 @@ pub(crate) async fn run(
                 })
                 .collect::<Result<_, _>>()?;
             let spec = RequirementsSpecification::from_requirements(requirements);
-            let environment = CachedEnvironment::get_or_create(
+            let result = CachedEnvironment::get_or_create(
                 spec,
                 interpreter,
                 &settings,
@@ -184,7 +186,20 @@ pub(crate) async fn run(
                 cache,
                 printer,
             )
-            .await?;
+            .await;
+
+            let environment = match result {
+                Ok(resolution) => resolution,
+                Err(ProjectError::Operation(operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                ))) => {
+                    let report = miette::Report::msg(format!("{err}"))
+                        .context(err.header().with_context("script"));
+                    eprint!("{report:?}");
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(err) => return Err(err.into()),
+            };
 
             Some(environment.into_interpreter())
         } else {
@@ -515,7 +530,7 @@ pub(crate) async fn run(
             Some(spec) => {
                 debug!("Syncing ephemeral requirements");
 
-                CachedEnvironment::get_or_create(
+                let result = CachedEnvironment::get_or_create(
                     spec,
                     base_interpreter.clone(),
                     &settings,
@@ -537,8 +552,22 @@ pub(crate) async fn run(
                     cache,
                     printer,
                 )
-                .await?
-                .into()
+                .await;
+
+                let environment = match result {
+                    Ok(resolution) => resolution,
+                    Err(ProjectError::Operation(operations::Error::Resolve(
+                        uv_resolver::ResolveError::NoSolution(err),
+                    ))) => {
+                        let report = miette::Report::msg(format!("{err}"))
+                            .context(err.header().with_context("`--with`"));
+                        eprint!("{report:?}");
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+
+                environment.into()
             }
         })
     };
@@ -612,7 +641,9 @@ pub(crate) async fn run(
 }
 
 /// Read a [`Pep723Script`] from the given command.
-pub(crate) async fn parse_script(command: &ExternalCommand) -> Result<Option<Pep723Script>> {
+pub(crate) async fn parse_script(
+    command: &ExternalCommand,
+) -> Result<Option<Pep723Script>, Pep723Error> {
     // Parse the input command.
     let command = RunCommand::from(command);
 
@@ -621,7 +652,7 @@ pub(crate) async fn parse_script(command: &ExternalCommand) -> Result<Option<Pep
     };
 
     // Read the PEP 723 `script` metadata from the target script.
-    Ok(Pep723Script::read(&target).await?)
+    Pep723Script::read(&target).await
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

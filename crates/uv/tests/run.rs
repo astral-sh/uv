@@ -332,6 +332,29 @@ fn run_pep723_script() -> Result<()> {
     warning: `--no-project` is a no-op for Python scripts with inline metadata, which always run in isolation
     "###);
 
+    // If the script can't be resolved, we should reference the script.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "add",
+        # ]
+        # ///
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("--no-project").arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from: main.py
+      × No solution found when resolving script dependencies:
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that the requirements are unsatisfiable.
+    "###);
+
     Ok(())
 }
 
@@ -503,6 +526,20 @@ fn run_with() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.0
+    "###);
+
+    // If the dependencies can't be resolved, we should reference `--with`.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv run` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+      × No solution found when resolving `--with` dependencies:
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that the requirements are unsatisfiable.
     "###);
 
     Ok(())

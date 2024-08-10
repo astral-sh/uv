@@ -91,6 +91,18 @@ pub(crate) enum ProjectError {
     Lock(#[from] uv_resolver::LockError),
 
     #[error(transparent)]
+    Operation(#[from] pip::operations::Error),
+
+    #[error(transparent)]
+    RequiresPython(#[from] uv_resolver::RequiresPythonError),
+
+    #[error(transparent)]
+    Interpreter(#[from] uv_python::InterpreterError),
+
+    #[error(transparent)]
+    Tool(#[from] uv_tool::Error),
+
+    #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
@@ -98,12 +110,6 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
-
-    #[error(transparent)]
-    Operation(#[from] pip::operations::Error),
-
-    #[error(transparent)]
-    RequiresPython(#[from] uv_resolver::RequiresPythonError),
 }
 
 /// Compute the `Requires-Python` bound for the [`Workspace`].
@@ -500,7 +506,7 @@ pub(crate) async fn resolve_environment<'a>(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<ResolutionGraph> {
+) -> Result<ResolutionGraph, ProjectError> {
     warn_on_requirements_txt_setting(&spec, settings);
 
     let ResolverSettingsRef {

@@ -128,17 +128,7 @@ pub struct NoSolutionError {
 }
 
 impl NoSolutionError {
-    pub fn header(&self) -> String {
-        match &self.markers {
-            ResolverMarkers::Universal { .. } | ResolverMarkers::SpecificEnvironment(_) => {
-                "No solution found when resolving dependencies:".to_string()
-            }
-            ResolverMarkers::Fork(markers) => {
-                format!("No solution found when resolving dependencies for split ({markers:?}):")
-            }
-        }
-    }
-
+    /// Create a new [`NoSolutionError`] from a [`pubgrub::NoSolutionError`].
     pub(crate) fn new(
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
         available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
@@ -206,6 +196,11 @@ impl NoSolutionError {
         collapse(derivation_tree)
             .expect("derivation tree should contain at least one external term")
     }
+
+    /// Initialize a [`NoSolutionHeader`] for this error.
+    pub fn header(&self) -> NoSolutionHeader {
+        NoSolutionHeader::new(self.markers.clone())
+    }
 }
 
 impl std::error::Error for NoSolutionError {}
@@ -234,5 +229,60 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct NoSolutionHeader {
+    /// The [`ResolverMarkers`] that caused the failure.
+    markers: ResolverMarkers,
+    /// The additional context for the resolution failure.
+    context: Option<&'static str>,
+}
+
+impl NoSolutionHeader {
+    /// Create a new [`NoSolutionHeader`] with the given [`ResolverMarkers`].
+    pub fn new(markers: ResolverMarkers) -> Self {
+        Self {
+            markers,
+            context: None,
+        }
+    }
+
+    /// Set the context for the resolution failure.
+    #[must_use]
+    pub fn with_context(mut self, context: &'static str) -> Self {
+        self.context = Some(context);
+        self
+    }
+}
+
+impl std::fmt::Display for NoSolutionHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.markers {
+            ResolverMarkers::SpecificEnvironment(_) | ResolverMarkers::Universal { .. } => {
+                if let Some(context) = self.context {
+                    write!(
+                        f,
+                        "No solution found when resolving {context} dependencies:"
+                    )
+                } else {
+                    write!(f, "No solution found when resolving dependencies:")
+                }
+            }
+            ResolverMarkers::Fork(markers) => {
+                if let Some(context) = self.context {
+                    write!(
+                        f,
+                        "No solution found when resolving {context} dependencies for split ({markers:?}):",
+                    )
+                } else {
+                    write!(
+                        f,
+                        "No solution found when resolving dependencies for split ({markers:?}):",
+                    )
+                }
+            }
+        }
     }
 }
