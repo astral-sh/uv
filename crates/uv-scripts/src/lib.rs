@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::LazyLock;
 
 use memchr::memmem::Finder;
@@ -39,7 +40,7 @@ impl Pep723Script {
         };
 
         // Parse the metadata.
-        let metadata = Pep723Metadata::from_string(metadata)?;
+        let metadata = Pep723Metadata::from_str(&metadata)?;
 
         Ok(Some(Self {
             path: file.as_ref().to_path_buf(),
@@ -72,11 +73,15 @@ pub struct Pep723Metadata {
     pub raw: String,
 }
 
-impl Pep723Metadata {
+impl FromStr for Pep723Metadata {
+    type Err = Pep723Error;
     /// Parse `Pep723Metadata` from a raw TOML string.
-    pub fn from_string(raw: String) -> Result<Self, toml::de::Error> {
-        let metadata = toml::from_str(&raw)?;
-        Ok(Pep723Metadata { raw, ..metadata })
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        let metadata = toml::from_str(raw)?;
+        Ok(Pep723Metadata {
+            raw: raw.to_string(),
+            ..metadata
+        })
     }
 }
 
