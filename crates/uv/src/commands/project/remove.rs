@@ -50,6 +50,27 @@ pub(crate) async fn remove(
     }
 
     let dependency_destination = if let Some(script) = script {
+        // If we found a PEP 723 script and the user provided a project-only setting, warn.
+        if package.is_some() {
+            warn_user_once!(
+                "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if locked {
+            warn_user_once!(
+                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if frozen {
+            warn_user_once!(
+                "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if no_sync {
+            warn_user_once!(
+                "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
         DependencyDestination::Script(script)
     } else {
         // Find the project in the workspace.
