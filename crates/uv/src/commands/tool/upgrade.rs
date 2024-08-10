@@ -59,7 +59,7 @@ pub(crate) async fn upgrade(
     }
 
     // Determine whether we applied any upgrades.
-    let mut updated = false;
+    let mut did_upgrade = false;
 
     for name in names {
         debug!("Upgrading tool: `{name}`");
@@ -128,7 +128,7 @@ pub(crate) async fn upgrade(
         // directory.
         let EnvironmentUpdate {
             environment,
-            changed,
+            changelog,
         } = update_environment(
             existing_environment,
             spec,
@@ -145,9 +145,10 @@ pub(crate) async fn upgrade(
         )
         .await?;
 
-        if changed {
-            updated = true;
+        did_upgrade |= !changelog.is_empty();
 
+        // If we modified the target tool, reinstall the entrypoints.
+        if changelog.includes(&name) {
             // At this point, we updated the existing environment, so we should remove any of its
             // existing executables.
             remove_entrypoints(&existing_tool_receipt);
@@ -165,7 +166,7 @@ pub(crate) async fn upgrade(
         }
     }
 
-    if !updated {
+    if !did_upgrade {
         writeln!(printer.stderr(), "Nothing to upgrade")?;
     }
 

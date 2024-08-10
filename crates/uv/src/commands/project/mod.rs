@@ -32,7 +32,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::Workspace;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, SharedState};
 use crate::printer::Printer;
@@ -780,8 +780,8 @@ pub(crate) async fn sync_environment(
 pub(crate) struct EnvironmentUpdate {
     /// The updated [`PythonEnvironment`].
     pub(crate) environment: PythonEnvironment,
-    /// Whether the environment was changed during the update operation.
-    pub(crate) changed: bool,
+    /// The [`Changelog`] of changes made to the environment.
+    pub(crate) changelog: Changelog,
 }
 
 impl EnvironmentUpdate {
@@ -854,7 +854,7 @@ pub(crate) async fn update_environment(
                 );
                 return Ok(EnvironmentUpdate {
                     environment: venv,
-                    changed: false,
+                    changelog: Changelog::default(),
                 });
             }
             SatisfiesResult::Unsatisfied(requirement) => {
@@ -975,7 +975,7 @@ pub(crate) async fn update_environment(
     };
 
     // Sync the environment.
-    let changed = pip::operations::install(
+    let changelog = pip::operations::install(
         &resolution,
         site_packages,
         Modifications::Exact,
@@ -1004,7 +1004,7 @@ pub(crate) async fn update_environment(
 
     Ok(EnvironmentUpdate {
         environment: venv,
-        changed,
+        changelog,
     })
 }
 
