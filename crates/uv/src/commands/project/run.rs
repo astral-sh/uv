@@ -134,8 +134,12 @@ pub(crate) async fn run(
             .await?
             .into_interpreter();
 
+            // STOPSHIP(charlie): Merge the CLI arguments, script settings, and user settings, in that order.
+
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(dependencies) = metadata.dependencies {
+
+
                 let requirements = dependencies.into_iter().map(Requirement::from).collect();
                 let spec = RequirementsSpecification::from_requirements(requirements);
                 let environment = CachedEnvironment::get_or_create(

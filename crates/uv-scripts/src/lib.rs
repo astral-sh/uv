@@ -1,22 +1,43 @@
-use memchr::memmem::Finder;
-use pypi_types::VerbatimParsedUrl;
-use serde::{Deserialize, Serialize};
 use std::io;
 use std::path::Path;
 use std::sync::LazyLock;
+
+use memchr::memmem::Finder;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use pypi_types::VerbatimParsedUrl;
+use uv_settings::Options as SettingsOptions;
+use uv_workspace::pyproject::ToolUv as WorkspaceOptions;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
 /// See: <https://peps.python.org/pep-0723/>
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
     pub dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
     pub requires_python: Option<pep440_rs::VersionSpecifiers>,
+    pub tool: Option<Tool>,
 }
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Tool {
+    pub uv: Option<ToolUv>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ToolUv {
+    #[serde(flatten)]
+    pub options: SettingsOptions,
+    #[serde(flatten)]
+    pub workspace: WorkspaceOptions,
+}
+
 
 #[derive(Debug, Error)]
 pub enum Pep723Error {

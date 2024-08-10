@@ -11,6 +11,8 @@ workspace = true
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
+uv-settings = { workspace = true }
+uv-workspace = { workspace = true }
 
 fs-err = { workspace = true, features = ["tokio"] }
 memchr = { workspace = true }
