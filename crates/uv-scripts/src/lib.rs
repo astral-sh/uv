@@ -211,13 +211,10 @@ impl ScriptTag {
             return Ok(None);
         }
 
+        // Extract the preceding content.
+        let prelude = std::str::from_utf8(&contents[..index])?;
+
         // Decode as UTF-8.
-        let prelude = if index != 0 {
-            std::str::from_utf8(&contents[..index])?
-        } else {
-            ""
-        }
-        .to_string();
         let contents = &contents[index..];
         let contents = std::str::from_utf8(contents)?;
 
@@ -235,6 +232,7 @@ impl ScriptTag {
         // > consists of only a single #).
         let mut toml = vec![];
 
+        // Extract the content that follows the metadata block.
         let mut python_script = vec![];
 
         while let Some(line) = lines.next() {
@@ -260,6 +258,7 @@ impl ScriptTag {
 
             toml.push(line);
         }
+
         // Find the closing `# ///`. The precedence is such that we need to identify the _last_ such
         // line.
         //
@@ -293,6 +292,7 @@ impl ScriptTag {
         toml.truncate(index - 1);
 
         // Join the lines into a single string.
+        let prelude = prelude.to_string();
         let metadata = toml.join("\n") + "\n";
         let script = python_script.join("\n") + "\n";
 

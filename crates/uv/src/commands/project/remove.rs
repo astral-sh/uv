@@ -18,12 +18,6 @@ use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
-/// Represents the destination where dependencies are added, either to a project or a script.
-enum DependencyDestination {
-    Project(VirtualProject),
-    Script(Pep723Script),
-}
-
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
@@ -49,7 +43,7 @@ pub(crate) async fn remove(
         warn_user_once!("`uv remove` is experimental and may change without warning");
     }
 
-    let dependency_destination = if let Some(script) = script {
+    let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
         if package.is_some() {
             warn_user_once!(
@@ -71,7 +65,7 @@ pub(crate) async fn remove(
                 "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        DependencyDestination::Script(script)
+        Target::Script(script)
     } else {
         // Find the project in the workspace.
         let project = if let Some(package) = package {
@@ -85,14 +79,14 @@ pub(crate) async fn remove(
             VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
         };
 
-        DependencyDestination::Project(project)
+        Target::Project(project)
     };
 
-    let mut toml = match &dependency_destination {
-        DependencyDestination::Script(script) => {
+    let mut toml = match &target {
+        Target::Script(script) => {
             PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
         }
-        DependencyDestination::Project(project) => PyProjectTomlMut::from_toml(
+        Target::Project(project) => PyProjectTomlMut::from_toml(
             project.pyproject_toml().raw.as_ref(),
             DependencyTarget::PyProjectToml,
         ),
@@ -131,11 +125,11 @@ pub(crate) async fn remove(
     }
 
     // Save the modified dependencies.
-    match &dependency_destination {
-        DependencyDestination::Script(script) => {
+    match &target {
+        Target::Script(script) => {
             script.replace_metadata(&toml.to_string()).await?;
         }
-        DependencyDestination::Project(project) => {
+        Target::Project(project) => {
             let pyproject_path = project.root().join("pyproject.toml");
             fs_err::write(pyproject_path, toml.to_string())?;
         }
@@ -148,7 +142,7 @@ pub(crate) async fn remove(
     }
 
     // If `--script`, exit early. There's no reason to lock and sync.
-    let DependencyDestination::Project(project) = dependency_destination else {
+    let Target::Project(project) = target else {
         return Ok(ExitStatus::Success);
     };
 
@@ -214,6 +208,15 @@ pub(crate) async fn remove(
     .await?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Represents the destination where dependencies are added, either to a project or a script.
+#[derive(Debug)]
+enum Target {
+    /// A PEP 723 script, with inline metadata.
+    Project(VirtualProject),
+    /// A project with a `pyproject.toml`.
+    Script(Pep723Script),
 }
 
 /// Emit a warning if a dependency with the given name is present as any dependency type.

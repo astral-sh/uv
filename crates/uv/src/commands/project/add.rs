@@ -3,9 +3,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
+
+use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -17,8 +18,8 @@ use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_python::{
-    request_from_version_file, EnvironmentPreference, PythonDownloads, PythonInstallation,
-    PythonPreference, PythonRequest, VersionRequest,
+    request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, RequiresPython};
@@ -37,12 +38,6 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
-
-/// Represents the destination where dependencies are added, either to a project or a script.
-enum DependencyDestination {
-    Project(VirtualProject),
-    Script(Pep723Script),
-}
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -75,8 +70,9 @@ pub(crate) async fn add(
         warn_user_once!("`uv add` is experimental and may change without warning");
     }
 
-    let download_reporter = PythonDownloadReporter::single(printer);
-    let (dependency_destination, venv) = if let Some(script) = script {
+    let reporter = PythonDownloadReporter::single(printer);
+
+    let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
         if !extras.is_empty() {
             warn_user_once!("Extras are not supported for Python scripts with inline metadata");
@@ -101,25 +97,27 @@ pub(crate) async fn add(
                 "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
+
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
             .native_tls(native_tls);
 
+        // If we found a script, add to the existing metadata. Otherwise, create a new inline
+        // metadata tag.
         let script = if let Some(script) = Pep723Script::read(&script).await? {
             script
         } else {
-            // As no metadata was found in the script, we will create a default metadata table for the script.
-
-            // (1) Explicit request from user
             let python_request = if let Some(request) = python.as_deref() {
+                // (1) Explicit request from user
                 PythonRequest::parse(request)
-            // (2) Request from `.python-version`
             } else if let Some(request) = request_from_version_file(&CWD).await? {
+                // (2) Request from `.python-version`
                 request
             } else {
+                // (3) Assume any Python version
                 PythonRequest::Any
             };
-            let reporter = PythonDownloadReporter::single(printer);
+
             let interpreter = PythonInstallation::find_or_download(
                 Some(python_request),
                 EnvironmentPreference::Any,
@@ -131,18 +129,20 @@ pub(crate) async fn add(
             )
             .await?
             .into_interpreter();
+
             let requires_python =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
             Pep723Script::create(&script, requires_python.specifiers()).await?
         };
-        // (1) Explicit request from user
+
         let python_request = if let Some(request) = python.as_deref() {
+            // (1) Explicit request from user
             Some(PythonRequest::parse(request))
-            // (2) Request from `.python-version`
         } else if let Some(request) = request_from_version_file(&CWD).await? {
+            // (2) Request from `.python-version`
             Some(request)
-            // (3) `Requires-Python` in `pyproject.toml`
         } else {
+            // (3) `Requires-Python` in `pyproject.toml`
             script
                 .metadata
                 .requires_python
@@ -159,23 +159,12 @@ pub(crate) async fn add(
             python_downloads,
             &client_builder,
             cache,
-            Some(&download_reporter),
+            Some(&reporter),
         )
         .await?
         .into_interpreter();
 
-        // Create a virtual environment.
-        let temp_dir = cache.environment()?;
-        let venv = uv_virtualenv::create_venv(
-            temp_dir.path(),
-            interpreter,
-            uv_virtualenv::Prompt::None,
-            false,
-            false,
-            false,
-        )?;
-
-        (DependencyDestination::Script(script), venv)
+        Target::Script(script, Box::new(interpreter))
     } else {
         // Find the project in the workspace.
         let project = if let Some(package) = package {
@@ -214,7 +203,8 @@ pub(crate) async fn add(
             printer,
         )
         .await?;
-        (DependencyDestination::Project(project), venv)
+
+        Target::Project(project, venv)
     };
 
     let client_builder = BaseClientBuilder::new()
@@ -236,7 +226,7 @@ pub(crate) async fn add(
 
     // Determine the environment for the resolution.
     let (tags, markers) =
-        resolution_environment(python_version, python_platform, venv.interpreter())?;
+        resolution_environment(python_version, python_platform, target.interpreter())?;
 
     // Add all authenticated sources to the cache.
     for url in settings.index_locations.urls() {
@@ -248,7 +238,7 @@ pub(crate) async fn add(
         .index_urls(settings.index_locations.index_urls())
         .index_strategy(settings.index_strategy)
         .markers(&markers)
-        .platform(venv.interpreter().platform())
+        .platform(target.interpreter().platform())
         .build();
 
     // Initialize any shared state.
@@ -269,7 +259,7 @@ pub(crate) async fn add(
         &client,
         cache,
         &build_constraints,
-        venv.interpreter(),
+        target.interpreter(),
         &settings.index_locations,
         &flat_index,
         &state.index,
@@ -298,15 +288,15 @@ pub(crate) async fn add(
     .resolve()
     .await?;
 
-    // Add the requirements to the `pyproject.toml`.
-    let mut toml = match &dependency_destination {
-        DependencyDestination::Script(script) => {
+    // Add the requirements to the `pyproject.toml` or script.
+    let mut toml = match &target {
+        Target::Script(script, _) => {
             PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
         }
-        DependencyDestination::Project(project) => {
-            let raw = project.pyproject_toml().raw.clone();
-            PyProjectTomlMut::from_toml(&raw, DependencyTarget::PyProjectToml)
-        }
+        Target::Project(project, _) => PyProjectTomlMut::from_toml(
+            &project.pyproject_toml().raw,
+            DependencyTarget::PyProjectToml,
+        ),
     }?;
     let mut edits = Vec::with_capacity(requirements.len());
     for mut requirement in requirements {
@@ -315,11 +305,11 @@ pub(crate) async fn add(
         requirement.extras.sort_unstable();
         requirement.extras.dedup();
 
-        let (requirement, source) = match dependency_destination {
-            DependencyDestination::Script(_) | DependencyDestination::Project(_) if raw_sources => {
+        let (requirement, source) = match target {
+            Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
                 (pep508_rs::Requirement::from(requirement), None)
             }
-            DependencyDestination::Script(_) => resolve_and_process_requirement(
+            Target::Script(_, _) => resolve_requirement(
                 requirement,
                 false,
                 editable,
@@ -327,12 +317,12 @@ pub(crate) async fn add(
                 tag.clone(),
                 branch.clone(),
             )?,
-            DependencyDestination::Project(ref project) => {
+            Target::Project(ref project, _) => {
                 let workspace = project
                     .workspace()
                     .packages()
                     .contains_key(&requirement.name);
-                resolve_and_process_requirement(
+                resolve_requirement(
                     requirement,
                     workspace,
                     editable,
@@ -342,6 +332,7 @@ pub(crate) async fn add(
                 )?
             }
         };
+
         // Update the `pyproject.toml`.
         let edit = match dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
@@ -360,10 +351,11 @@ pub(crate) async fn add(
         });
     }
 
-    // Save the modified `pyproject.toml`.
     let content = toml.to_string();
-    let modified = match &dependency_destination {
-        DependencyDestination::Script(script) => {
+
+    // Save the modified `pyproject.toml` or script.
+    let modified = match &target {
+        Target::Script(script, _) => {
             if content == script.metadata.raw {
                 debug!("No changes to dependencies; skipping update");
                 false
@@ -372,7 +364,7 @@ pub(crate) async fn add(
                 true
             }
         }
-        DependencyDestination::Project(project) => {
+        Target::Project(project, _) => {
             if content == *project.pyproject_toml().raw {
                 debug!("No changes to dependencies; skipping update");
                 false
@@ -390,11 +382,12 @@ pub(crate) async fn add(
     }
 
     // If `--script`, exit early. There's no reason to lock and sync.
-    let DependencyDestination::Project(project) = dependency_destination else {
+    let Target::Project(project, venv) = target else {
         return Ok(ExitStatus::Success);
     };
 
     let existing = project.pyproject_toml();
+
     // Update the `pypackage.toml` in-memory.
     let project = project
         .clone()
@@ -560,14 +553,14 @@ pub(crate) async fn add(
 }
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
-fn resolve_and_process_requirement(
+fn resolve_requirement(
     requirement: pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
-) -> Result<(pep508_rs::Requirement, Option<Source>), anyhow::Error> {
+) -> Result<(Requirement, Option<Source>), anyhow::Error> {
     let result = Source::from_requirement(
         &requirement.name,
         requirement.source.clone(),
@@ -594,6 +587,25 @@ fn resolve_and_process_requirement(
     processed_requirement.clear_url();
 
     Ok((processed_requirement, source))
+}
+
+/// Represents the destination where dependencies are added, either to a project or a script.
+#[derive(Debug)]
+enum Target {
+    /// A PEP 723 script, with inline metadata.
+    Script(Pep723Script, Box<Interpreter>),
+    /// A project with a `pyproject.toml`.
+    Project(VirtualProject, PythonEnvironment),
+}
+
+impl Target {
+    /// Returns the [`Interpreter`] for the target.
+    fn interpreter(&self) -> &Interpreter {
+        match self {
+            Self::Script(_, interpreter) => interpreter,
+            Self::Project(_, venv) => venv.interpreter(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
