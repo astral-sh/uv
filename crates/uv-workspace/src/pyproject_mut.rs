@@ -51,7 +51,9 @@ pub enum ArrayEdit {
 /// Specifies whether dependencies are added to a script file or a `pyproject.toml` file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DependencyTarget {
+    /// A PEP 723 script, with inline metadata.
     Script,
+    /// A project with a `pyproject.toml`.
     PyProjectToml,
 }
 
@@ -92,7 +94,8 @@ impl PyProjectTomlMut {
         Ok(())
     }
 
-    /// Retrieves a mutable reference to the root `Table` of the TOML document, creating the `project` table if necessary.
+    /// Retrieves a mutable reference to the root [`Table`] of the TOML document, creating the
+    /// `project` table if necessary.
     fn doc(&mut self) -> Result<&mut Table, Error> {
         let doc = match self.target {
             DependencyTarget::Script => self.doc.as_table_mut(),
@@ -106,7 +109,8 @@ impl PyProjectTomlMut {
         Ok(doc)
     }
 
-    /// Retrieves an optional mutable reference to the `project` `Table`, returning `None` if it doesn't exist.
+    /// Retrieves an optional mutable reference to the `project` [`Table`], returning `None` if it
+    /// doesn't exist.
     fn doc_mut(&mut self) -> Result<Option<&mut Table>, Error> {
         let doc = match self.target {
             DependencyTarget::Script => Some(self.doc.as_table_mut()),

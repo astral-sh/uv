@@ -357,7 +357,7 @@ pub(crate) async fn add(
                 debug!("No changes to dependencies; skipping update");
                 false
             } else {
-                script.replace_metadata(&content).await?;
+                script.write(&content).await?;
                 true
             }
         }
@@ -372,16 +372,17 @@ pub(crate) async fn add(
             }
         }
     };
-    // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
-    // to exist at all.
-    if frozen {
-        return Ok(ExitStatus::Success);
-    }
 
     // If `--script`, exit early. There's no reason to lock and sync.
     let Target::Project(project, venv) = target else {
         return Ok(ExitStatus::Success);
     };
+
+    // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
+    // to exist at all.
+    if frozen {
+        return Ok(ExitStatus::Success);
+    }
 
     let existing = project.pyproject_toml();
 

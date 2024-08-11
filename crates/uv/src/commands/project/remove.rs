@@ -127,7 +127,7 @@ pub(crate) async fn remove(
     // Save the modified dependencies.
     match &target {
         Target::Script(script) => {
-            script.replace_metadata(&toml.to_string()).await?;
+            script.write(&toml.to_string()).await?;
         }
         Target::Project(project) => {
             let pyproject_path = project.root().join("pyproject.toml");

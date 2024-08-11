@@ -90,21 +90,19 @@ impl Pep723Script {
     }
 
     /// Replace the existing metadata in the file with new metadata and write the updated content.
-    pub async fn replace_metadata(&self, new_metadata: &str) -> Result<(), Pep723Error> {
-        let new_content = format!(
+    pub async fn write(&self, metadata: &str) -> Result<(), Pep723Error> {
+        let content = format!(
             "{}{}{}",
             if self.prelude.is_empty() {
                 String::new()
             } else {
                 format!("{}\n", self.prelude)
             },
-            serialize_metadata(new_metadata),
+            serialize_metadata(metadata),
             self.raw
         );
 
-        fs_err::tokio::write(&self.path, new_content)
-            .await
-            .map_err(std::convert::Into::into)
+        Ok(fs_err::tokio::write(&self.path, content).await?)
     }
 }
 
