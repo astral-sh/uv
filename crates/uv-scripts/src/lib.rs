@@ -19,11 +19,12 @@ static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"))
 /// A PEP 723 script, including its [`Pep723Metadata`].
 #[derive(Debug)]
 pub struct Pep723Script {
+    /// The path to the Python script.
     pub path: PathBuf,
+    /// The parsed [`Pep723Metadata`] table from the script.
     pub metadata: Pep723Metadata,
     /// The content of the script after the metadata table.
     pub raw: String,
-
     /// The content of the script before the metadata table.
     pub prelude: String,
 }
@@ -40,18 +41,18 @@ impl Pep723Script {
         };
 
         // Extract the `script` tag.
-        let Some((prelude, metadata, raw)) = extract_script_tag(&contents)? else {
+        let Some(script_tag) = ScriptTag::parse(&contents)? else {
             return Ok(None);
         };
 
         // Parse the metadata.
-        let metadata = Pep723Metadata::from_str(&metadata)?;
+        let metadata = Pep723Metadata::from_str(&script_tag.metadata)?;
 
         Ok(Some(Self {
             path: file.as_ref().to_path_buf(),
             metadata,
-            raw,
-            prelude,
+            raw: script_tag.script,
+            prelude: script_tag.prelude,
         }))
     }
 
@@ -75,16 +76,16 @@ impl Pep723Script {
             requires_python = requires_python,
         };
 
-        let (raw, prelude) = extract_shebang(&contents)?;
+        let (prelude, raw) = extract_shebang(&contents)?;
 
         // Parse the metadata.
         let metadata = Pep723Metadata::from_str(&default_metadata)?;
 
         Ok(Self {
             path: file.as_ref().to_path_buf(),
+            prelude: prelude.unwrap_or_default(),
             metadata,
             raw,
-            prelude: prelude.unwrap_or(String::new()),
         })
     }
 
@@ -114,7 +115,7 @@ impl Pep723Script {
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
     pub dependencies: Option<Vec<pep508_rs::Requirement<VerbatimParsedUrl>>>,
-    pub requires_python: Option<pep440_rs::VersionSpecifiers>,
+    pub requires_python: Option<VersionSpecifiers>,
     pub tool: Option<Tool>,
     /// The raw unserialized document.
     #[serde(skip)]
@@ -123,6 +124,7 @@ pub struct Pep723Metadata {
 
 impl FromStr for Pep723Metadata {
     type Err = Pep723Error;
+
     /// Parse `Pep723Metadata` from a raw TOML string.
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         let metadata = toml::from_str(raw)?;
@@ -159,141 +161,152 @@ pub enum Pep723Error {
     Toml(#[from] toml::de::Error),
 }
 
-/// Given the contents of a Python file, extract the `script` metadata block with leading comment
-/// hashes removed, any preceding shebang or content (prelude), and the remaining Python script code.
-///
-/// The function returns a tuple where:
-/// - The first element is the preceding content, which may include a shebang or other lines before the `script` metadata block.
-/// - The second element is the extracted metadata as a string with comment hashes removed.
-/// - The third element is the remaining Python code of the script.
-///
-/// Given the following input string representing the contents of a Python script:
-///
-/// ```python
-/// #!/usr/bin/env python3
-/// # /// script
-/// # requires-python = '>=3.11'
-/// # dependencies = [
-/// #   'requests<3',
-/// #   'rich',
-/// # ]
-/// # ///
-///
-/// import requests
-///
-/// print("Hello, World!")
-/// ```
-///
-/// This function would return:
-///
-/// (
-///     "#!/usr/bin/env python3\n",
-///     "requires-python = '>=3.11'\ndependencies = [\n  'requests<3',\n  'rich',\n]",
-///     "import requests\n\nprint(\"Hello, World!\")\n"
-/// )
-///
-/// See: <https://peps.python.org/pep-0723/>
-fn extract_script_tag(contents: &[u8]) -> Result<Option<(String, String, String)>, Pep723Error> {
-    // Identify the opening pragma.
-    let Some(index) = FINDER.find(contents) else {
-        return Ok(None);
-    };
-
-    // The opening pragma must be the first line, or immediately preceded by a newline.
-    if !(index == 0 || matches!(contents[index - 1], b'\r' | b'\n')) {
-        return Ok(None);
-    }
-
-    // Decode as UTF-8.
-    let prelude = if index != 0 {
-        std::str::from_utf8(&contents[..index])?
-    } else {
-        ""
-    }
-    .to_string();
-    let contents = &contents[index..];
-    let contents = std::str::from_utf8(contents)?;
-
-    let mut lines = contents.lines();
-
-    // Ensure that the first line is exactly `# /// script`.
-    if !lines.next().is_some_and(|line| line == "# /// script") {
-        return Ok(None);
-    }
-
-    // > Every line between these two lines (# /// TYPE and # ///) MUST be a comment starting
-    // > with #. If there are characters after the # then the first character MUST be a space. The
-    // > embedded content is formed by taking away the first two characters of each line if the
-    // > second character is a space, otherwise just the first character (which means the line
-    // > consists of only a single #).
-    let mut toml = vec![];
-
-    let mut python_script = vec![];
-
-    while let Some(line) = lines.next() {
-        // Remove the leading `#`.
-        let Some(line) = line.strip_prefix('#') else {
-            python_script.push(line);
-            python_script.extend(lines);
-            break;
-        };
-
-        // If the line is empty, continue.
-        if line.is_empty() {
-            toml.push("");
-            continue;
-        }
-
-        // Otherwise, the line _must_ start with ` `.
-        let Some(line) = line.strip_prefix(' ') else {
-            python_script.push(line);
-            python_script.extend(lines);
-            break;
-        };
-
-        toml.push(line);
-    }
-    // Find the closing `# ///`. The precedence is such that we need to identify the _last_ such
-    // line.
-    //
-    // For example, given:
-    // ```python
-    // # /// script
-    // #
-    // # ///
-    // #
-    // # ///
-    // ```
-    //
-    // The latter `///` is the closing pragma
-    let Some(index) = toml.iter().rev().position(|line| *line == "///") else {
-        return Ok(None);
-    };
-    let index = toml.len() - index;
-
-    // Discard any lines after the closing `# ///`.
-    //
-    // For example, given:
-    // ```python
-    // # /// script
-    // #
-    // # ///
-    // #
-    // #
-    // ```
-    //
-    // We need to discard the last two lines.
-    toml.truncate(index - 1);
-
-    // Join the lines into a single string.
-    let toml = toml.join("\n") + "\n";
-    let python_script = python_script.join("\n") + "\n";
-
-    Ok(Some((prelude, toml, python_script)))
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct ScriptTag {
+    /// The content of the script before the metadata block.
+    prelude: String,
+    /// The metadata block.
+    metadata: String,
+    /// The content of the script after the metadata block.
+    script: String,
 }
 
-/// Extracts the shebang line from the given file contents and returns it along with the remaining content.
-fn extract_shebang(contents: &[u8]) -> Result<(String, Option<String>), Pep723Error> {
+impl ScriptTag {
+    /// Given the contents of a Python file, extract the `script` metadata block with leading
+    /// comment hashes removed, any preceding shebang or content (prelude), and the remaining Python
+    /// script.
+    ///
+    /// Given the following input string representing the contents of a Python script:
+    ///
+    /// ```python
+    /// #!/usr/bin/env python3
+    /// # /// script
+    /// # requires-python = '>=3.11'
+    /// # dependencies = [
+    /// #   'requests<3',
+    /// #   'rich',
+    /// # ]
+    /// # ///
+    ///
+    /// import requests
+    ///
+    /// print("Hello, World!")
+    /// ```
+    ///
+    /// This function would return:
+    ///
+    /// - Preamble: `#!/usr/bin/env python3\n`
+    /// - Metadata: `requires-python = '>=3.11'\ndependencies = [\n  'requests<3',\n  'rich',\n]`
+    /// - Script: `import requests\n\nprint("Hello, World!")\n`
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    fn parse(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
+        // Identify the opening pragma.
+        let Some(index) = FINDER.find(contents) else {
+            return Ok(None);
+        };
+
+        // The opening pragma must be the first line, or immediately preceded by a newline.
+        if !(index == 0 || matches!(contents[index - 1], b'\r' | b'\n')) {
+            return Ok(None);
+        }
+
+        // Decode as UTF-8.
+        let prelude = if index != 0 {
+            std::str::from_utf8(&contents[..index])?
+        } else {
+            ""
+        }
+        .to_string();
+        let contents = &contents[index..];
+        let contents = std::str::from_utf8(contents)?;
+
+        let mut lines = contents.lines();
+
+        // Ensure that the first line is exactly `# /// script`.
+        if !lines.next().is_some_and(|line| line == "# /// script") {
+            return Ok(None);
+        }
+
+        // > Every line between these two lines (# /// TYPE and # ///) MUST be a comment starting
+        // > with #. If there are characters after the # then the first character MUST be a space. The
+        // > embedded content is formed by taking away the first two characters of each line if the
+        // > second character is a space, otherwise just the first character (which means the line
+        // > consists of only a single #).
+        let mut toml = vec![];
+
+        let mut python_script = vec![];
+
+        while let Some(line) = lines.next() {
+            // Remove the leading `#`.
+            let Some(line) = line.strip_prefix('#') else {
+                python_script.push(line);
+                python_script.extend(lines);
+                break;
+            };
+
+            // If the line is empty, continue.
+            if line.is_empty() {
+                toml.push("");
+                continue;
+            }
+
+            // Otherwise, the line _must_ start with ` `.
+            let Some(line) = line.strip_prefix(' ') else {
+                python_script.push(line);
+                python_script.extend(lines);
+                break;
+            };
+
+            toml.push(line);
+        }
+        // Find the closing `# ///`. The precedence is such that we need to identify the _last_ such
+        // line.
+        //
+        // For example, given:
+        // ```python
+        // # /// script
+        // #
+        // # ///
+        // #
+        // # ///
+        // ```
+        //
+        // The latter `///` is the closing pragma
+        let Some(index) = toml.iter().rev().position(|line| *line == "///") else {
+            return Ok(None);
+        };
+        let index = toml.len() - index;
+
+        // Discard any lines after the closing `# ///`.
+        //
+        // For example, given:
+        // ```python
+        // # /// script
+        // #
+        // # ///
+        // #
+        // #
+        // ```
+        //
+        // We need to discard the last two lines.
+        toml.truncate(index - 1);
+
+        // Join the lines into a single string.
+        let metadata = toml.join("\n") + "\n";
+        let script = python_script.join("\n") + "\n";
+
+        Ok(Some(Self {
+            prelude,
+            metadata,
+            script,
+        }))
+    }
+}
+
+/// Extracts the shebang line from the given file contents and returns it along with the remaining
+/// content.
+fn extract_shebang(contents: &[u8]) -> Result<(Option<String>, String), Pep723Error> {
     let contents = std::str::from_utf8(contents)?;
 
     let mut lines = contents.lines();
@@ -303,11 +316,11 @@ fn extract_shebang(contents: &[u8]) -> Result<(String, Option<String>), Pep723Er
         if first_line.starts_with("#!") {
             let shebang = first_line.to_string();
             let remaining_content: String = lines.collect::<Vec<&str>>().join("\n");
-            return Ok((remaining_content, Some(shebang)));
+            return Ok((Some(shebang), remaining_content));
         }
     }
 
-    Ok((contents.to_string(), None))
+    Ok((None, contents.to_string()))
 }
 
 /// Formats the provided metadata by prefixing each line with `#` and wrapping it with script markers.
@@ -333,7 +346,7 @@ fn serialize_metadata(metadata: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::serialize_metadata;
+    use crate::{serialize_metadata, ScriptTag};
 
     #[test]
     fn missing_space() {
@@ -343,10 +356,7 @@ mod tests {
             # ///
         "};
 
-        assert_eq!(
-            super::extract_script_tag(contents.as_bytes()).unwrap(),
-            None
-        );
+        assert_eq!(ScriptTag::parse(contents.as_bytes()).unwrap(), None);
     }
 
     #[test]
@@ -360,10 +370,7 @@ mod tests {
             # ]
         "};
 
-        assert_eq!(
-            super::extract_script_tag(contents.as_bytes()).unwrap(),
-            None
-        );
+        assert_eq!(ScriptTag::parse(contents.as_bytes()).unwrap(), None);
     }
 
     #[test]
@@ -380,10 +387,7 @@ mod tests {
             #
         "};
 
-        assert_eq!(
-            super::extract_script_tag(contents.as_bytes()).unwrap(),
-            None
-        );
+        assert_eq!(ScriptTag::parse(contents.as_bytes()).unwrap(), None);
     }
 
     #[test]
@@ -421,13 +425,11 @@ mod tests {
             data = resp.json()
         "};
 
-        let actual = super::extract_script_tag(contents.as_bytes())
-            .unwrap()
-            .unwrap();
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
 
-        assert_eq!(actual.0, String::new());
-        assert_eq!(actual.1, expected_metadata);
-        assert_eq!(actual.2, expected_data);
+        assert_eq!(actual.prelude, String::new());
+        assert_eq!(actual.metadata, expected_metadata);
+        assert_eq!(actual.script, expected_data);
     }
 
     #[test]
@@ -466,13 +468,11 @@ mod tests {
             data = resp.json()
         "};
 
-        let actual = super::extract_script_tag(contents.as_bytes())
-            .unwrap()
-            .unwrap();
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
 
-        assert_eq!(actual.0, "#!/usr/bin/env python3\n".to_string());
-        assert_eq!(actual.1, expected_metadata);
-        assert_eq!(actual.2, expected_data);
+        assert_eq!(actual.prelude, "#!/usr/bin/env python3\n".to_string());
+        assert_eq!(actual.metadata, expected_metadata);
+        assert_eq!(actual.script, expected_data);
     }
     #[test]
     fn embedded_comment() {
@@ -498,10 +498,10 @@ mod tests {
             '''
         "};
 
-        let actual = super::extract_script_tag(contents.as_bytes())
+        let actual = ScriptTag::parse(contents.as_bytes())
             .unwrap()
             .unwrap()
-            .1;
+            .metadata;
 
         assert_eq!(actual, expected);
     }
@@ -528,10 +528,10 @@ mod tests {
             ]
         "};
 
-        let actual = super::extract_script_tag(contents.as_bytes())
+        let actual = ScriptTag::parse(contents.as_bytes())
             .unwrap()
             .unwrap()
-            .1;
+            .metadata;
 
         assert_eq!(actual, expected);
     }

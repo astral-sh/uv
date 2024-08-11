@@ -2928,7 +2928,6 @@ fn add_script() -> Result<()> {
         # ]
         # ///
 
-
         import requests
         from rich.pretty import pprint
 
@@ -2961,7 +2960,6 @@ fn add_script() -> Result<()> {
         #   "anyio",
         # ]
         # ///
-
 
         import requests
         from rich.pretty import pprint
@@ -3093,7 +3091,6 @@ fn remove_script() -> Result<()> {
         # ]
         # ///
 
-
         import requests
         from rich.pretty import pprint
 
@@ -3126,7 +3123,6 @@ fn remove_script() -> Result<()> {
         # ]
         # ///
 
-
         import requests
         from rich.pretty import pprint
 
@@ -3152,7 +3148,6 @@ fn remove_last_dep_script() -> Result<()> {
         #   "rich",
         # ]
         # ///
-
 
         import requests
         from rich.pretty import pprint
@@ -3183,7 +3178,6 @@ fn remove_last_dep_script() -> Result<()> {
         # dependencies = []
         # ///
 
-
         import requests
         from rich.pretty import pprint
 
@@ -3210,7 +3204,6 @@ fn add_git_to_script() -> Result<()> {
         #   "rich",
         # ]
         # ///
-
 
         import requests
         from rich.pretty import pprint
@@ -3264,7 +3257,6 @@ fn add_git_to_script() -> Result<()> {
         # [tool.uv.sources]
         # uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
         # ///
-
 
         import requests
         from rich.pretty import pprint

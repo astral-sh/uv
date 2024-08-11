@@ -703,10 +703,10 @@ pub(crate) struct AddSettings {
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) package: Option<PackageName>,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) script: Option<PathBuf>,
 }
 
 impl AddSettings {
@@ -731,8 +731,8 @@ impl AddSettings {
             build,
             refresh,
             package,
-            python,
             script,
+            python,
         } = args;
 
         let requirements = requirements
@@ -759,6 +759,7 @@ impl AddSettings {
             tag,
             branch,
             package,
+            script,
             python,
             editable: flag(editable, no_editable),
             extras: extra.unwrap_or_default(),
@@ -767,7 +768,6 @@ impl AddSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
-            script,
         }
     }
 }
@@ -782,10 +782,10 @@ pub(crate) struct RemoveSettings {
     pub(crate) packages: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) package: Option<PackageName>,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) script: Option<PathBuf>,
 }
 
 impl RemoveSettings {
@@ -803,8 +803,8 @@ impl RemoveSettings {
             build,
             refresh,
             package,
-            python,
             script,
+            python,
         } = args;
 
         let dependency_type = if let Some(group) = optional {
@@ -822,13 +822,13 @@ impl RemoveSettings {
             packages,
             dependency_type,
             package,
+            script,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
-            script,
         }
     }
 }
