@@ -56,7 +56,7 @@ pub use verbatim_url::{
 };
 
 mod cursor;
-mod marker;
+pub mod marker;
 mod origin;
 #[cfg(feature = "non-pep508-extensions")]
 mod unnamed;
@@ -149,7 +149,7 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// The markers such as `python_version > "3.8"` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
-    pub marker: Option<MarkerTree>,
+    pub marker: MarkerTree,
     /// The source file containing the requirement.
     pub origin: Option<RequirementOrigin>,
 }
@@ -190,7 +190,7 @@ impl<T: Pep508Url + Display> Display for Requirement<T> {
                 }
             }
         }
-        if let Some(marker) = self.marker.as_ref().and_then(MarkerTree::contents) {
+        if let Some(marker) = self.marker.contents() {
             write!(f, " ; {marker}")?;
         }
         Ok(())
@@ -256,10 +256,7 @@ impl PyRequirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`
     #[getter]
     pub fn marker(&self) -> Option<String> {
-        self.marker
-            .as_ref()
-            .and_then(MarkerTree::contents)
-            .map(|marker| marker.to_string())
+        self.marker.try_to_string()
     }
 
     /// Parses a PEP 440 string
@@ -375,11 +372,7 @@ impl PyRequirement {
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate(env, extras)
-        } else {
-            true
-        }
+        self.marker.evaluate(env, extras)
     }
 
     /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
@@ -393,11 +386,8 @@ impl<T: Pep508Url> Requirement<T> {
         extras: &HashSet<ExtraName>,
         python_versions: &[Version],
     ) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate_extras_and_python_version(extras, python_versions)
-        } else {
-            true
-        }
+        self.marker
+            .evaluate_extras_and_python_version(extras, python_versions)
     }
 
     /// Returns whether the markers apply for the given environment.
@@ -406,11 +396,7 @@ impl<T: Pep508Url> Requirement<T> {
         env: &MarkerEnvironment,
         extras: &[ExtraName],
     ) -> (bool, Vec<MarkerWarning>) {
-        if let Some(marker) = &self.marker {
-            marker.evaluate_collect_warnings(env, extras)
-        } else {
-            (true, Vec::new())
-        }
+        self.marker.evaluate_collect_warnings(env, extras)
     }
 
     /// Return the requirement with an additional marker added, to require the given extra.
@@ -418,26 +404,14 @@ impl<T: Pep508Url> Requirement<T> {
     /// For example, given `flask >= 2.0.2`, calling `with_extra_marker("dotenv")` would return
     /// `flask >= 2.0.2 ; extra == "dotenv"`.
     #[must_use]
-    pub fn with_extra_marker(self, extra: &ExtraName) -> Self {
-        let marker = match self.marker {
-            Some(mut marker) => {
-                let extra = MarkerTree::expression(MarkerExpression::Extra {
-                    operator: ExtraOperator::Equal,
-                    name: extra.clone(),
-                });
-                marker.and(extra);
-                marker
-            }
-            None => MarkerTree::expression(MarkerExpression::Extra {
+    pub fn with_extra_marker(mut self, extra: &ExtraName) -> Self {
+        self.marker
+            .and(MarkerTree::expression(MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
                 name: extra.clone(),
-            }),
-        };
+            }));
 
-        Self {
-            marker: Some(marker),
-            ..self
-        }
+        self
     }
 
     /// Set the source file containing the requirement.
@@ -1053,6 +1027,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
     } else {
         None
     };
+
     // wsp*
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
@@ -1085,7 +1060,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
         name,
         extras,
         version_or_url: requirement_kind,
-        marker,
+        marker: marker.unwrap_or_default(),
         origin: None,
     })
 }
@@ -1222,14 +1197,14 @@ mod tests {
                 .into_iter()
                 .collect(),
             )),
-            marker: Some(MarkerTree::expression(MarkerExpression::Version {
+            marker: MarkerTree::expression(MarkerExpression::Version {
                 key: MarkerValueVersion::PythonVersion,
                 specifier: VersionSpecifier::from_pattern(
                     pep440_rs::Operator::LessThan,
                     "2.7".parse().unwrap(),
                 )
                 .unwrap(),
-            })),
+            }),
             origin: None,
         };
         assert_eq!(requests, expected);
@@ -1455,7 +1430,7 @@ mod tests {
         let expected = Requirement {
             name: PackageName::from_str("pip").unwrap(),
             extras: vec![],
-            marker: None,
+            marker: MarkerTree::TRUE,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
             origin: None,
         };

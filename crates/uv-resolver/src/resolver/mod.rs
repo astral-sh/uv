@@ -1598,12 +1598,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             // If the requirement is `requests ; sys_platform == 'darwin'` and the
                             // constraint is `requests ; python_version == '3.6'`, the constraint
                             // should only apply when _both_ markers are true.
-                            if let Some(marker) = requirement.marker.as_ref() {
-                                let marker = constraint.marker.as_ref().map(|m| {
-                                    let mut marker = marker.clone();
-                                    marker.and(m.clone());
-                                    marker
-                                }).or_else(|| Some(marker.clone()));
+                            if requirement.marker.is_true() {
+                                Cow::Borrowed(constraint)
+                            } else {
+                                let mut marker = constraint.marker.clone();
+                                marker.and(requirement.marker.clone());
 
                                 Cow::Owned(Requirement {
                                     name: constraint.name.clone(),
@@ -1612,8 +1611,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     origin: constraint.origin.clone(),
                                     marker
                                 })
-                            } else {
-                                Cow::Borrowed(constraint)
                             }
                         })
                 )
@@ -3120,8 +3117,5 @@ fn satisfies_requires_python(
 /// Returns true if and only if the given requirement's marker expression has a
 /// possible true value given the `markers` expression given.
 fn possible_to_satisfy_markers(markers: &MarkerTree, requirement: &Requirement) -> bool {
-    let Some(marker) = requirement.marker.as_ref() else {
-        return true;
-    };
-    !markers.is_disjoint(marker)
+    !markers.is_disjoint(&requirement.marker)
 }

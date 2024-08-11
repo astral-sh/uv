@@ -23,7 +23,7 @@ pub struct Preference {
     name: PackageName,
     version: Version,
     /// The markers on the requirement itself (those after the semicolon).
-    marker: Option<MarkerTree>,
+    marker: MarkerTree,
     /// If coming from a package with diverging versions, the markers of the forks this preference
     /// is part of, otherwise `None`.
     fork_markers: Option<BTreeSet<MarkerTree>>,
@@ -77,7 +77,7 @@ impl Preference {
         Self {
             name: dist.name().clone(),
             version: version.clone(),
-            marker: None,
+            marker: MarkerTree::TRUE,
             // Installed distributions don't have fork annotations.
             fork_markers: None,
             hashes: Vec::new(),
@@ -89,7 +89,7 @@ impl Preference {
         Self {
             name: package.id.name.clone(),
             version: package.id.version.clone(),
-            marker: None,
+            marker: MarkerTree::TRUE,
             fork_markers: package.fork_markers().cloned(),
             hashes: Vec::new(),
         }
@@ -128,11 +128,7 @@ impl Preferences {
         for preference in preferences {
             // Filter non-matching preferences when resolving for an environment.
             if let Some(markers) = markers {
-                if !preference
-                    .marker
-                    .as_ref()
-                    .map_or(true, |marker| marker.evaluate(markers, &[]))
-                {
+                if !preference.marker.evaluate(markers, &[]) {
                     trace!("Excluding {preference} from preferences due to unmatched markers");
                     continue;
                 }

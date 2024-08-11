@@ -23,7 +23,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/for-poetry.txt",
@@ -52,7 +52,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/for-poetry.txt",
@@ -70,7 +70,7 @@ RequirementsTxt {
                     ),
                     extras: [],
                     version_or_url: None,
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/for-poetry.txt",
@@ -107,7 +107,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/for-poetry.txt",

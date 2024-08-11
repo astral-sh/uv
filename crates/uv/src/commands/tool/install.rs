@@ -20,11 +20,10 @@ use uv_warnings::{warn_user, warn_user_once};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
-use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{
-    project::{resolve_environment, resolve_names, sync_environment, update_environment},
-    tool::common::InstallAction,
+use crate::commands::project::{
+    resolve_environment, resolve_names, sync_environment, update_environment,
 };
+use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{reporters::PythonDownloadReporter, tool::common::install_executables};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -352,7 +351,6 @@ pub(crate) async fn install(
         force || invalid_tool_receipt,
         python,
         requirements,
-        InstallAction::Install,
         printer,
     )
 }

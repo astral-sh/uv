@@ -14,9 +14,11 @@ fn test_tool_upgrade_name() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`.
+    // Install `babel` from Test PyPI, to get an outdated version.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black>=23.1")
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
@@ -29,18 +31,16 @@ fn test_tool_upgrade_name() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
     "###);
 
-    // Upgrade `black`. This should be a no-op, since we have the latest version already.
+    // Upgrade `babel` by installing from PyPI, which should upgrade to the latest version.
     uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("black")
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
@@ -50,9 +50,11 @@ fn test_tool_upgrade_name() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    Updated 2 executables: black, blackd
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
     "###);
 }
 
@@ -64,9 +66,11 @@ fn test_tool_upgrade_all() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black==23.1`.
+    // Install `python-dotenv` from Test PyPI, to get an outdated version.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("black==23.1")
+        .arg("python-dotenv")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
@@ -79,18 +83,15 @@ fn test_tool_upgrade_all() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==23.1.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    Installed 2 executables: black, blackd
+     + python-dotenv==0.10.2.post2
+    Installed 1 executable: dotenv
     "###);
 
-    // Install `pytest==8.0`.
+    // Install `babel` from Test PyPI, to get an outdated version.
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("pytest==8.0")
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
@@ -103,16 +104,16 @@ fn test_tool_upgrade_all() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + iniconfig==2.0.0
-     + packaging==24.0
-     + pluggy==1.4.0
-     + pytest==8.0.0
-    Installed 2 executables: py.test, pytest
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
     "###);
 
-    // Upgrade all. This is a no-op, since we have the latest versions already.
+    // Upgrade all from PyPI.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("--all")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
         .env("PATH", bin_dir.as_os_str()), @r###"
@@ -122,12 +123,15 @@ fn test_tool_upgrade_all() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    Updated 2 executables: black, blackd
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    Updated 2 executables: py.test, pytest
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    Installed 1 executable: pybabel
+    Updated python-dotenv v0.10.2.post2 -> v1.0.1
+     - python-dotenv==0.10.2.post2
+     + python-dotenv==1.0.1
+    Installed 1 executable: dotenv
     "###);
 }
 
@@ -215,9 +219,7 @@ fn test_tool_upgrade_settings() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    Updated 2 executables: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     // Upgrade `black`, but override the resolution.
@@ -233,13 +235,63 @@ fn test_tool_upgrade_settings() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated black v23.1.0 -> v24.3.0
      - black==23.1.0
      + black==24.3.0
-    Updated 2 executables: black, blackd
+    Installed 2 executables: black, blackd
+    "###);
+}
+
+#[test]
+fn test_tool_upgrade_respect_constraints() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `babel` from Test PyPI, to get an outdated version.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel<2.10")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    "###);
+
+    // Upgrade `babel` from PyPI. It should be updated, but not beyond the constraint.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool upgrade` is experimental and may change without warning
+    Updated babel v2.6.0 -> v2.9.1
+     - babel==2.6.0
+     + babel==2.9.1
+     - pytz==2018.5
+     + pytz==2024.1
+    Installed 1 executable: pybabel
     "###);
 }
 
@@ -289,15 +341,12 @@ fn test_tool_upgrade_constraint() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated babel v2.6.0 -> v2.13.1
      - babel==2.6.0
      + babel==2.13.1
      - pytz==2018.5
      + setuptools==69.2.0
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 
     // Upgrade `babel` without a constraint.
@@ -314,14 +363,11 @@ fn test_tool_upgrade_constraint() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated babel v2.13.1 -> v2.14.0
      - babel==2.13.1
      + babel==2.14.0
      - setuptools==69.2.0
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 
     // Passing `--upgrade` explicitly should warn.
@@ -340,8 +386,6 @@ fn test_tool_upgrade_constraint() {
     ----- stderr -----
     warning: `--upgrade` is enabled by default on `uv tool upgrade`
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 }

@@ -60,11 +60,7 @@ impl Constraints {
 
             // ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part
             // of the main conjunction.
-            let Some(extra_expression) = requirement
-                .marker
-                .as_ref()
-                .and_then(MarkerTree::top_level_extra)
-            else {
+            let Some(extra_expression) = requirement.marker.top_level_extra() else {
                 // Case 2: A non-optional dependency with constraint(s).
                 return Either::Right(Either::Right(
                     std::iter::once(requirement).chain(constraints.iter().map(Cow::Borrowed)),
@@ -79,11 +75,9 @@ impl Constraints {
                 constraints.iter().cloned().map(move |constraint| {
                     // Add the extra to the override marker.
                     let mut joint_marker = MarkerTree::expression(extra_expression.clone());
-                    if let Some(marker) = &constraint.marker {
-                        joint_marker.and(marker.clone());
-                    }
+                    joint_marker.and(constraint.marker.clone());
                     Cow::Owned(Requirement {
-                        marker: Some(joint_marker.clone()),
+                        marker: joint_marker,
                         ..constraint
                     })
                 }),

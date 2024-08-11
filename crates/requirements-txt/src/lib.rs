@@ -1691,7 +1691,7 @@ mod test {
                                 ),
                                 extras: [],
                                 version_or_url: None,
-                                marker: None,
+                                marker: true,
                                 origin: Some(
                                     File(
                                         "<REQUIREMENTS_DIR>/subdir/sibling.txt",
@@ -1755,7 +1755,7 @@ mod test {
                                 ),
                                 extras: [],
                                 version_or_url: None,
-                                marker: None,
+                                marker: true,
                                 origin: Some(
                                     File(
                                         "<REQUIREMENTS_DIR>/requirements.txt",
@@ -1864,7 +1864,7 @@ mod test {
                                     },
                                 },
                                 extras: [],
-                                marker: None,
+                                marker: true,
                                 origin: Some(
                                     File(
                                         "<REQUIREMENTS_DIR>/grandchild.txt",
@@ -1978,7 +1978,7 @@ mod test {
                                 ),
                                 extras: [],
                                 version_or_url: None,
-                                marker: None,
+                                marker: true,
                                 origin: Some(
                                     File(
                                         "<REQUIREMENTS_DIR>/./sibling.txt",
@@ -2007,7 +2007,7 @@ mod test {
                                         ),
                                     ),
                                 ),
-                                marker: None,
+                                marker: true,
                                 origin: Some(
                                     File(
                                         "<REQUIREMENTS_DIR>/requirements.txt",
@@ -2038,7 +2038,7 @@ mod test {
                                         ),
                                     ),
                                 ),
-                                marker: None,
+                                marker: true,
                                 origin: Some(
                                     File(
                                         "<REQUIREMENTS_DIR>/requirements.txt",
@@ -2069,7 +2069,7 @@ mod test {
                                         ),
                                     ),
                                 ),
-                                marker: None,
+                                marker: true,
                                 origin: Some(
                                     File(
                                         "<REQUIREMENTS_DIR>/requirements.txt",
@@ -2098,7 +2098,7 @@ mod test {
                                         ),
                                     ),
                                 ),
-                                marker: None,
+                                marker: true,
                                 origin: Some(
                                     File(
                                         "<REQUIREMENTS_DIR>/requirements.txt",

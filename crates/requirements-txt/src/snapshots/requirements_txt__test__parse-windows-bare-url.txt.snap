@@ -44,7 +44,7 @@ RequirementsTxt {
                         },
                     },
                     extras: [],
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/bare-url.txt",
@@ -98,7 +98,7 @@ RequirementsTxt {
                             "dev",
                         ),
                     ],
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/bare-url.txt",
@@ -148,7 +148,7 @@ RequirementsTxt {
                         },
                     },
                     extras: [],
-                    marker: None,
+                    marker: true,
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/bare-url.txt",

@@ -1,13 +1,15 @@
+use std::collections::BTreeSet;
 use std::fmt;
 use std::fmt::Write;
 
-use itertools::Itertools;
-use owo_colors::OwoColorize;
-
-use distribution_types::{CachedDist, InstalledDist, InstalledMetadata, LocalDist, Name};
-
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
+use distribution_types::{CachedDist, InstalledDist, InstalledMetadata, LocalDist, Name};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use pep440_rs::Version;
+use rustc_hash::{FxBuildHasher, FxHashMap};
+use uv_normalize::PackageName;
 
 /// A trait to handle logging during install operations.
 pub(crate) trait InstallLogger {
@@ -219,6 +221,172 @@ impl InstallLogger for SummaryInstallLogger {
         _uninstalled: Vec<InstalledDist>,
         _printer: Printer,
     ) -> fmt::Result {
+        Ok(())
+    }
+}
+
+/// A logger that shows special output for the modification of the given target.
+#[derive(Debug, Clone)]
+pub(crate) struct UpgradeInstallLogger {
+    target: PackageName,
+}
+
+impl UpgradeInstallLogger {
+    /// Create a new logger for the given target.
+    pub(crate) fn new(target: PackageName) -> Self {
+        Self { target }
+    }
+}
+
+impl InstallLogger for UpgradeInstallLogger {
+    fn on_audit(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+
+    fn on_prepare(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+
+    fn on_uninstall(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+
+    fn on_install(
+        &self,
+        _count: usize,
+        _start: std::time::Instant,
+        _printer: Printer,
+    ) -> fmt::Result {
+        Ok(())
+    }
+
+    fn on_complete(
+        &self,
+        installed: Vec<CachedDist>,
+        reinstalled: Vec<InstalledDist>,
+        uninstalled: Vec<InstalledDist>,
+        printer: Printer,
+    ) -> fmt::Result {
+        // Index the removals by package name.
+        let removals: FxHashMap<&PackageName, BTreeSet<Version>> =
+            reinstalled.iter().chain(uninstalled.iter()).fold(
+                FxHashMap::with_capacity_and_hasher(
+                    reinstalled.len() + uninstalled.len(),
+                    FxBuildHasher,
+                ),
+                |mut acc, distribution| {
+                    acc.entry(distribution.name())
+                        .or_default()
+                        .insert(distribution.installed_version().version().clone());
+                    acc
+                },
+            );
+
+        // Index the additions by package name.
+        let additions: FxHashMap<&PackageName, BTreeSet<Version>> = installed.iter().fold(
+            FxHashMap::with_capacity_and_hasher(installed.len(), FxBuildHasher),
+            |mut acc, distribution| {
+                acc.entry(distribution.name())
+                    .or_default()
+                    .insert(distribution.installed_version().version().clone());
+                acc
+            },
+        );
+
+        // Summarize the change for the target.
+        match (removals.get(&self.target), additions.get(&self.target)) {
+            (Some(removals), Some(additions)) => {
+                if removals == additions {
+                    let reinstalls = additions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    writeln!(
+                        printer.stderr(),
+                        "{} {} {}",
+                        "Reinstalled".yellow().bold(),
+                        &self.target,
+                        reinstalls
+                    )?;
+                } else {
+                    let removals = removals
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let additions = additions
+                        .iter()
+                        .map(|version| format!("v{version}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    writeln!(
+                        printer.stderr(),
+                        "{} {} {} -> {}",
+                        "Updated".green().bold(),
+                        &self.target,
+                        removals,
+                        additions
+                    )?;
+                }
+            }
+            (Some(removals), None) => {
+                let removals = removals
+                    .iter()
+                    .map(|version| format!("v{version}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {} {}",
+                    "Removed".red().bold(),
+                    &self.target,
+                    removals
+                )?;
+            }
+            (None, Some(additions)) => {
+                let additions = additions
+                    .iter()
+                    .map(|version| format!("v{version}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    printer.stderr(),
+                    "{} {} {}",
+                    "Added".green().bold(),
+                    &self.target,
+                    additions
+                )?;
+            }
+            (None, None) => {
+                writeln!(
+                    printer.stderr(),
+                    "{} {} {}",
+                    "Modified".dimmed(),
+                    &self.target.dimmed().bold(),
+                    "environment".dimmed()
+                )?;
+            }
+        }
+
+        // Follow-up with a detailed summary of all changes.
+        DefaultInstallLogger.on_complete(installed, reinstalled, uninstalled, printer)?;
+
         Ok(())
     }
 }

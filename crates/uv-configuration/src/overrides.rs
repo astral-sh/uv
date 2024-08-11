@@ -50,11 +50,7 @@ impl Overrides {
 
             // ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part
             // of the main conjunction.
-            let Some(extra_expression) = requirement
-                .marker
-                .as_ref()
-                .and_then(MarkerTree::top_level_extra)
-            else {
+            let Some(extra_expression) = requirement.marker.top_level_extra() else {
                 // Case 2: A non-optional dependency with override(s).
                 return Either::Right(Either::Right(overrides.iter().map(Cow::Borrowed)));
             };
@@ -67,11 +63,9 @@ impl Overrides {
                 move |override_requirement| {
                     // Add the extra to the override marker.
                     let mut joint_marker = MarkerTree::expression(extra_expression.clone());
-                    if let Some(marker) = &override_requirement.marker {
-                        joint_marker.and(marker.clone());
-                    }
+                    joint_marker.and(override_requirement.marker.clone());
                     Cow::Owned(Requirement {
-                        marker: Some(joint_marker.clone()),
+                        marker: joint_marker,
                         ..override_requirement.clone()
                     })
                 },

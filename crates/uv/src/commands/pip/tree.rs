@@ -139,12 +139,11 @@ impl DisplayDependencyGraph {
         // Add all transitive requirements.
         for metadata in packages.values().flatten() {
             // Ignore any optional dependencies.
-            for required in metadata.requires_dist.iter().filter(|requirement| {
-                requirement
-                    .marker
-                    .as_ref()
-                    .map_or(true, |m| m.evaluate(markers, &[]))
-            }) {
+            for required in metadata
+                .requires_dist
+                .iter()
+                .filter(|requirement| requirement.marker.evaluate(markers, &[]))
+            {
                 let dependency = if invert {
                     Dependency::Inverted(
                         required.name.clone(),
