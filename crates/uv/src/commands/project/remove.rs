@@ -6,10 +6,11 @@ use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
 use uv_fs::CWD;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::DependencyType;
-use uv_workspace::pyproject_mut::PyProjectTomlMut;
-use uv_workspace::{DiscoveryOptions, ProjectWorkspace, VirtualProject, Workspace};
+use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -28,6 +29,7 @@ pub(crate) async fn remove(
     package: Option<PackageName>,
     python: Option<String>,
     settings: ResolverInstallerSettings,
+    script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     preview: PreviewMode,
@@ -41,41 +43,79 @@ pub(crate) async fn remove(
         warn_user_once!("`uv remove` is experimental and may change without warning");
     }
 
-    // Find the project in the workspace.
-    let project = if let Some(package) = package {
-        Workspace::discover(&CWD, &DiscoveryOptions::default())
-            .await?
-            .with_current_project(package.clone())
-            .with_context(|| format!("Package `{package}` not found in workspace"))?
+    let target = if let Some(script) = script {
+        // If we found a PEP 723 script and the user provided a project-only setting, warn.
+        if package.is_some() {
+            warn_user_once!(
+                "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if locked {
+            warn_user_once!(
+                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if frozen {
+            warn_user_once!(
+                "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        if no_sync {
+            warn_user_once!(
+                "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
+        Target::Script(script)
     } else {
-        ProjectWorkspace::discover(&CWD, &DiscoveryOptions::default()).await?
+        // Find the project in the workspace.
+        let project = if let Some(package) = package {
+            VirtualProject::Project(
+                Workspace::discover(&CWD, &DiscoveryOptions::default())
+                    .await?
+                    .with_current_project(package.clone())
+                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+            )
+        } else {
+            VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await?
+        };
+
+        Target::Project(project)
     };
 
-    let mut pyproject = PyProjectTomlMut::from_toml(project.current_project().pyproject_toml())?;
+    let mut toml = match &target {
+        Target::Script(script) => {
+            PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
+        }
+        Target::Project(project) => PyProjectTomlMut::from_toml(
+            project.pyproject_toml().raw.as_ref(),
+            DependencyTarget::PyProjectToml,
+        ),
+    }?;
+
     for package in packages {
         match dependency_type {
             DependencyType::Production => {
-                let deps = pyproject.remove_dependency(&package)?;
+                let deps = toml.remove_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&package, &pyproject);
+                    warn_if_present(&package, &toml);
                     anyhow::bail!(
                         "The dependency `{package}` could not be found in `dependencies`"
                     );
                 }
             }
             DependencyType::Dev => {
-                let deps = pyproject.remove_dev_dependency(&package)?;
+                let deps = toml.remove_dev_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&package, &pyproject);
+                    warn_if_present(&package, &toml);
                     anyhow::bail!(
                         "The dependency `{package}` could not be found in `dev-dependencies`"
                     );
                 }
             }
             DependencyType::Optional(ref group) => {
-                let deps = pyproject.remove_optional_dependency(&package, group)?;
+                let deps = toml.remove_optional_dependency(&package, group)?;
                 if deps.is_empty() {
-                    warn_if_present(&package, &pyproject);
+                    warn_if_present(&package, &toml);
                     anyhow::bail!(
                         "The dependency `{package}` could not be found in `optional-dependencies`"
                     );
@@ -84,17 +124,27 @@ pub(crate) async fn remove(
         }
     }
 
-    // Save the modified `pyproject.toml`.
-    fs_err::write(
-        project.current_project().root().join("pyproject.toml"),
-        pyproject.to_string(),
-    )?;
+    // Save the modified dependencies.
+    match &target {
+        Target::Script(script) => {
+            script.write(&toml.to_string()).await?;
+        }
+        Target::Project(project) => {
+            let pyproject_path = project.root().join("pyproject.toml");
+            fs_err::write(pyproject_path, toml.to_string())?;
+        }
+    };
 
     // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
     // to exist at all.
     if frozen {
         return Ok(ExitStatus::Success);
     }
+
+    // If `--script`, exit early. There's no reason to lock and sync.
+    let Target::Project(project) = target else {
+        return Ok(ExitStatus::Success);
+    };
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
@@ -139,7 +189,7 @@ pub(crate) async fn remove(
     let state = SharedState::default();
 
     project::sync::do_sync(
-        &VirtualProject::Project(project),
+        &project,
         &venv,
         &lock.lock,
         &extras,
@@ -158,6 +208,15 @@ pub(crate) async fn remove(
     .await?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Represents the destination where dependencies are added, either to a project or a script.
+#[derive(Debug)]
+enum Target {
+    /// A PEP 723 script, with inline metadata.
+    Project(VirtualProject),
+    /// A project with a `pyproject.toml`.
+    Script(Pep723Script),
 }
 
 /// Emit a warning if a dependency with the given name is present as any dependency type.

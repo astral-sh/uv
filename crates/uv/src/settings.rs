@@ -703,6 +703,7 @@ pub(crate) struct AddSettings {
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) package: Option<PackageName>,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -730,6 +731,7 @@ impl AddSettings {
             build,
             refresh,
             package,
+            script,
             python,
         } = args;
 
@@ -757,6 +759,7 @@ impl AddSettings {
             tag,
             branch,
             package,
+            script,
             python,
             editable: flag(editable, no_editable),
             extras: extra.unwrap_or_default(),
@@ -779,6 +782,7 @@ pub(crate) struct RemoveSettings {
     pub(crate) packages: Vec<PackageName>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) package: Option<PackageName>,
+    pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -799,6 +803,7 @@ impl RemoveSettings {
             build,
             refresh,
             package,
+            script,
             python,
         } = args;
 
@@ -817,6 +822,7 @@ impl RemoveSettings {
             packages,
             dependency_type,
             package,
+            script,
             python,
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
