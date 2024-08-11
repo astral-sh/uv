@@ -343,7 +343,10 @@ impl PyProjectTomlMut {
     }
 
     /// Removes all occurrences of dependencies with the given name.
-    pub fn remove_dependency(&mut self, req: &PackageName) -> Result<Vec<Requirement>, Error> {
+    pub fn remove_dependency(
+        &mut self,
+        requirement: &Requirement,
+    ) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.dependencies`.
         let Some(dependencies) = self
             .doc_mut()?
@@ -354,14 +357,17 @@ impl PyProjectTomlMut {
             return Ok(Vec::new());
         };
 
-        let requirements = remove_dependency(req, dependencies);
-        self.remove_source(req)?;
+        let requirements = remove_dependency(requirement, dependencies);
+        self.remove_source(requirement)?;
 
         Ok(requirements)
     }
 
     /// Removes all occurrences of development dependencies with the given name.
-    pub fn remove_dev_dependency(&mut self, req: &PackageName) -> Result<Vec<Requirement>, Error> {
+    pub fn remove_dev_dependency(
+        &mut self,
+        requirement: &Requirement,
+    ) -> Result<Vec<Requirement>, Error> {
         // Try to get `tool.uv.dev-dependencies`.
         let Some(dev_dependencies) = self
             .doc
@@ -378,8 +384,8 @@ impl PyProjectTomlMut {
             return Ok(Vec::new());
         };
 
-        let requirements = remove_dependency(req, dev_dependencies);
-        self.remove_source(req)?;
+        let requirements = remove_dependency(requirement, dev_dependencies);
+        self.remove_source(requirement)?;
 
         Ok(requirements)
     }
@@ -387,7 +393,7 @@ impl PyProjectTomlMut {
     /// Removes all occurrences of optional dependencies in the group with the given name.
     pub fn remove_optional_dependency(
         &mut self,
-        req: &PackageName,
+        requirement: &Requirement,
         group: &ExtraName,
     ) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.optional-dependencies.<group>`.
@@ -403,14 +409,14 @@ impl PyProjectTomlMut {
             return Ok(Vec::new());
         };
 
-        let requirements = remove_dependency(req, optional_dependencies);
-        self.remove_source(req)?;
+        let requirements = remove_dependency(requirement, optional_dependencies);
+        self.remove_source(requirement)?;
 
         Ok(requirements)
     }
 
     /// Remove a matching source from `tool.uv.sources`, if it exists.
-    fn remove_source(&mut self, name: &PackageName) -> Result<(), Error> {
+    fn remove_source(&mut self, requirement: &Requirement) -> Result<(), Error> {
         if let Some(sources) = self
             .doc
             .get_mut("tool")
@@ -423,7 +429,7 @@ impl PyProjectTomlMut {
             .map(|sources| sources.as_table_mut().ok_or(Error::MalformedSources))
             .transpose()?
         {
-            sources.remove(name.as_ref());
+            sources.remove(requirement.name.as_ref());
         }
 
         Ok(())
@@ -434,13 +440,13 @@ impl PyProjectTomlMut {
     ///
     /// This method searches `project.dependencies`, `tool.uv.dev-dependencies`, and
     /// `tool.uv.optional-dependencies`.
-    pub fn find_dependency(&self, name: &PackageName) -> Vec<DependencyType> {
+    pub fn find_dependency(&self, requirement: &Requirement) -> Vec<DependencyType> {
         let mut types = Vec::new();
 
         if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
             // Check `project.dependencies`.
             if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
-                if !find_dependencies(name, dependencies).is_empty() {
+                if !find_dependencies(requirement, dependencies).is_empty() {
                     types.push(DependencyType::Production);
                 }
             }
@@ -458,7 +464,7 @@ impl PyProjectTomlMut {
                         continue;
                     };
 
-                    if !find_dependencies(name, dependencies).is_empty() {
+                    if !find_dependencies(requirement, dependencies).is_empty() {
                         types.push(DependencyType::Optional(extra));
                     }
                 }
@@ -475,7 +481,7 @@ impl PyProjectTomlMut {
             .and_then(|tool| tool.get("dev-dependencies"))
             .and_then(Item::as_array)
         {
-            if !find_dependencies(name, dev_dependencies).is_empty() {
+            if !find_dependencies(requirement, dev_dependencies).is_empty() {
                 types.push(DependencyType::Dev);
             }
         }
@@ -500,7 +506,7 @@ pub fn add_dependency(
     has_source: bool,
 ) -> Result<ArrayEdit, Error> {
     // Find matching dependencies.
-    let mut to_replace = find_dependencies(&req.name, deps);
+    let mut to_replace = find_dependencies(req, deps);
     match to_replace.as_slice() {
         [] => {
             deps.push(req.to_string());
@@ -545,7 +551,7 @@ fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool
 }
 
 /// Removes all occurrences of dependencies with the given name from the given `deps` array.
-fn remove_dependency(req: &PackageName, deps: &mut Array) -> Vec<Requirement> {
+fn remove_dependency(req: &Requirement, deps: &mut Array) -> Vec<Requirement> {
     // Remove matching dependencies.
     let removed = find_dependencies(req, deps)
         .into_iter()
@@ -566,11 +572,11 @@ fn remove_dependency(req: &PackageName, deps: &mut Array) -> Vec<Requirement> {
 
 /// Returns a `Vec` containing the all dependencies with the given name, along with their positions
 /// in the array.
-fn find_dependencies(name: &PackageName, deps: &Array) -> Vec<(usize, Requirement)> {
+fn find_dependencies(requirement: &Requirement, deps: &Array) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
         if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if req.name == *name {
+            if req.name == requirement.name && req.marker == requirement.marker {
                 to_replace.push((i, req));
             }
         }
