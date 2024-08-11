@@ -2772,7 +2772,7 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_paths: bool,
 
-    // Hide unsupported python options.
+    // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
     #[arg(long, hide = true)]
