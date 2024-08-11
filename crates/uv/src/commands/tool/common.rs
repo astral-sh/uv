@@ -61,13 +61,6 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
     }
 }
 
-/// Represents the action to be performed on executables: update or install.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum InstallAction {
-    Update,
-    Install,
-}
-
 /// Installs tool executables for a given package and handles any conflicts.
 pub(crate) fn install_executables(
     environment: &PythonEnvironment,
@@ -77,7 +70,6 @@ pub(crate) fn install_executables(
     force: bool,
     python: Option<String>,
     requirements: Vec<Requirement>,
-    action: InstallAction,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let site_packages = SitePackages::from_environment(environment)?;
@@ -102,8 +94,7 @@ pub(crate) fn install_executables(
         installed_dist.version(),
     )?;
 
-    // Determine the entry points targets
-    // Use a sorted collection for deterministic output
+    // Determine the entry points targets. Use a sorted collection for deterministic output.
     let target_entry_points = entry_points
         .into_iter()
         .map(|(name, source_path)| {
@@ -180,13 +171,9 @@ pub(crate) fn install_executables(
     } else {
         "s"
     };
-    let install_message = match action {
-        InstallAction::Install => "Installed",
-        InstallAction::Update => "Updated",
-    };
     writeln!(
         printer.stderr(),
-        "{install_message} {} executable{s}: {}",
+        "Installed {} executable{s}: {}",
         target_entry_points.len(),
         target_entry_points
             .iter()
@@ -194,7 +181,7 @@ pub(crate) fn install_executables(
             .join(", ")
     )?;
 
-    debug!("Adding receipt for tool `{}`", name);
+    debug!("Adding receipt for tool `{name}`");
     let tool = Tool::new(
         requirements.into_iter().collect(),
         python,

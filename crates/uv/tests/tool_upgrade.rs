@@ -50,14 +50,11 @@ fn test_tool_upgrade_name() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
      + babel==2.14.0
      - pytz==2018.5
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 }
 
@@ -126,21 +123,15 @@ fn test_tool_upgrade_all() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated babel v2.6.0 -> v2.14.0
      - babel==2.6.0
      + babel==2.14.0
      - pytz==2018.5
-    Updated 1 executable: pybabel
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Installed 1 executable: pybabel
+    Updated python-dotenv v0.10.2.post2 -> v1.0.1
      - python-dotenv==0.10.2.post2
      + python-dotenv==1.0.1
-    Updated 1 executable: dotenv
+    Installed 1 executable: dotenv
     "###);
 }
 
@@ -228,9 +219,7 @@ fn test_tool_upgrade_settings() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    Updated 2 executables: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 
     // Upgrade `black`, but override the resolution.
@@ -246,13 +235,10 @@ fn test_tool_upgrade_settings() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated black v23.1.0 -> v24.3.0
      - black==23.1.0
      + black==24.3.0
-    Updated 2 executables: black, blackd
+    Installed 2 executables: black, blackd
     "###);
 }
 
@@ -300,15 +286,12 @@ fn test_tool_upgrade_respect_constraints() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated babel v2.6.0 -> v2.9.1
      - babel==2.6.0
      + babel==2.9.1
      - pytz==2018.5
      + pytz==2024.1
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 }
 
@@ -358,15 +341,12 @@ fn test_tool_upgrade_constraint() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated babel v2.6.0 -> v2.13.1
      - babel==2.6.0
      + babel==2.13.1
      - pytz==2018.5
      + setuptools==69.2.0
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 
     // Upgrade `babel` without a constraint.
@@ -383,14 +363,11 @@ fn test_tool_upgrade_constraint() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
+    Updated babel v2.13.1 -> v2.14.0
      - babel==2.13.1
      + babel==2.14.0
      - setuptools==69.2.0
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 
     // Passing `--upgrade` explicitly should warn.
@@ -409,8 +386,6 @@ fn test_tool_upgrade_constraint() {
     ----- stderr -----
     warning: `--upgrade` is enabled by default on `uv tool upgrade`
     warning: `uv tool upgrade` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    Audited [N] packages in [TIME]
-    Updated 1 executable: pybabel
+    Installed 1 executable: pybabel
     "###);
 }
