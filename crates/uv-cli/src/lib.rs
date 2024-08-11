@@ -2360,9 +2360,18 @@ pub struct LockArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AddArgs {
-    /// The packages to add, as PEP 508 requirements (e.g., `ruff==0.5.0`).
-    #[arg(required = true)]
-    pub requirements: Vec<String>,
+    /// Install all listed packages.
+    #[arg(group = "sources")]
+    pub packages: Vec<String>,
+
+    /// Install all packages listed in the given `requirements.txt` files.
+    ///
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will
+    /// extract the requirements for the relevant project.
+    ///
+    /// If `-` is provided, then requirements will be read from stdin.
+    #[arg(long, short, group = "sources", value_parser = parse_file_path)]
+    pub requirements: Vec<PathBuf>,
 
     /// Add the requirements as development dependencies.
     #[arg(long, conflicts_with("optional"))]

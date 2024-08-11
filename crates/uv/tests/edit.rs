@@ -583,7 +583,7 @@ fn add_raw_error() -> Result<()> {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES>...
 
     For more information, try '--help'.
     "###);
@@ -2240,7 +2240,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--branch <BRANCH>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES>...
 
     For more information, try '--help'.
     "###
@@ -2261,7 +2261,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--rev <REV>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <REQUIREMENTS>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES>...
 
     For more information, try '--help'.
     "###
@@ -2282,7 +2282,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used multiple times
 
-    Usage: uv add [OPTIONS] <REQUIREMENTS>...
+    Usage: uv add [OPTIONS] [PACKAGES]...
 
     For more information, try '--help'.
     "###
@@ -2905,6 +2905,66 @@ fn add_repeat() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "anyio>=4.3.0",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Add from requirement file.
+#[test]
+fn add_requirements_file() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask==2.3.2")?;
+
+    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==2.3.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + werkzeug==3.0.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        # ...
+        requires-python = ">=3.12"
+        dependencies = [
+            "flask==2.3.2",
         ]
         "###
         );

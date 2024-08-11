@@ -1147,12 +1147,22 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
+            let requirements = args
+                .packages
+                .into_iter()
+                .map(RequirementsSource::Package)
+                .chain(
+                    args.requirements
+                        .into_iter()
+                        .map(RequirementsSource::from_requirements_file),
+                )
+                .collect::<Vec<_>>();
 
             commands::add(
                 args.locked,
                 args.frozen,
                 args.no_sync,
-                args.requirements,
+                requirements,
                 args.editable,
                 args.dependency_type,
                 args.raw_sources,
