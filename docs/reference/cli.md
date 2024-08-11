@@ -471,7 +471,9 @@ uv add [OPTIONS] [PACKAGES]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>PACKAGES</code></dt><dd><p>Install all listed packages</p>
+<dl class="cli-reference"><dt><code>PACKAGES</code></dt><dd><p>The packages to add.</p>
+
+<p>As PEP 508 requirements (e.g., <code>ruff==0.5.0</code>).</p>
 
 </dd></dl>
 
@@ -696,7 +698,7 @@ uv add [OPTIONS] [PACKAGES]...
 
 </dd><dt><code>--reinstall-package</code> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it&#8217;s already installed. Implies <code>--refresh-package</code></p>
 
-</dd><dt><code>--requirements</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> files.</p>
+</dd><dt><code>--requirements</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Add all packages listed in the given <code>requirements.txt</code> files.</p>
 
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
 
