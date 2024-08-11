@@ -5127,6 +5127,7 @@ dependencies = [
  "pypi-types",
  "schemars",
  "serde",
+ "textwrap",
  "thiserror",
  "toml",
  "tracing",

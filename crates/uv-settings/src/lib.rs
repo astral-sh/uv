@@ -75,8 +75,9 @@ impl FilesystemOptions {
                 Err(Error::PyprojectToml(file, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
                     warn_user!(
-                        "Failed to parse `{file}` during settings discovery: {}; skipping...",
-                        err.message()
+                        "Failed to parse `{}` during settings discovery:\n{}",
+                        file.cyan(),
+                        textwrap::indent(&err.to_string(), "  ")
                     );
                 }
                 Err(err) => {
