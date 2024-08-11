@@ -23,10 +23,10 @@ pub struct Pep723Script {
     pub path: PathBuf,
     /// The parsed [`Pep723Metadata`] table from the script.
     pub metadata: Pep723Metadata,
-    /// The content of the script after the metadata table.
-    pub raw: String,
     /// The content of the script before the metadata table.
     pub prelude: String,
+    /// The content of the script after the metadata table.
+    pub postlude: String,
 }
 
 impl Pep723Script {
@@ -41,18 +41,23 @@ impl Pep723Script {
         };
 
         // Extract the `script` tag.
-        let Some(script_tag) = ScriptTag::parse(&contents)? else {
+        let Some(ScriptTag {
+            prelude,
+            metadata,
+            postlude,
+        }) = ScriptTag::parse(&contents)?
+        else {
             return Ok(None);
         };
 
         // Parse the metadata.
-        let metadata = Pep723Metadata::from_str(&script_tag.metadata)?;
+        let metadata = Pep723Metadata::from_str(&metadata)?;
 
         Ok(Some(Self {
             path: file.as_ref().to_path_buf(),
             metadata,
-            raw: script_tag.script,
-            prelude: script_tag.prelude,
+            prelude,
+            postlude,
         }))
     }
 
@@ -63,29 +68,25 @@ impl Pep723Script {
         file: impl AsRef<Path>,
         requires_python: &VersionSpecifiers,
     ) -> Result<Self, Pep723Error> {
-        let contents = match fs_err::tokio::read(&file).await {
-            Ok(contents) => contents,
-            Err(err) => return Err(err.into()),
-        };
+        let contents = fs_err::tokio::read(&file).await?;
 
-        // Extract the `script` tag.
+        // Define the default metadata.
         let default_metadata = indoc::formatdoc! {r#"
             requires-python = "{requires_python}"
             dependencies = []
             "#,
             requires_python = requires_python,
         };
-
-        let (prelude, raw) = extract_shebang(&contents)?;
-
-        // Parse the metadata.
         let metadata = Pep723Metadata::from_str(&default_metadata)?;
+
+        //  Extract the shebang and script content.
+        let (prelude, postlude) = extract_shebang(&contents)?;
 
         Ok(Self {
             path: file.as_ref().to_path_buf(),
-            prelude: prelude.unwrap_or_default(),
+            prelude,
             metadata,
-            raw,
+            postlude,
         })
     }
 
@@ -99,7 +100,7 @@ impl Pep723Script {
                 format!("{}\n", self.prelude)
             },
             serialize_metadata(metadata),
-            self.raw
+            self.postlude
         );
 
         Ok(fs_err::tokio::write(&self.path, content).await?)
@@ -126,7 +127,7 @@ impl FromStr for Pep723Metadata {
     /// Parse `Pep723Metadata` from a raw TOML string.
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         let metadata = toml::from_str(raw)?;
-        Ok(Pep723Metadata {
+        Ok(Self {
             raw: raw.to_string(),
             ..metadata
         })
@@ -166,7 +167,7 @@ struct ScriptTag {
     /// The metadata block.
     metadata: String,
     /// The content of the script after the metadata block.
-    script: String,
+    postlude: String,
 }
 
 impl ScriptTag {
@@ -195,7 +196,7 @@ impl ScriptTag {
     ///
     /// - Preamble: `#!/usr/bin/env python3\n`
     /// - Metadata: `requires-python = '>=3.11'\ndependencies = [\n  'requests<3',\n  'rich',\n]`
-    /// - Script: `import requests\n\nprint("Hello, World!")\n`
+    /// - Postlude: `import requests\n\nprint("Hello, World!")\n`
     ///
     /// See: <https://peps.python.org/pep-0723/>
     fn parse(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
@@ -292,40 +293,58 @@ impl ScriptTag {
         // Join the lines into a single string.
         let prelude = prelude.to_string();
         let metadata = toml.join("\n") + "\n";
-        let script = python_script.join("\n") + "\n";
+        let postlude = python_script.join("\n") + "\n";
 
         Ok(Some(Self {
             prelude,
             metadata,
-            script,
+            postlude,
         }))
     }
 }
 
 /// Extracts the shebang line from the given file contents and returns it along with the remaining
 /// content.
-fn extract_shebang(contents: &[u8]) -> Result<(Option<String>, String), Pep723Error> {
+fn extract_shebang(contents: &[u8]) -> Result<(String, String), Pep723Error> {
     let contents = std::str::from_utf8(contents)?;
 
-    let mut lines = contents.lines();
+    if contents.starts_with("#!") {
+        // Find the first newline.
+        let bytes = contents.as_bytes();
+        let index = bytes
+            .iter()
+            .position(|&b| b == b'\r' || b == b'\n')
+            .unwrap_or(bytes.len());
 
-    // Check the first line for a shebang
-    if let Some(first_line) = lines.next() {
-        if first_line.starts_with("#!") {
-            let shebang = first_line.to_string();
-            let remaining_content: String = lines.collect::<Vec<&str>>().join("\n");
-            return Ok((Some(shebang), remaining_content));
-        }
+        // Support `\r`, `\n`, and `\r\n` line endings.
+        let width = match bytes.get(index) {
+            Some(b'\r') => {
+                if bytes.get(index + 1) == Some(&b'\n') {
+                    2
+                } else {
+                    1
+                }
+            }
+            Some(b'\n') => 1,
+            _ => 0,
+        };
+
+        // Extract the shebang line.
+        let shebang = contents[..index].to_string();
+        let script = contents[index + width..].to_string();
+
+        Ok((shebang, script))
+    } else {
+        Ok((String::new(), contents.to_string()))
     }
-
-    Ok((None, contents.to_string()))
 }
 
 /// Formats the provided metadata by prefixing each line with `#` and wrapping it with script markers.
 fn serialize_metadata(metadata: &str) -> String {
-    let mut output = String::with_capacity(metadata.len() + 2);
+    let mut output = String::with_capacity(metadata.len() + 32);
 
-    output.push_str("# /// script\n");
+    output.push_str("# /// script");
+    output.push('\n');
 
     for line in metadata.lines() {
         if line.is_empty() {
@@ -337,7 +356,8 @@ fn serialize_metadata(metadata: &str) -> String {
         }
     }
 
-    output.push_str("# ///\n");
+    output.push_str("# ///");
+    output.push('\n');
 
     output
 }
@@ -427,7 +447,7 @@ mod tests {
 
         assert_eq!(actual.prelude, String::new());
         assert_eq!(actual.metadata, expected_metadata);
-        assert_eq!(actual.script, expected_data);
+        assert_eq!(actual.postlude, expected_data);
     }
 
     #[test]
@@ -470,7 +490,7 @@ mod tests {
 
         assert_eq!(actual.prelude, "#!/usr/bin/env python3\n".to_string());
         assert_eq!(actual.metadata, expected_metadata);
-        assert_eq!(actual.script, expected_data);
+        assert_eq!(actual.postlude, expected_data);
     }
     #[test]
     fn embedded_comment() {
