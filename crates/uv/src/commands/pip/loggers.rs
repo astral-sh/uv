@@ -2,14 +2,17 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::fmt::Write;
 
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
-use crate::printer::Printer;
-use distribution_types::{CachedDist, InstalledDist, InstalledMetadata, LocalDist, Name};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pep440_rs::Version;
 use rustc_hash::{FxBuildHasher, FxHashMap};
+
+use distribution_types::{InstalledMetadata, LocalDist, Name};
+use pep440_rs::Version;
 use uv_normalize::PackageName;
+
+use crate::commands::pip::operations::Changelog;
+use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
+use crate::printer::Printer;
 
 /// A trait to handle logging during install operations.
 pub(crate) trait InstallLogger {
@@ -31,13 +34,7 @@ pub(crate) trait InstallLogger {
     fn on_install(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result;
 
     /// Log the completion of the operation.
-    fn on_complete(
-        &self,
-        installed: Vec<CachedDist>,
-        reinstalled: Vec<InstalledDist>,
-        uninstalled: Vec<InstalledDist>,
-        printer: Printer,
-    ) -> fmt::Result;
+    fn on_complete(&self, changelog: &Changelog, printer: Printer) -> fmt::Result;
 }
 
 /// The default logger for install operations.
@@ -106,21 +103,15 @@ impl InstallLogger for DefaultInstallLogger {
         )
     }
 
-    fn on_complete(
-        &self,
-        installed: Vec<CachedDist>,
-        reinstalled: Vec<InstalledDist>,
-        uninstalled: Vec<InstalledDist>,
-        printer: Printer,
-    ) -> fmt::Result {
-        for event in uninstalled
-            .into_iter()
-            .chain(reinstalled)
+    fn on_complete(&self, changelog: &Changelog, printer: Printer) -> fmt::Result {
+        for event in changelog
+            .uninstalled
+            .iter()
             .map(|distribution| ChangeEvent {
                 dist: LocalDist::from(distribution),
                 kind: ChangeEventKind::Removed,
             })
-            .chain(installed.into_iter().map(|distribution| ChangeEvent {
+            .chain(changelog.installed.iter().map(|distribution| ChangeEvent {
                 dist: LocalDist::from(distribution),
                 kind: ChangeEventKind::Added,
             }))
@@ -214,13 +205,7 @@ impl InstallLogger for SummaryInstallLogger {
         )
     }
 
-    fn on_complete(
-        &self,
-        _installed: Vec<CachedDist>,
-        _reinstalled: Vec<InstalledDist>,
-        _uninstalled: Vec<InstalledDist>,
-        _printer: Printer,
-    ) -> fmt::Result {
+    fn on_complete(&self, _changelog: &Changelog, _printer: Printer) -> fmt::Result {
         Ok(())
     }
 }
@@ -275,20 +260,11 @@ impl InstallLogger for UpgradeInstallLogger {
         Ok(())
     }
 
-    fn on_complete(
-        &self,
-        installed: Vec<CachedDist>,
-        reinstalled: Vec<InstalledDist>,
-        uninstalled: Vec<InstalledDist>,
-        printer: Printer,
-    ) -> fmt::Result {
+    fn on_complete(&self, changelog: &Changelog, printer: Printer) -> fmt::Result {
         // Index the removals by package name.
         let removals: FxHashMap<&PackageName, BTreeSet<Version>> =
-            reinstalled.iter().chain(uninstalled.iter()).fold(
-                FxHashMap::with_capacity_and_hasher(
-                    reinstalled.len() + uninstalled.len(),
-                    FxBuildHasher,
-                ),
+            changelog.uninstalled.iter().fold(
+                FxHashMap::with_capacity_and_hasher(changelog.uninstalled.len(), FxBuildHasher),
                 |mut acc, distribution| {
                     acc.entry(distribution.name())
                         .or_default()
@@ -298,15 +274,16 @@ impl InstallLogger for UpgradeInstallLogger {
             );
 
         // Index the additions by package name.
-        let additions: FxHashMap<&PackageName, BTreeSet<Version>> = installed.iter().fold(
-            FxHashMap::with_capacity_and_hasher(installed.len(), FxBuildHasher),
-            |mut acc, distribution| {
-                acc.entry(distribution.name())
-                    .or_default()
-                    .insert(distribution.installed_version().version().clone());
-                acc
-            },
-        );
+        let additions: FxHashMap<&PackageName, BTreeSet<Version>> =
+            changelog.installed.iter().fold(
+                FxHashMap::with_capacity_and_hasher(changelog.installed.len(), FxBuildHasher),
+                |mut acc, distribution| {
+                    acc.entry(distribution.name())
+                        .or_default()
+                        .insert(distribution.installed_version().version().clone());
+                    acc
+                },
+            );
 
         // Summarize the change for the target.
         match (removals.get(&self.target), additions.get(&self.target)) {
@@ -385,7 +362,7 @@ impl InstallLogger for UpgradeInstallLogger {
         }
 
         // Follow-up with a detailed summary of all changes.
-        DefaultInstallLogger.on_complete(installed, reinstalled, uninstalled, printer)?;
+        DefaultInstallLogger.on_complete(changelog, printer)?;
 
         Ok(())
     }

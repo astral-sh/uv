@@ -291,7 +291,8 @@ pub(crate) async fn install(
             cache,
             printer,
         )
-        .await?;
+        .await?
+        .into_environment();
 
         // At this point, we updated the existing environment, so we should remove any of its
         // existing executables.

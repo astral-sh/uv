@@ -31,9 +31,11 @@ use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
+use crate::commands::pip::operations::Changelog;
 use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{pip, ExitStatus, SharedState};
+use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 
 /// Create a virtual environment.
@@ -329,7 +331,9 @@ async fn venv_impl(
             .await
             .map_err(VenvError::Seed)?;
 
-        pip::operations::report_modifications(installed, Vec::new(), Vec::new(), printer)
+        let changelog = Changelog::from_installed(installed);
+        DefaultInstallLogger
+            .on_complete(&changelog, printer)
             .into_diagnostic()?;
     }
 

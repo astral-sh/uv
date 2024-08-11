@@ -219,7 +219,7 @@ fn test_tool_upgrade_settings() {
 
     ----- stderr -----
     warning: `uv tool upgrade` is experimental and may change without warning
-    Installed 2 executables: black, blackd
+    Nothing to upgrade
     "###);
 
     // Upgrade `black`, but override the resolution.
@@ -386,6 +386,58 @@ fn test_tool_upgrade_constraint() {
     ----- stderr -----
     warning: `--upgrade` is enabled by default on `uv tool upgrade`
     warning: `uv tool upgrade` is experimental and may change without warning
+    Nothing to upgrade
+    "###);
+}
+
+/// Upgrade a tool, but only by upgrading one of it's `--with` dependencies, and not the tool
+/// itself.
+#[test]
+fn test_tool_upgrade_with() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `babel` from Test PyPI, to get an outdated version.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel==2.6.0")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool install` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
     Installed 1 executable: pybabel
+    "###);
+
+    // Upgrade `babel` from PyPI. It shouldn't be updated, but `pytz` should be.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv tool upgrade` is experimental and may change without warning
+    Modified babel environment
+     - pytz==2018.5
+     + pytz==2024.1
     "###);
 }

@@ -7,12 +7,12 @@ use crate::{InstalledMetadata, InstalledVersion, Name};
 /// A distribution which is either installable, is a wheel in our cache or is already installed.
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
-pub enum LocalDist {
-    Cached(CachedDist),
-    Installed(InstalledDist),
+pub enum LocalDist<'a> {
+    Cached(&'a CachedDist),
+    Installed(&'a InstalledDist),
 }
 
-impl Name for LocalDist {
+impl Name for LocalDist<'_> {
     fn name(&self) -> &PackageName {
         match self {
             Self::Cached(dist) => dist.name(),
@@ -21,7 +21,7 @@ impl Name for LocalDist {
     }
 }
 
-impl InstalledMetadata for LocalDist {
+impl InstalledMetadata for LocalDist<'_> {
     fn installed_version(&self) -> InstalledVersion {
         match self {
             Self::Cached(dist) => dist.installed_version(),
@@ -30,14 +30,14 @@ impl InstalledMetadata for LocalDist {
     }
 }
 
-impl From<CachedDist> for LocalDist {
-    fn from(dist: CachedDist) -> Self {
+impl<'a> From<&'a CachedDist> for LocalDist<'a> {
+    fn from(dist: &'a CachedDist) -> Self {
         Self::Cached(dist)
     }
 }
 
-impl From<InstalledDist> for LocalDist {
-    fn from(dist: InstalledDist) -> Self {
+impl<'a> From<&'a InstalledDist> for LocalDist<'a> {
+    fn from(dist: &'a InstalledDist) -> Self {
         Self::Installed(dist)
     }
 }

@@ -117,7 +117,7 @@ impl<T: DistributionMetadata> Verbatim for T {
 }
 
 // Implement `Display` for all known types that implement `Metadata`.
-impl std::fmt::Display for LocalDist {
+impl std::fmt::Display for LocalDist<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.installed_version())
     }

@@ -11,7 +11,7 @@ use distribution_types::{
     CachedDist, Diagnostic, InstalledDist, ResolutionDiagnostic, UnresolvedRequirementSpecification,
 };
 use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, Name, Resolution,
+    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
@@ -41,7 +41,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, DryRunEvent};
+use crate::commands::{compile_bytecode, elapsed, ChangeEventKind, DryRunEvent};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -282,7 +282,40 @@ pub(crate) enum Modifications {
     Exact,
 }
 
+/// A summary of the changes made to the environment during an installation.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Changelog {
+    /// The distributions that were installed.
+    pub(crate) installed: Vec<CachedDist>,
+    /// The distributions that were uninstalled.
+    pub(crate) uninstalled: Vec<InstalledDist>,
+}
+
+impl Changelog {
+    /// Create a [`Changelog`] from a list of installed distributions.
+    pub(crate) fn from_installed(installed: Vec<CachedDist>) -> Self {
+        Self {
+            installed,
+            uninstalled: vec![],
+        }
+    }
+
+    /// Returns `true` if the changelog includes a distribution with the given name, either via
+    /// an installation or uninstallation.
+    pub(crate) fn includes(&self, name: &PackageName) -> bool {
+        self.installed.iter().any(|dist| dist.name() == name)
+            || self.uninstalled.iter().any(|dist| dist.name() == name)
+    }
+
+    /// Returns `true` if the changelog is empty.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.installed.is_empty() && self.uninstalled.is_empty()
+    }
+}
+
 /// Install a set of requirements into the current environment.
+///
+/// Returns a [`Changelog`] summarizing the changes made to the environment.
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
@@ -304,7 +337,7 @@ pub(crate) async fn install(
     dry_run: bool,
     printer: Printer,
     preview: PreviewMode,
-) -> Result<(), Error> {
+) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
     // Extract the requirements from the resolution.
@@ -326,7 +359,8 @@ pub(crate) async fn install(
         .context("Failed to determine installation plan")?;
 
     if dry_run {
-        return report_dry_run(resolution, plan, modifications, start, printer);
+        report_dry_run(resolution, plan, modifications, start, printer)?;
+        return Ok(Changelog::default());
     }
 
     let Plan {
@@ -345,7 +379,7 @@ pub(crate) async fn install(
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         logger.on_audit(resolution.len(), start, printer)?;
-        return Ok(());
+        return Ok(Changelog::default());
     }
 
     // Map any registry-based requirements back to those returned by the resolver.
@@ -385,10 +419,11 @@ pub(crate) async fn install(
     };
 
     // Remove any upgraded or extraneous installations.
-    if !extraneous.is_empty() || !reinstalls.is_empty() {
+    let uninstalls = extraneous.into_iter().chain(reinstalls).collect::<Vec<_>>();
+    if !uninstalls.is_empty() {
         let start = std::time::Instant::now();
 
-        for dist_info in extraneous.iter().chain(reinstalls.iter()) {
+        for dist_info in &uninstalls {
             match uv_installer::uninstall(dist_info).await {
                 Ok(summary) => {
                     debug!(
@@ -412,33 +447,39 @@ pub(crate) async fn install(
             }
         }
 
-        logger.on_uninstall(extraneous.len() + reinstalls.len(), start, printer)?;
+        logger.on_uninstall(uninstalls.len(), start, printer)?;
     }
 
     // Install the resolved distributions.
-    let mut wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
-    if !wheels.is_empty() {
+    let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+    if !installs.is_empty() {
         let start = std::time::Instant::now();
-        wheels = uv_installer::Installer::new(venv)
+        installs = uv_installer::Installer::new(venv)
             .with_link_mode(link_mode)
             .with_cache(cache)
-            .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
+            .with_reporter(InstallReporter::from(printer).with_length(installs.len() as u64))
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking
             // task.
-            .install_blocking(wheels)?;
+            .install_blocking(installs)?;
 
-        logger.on_install(wheels.len(), start, printer)?;
+        logger.on_install(installs.len(), start, printer)?;
     }
 
     if compile {
         compile_bytecode(venv, cache, printer).await?;
     }
 
-    // Notify the user of any environment modifications.
-    logger.on_complete(wheels, reinstalls, extraneous, printer)?;
+    // Construct a summary of the changes made to the environment.
+    let changelog = Changelog {
+        installed: installs,
+        uninstalled: uninstalls,
+    };
 
-    Ok(())
+    // Notify the user of any environment modifications.
+    logger.on_complete(&changelog, printer)?;
+
+    Ok(changelog)
 }
 
 /// Report on the results of a dry-run installation.
@@ -508,18 +549,16 @@ fn report_dry_run(
     };
 
     // Remove any upgraded or extraneous installations.
-    if !extraneous.is_empty() || !reinstalls.is_empty() {
-        let s = if extraneous.len() + reinstalls.len() == 1 {
-            ""
-        } else {
-            "s"
-        };
+    let uninstalls = extraneous.len() + reinstalls.len();
+
+    if uninstalls > 0 {
+        let s = if uninstalls == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
             "{}",
             format!(
                 "Would uninstall {}",
-                format!("{} package{}", extraneous.len() + reinstalls.len(), s).bold(),
+                format!("{uninstalls} package{s}").bold(),
             )
             .dimmed()
         )?;
@@ -540,6 +579,7 @@ fn report_dry_run(
     // TDOO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
     for event in reinstalls
         .into_iter()
+        .chain(extraneous.into_iter())
         .map(|distribution| DryRunEvent {
             name: distribution.name().clone(),
             version: distribution.installed_version().to_string(),
@@ -579,56 +619,6 @@ fn report_dry_run(
         }
     }
 
-    Ok(())
-}
-
-/// Report on any modifications to the Python environment.
-pub(crate) fn report_modifications(
-    installed: Vec<CachedDist>,
-    reinstalled: Vec<InstalledDist>,
-    uninstalled: Vec<InstalledDist>,
-    printer: Printer,
-) -> Result<(), Error> {
-    for event in uninstalled
-        .into_iter()
-        .chain(reinstalled)
-        .map(|distribution| ChangeEvent {
-            dist: LocalDist::from(distribution),
-            kind: ChangeEventKind::Removed,
-        })
-        .chain(installed.into_iter().map(|distribution| ChangeEvent {
-            dist: LocalDist::from(distribution),
-            kind: ChangeEventKind::Added,
-        }))
-        .sorted_unstable_by(|a, b| {
-            a.dist
-                .name()
-                .cmp(b.dist.name())
-                .then_with(|| a.kind.cmp(&b.kind))
-                .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
-        })
-    {
-        match event.kind {
-            ChangeEventKind::Added => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "+".green(),
-                    event.dist.name().bold(),
-                    event.dist.installed_version().dimmed()
-                )?;
-            }
-            ChangeEventKind::Removed => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "-".red(),
-                    event.dist.name().bold(),
-                    event.dist.installed_version().dimmed()
-                )?;
-            }
-        }
-    }
     Ok(())
 }
 
