@@ -3263,7 +3263,9 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery; skipping...
+    warning: Failed to parse `pyproject.toml` during settings discovery: no such comparison operator "=", must be one of ~= == != <= >= < > ===
+    werkzeug=2.3.0
+            ^^^^^^; skipping...
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 29
       |
