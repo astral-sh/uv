@@ -16,7 +16,7 @@ use crate::pyproject::{DependencyType, Source};
 /// preserving comments and other structure, such as `uv add` and `uv remove`.
 pub struct PyProjectTomlMut {
     doc: DocumentMut,
-    dependency_target: DependencyTarget,
+    target: DependencyTarget,
 }
 
 #[derive(Error, Debug)]
@@ -57,10 +57,10 @@ pub enum DependencyTarget {
 
 impl PyProjectTomlMut {
     /// Initialize a [`PyProjectTomlMut`] from a [`str`].
-    pub fn from_toml(raw: &str, dependency_target: DependencyTarget) -> Result<Self, Error> {
+    pub fn from_toml(raw: &str, target: DependencyTarget) -> Result<Self, Error> {
         Ok(Self {
             doc: raw.parse().map_err(Box::new)?,
-            dependency_target,
+            target,
         })
     }
 
@@ -93,8 +93,8 @@ impl PyProjectTomlMut {
     }
 
     /// Retrieves a mutable reference to the root `Table` of the TOML document, creating the `project` table if necessary.
-    fn doc(&mut self) -> Result<&mut toml_edit::Table, Error> {
-        let doc = match self.dependency_target {
+    fn doc(&mut self) -> Result<&mut Table, Error> {
+        let doc = match self.target {
             DependencyTarget::Script => self.doc.as_table_mut(),
             DependencyTarget::PyProjectToml => self
                 .doc
@@ -107,8 +107,8 @@ impl PyProjectTomlMut {
     }
 
     /// Retrieves an optional mutable reference to the `project` `Table`, returning `None` if it doesn't exist.
-    fn doc_mut(&mut self) -> Result<Option<&mut toml_edit::Table>, Error> {
-        let doc = match self.dependency_target {
+    fn doc_mut(&mut self) -> Result<Option<&mut Table>, Error> {
+        let doc = match self.target {
             DependencyTarget::Script => Some(self.doc.as_table_mut()),
             DependencyTarget::PyProjectToml => self
                 .doc

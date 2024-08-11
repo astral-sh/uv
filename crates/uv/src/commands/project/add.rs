@@ -74,9 +74,6 @@ pub(crate) async fn add(
 
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
-        if !extras.is_empty() {
-            warn_user_once!("Extras are not supported for Python scripts with inline metadata");
-        }
         if package.is_some() {
             warn_user_once!(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
