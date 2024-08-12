@@ -141,7 +141,7 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().clone();
-                    locked_dist.add_dependency(dependency_dist, marker.unwrap_or_default());
+                    locked_dist.add_dependency(dependency_dist, marker);
                 }
                 let id = locked_dist.id.clone();
                 if let Some(locked_dist) = locked_dists.insert(id, locked_dist) {
@@ -173,11 +173,7 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().clone();
-                    locked_dist.add_optional_dependency(
-                        extra.clone(),
-                        dependency_dist,
-                        marker.unwrap_or_default(),
-                    );
+                    locked_dist.add_optional_dependency(extra.clone(), dependency_dist, marker);
                 }
             }
             if let Some(group) = dist.dev.as_ref() {
@@ -195,11 +191,7 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().clone();
-                    locked_dist.add_dev_dependency(
-                        group.clone(),
-                        dependency_dist,
-                        marker.unwrap_or_default(),
-                    );
+                    locked_dist.add_dev_dependency(group.clone(), dependency_dist, marker);
                 }
             }
         }
