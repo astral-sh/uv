@@ -95,6 +95,11 @@ impl ManagedPythonInstallations {
         ))
     }
 
+    /// Return the location of the cache directory for managed Python installations.
+    pub fn cache(&self) -> PathBuf {
+        self.root.join(".cache")
+    }
+
     /// Initialize the Python installation directory.
     ///
     /// Ensures the directory is created.
@@ -118,6 +123,10 @@ impl ManagedPythonInstallations {
 
         // Create the directory, if it doesn't exist.
         fs::create_dir_all(root)?;
+
+        // Create the cache directory, if it doesn't exist.
+        let cache = self.cache();
+        fs::create_dir_all(&cache)?;
 
         // Add a .gitignore.
         match fs::OpenOptions::new()
@@ -166,8 +175,10 @@ impl ManagedPythonInstallations {
                 })
             }
         };
+        let cache = self.cache();
         Ok(dirs
             .into_iter()
+            .filter(|path| *path != cache)
             .filter_map(|path| {
                 ManagedPythonInstallation::new(path)
                     .inspect_err(|err| {

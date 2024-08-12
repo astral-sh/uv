@@ -1,11 +1,11 @@
 use std::fmt;
 use std::str::FromStr;
 
-use pep440_rs::Version;
 use tracing::{debug, info};
-use uv_client::BaseClientBuilder;
 
+use pep440_rs::Version;
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
@@ -123,6 +123,7 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
+        let cache_dir = installations.cache();
         let _lock = installations.acquire_lock()?;
 
         let download = ManagedPythonDownload::from_request(&request)?;
@@ -130,7 +131,7 @@ impl PythonInstallation {
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(&client, installations_dir, cache, reporter)
+            .fetch(&client, installations_dir, &cache_dir, reporter)
             .await?;
 
         let path = match result {

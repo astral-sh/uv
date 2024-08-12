@@ -1,14 +1,15 @@
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::path::PathBuf;
+
 use anyhow::Result;
 use fs_err as fs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::BTreeSet;
-use std::fmt::Write;
-use std::path::PathBuf;
 use tracing::debug;
-use uv_cache::Cache;
+
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
 use uv_fs::CWD;
@@ -34,7 +35,6 @@ pub(crate) async fn install(
     connectivity: Connectivity,
     preview: PreviewMode,
     no_config: bool,
-    cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
@@ -45,6 +45,7 @@ pub(crate) async fn install(
 
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
     let installations_dir = installations.root();
+    let cache_dir = installations.cache();
     let _lock = installations.acquire_lock()?;
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
@@ -161,7 +162,7 @@ pub(crate) async fn install(
             (
                 download.key(),
                 download
-                    .fetch(&client, installations_dir, cache, Some(&reporter))
+                    .fetch(&client, installations_dir, &cache_dir, Some(&reporter))
                     .await,
             )
         });
