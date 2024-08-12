@@ -40,7 +40,7 @@ pub(crate) type MarkersForDistribution =
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    pub(crate) petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed>,
+    pub(crate) petgraph: Graph<ResolutionGraphNode, MarkerTree, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: Option<RequiresPython>,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
@@ -91,7 +91,7 @@ impl ResolutionGraph {
         options: Options,
     ) -> Result<Self, ResolveError> {
         let size_guess = resolutions[0].nodes.len();
-        let mut petgraph: Graph<ResolutionGraphNode, Option<MarkerTree>, Directed> =
+        let mut petgraph: Graph<ResolutionGraphNode, MarkerTree, Directed> =
             Graph::with_capacity(size_guess, size_guess);
         let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
             FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
@@ -163,12 +163,10 @@ impl ResolutionGraph {
         // Normalize any markers.
         if let Some(ref requires_python) = requires_python {
             for edge in petgraph.edge_indices() {
-                if let Some(marker) = petgraph[edge].take() {
-                    petgraph[edge] = Some(marker.simplify_python_versions(
-                        Range::from(requires_python.bound_major_minor().clone()),
-                        Range::from(requires_python.bound().clone()),
-                    ));
-                }
+                petgraph[edge] = petgraph[edge].clone().simplify_python_versions(
+                    Range::from(requires_python.bound_major_minor().clone()),
+                    Range::from(requires_python.bound().clone()),
+                );
             }
         }
 
@@ -214,7 +212,7 @@ impl ResolutionGraph {
     }
 
     fn add_edge(
-        petgraph: &mut Graph<ResolutionGraphNode, Option<MarkerTree>>,
+        petgraph: &mut Graph<ResolutionGraphNode, MarkerTree>,
         inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
         edge: &ResolutionDependencyEdge,
@@ -240,21 +238,16 @@ impl ResolutionGraph {
             .find_edge(from_index, to_index)
             .and_then(|edge| petgraph.edge_weight_mut(edge))
         {
-            // If either the existing marker or new marker is `None`, then the dependency is
-            // included unconditionally, and so the combined marker should be `None`.
-            if let (Some(marker), Some(ref version_marker)) = (marker.as_mut(), edge.marker.clone())
-            {
-                marker.or(version_marker.clone());
-            } else {
-                *marker = None;
-            }
+            // If either the existing marker or new marker is `true`, then the dependency is
+            // included unconditionally, and so the combined marker is `true`.
+            marker.or(edge.marker.clone());
         } else {
             petgraph.update_edge(from_index, to_index, edge.marker.clone());
         }
     }
 
     fn add_version<'a>(
-        petgraph: &mut Graph<ResolutionGraphNode, Option<MarkerTree>>,
+        petgraph: &mut Graph<ResolutionGraphNode, MarkerTree>,
         inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
@@ -660,7 +653,7 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.
 fn report_missing_lower_bounds(
-    petgraph: &Graph<ResolutionGraphNode, Option<MarkerTree>>,
+    petgraph: &Graph<ResolutionGraphNode, MarkerTree>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
 ) {
     for node_index in petgraph.node_indices() {
@@ -687,7 +680,7 @@ fn report_missing_lower_bounds(
 fn has_lower_bound(
     node_index: NodeIndex,
     package_name: &PackageName,
-    petgraph: &Graph<ResolutionGraphNode, Option<MarkerTree>>,
+    petgraph: &Graph<ResolutionGraphNode, MarkerTree>,
 ) -> bool {
     for neighbor_index in petgraph.neighbors_directed(node_index, Direction::Incoming) {
         let neighbor_dist = match petgraph.node_weight(neighbor_index).unwrap() {

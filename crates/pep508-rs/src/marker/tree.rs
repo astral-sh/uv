@@ -1308,8 +1308,14 @@ impl ExtraMarkerTree<'_> {
 pub struct MarkerTreeContents(MarkerTree);
 
 impl From<MarkerTreeContents> for MarkerTree {
-    fn from(value: MarkerTreeContents) -> Self {
-        value.0
+    fn from(contents: MarkerTreeContents) -> Self {
+        contents.0
+    }
+}
+
+impl From<Option<MarkerTreeContents>> for MarkerTree {
+    fn from(marker: Option<MarkerTreeContents>) -> Self {
+        marker.map(|contents| contents.0).unwrap_or_default()
     }
 }
 

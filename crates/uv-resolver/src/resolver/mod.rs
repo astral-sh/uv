@@ -670,7 +670,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if let Some(ref dev) = edge.to_dev {
                 write!(msg, " (group: {dev})").unwrap();
             }
-            if let Some(marker) = edge.marker.as_ref().and_then(MarkerTree::contents) {
+            if let Some(marker) = edge.marker.contents() {
                 write!(msg, " ; {marker}").unwrap();
             }
             trace!("Resolution:     {msg}");
@@ -2341,7 +2341,7 @@ impl ForkState {
                             // needed during resolution (which I believe is
                             // true), but is a more robust approach that should
                             // capture all cases.
-                            marker: self.markers.fork_markers().cloned(),
+                            marker: self.markers.fork_markers().cloned().unwrap_or_default(),
                         };
                         edges.insert(edge);
                     }
@@ -2366,7 +2366,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: None,
                             to_dev: None,
-                            marker: Some(dependency_marker.as_ref().clone()),
+                            marker: MarkerTree::from(dependency_marker.clone()),
                         };
                         edges.insert(edge);
                     }
@@ -2392,7 +2392,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
-                            marker: dependency_marker.clone().map(MarkerTree::from),
+                            marker: MarkerTree::from(dependency_marker.clone()),
                         };
                         edges.insert(edge);
                     }
@@ -2418,7 +2418,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
-                            marker: dependency_marker.clone().map(MarkerTree::from),
+                            marker: MarkerTree::from(dependency_marker.clone()),
                         };
                         edges.insert(edge);
                     }
@@ -2501,7 +2501,7 @@ pub(crate) struct ResolutionDependencyEdge {
     pub(crate) to_url: Option<VerbatimParsedUrl>,
     pub(crate) to_extra: Option<ExtraName>,
     pub(crate) to_dev: Option<GroupName>,
-    pub(crate) marker: Option<MarkerTree>,
+    pub(crate) marker: MarkerTree,
 }
 
 impl Resolution {
