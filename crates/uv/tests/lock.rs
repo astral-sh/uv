@@ -6099,7 +6099,6 @@ fn lock_find_links_http_wheel() -> Result<()> {
         sdist = { url = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/build/packaging-23.2.tar.gz" }
         wheels = [
             { url = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/build/packaging-23.2-py3-none-any.whl" },
-            { url = "https://files.pythonhosted.org/packages/ec/1a/610693ac4ee14fcdf2d9bf3c493370e4f2ef7ae2e19217d7a237ff42367d/packaging-23.2-py3-none-any.whl", hash = "sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7", size = 53011 },
         ]
 
         [[package]]
@@ -6191,7 +6190,6 @@ fn lock_find_links_http_sdist() -> Result<()> {
         sdist = { url = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/build/packaging-23.2.tar.gz" }
         wheels = [
             { url = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/build/packaging-23.2-py3-none-any.whl" },
-            { url = "https://files.pythonhosted.org/packages/ec/1a/610693ac4ee14fcdf2d9bf3c493370e4f2ef7ae2e19217d7a237ff42367d/packaging-23.2-py3-none-any.whl", hash = "sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7", size = 53011 },
         ]
 
         [[package]]

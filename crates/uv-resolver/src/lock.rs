@@ -1832,7 +1832,7 @@ impl SourceDist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed(_) => unreachable!(),
             ResolvedDist::Installable(ref dist) => {
-                SourceDist::from_dist(id, dist, &annotated_dist.hashes)
+                SourceDist::from_dist(id, dist, &annotated_dist.hashes, annotated_dist.index())
             }
         }
     }
@@ -1841,16 +1841,19 @@ impl SourceDist {
         id: &PackageId,
         dist: &Dist,
         hashes: &[HashDigest],
+        index: Option<&IndexUrl>,
     ) -> Result<Option<SourceDist>, LockError> {
         match *dist {
             Dist::Built(BuiltDist::Registry(ref built_dist)) => {
                 let Some(sdist) = built_dist.sdist.as_ref() else {
                     return Ok(None);
                 };
-                SourceDist::from_registry_dist(sdist).map(Some)
+                SourceDist::from_registry_dist(sdist, index)
             }
             Dist::Built(_) => Ok(None),
-            Dist::Source(ref source_dist) => SourceDist::from_source_dist(id, source_dist, hashes),
+            Dist::Source(ref source_dist) => {
+                SourceDist::from_source_dist(id, source_dist, hashes, index)
+            }
         }
     }
 
@@ -1858,10 +1861,11 @@ impl SourceDist {
         id: &PackageId,
         source_dist: &distribution_types::SourceDist,
         hashes: &[HashDigest],
+        index: Option<&IndexUrl>,
     ) -> Result<Option<SourceDist>, LockError> {
         match *source_dist {
             distribution_types::SourceDist::Registry(ref reg_dist) => {
-                SourceDist::from_registry_dist(reg_dist).map(Some)
+                SourceDist::from_registry_dist(reg_dist, index)
             }
             distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 SourceDist::from_direct_dist(id, direct_dist, hashes).map(Some)
@@ -1875,7 +1879,16 @@ impl SourceDist {
         }
     }
 
-    fn from_registry_dist(reg_dist: &RegistrySourceDist) -> Result<SourceDist, LockError> {
+    fn from_registry_dist(
+        reg_dist: &RegistrySourceDist,
+        index: Option<&IndexUrl>,
+    ) -> Result<Option<SourceDist>, LockError> {
+        // Reject distributions from registries that don't match the index URL, as can occur with
+        // `--find-links`.
+        if !index.is_some_and(|index| *index == reg_dist.index) {
+            return Ok(None);
+        }
+
         let url = reg_dist
             .file
             .url
@@ -1884,10 +1897,10 @@ impl SourceDist {
             .map_err(LockError::from)?;
         let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
         let size = reg_dist.file.size;
-        Ok(SourceDist::Url {
+        Ok(Some(SourceDist::Url {
             url,
             metadata: SourceDistMetadata { hash, size },
-        })
+        }))
     }
 
     fn from_direct_dist(
@@ -2071,16 +2084,27 @@ impl Wheel {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed(_) => unreachable!(),
-            ResolvedDist::Installable(ref dist) => Wheel::from_dist(dist, &annotated_dist.hashes),
+            ResolvedDist::Installable(ref dist) => {
+                Wheel::from_dist(dist, &annotated_dist.hashes, annotated_dist.index())
+            }
         }
     }
 
-    fn from_dist(dist: &Dist, hashes: &[HashDigest]) -> Result<Vec<Wheel>, LockError> {
+    fn from_dist(
+        dist: &Dist,
+        hashes: &[HashDigest],
+        index: Option<&IndexUrl>,
+    ) -> Result<Vec<Wheel>, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes),
+            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes, index),
             Dist::Source(distribution_types::SourceDist::Registry(ref source_dist)) => source_dist
                 .wheels
                 .iter()
+                .filter(|wheel| {
+                    // Reject distributions from registries that don't match the index URL, as can occur with
+                    // `--find-links`.
+                    index.is_some_and(|index| *index == wheel.index)
+                })
                 .map(Wheel::from_registry_wheel)
                 .collect(),
             Dist::Source(_) => Ok(vec![]),
@@ -2090,9 +2114,10 @@ impl Wheel {
     fn from_built_dist(
         built_dist: &BuiltDist,
         hashes: &[HashDigest],
+        index: Option<&IndexUrl>,
     ) -> Result<Vec<Wheel>, LockError> {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Wheel::from_registry_dist(reg_dist),
+            BuiltDist::Registry(ref reg_dist) => Wheel::from_registry_dist(reg_dist, index),
             BuiltDist::DirectUrl(ref direct_dist) => {
                 Ok(vec![Wheel::from_direct_dist(direct_dist, hashes)])
             }
@@ -2100,10 +2125,18 @@ impl Wheel {
         }
     }
 
-    fn from_registry_dist(reg_dist: &RegistryBuiltDist) -> Result<Vec<Wheel>, LockError> {
+    fn from_registry_dist(
+        reg_dist: &RegistryBuiltDist,
+        index: Option<&IndexUrl>,
+    ) -> Result<Vec<Wheel>, LockError> {
         reg_dist
             .wheels
             .iter()
+            .filter(|wheel| {
+                // Reject distributions from registries that don't match the index URL, as can occur with
+                // `--find-links`.
+                index.is_some_and(|index| *index == wheel.index)
+            })
             .map(Wheel::from_registry_wheel)
             .collect()
     }
