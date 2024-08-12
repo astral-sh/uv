@@ -6695,7 +6695,6 @@ fn lock_sources_url() -> Result<()> {
 ///
 /// When resolving, we should ignore the `tool.uv.sources` and instead pull in `anyio` from PyPI.
 #[test]
-#[cfg(not(windows))] // TODO(charlie): Fix file paths on Windows.
 fn lock_sources_archive() -> Result<()> {
     let context = TestContext::new("3.12");
 
