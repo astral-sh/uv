@@ -34,7 +34,7 @@ use pypi_types::{
 };
 use uv_configuration::{ExtrasSpecification, Upgrade};
 use uv_distribution::{ArchiveMetadata, Metadata};
-use uv_fs::{PortablePath, PortablePathBuf};
+use uv_fs::{PortablePath, PortablePathBuf, Simplified};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_workspace::VirtualProject;
@@ -1519,18 +1519,21 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist) -> Source {
-        Source::Path(path_dist.lock_path.clone())
+        let path = path_dist.lock_path.simplified().to_path_buf();
+        Source::Path(path)
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist) -> Source {
-        Source::Path(path_dist.install_path.clone())
+        let path = path_dist.install_path.simplified().to_path_buf();
+        Source::Path(path)
     }
 
     fn from_directory_source_dist(directory_dist: &DirectorySourceDist) -> Source {
+        let path = directory_dist.lock_path.simplified().to_path_buf();
         if directory_dist.editable {
-            Source::Editable(directory_dist.lock_path.clone())
+            Source::Editable(path)
         } else {
-            Source::Directory(directory_dist.lock_path.clone())
+            Source::Directory(path)
         }
     }
 
