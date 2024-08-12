@@ -39,7 +39,7 @@ $ uvx pycowsay hello from uv
 
 ```
 
-Tools are installed into temporary, isolated environmnets when using `uvx`.
+Tools are installed into temporary, isolated environments when using `uvx`.
 
 ## Commands with different package names
 
