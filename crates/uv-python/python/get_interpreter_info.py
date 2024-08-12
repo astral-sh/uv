@@ -542,6 +542,17 @@ def main() -> None:
         "python_version": ".".join(platform.python_version_tuple()[:2]),
         "sys_platform": sys.platform,
     }
+    os_and_arch = get_operating_system_and_architecture()
+
+    manylinux_compatible = False
+    if os_and_arch["os"] == "linux":
+        # noinspection PyProtectedMember
+        from .packaging._manylinux import _get_glibc_version, _is_compatible
+
+        manylinux_compatible = _is_compatible(
+            arch=os_and_arch["arch"], version=_get_glibc_version()
+        )
+
     interpreter_info = {
         "result": "success",
         "markers": markers,
@@ -554,7 +565,8 @@ def main() -> None:
         "stdlib": sysconfig.get_path("stdlib"),
         "scheme": get_scheme(),
         "virtualenv": get_virtualenv(),
-        "platform": get_operating_system_and_architecture(),
+        "platform": os_and_arch,
+        "manylinux_compatible": manylinux_compatible,
         # The `t` abiflag for freethreading Python.
         # https://peps.python.org/pep-0703/#build-configuration-changes
         "gil_disabled": bool(sysconfig.get_config_var("Py_GIL_DISABLED")),
