@@ -80,7 +80,7 @@ The lockfile is created and updated during uv invocations that use the project e
 
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually.
 There is no Python standard for lockfiles at this time, so the format of this file is specific to uv
-and not generally not usable by other tools.
+and not generally usable by other tools.
 
 To avoid updating the lockfile during `uv sync` and `uv run` invocations, use the `--frozen` flag.
 
