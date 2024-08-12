@@ -247,7 +247,7 @@ pub enum Commands {
     #[command(flatten)]
     Project(Box<ProjectCommand>),
 
-    /// Run and manage tools provided by Python packages (experimental).
+    /// Run and install commands provided by Python packages (experimental).
     #[command(
         after_help = "Use `uv help tool` for more details.",
         after_long_help = ""
@@ -2623,30 +2623,81 @@ pub struct ToolNamespace {
 
 #[derive(Subcommand)]
 pub enum ToolCommand {
-    /// Run a tool.
+    /// Run a command provided by a Python package.
+    ///
+    /// By default, the package to install is assumed to match the command name.
+    ///
+    /// The name of the command can include an exact version in the format
+    /// `<package>@<version>`, e.g., `uv run ruff@0.3.0`. If more complex
+    /// version specification is desired or if the command is provided by a
+    /// different package, use `--from`.
+    ///
+    /// If the tool was previously installed, i.e., via `uv tool install`, the
+    /// installed version will be used unless a version is requested or the
+    /// `--isolated` flag is used.
+    ///
+    /// `uvx` is provided as a convenient alias for `uv tool run`, their
+    /// behavior is identical.
+    ///
+    /// If no command is provided, the installed tools are displayed.
+    ///
+    /// Packages are installed into an ephemeral virtual environment in the uv
+    /// cache directory.
     Run(ToolRunArgs),
-    /// Hidden alias for `uv tool run` for invocation from the `uvx` command
+    /// Hidden alias for `uv tool run` for the `uvx` command
     #[command(
         hide = true,
-        override_usage = "uvx [OPTIONS] <COMMAND>",
-        about = "Run a tool.",
+        override_usage = "uvx [OPTIONS] [COMMAND]",
+        about = "Run a command provided by a Python package.",
         after_help = "Use `uv help tool run` for more details.",
         after_long_help = ""
     )]
     Uvx(ToolRunArgs),
-    /// Install a tool.
+    /// Install commands provided by a Python package.
+    ///
+    /// Packages are installed into an isolated virtual environment in the uv
+    /// tools directory. The executables are linked the tool executable
+    /// directory, which is determined according to the XDG standard and can be
+    /// retrieved with `uv tool dir --bin`.
+    ///
+    /// If the tool was previously installed, the existing tool will generally
+    /// be replaced.
     Install(ToolInstallArgs),
-    /// Upgrade a tool.
+    /// Upgrade installed tools.
+    ///
+    /// If a tool was installed with version constraints, they will be respected
+    /// on upgrade — to upgrade a tool beyond the originally provided
+    /// constraints, use `uv tool install` again.
+    ///
+    /// If a tool was installed with specific settings, they will be respected
+    /// on upgraded. For example, if `--prereleases allow` was provided during
+    /// installation, it will continue to be respected in upgrades.
     #[command(alias = "update")]
     Upgrade(ToolUpgradeArgs),
     /// List installed tools.
     List(ToolListArgs),
     /// Uninstall a tool.
     Uninstall(ToolUninstallArgs),
-    /// Ensure that the tool executable directory is on `PATH`.
+    /// Ensure that the tool executable directory is on the `PATH`.
+    ///
+    /// If the tool executable directory is not present on the `PATH`, uv will
+    /// attempt to add it to the relevant shell configuration files.
+    ///
+    /// If the shell configuration files already include a blurb to add the
+    /// executable directory to the path, but the directory is not present on
+    /// the `PATH`, uv will exit with an error.
+    ///
+    /// The tool executable directory is determined according to the XDG standard
+    /// and can be retrieved with `uv tool dir --bin`.
     #[command(alias = "ensurepath")]
     UpdateShell,
-    /// Show the tools directory.
+    /// Show the path to the uv tools directory.
+    ///
+    /// The tools directory is used to store environments and metadata for
+    /// installed tools.
+    ///
+    /// To instead view the directory uv installs executables into, use the
+    /// `--bin` flag.
     Dir(ToolDirArgs),
 }
 
@@ -2655,14 +2706,7 @@ pub enum ToolCommand {
 pub struct ToolRunArgs {
     /// The command to run.
     ///
-    /// By default, the package to install is assumed to match the command name.
-    ///
-    /// The name of the command can include an exact version in the format `<package>@<version>`.
-    ///
-    /// If more complex version specification is desired or if the command is provided by a different
-    /// package, use `--from`.
-    ///
-    /// If omitted, lists the available tools.
+    /// WARNING: The documentation for [`Self::command`] is not included in help output
     #[command(subcommand)]
     pub command: Option<ExternalCommand>,
 

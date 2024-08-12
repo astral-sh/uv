@@ -23,7 +23,7 @@ fn help() {
       sync     Update the project's environment (experimental)
       lock     Update the project's lockfile (experimental)
       tree     Display the project's dependency tree (experimental)
-      tool     Run and manage tools provided by Python packages (experimental)
+      tool     Run and install commands provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
@@ -85,7 +85,7 @@ fn help_flag() {
       sync     Update the project's environment (experimental)
       lock     Update the project's lockfile (experimental)
       tree     Display the project's dependency tree (experimental)
-      tool     Run and manage tools provided by Python packages (experimental)
+      tool     Run and install commands provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
@@ -146,7 +146,7 @@ fn help_short_flag() {
       sync     Update the project's environment (experimental)
       lock     Update the project's lockfile (experimental)
       tree     Display the project's dependency tree (experimental)
-      tool     Run and manage tools provided by Python packages (experimental)
+      tool     Run and install commands provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
@@ -697,7 +697,7 @@ fn help_with_global_option() {
       sync     Update the project's environment (experimental)
       lock     Update the project's lockfile (experimental)
       tree     Display the project's dependency tree (experimental)
-      tool     Run and manage tools provided by Python packages (experimental)
+      tool     Run and install commands provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
@@ -795,7 +795,7 @@ fn help_with_no_pager() {
       sync     Update the project's environment (experimental)
       lock     Update the project's lockfile (experimental)
       tree     Display the project's dependency tree (experimental)
-      tool     Run and manage tools provided by Python packages (experimental)
+      tool     Run and install commands provided by Python packages (experimental)
       python   Manage Python versions and installations (experimental)
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment

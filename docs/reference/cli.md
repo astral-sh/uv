@@ -26,7 +26,7 @@ uv [OPTIONS] <COMMAND>
 </dd>
 <dt><a href="#uv-tree"><code>uv tree</code></a></dt><dd><p>Display the project&#8217;s dependency tree (experimental)</p>
 </dd>
-<dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and manage tools provided by Python packages (experimental)</p>
+<dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and install commands provided by Python packages (experimental)</p>
 </dd>
 <dt><a href="#uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations (experimental)</p>
 </dd>
@@ -1763,7 +1763,7 @@ uv tree [OPTIONS]
 
 ## uv tool
 
-Run and manage tools provided by Python packages (experimental)
+Run and install commands provided by Python packages (experimental)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1773,25 +1773,37 @@ uv tool [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#uv-tool-run"><code>uv tool run</code></a></dt><dd><p>Run a tool</p>
+<dl class="cli-reference"><dt><a href="#uv-tool-run"><code>uv tool run</code></a></dt><dd><p>Run a command provided by a Python package</p>
 </dd>
-<dt><a href="#uv-tool-install"><code>uv tool install</code></a></dt><dd><p>Install a tool</p>
+<dt><a href="#uv-tool-install"><code>uv tool install</code></a></dt><dd><p>Install commands provided by a Python package</p>
 </dd>
-<dt><a href="#uv-tool-upgrade"><code>uv tool upgrade</code></a></dt><dd><p>Upgrade a tool</p>
+<dt><a href="#uv-tool-upgrade"><code>uv tool upgrade</code></a></dt><dd><p>Upgrade installed tools</p>
 </dd>
 <dt><a href="#uv-tool-list"><code>uv tool list</code></a></dt><dd><p>List installed tools</p>
 </dd>
 <dt><a href="#uv-tool-uninstall"><code>uv tool uninstall</code></a></dt><dd><p>Uninstall a tool</p>
 </dd>
-<dt><a href="#uv-tool-update-shell"><code>uv tool update-shell</code></a></dt><dd><p>Ensure that the tool executable directory is on <code>PATH</code></p>
+<dt><a href="#uv-tool-update-shell"><code>uv tool update-shell</code></a></dt><dd><p>Ensure that the tool executable directory is on the <code>PATH</code></p>
 </dd>
-<dt><a href="#uv-tool-dir"><code>uv tool dir</code></a></dt><dd><p>Show the tools directory</p>
+<dt><a href="#uv-tool-dir"><code>uv tool dir</code></a></dt><dd><p>Show the path to the uv tools directory</p>
 </dd>
 </dl>
 
 ### uv tool run
 
-Run a tool
+Run a command provided by a Python package.
+
+By default, the package to install is assumed to match the command name.
+
+The name of the command can include an exact version in the format `<package>@<version>`, e.g., `uv run ruff@0.3.0`. If more complex version specification is desired or if the command is provided by a different package, use `--from`.
+
+If the tool was previously installed, i.e., via `uv tool install`, the installed version will be used unless a version is requested or the `--isolated` flag is used.
+
+`uvx` is provided as a convenient alias for `uv tool run`, their behavior is identical.
+
+If no command is provided, the installed tools are displayed.
+
+Packages are installed into an ephemeral virtual environment in the uv cache directory.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -2023,7 +2035,11 @@ uv tool run [OPTIONS] [COMMAND]
 
 ### uv tool install
 
-Install a tool
+Install commands provided by a Python package.
+
+Packages are installed into an isolated virtual environment in the uv tools directory. The executables are linked the tool executable directory, which is determined according to the XDG standard and can be retrieved with `uv tool dir --bin`.
+
+If the tool was previously installed, the existing tool will generally be replaced.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -2259,7 +2275,11 @@ uv tool install [OPTIONS] <PACKAGE>
 
 ### uv tool upgrade
 
-Upgrade a tool
+Upgrade installed tools.
+
+If a tool was installed with version constraints, they will be respected on upgrade — to upgrade a tool beyond the originally provided constraints, use `uv tool install` again.
+
+If a tool was installed with specific settings, they will be respected on upgraded. For example, if `--prereleases allow` was provided during installation, it will continue to be respected in upgrades.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -2653,7 +2673,13 @@ uv tool uninstall [OPTIONS] <NAME>
 
 ### uv tool update-shell
 
-Ensure that the tool executable directory is on `PATH`
+Ensure that the tool executable directory is on the `PATH`.
+
+If the tool executable directory is not present on the `PATH`, uv will attempt to add it to the relevant shell configuration files.
+
+If the shell configuration files already include a blurb to add the executable directory to the path, but the directory is not present on the `PATH`, uv will exit with an error.
+
+The tool executable directory is determined according to the XDG standard and can be retrieved with `uv tool dir --bin`.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -2734,7 +2760,11 @@ uv tool update-shell [OPTIONS]
 
 ### uv tool dir
 
-Show the tools directory
+Show the path to the uv tools directory.
+
+The tools directory is used to store environments and metadata for installed tools.
+
+To instead view the directory uv installs executables into, use the `--bin` flag.
 
 <h3 class="cli-reference">Usage</h3>
 
