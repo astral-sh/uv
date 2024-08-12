@@ -350,6 +350,7 @@ pub(crate) async fn pip_compile(
         dev,
         source_trees,
         project,
+        None,
         &extras,
         preferences,
         EmptyInstalledPackages,

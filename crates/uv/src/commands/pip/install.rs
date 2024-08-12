@@ -340,6 +340,7 @@ pub(crate) async fn pip_install(
         dev,
         source_trees,
         project,
+        None,
         extras,
         preferences,
         site_packages.clone(),
