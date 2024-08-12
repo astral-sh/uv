@@ -545,7 +545,7 @@ def main() -> None:
     os_and_arch = get_operating_system_and_architecture()
 
     manylinux_compatible = False
-    if os_and_arch["os"] == "linux":
+    if os_and_arch["os"]["name"] == "manylinux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version, _is_compatible
 
