@@ -4536,6 +4536,7 @@ dependencies = [
  "uv-warnings",
  "uv-workspace",
  "which",
+ "zip",
 ]
 
 [[package]]
