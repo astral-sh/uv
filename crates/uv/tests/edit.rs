@@ -2061,6 +2061,42 @@ fn update_marker() -> Result<()> {
         );
     });
 
+    uv_snapshot!(context.filters(), context.remove(&["requests"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv remove` is experimental and may change without warning
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - requests==2.31.0
+     - urllib3==2.2.1
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
+        );
+    });
+
     Ok(())
 }
 

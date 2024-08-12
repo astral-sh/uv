@@ -1,8 +1,6 @@
-use std::str::FromStr;
-
 use anyhow::{Context, Result};
 
-use pep508_rs::{PackageName, Requirement};
+use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
@@ -95,30 +93,29 @@ pub(crate) async fn remove(
     }?;
 
     for package in packages {
-        let requirement = Requirement::from_str(package.as_str())?;
         match dependency_type {
             DependencyType::Production => {
-                let deps = toml.remove_dependency(&requirement)?;
+                let deps = toml.remove_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&requirement, &toml);
+                    warn_if_present(&package, &toml);
                     anyhow::bail!(
                         "The dependency `{package}` could not be found in `dependencies`"
                     );
                 }
             }
             DependencyType::Dev => {
-                let deps = toml.remove_dev_dependency(&requirement)?;
+                let deps = toml.remove_dev_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&requirement, &toml);
+                    warn_if_present(&package, &toml);
                     anyhow::bail!(
                         "The dependency `{package}` could not be found in `dev-dependencies`"
                     );
                 }
             }
             DependencyType::Optional(ref group) => {
-                let deps = toml.remove_optional_dependency(&requirement, group)?;
+                let deps = toml.remove_optional_dependency(&package, group)?;
                 if deps.is_empty() {
-                    warn_if_present(&requirement, &toml);
+                    warn_if_present(&package, &toml);
                     anyhow::bail!(
                         "The dependency `{package}` could not be found in `optional-dependencies`"
                     );
@@ -227,22 +224,20 @@ enum Target {
 ///
 /// This is useful when a dependency of the user-specified type was not found, but it may be present
 /// elsewhere.
-fn warn_if_present(requirement: &Requirement, pyproject: &PyProjectTomlMut) {
-    for dep_ty in pyproject.find_dependency(requirement) {
+fn warn_if_present(requirement: &PackageName, pyproject: &PyProjectTomlMut) {
+    for dep_ty in pyproject.find_dependency(requirement, None) {
         match dep_ty {
             DependencyType::Production => {
-                warn_user!("`{}` is a production dependency", requirement.name);
+                warn_user!("`{requirement}` is a production dependency");
             }
             DependencyType::Dev => {
                 warn_user!(
-                    "`{}` is a development dependency; try calling `uv remove --dev`",
-                    requirement.name
+                    "`{requirement}` is a development dependency; try calling `uv remove --dev`",
                 );
             }
             DependencyType::Optional(group) => {
                 warn_user!(
-                    "`{}` is an optional dependency; try calling `uv remove --optional {group}`",
-                    requirement.name
+                    "`{requirement}` is an optional dependency; try calling `uv remove --optional {group}`",
                 );
             }
         }
