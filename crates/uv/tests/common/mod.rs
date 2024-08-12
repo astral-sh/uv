@@ -12,7 +12,9 @@ use std::str::FromStr;
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir, SymlinkToFile};
+use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::formatdoc;
+use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
 
@@ -987,6 +989,37 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
     fs_err::create_dir(dir.join(name))?;
     fs_err::write(dir.join(name).join("__init__.py"), "")?;
     Ok(())
+}
+
+// This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
+pub const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
+    "Z2l0aHViX3BhdA==",
+    "MTFCR0laQTdRMGdXeGsweHV6ekR2Mg==",
+    "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
+];
+
+// This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
+#[cfg(not(windows))]
+pub const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
+    "Z2l0aHViX3BhdA==",
+    "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
+    "cnNmNXJwMHk2WWpteVZvb2ZFc0c5WUs5b2NPcFY1aVpYTnNmdE05eEhaM0lGSExSSktDWTcxeVBVZXkK",
+];
+
+/// Decode a split, base64 encoded authentication token.
+/// We split and encode the token to bypass revoke by GitHub's secret scanning
+pub fn decode_token(content: &[&str]) -> String {
+    let token = content
+        .iter()
+        .map(|part| base64.decode(part).unwrap())
+        .map(|decoded| {
+            std::str::from_utf8(decoded.as_slice())
+                .unwrap()
+                .trim_end()
+                .to_string()
+        })
+        .join("_");
+    token
 }
 
 /// Utility macro to return the name of the current function.

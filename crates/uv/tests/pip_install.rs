@@ -5,50 +5,17 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use fs_err as fs;
 use indoc::indoc;
-use itertools::Itertools;
 use predicates::prelude::predicate;
 use url::Url;
 
 use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
-use crate::common::{build_vendor_links_url, get_bin, venv_bin_path};
+use crate::common::{build_vendor_links_url, decode_token, get_bin, venv_bin_path};
 
 mod common;
-
-// This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
-const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
-    "Z2l0aHViX3BhdA==",
-    "MTFCR0laQTdRMGdXeGsweHV6ekR2Mg==",
-    "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
-];
-
-// This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
-#[cfg(not(windows))]
-const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
-    "Z2l0aHViX3BhdA==",
-    "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
-    "cnNmNXJwMHk2WWpteVZvb2ZFc0c5WUs5b2NPcFY1aVpYTnNmdE05eEhaM0lGSExSSktDWTcxeVBVZXkK",
-];
-
-/// Decode a split, base64 encoded authentication token.
-/// We split and encode the token to bypass revoke by GitHub's secret scanning
-fn decode_token(content: &[&str]) -> String {
-    let token = content
-        .iter()
-        .map(|part| base64.decode(part).unwrap())
-        .map(|decoded| {
-            std::str::from_utf8(decoded.as_slice())
-                .unwrap()
-                .trim_end()
-                .to_string()
-        })
-        .join("_");
-    token
-}
 
 #[test]
 fn missing_requirements_txt() {
@@ -1507,7 +1474,7 @@ fn install_git_public_https_missing_commit() {
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -1540,7 +1507,7 @@ fn install_git_private_https_pat() {
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat_mixed_with_public() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -1573,8 +1540,8 @@ fn install_git_private_https_pat_mixed_with_public() {
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_multiple_pat() {
     let context = TestContext::new("3.8");
-    let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
-    let token_2 = decode_token(READ_ONLY_GITHUB_TOKEN_2);
+    let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
 
     let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
         .into_iter()
@@ -1610,7 +1577,7 @@ fn install_git_private_https_multiple_pat() {
 #[cfg(feature = "git")]
 fn install_git_private_https_pat_at_ref() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let mut filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -1654,7 +1621,7 @@ fn install_git_private_https_pat_at_ref() {
 #[ignore]
 fn install_git_private_https_pat_and_username() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
     let filters: Vec<_> = [(token.as_str(), "***")]
@@ -1719,7 +1686,7 @@ fn install_git_private_https_pat_not_authorized() {
 #[cfg(not(windows))]
 fn install_github_artifact_private_https_pat_mixed_with_public() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -1754,8 +1721,8 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
 #[cfg(not(windows))]
 fn install_github_artifact_private_https_multiple_pat() {
     let context = TestContext::new("3.8");
-    let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
-    let token_2 = decode_token(READ_ONLY_GITHUB_TOKEN_2);
+    let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
 
     let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
         .into_iter()
