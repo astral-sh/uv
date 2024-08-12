@@ -410,7 +410,6 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
     let platform_tags = match (&os, arch) {
         (Os::Manylinux { major, minor }, _) => {
             let mut platform_tags = Vec::new();
-
             if let Some(min_minor) = arch.get_minimum_manylinux_minor() {
                 for minor in (min_minor..=*minor).rev() {
                     platform_tags.push(format!("manylinux_{major}_{minor}_{arch}"));
