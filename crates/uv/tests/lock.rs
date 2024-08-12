@@ -6942,3 +6942,200 @@ fn lock_sources_source_tree() -> Result<()> {
 
     Ok(())
 }
+
+/// Lock a project in which a given dependency is requested from two different members, once as
+/// editable, and once as non-editable.
+#[test]
+fn lock_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = ["library"]
+        requires-python = ">=3.12"
+
+        [tool.uv.sources]
+        library = { path = "./library" }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    context.temp_dir.child("src/__init__.py").touch()?;
+
+    // Create a package.
+    let leaf = context.temp_dir.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+
+        [tool.uv.sources]
+        library = { path = "../../library" }
+    "#})?;
+    leaf.child("src/__init__.py").touch()?;
+
+    // Create a peripheral library.
+    let library = context.temp_dir.child("library");
+    library.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "library"
+        version = "0.1.0"
+        dependencies = []
+    "#})?;
+    library.child("src/__init__.py").touch()?;
+
+    // First, lock without marking the dependency as editable from either member.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { editable = "packages/leaf" }
+        dependencies = [
+            { name = "library" },
+        ]
+
+        [[package]]
+        name = "library"
+        version = "0.1.0"
+        source = { directory = "library" }
+
+        [[package]]
+        name = "workspace"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "library" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###);
+
+    // Next, mark the dependency as editable from one member.
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+
+        [tool.uv.sources]
+        library = { path = "../../library", editable = true }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { editable = "packages/leaf" }
+        dependencies = [
+            { name = "library" },
+        ]
+
+        [[package]]
+        name = "library"
+        version = "0.1.0"
+        source = { editable = "library" }
+
+        [[package]]
+        name = "workspace"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "library" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + library==0.1.0 (from file://[TEMP_DIR]/library)
+     + workspace==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
