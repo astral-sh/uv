@@ -252,6 +252,13 @@ impl Workspace {
         self.packages.is_empty()
     }
 
+    pub fn package_name(&self) -> Option<&PackageName> {
+        self.pyproject_toml
+            .project
+            .as_ref()
+            .map(|project| &project.name)
+    }
+
     /// Returns the set of requirements that include all packages in the workspace.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.values().filter_map(|member| {
