@@ -210,6 +210,7 @@ mod tests {
                             },
                             "arch": "x86_64"
                         },
+                        "manylinux_compatible": true,
                         "markers": {
                             "implementation_name": "{IMPLEMENTATION}",
                             "implementation_version": "{FULL_VERSION}",
@@ -1379,7 +1380,6 @@ mod tests {
             ImplementationName::default(),
             true,
         )?;
-
         let python = context.run(|| {
             find_python_installation(
                 &PythonRequest::parse("./foo/bar"),
