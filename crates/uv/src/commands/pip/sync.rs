@@ -288,6 +288,7 @@ pub(crate) async fn pip_sync(
         dev,
         source_trees,
         project,
+        None,
         &extras,
         preferences,
         site_packages.clone(),
