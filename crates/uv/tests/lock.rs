@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use std::io::BufReader;
 use url::Url;
 
 use common::{uv_snapshot, TestContext};
@@ -6558,6 +6559,385 @@ fn lock_local_index() -> Result<()> {
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + tqdm==1000.0.0
+    "###);
+
+    Ok(())
+}
+
+/// Lock a direct URL requirement that uses `tool.uv.sources` internally (specifically, the root
+/// package `workspace` depends on `anyio`, and declares a source pointing to a local stub of
+/// `anyio`).
+///
+/// When resolving, we should ignore the `tool.uv.sources` and instead pull in `anyio` from PyPI.
+#[test]
+fn lock_sources_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["workspace @ https://github.com/user-attachments/files/16592193/workspace.zip"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "workspace" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+
+        [[package]]
+        name = "workspace"
+        version = "0.1.0"
+        source = { url = "https://github.com/user-attachments/files/16592193/workspace.zip" }
+        dependencies = [
+            { name = "anyio" },
+        ]
+        sdist = { url = "https://github.com/user-attachments/files/16592193/workspace.zip", hash = "sha256:ba690a925dc3d1b53e0675201c9ec26ab59eeec72ab271562f53297bf1817263" }
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+     + workspace==0.1.0 (from https://github.com/user-attachments/files/16592193/workspace.zip)
+    "###);
+
+    Ok(())
+}
+
+/// Lock a local archive requirement that uses `tool.uv.sources` internally (specifically, the root
+/// package `workspace` depends on `anyio`, and declares a source pointing to a local stub of
+/// `anyio`).
+///
+/// When resolving, we should ignore the `tool.uv.sources` and instead pull in `anyio` from PyPI.
+#[test]
+#[cfg(not(windows))] // TODO(charlie): Fix file paths on Windows.
+fn lock_sources_archive() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Download the source.
+    let response =
+        reqwest::blocking::get("https://github.com/user-attachments/files/16592193/workspace.zip")?;
+    let workspace_archive = context.temp_dir.child("workspace.zip");
+    let mut workspace_archive_file = fs_err::File::create(&*workspace_archive)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut workspace_archive_file)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["workspace @ {}"]
+        "#,
+        Url::from_file_path(&workspace_archive).unwrap(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "workspace" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+
+        [[package]]
+        name = "workspace"
+        version = "0.1.0"
+        source = { path = "[TEMP_DIR]/workspace.zip" }
+        dependencies = [
+            { name = "anyio" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+     + workspace==0.1.0 (from file://[TEMP_DIR]/workspace.zip)
+    "###);
+
+    Ok(())
+}
+
+/// Lock a local archive requirement that uses `tool.uv.sources` internally (specifically, the root
+/// package `workspace` depends on `anyio`, and declares a source pointing to a local stub of
+/// `anyio`).
+///
+/// When resolving, we should respect the `tool.uv.sources` and pull in the stub `anyio`.
+#[test]
+fn lock_sources_source_tree() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Download the source.
+    let response =
+        reqwest::blocking::get("https://github.com/user-attachments/files/16592193/workspace.zip")?;
+    let workspace_archive = context.temp_dir.child("workspace.zip");
+    let mut workspace_archive_file = fs_err::File::create(&*workspace_archive)?;
+    std::io::copy(&mut response.bytes()?.as_ref(), &mut workspace_archive_file)?;
+
+    // Unzip the file.
+    let file = fs_err::File::open(&*workspace_archive)?;
+    let mut archive = zip::ZipArchive::new(BufReader::new(file))?;
+    archive.extract(&context.temp_dir)?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["workspace @ file://{}"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.hatch.metadata]
+        allow-direct-references = true
+
+        [tool.hatch.build.targets.wheel]
+        packages = ["src/project"]
+        "#,
+        context.temp_dir.child("workspace").portable_display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "0.1.0"
+        source = { editable = "[TEMP_DIR]/workspace/anyio" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "workspace" },
+        ]
+
+        [[package]]
+        name = "workspace"
+        version = "0.1.0"
+        source = { directory = "[TEMP_DIR]/workspace" }
+        dependencies = [
+            { name = "anyio" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==0.1.0 (from file://[TEMP_DIR]/workspace/anyio)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + workspace==0.1.0 (from file://[TEMP_DIR]/workspace)
     "###);
 
     Ok(())

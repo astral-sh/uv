@@ -91,8 +91,9 @@ ignore = { version = "0.4.22" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.36.1", features = ["filters", "json"] }
 predicates = { version = "3.0.4" }
-regex = { version = "1.10.3" }
+regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
+zip = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["flate2"]
