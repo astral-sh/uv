@@ -794,6 +794,7 @@ mod tests {
                     },
                     "arch": "x86_64"
                 },
+                "manylinux_compatible": false,
                 "markers": {
                     "implementation_name": "cpython",
                     "implementation_version": "3.12.0",
