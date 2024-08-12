@@ -94,13 +94,13 @@ impl Tags {
         python_version: (u8, u8),
         implementation_name: &str,
         implementation_version: (u8, u8),
+        manylinux_compatible: bool,
         gil_disabled: bool,
     ) -> Result<Self, TagsError> {
         let implementation = Implementation::parse(implementation_name, gil_disabled)?;
-        let platform_tags = compatible_tags(platform)?;
+        let platform_tags = compatible_tags(platform, manylinux_compatible)?;
 
         let mut tags = Vec::with_capacity(5 * platform_tags.len());
-
         // 1. This exact c api version
         for platform_tag in &platform_tags {
             tags.push((
@@ -393,13 +393,24 @@ impl Implementation {
 /// and "any".
 ///
 /// Bit of a mess, needs to be cleaned up.
-fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
+fn compatible_tags(
+    platform: &Platform,
+    manylinux_compatible: bool,
+) -> Result<Vec<String>, PlatformError> {
     let os = platform.os();
     let arch = platform.arch();
 
     let platform_tags = match (&os, arch) {
         (Os::Manylinux { major, minor }, _) => {
             let mut platform_tags = Vec::new();
+
+            // If the interpreter is manylinux incompatible, we return an empty vector.
+            // This is the path that gets hit when user overrides the manylinux compatibility
+            // via adding `_manylinux` module to their standard library.
+            // See https://github.com/astral-sh/uv/issues/5915 for more details.
+            if !manylinux_compatible {
+                return Ok(platform_tags);
+            }
             if let Some(min_minor) = arch.get_minimum_manylinux_minor() {
                 for minor in (min_minor..=*minor).rev() {
                     platform_tags.push(format!("manylinux_{major}_{minor}_{arch}"));
