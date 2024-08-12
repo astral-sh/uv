@@ -1545,16 +1545,7 @@ impl Source {
     fn from_index_url(index_url: &IndexUrl) -> Source {
         // Remove any sensitive credentials from the index URL.
         let redacted = index_url.redacted();
-        match *index_url {
-            IndexUrl::Pypi(_) => Source::Registry(UrlString::from(redacted.as_ref())),
-            IndexUrl::Url(_) => Source::Registry(UrlString::from(redacted.as_ref())),
-            // TODO(konsti): Retain path on index url without converting to URL.
-            IndexUrl::Path(_) => Source::Path(
-                redacted
-                    .to_file_path()
-                    .expect("Could not convert index URL to path"),
-            ),
-        }
+        Source::Registry(UrlString::from(redacted.as_ref()))
     }
 
     fn from_git_dist(git_dist: &GitSourceDist) -> Source {
