@@ -129,8 +129,9 @@ mod resolver {
         Arch::Aarch64,
     );
 
-    static TAGS: LazyLock<Tags> =
-        LazyLock::new(|| Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false).unwrap());
+    static TAGS: LazyLock<Tags> = LazyLock::new(|| {
+        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false).unwrap()
+    });
 
     pub(crate) async fn resolve(
         manifest: Manifest,
