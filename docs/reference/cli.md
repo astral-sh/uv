@@ -1791,13 +1791,11 @@ The name of the command can include an exact version in the format `<package>@<v
 
 If the tool was previously installed, i.e., via `uv tool install`, the installed version will be used unless a version is requested or the `--isolated` flag is used.
 
-A `uvx` alias is provided for `uv tool run` for quick invocations.
+`uvx` is provided as a convenient alias for `uv tool run`, their behavior is identical.
 
 If no command is provided, the installed tools are displayed.
 
 Packages are installed into an ephemeral virtual environment in the uv cache directory.
-
-Be careful when invoking tools, package installation can execute arbitrary code.
 
 <h3 class="cli-reference">Usage</h3>
 
