@@ -7,8 +7,9 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use url::Url;
 
-use crate::common::packse_index_url;
+use crate::common::{build_vendor_links_url, packse_index_url};
 use common::{uv_snapshot, TestContext};
+use uv_fs::Simplified;
 
 mod common;
 
@@ -3877,7 +3878,7 @@ fn lock_multiple_markers() -> Result<()> {
 
 /// Check relative and absolute path handling in lockfiles.
 #[test]
-fn relative_and_absolute_paths() -> Result<()> {
+fn lock_relative_and_absolute_paths() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5842,7 +5843,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
 
 /// Warn when there are missing bounds on transitive dependencies with `--resolution lowest`.
 #[test]
-fn warn_missing_transitive_lower_bounds() -> Result<()> {
+fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -5867,6 +5868,485 @@ fn warn_missing_transitive_lower_bounds() -> Result<()> {
     warning: The transitive dependency `packaging` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
     warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
     warning: The transitive dependency `iniconfig` is unpinned. Consider setting a lower bound with a constraint when using `--resolution-strategy lowest` to avoid using outdated versions.
+    "###);
+
+    Ok(())
+}
+
+/// Lock a local wheel via `--find-links`.
+#[test]
+fn lock_find_links_local_wheel() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm==1000.0.0"]
+
+        [tool.uv]
+        find-links = ["{}"]
+        "#,
+        context.workspace_root.join("scripts/links/").portable_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "tqdm" },
+        ]
+
+        [[package]]
+        name = "tqdm"
+        version = "1000.0.0"
+        source = { registry = "file://[WORKSPACE]/scripts/links" }
+        wheels = [
+            { url = "file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + tqdm==1000.0.0
+    "###);
+
+    Ok(())
+}
+
+/// Lock a local source distribution via `--find-links`.
+#[test]
+fn lock_find_links_local_sdist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm==999.0.0"]
+
+        [tool.uv]
+        find-links = ["{}"]
+        "#,
+        context.workspace_root.join("scripts/links/").portable_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "tqdm" },
+        ]
+
+        [[package]]
+        name = "tqdm"
+        version = "999.0.0"
+        source = { registry = "file://[WORKSPACE]/scripts/links" }
+        sdist = { url = "file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz" }
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + tqdm==999.0.0
+    "###);
+
+    Ok(())
+}
+
+/// Lock a wheel over HTTP via `--find-links`.
+#[test]
+fn lock_find_links_http_wheel() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["packaging==23.2"]
+
+        [tool.uv]
+        find-links = ["{}"]
+        no-build-package = ["packaging"]
+        "#,
+        build_vendor_links_url()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "packaging"
+        version = "23.2"
+        source = { registry = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/links.html" }
+        sdist = { url = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/build/packaging-23.2.tar.gz" }
+        wheels = [
+            { url = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/build/packaging-23.2-py3-none-any.whl" },
+            { url = "https://files.pythonhosted.org/packages/ec/1a/610693ac4ee14fcdf2d9bf3c493370e4f2ef7ae2e19217d7a237ff42367d/packaging-23.2-py3-none-any.whl", hash = "sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7", size = 53011 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "packaging" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + packaging==23.2
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+/// Lock a source distribution over HTTP via `--find-links`.
+#[test]
+fn lock_find_links_http_sdist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["packaging==23.2"]
+
+        [tool.uv]
+        find-links = ["{}"]
+        no-binary-package = ["packaging"]
+        "#,
+        build_vendor_links_url()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "packaging"
+        version = "23.2"
+        source = { registry = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/links.html" }
+        sdist = { url = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/build/packaging-23.2.tar.gz" }
+        wheels = [
+            { url = "https://raw.githubusercontent.com/astral-sh/packse/0.3.34/vendor/build/packaging-23.2-py3-none-any.whl" },
+            { url = "https://files.pythonhosted.org/packages/ec/1a/610693ac4ee14fcdf2d9bf3c493370e4f2ef7ae2e19217d7a237ff42367d/packaging-23.2-py3-none-any.whl", hash = "sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7", size = 53011 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "packaging" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + packaging==23.2
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+/// Lock against a local directory laid out as a PEP 503-compatible index.
+#[test]
+fn lock_local_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root = context.temp_dir.child("simple-html");
+    fs_err::create_dir_all(&root)?;
+
+    let tqdm = root.child("tqdm");
+    fs_err::create_dir_all(&tqdm)?;
+
+    let index = tqdm.child("index.html");
+    index.write_str(&formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for tqdm</h1>
+            <a
+              href="{}/tqdm-1000.0.0-py3-none-any.whl"
+              data-requires-python=">=3.8"
+            >
+              tqdm-1000.0.0-py3-none-any.whl
+            </a>
+          </body>
+        </html>
+    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm"]
+
+        [tool.uv]
+        extra-index-url = ["{}"]
+        "#,
+        Url::from_directory_path(&root).unwrap().as_str()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    let index = Url::from_directory_path(&root).unwrap().to_string();
+    let filters = [(index.as_str(), "file://[TMP]")]
+        .into_iter()
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "tqdm" },
+        ]
+
+        [[package]]
+        name = "tqdm"
+        version = "1000.0.0"
+        source = { registry = "file://[TMP]" }
+        wheels = [
+            { url = "file://[WORKSPACE]/scripts/links//tqdm-1000.0.0-py3-none-any.whl" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + tqdm==1000.0.0
     "###);
 
     Ok(())
