@@ -1380,6 +1380,7 @@ mod tests {
             ImplementationName::default(),
             true,
         )?;
+
         let python = context.run(|| {
             find_python_installation(
                 &PythonRequest::parse("./foo/bar"),
