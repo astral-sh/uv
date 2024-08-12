@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use distribution_types::{DistributionMetadata, Name, ResolvedDist, VersionOrUrlRef};
+use distribution_types::{
+    BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, ResolvedDist, SourceDist,
+    VersionOrUrlRef,
+};
 use pep440_rs::Version;
 use pypi_types::HashDigest;
 use uv_distribution::Metadata;
@@ -33,6 +36,27 @@ impl AnnotatedDist {
     /// dependency group).
     pub(crate) fn is_base(&self) -> bool {
         self.extra.is_none() && self.dev.is_none()
+    }
+
+    /// Returns the [`IndexUrl`] of the distribution, if it is from a registry.
+    pub(crate) fn index(&self) -> Option<&IndexUrl> {
+        match &self.dist {
+            ResolvedDist::Installed(_) => None,
+            ResolvedDist::Installable(dist) => match dist {
+                Dist::Built(dist) => match dist {
+                    BuiltDist::Registry(dist) => Some(&dist.best_wheel().index),
+                    BuiltDist::DirectUrl(_) => None,
+                    BuiltDist::Path(_) => None,
+                },
+                Dist::Source(dist) => match dist {
+                    SourceDist::Registry(dist) => Some(&dist.index),
+                    SourceDist::DirectUrl(_) => None,
+                    SourceDist::Git(_) => None,
+                    SourceDist::Path(_) => None,
+                    SourceDist::Directory(_) => None,
+                },
+            },
+        }
     }
 }
 
