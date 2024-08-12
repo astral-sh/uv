@@ -50,18 +50,27 @@ fn home_assistant_core() -> Result<()> {
 
 // Source: https://github.com/konstin/transformers/blob/da3c00433d93e43bf1e7360b1057e8c160e7978e/pyproject.toml
 #[test]
-// Takes too long on non-Linux in CI.
-#[cfg(target_os = "linux")]
 fn transformers() -> Result<()> {
+    // Takes too long on non-Linux in CI.
+    if !cfg!(target_os = "linux") && std::env::var_os("CI").is_some() {
+        return Ok(());
+    }
     lock_ecosystem_package_non_deterministic("3.12", "transformers")
 }
 
 // Source: https://github.com/konstin/warehouse/blob/baae127d90417104c8dee3fdd3855e2ba17aa428/pyproject.toml
 #[test]
-// Interestingly only works on Linux because the build
-// tries to run `pg_config`.
-#[cfg(target_os = "linux")]
 fn warehouse() -> Result<()> {
+    // This build requires running `pg_config`. We could
+    // probably stub it out, but for now, we just skip the
+    // test if we can't run `pg_config`.
+    if std::process::Command::new("pg_config").output().is_err() {
+        return Ok(());
+    }
+    // Also, takes too long on non-Linux in CI.
+    if !cfg!(target_os = "linux") && std::env::var_os("CI").is_some() {
+        return Ok(());
+    }
     lock_ecosystem_package_non_deterministic("3.11", "warehouse")
 }
 
@@ -119,7 +128,6 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
 /// a stop-gap to enable at least tracking the lock files of some
 /// ecosystem packages even if re-locking is producing different
 /// results.
-#[cfg(target_os = "linux")]
 fn lock_ecosystem_package_non_deterministic(python_version: &str, name: &str) -> Result<()> {
     let dir = PathBuf::from(format!("../../ecosystem/{name}"));
     let context = TestContext::new(python_version);
