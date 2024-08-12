@@ -6,8 +6,9 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::prelude::FileTouch;
 use indoc::indoc;
-use insta::assert_json_snapshot;
+use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
 use crate::common::{copy_dir_ignore, make_project, uv_snapshot, TestContext};
@@ -952,6 +953,201 @@ fn workspace_hidden_member() -> Result<()> {
       }
     }
     "###);
+
+    Ok(())
+}
+
+/// Ensure workspace members inherit sources from the root, if not specified in the member.
+///
+/// In such cases, relative paths should be resolved relative to the workspace root, rather than
+/// relative to the member.
+#[test]
+fn workspace_inherit_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create a package.
+    let leaf = workspace.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+    "#})?;
+    leaf.child("src/__init__.py").touch()?;
+
+    // Create a peripheral library.
+    let library = context.temp_dir.child("library");
+    library.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "library"
+        version = "0.1.0"
+        dependencies = []
+    "#})?;
+    library.child("src/__init__.py").touch()?;
+
+    // As-is, resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because library was not found in the cache and leaf==0.1.0 depends on library, we can conclude that leaf==0.1.0 cannot be used.
+          And because only leaf==0.1.0 is available and you require leaf, we can conclude that the requirements are unsatisfiable.
+
+          hint: Packages were unavailable because the network was disabled
+    "###
+    );
+
+    // Update the leaf to include the source.
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+
+        [tool.uv.sources]
+        library = { path = "../../../library", editable = true }
+    "#})?;
+    leaf.child("src/__init__.py").touch()?;
+
+    // Resolving should succeed.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    // Revert that change.
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+    "#})?;
+
+    // Update the root to include the source.
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.sources]
+        library = { path = "../library", editable = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // Resolving should succeed.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+
+    // The lockfile should use a path relative to the workspace root.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { editable = "packages/leaf" }
+        dependencies = [
+            { name = "library" },
+        ]
+
+        [[package]]
+        name = "library"
+        version = "0.1.0"
+        source = { editable = "../library" }
+
+        [[package]]
+        name = "workspace"
+        version = "0.1.0"
+        source = { editable = "." }
+        "###
+        );
+    });
+
+    // Update the root to include the source again.
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.sources]
+        library = { path = "../library", editable = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // Update the member to include a _different_ source.
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+
+        [tool.uv.sources]
+        application = { path = "../application", editable = true }
+
+    "#})?;
+
+    // Resolving should succeed; the member should still use the root's source, despite defining
+    // some of its own
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "###
+    );
 
     Ok(())
 }
