@@ -7138,3 +7138,367 @@ fn lock_editable() -> Result<()> {
 
     Ok(())
 }
+
+/// Lock a project in which a given dependency is requested from two different members, once as
+/// editable, and once as non-editable.
+#[test]
+fn lock_mixed_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace (`workspace1`) with a dependency on another workspace (`workspace2`).
+    let workspace1 = context.temp_dir.child("workspace1");
+    workspace1.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf1", "workspace2"]
+
+        [project.optional-dependencies]
+        async = ["typing-extensions>=4"]
+
+        [tool.uv.sources]
+        leaf1 = { workspace = true }
+        workspace2 = { path = "../workspace2" }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace1.child("src/__init__.py").touch()?;
+
+    let leaf1 = workspace1.child("packages").child("leaf1");
+    leaf1.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        async = ["iniconfig>=2"]
+    "#})?;
+    leaf1.child("src/__init__.py").touch()?;
+
+    // Create a second workspace (`workspace2`) with an extra of the same name.
+    let workspace2 = context.temp_dir.child("workspace2");
+    workspace2.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf2"]
+
+        [tool.uv.sources]
+        leaf2 = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace2.child("src/__init__.py").touch()?;
+
+    let leaf2 = workspace2.child("packages").child("leaf2");
+    leaf2.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        async = ["packaging>=24"]
+    "#})?;
+    leaf2.child("src/__init__.py").touch()?;
+
+    // Lock the first workspace.
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace1), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(workspace1.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "leaf1"
+        version = "0.1.0"
+        source = { editable = "packages/leaf1" }
+
+        [package.optional-dependencies]
+        async = [
+            { name = "iniconfig" },
+        ]
+
+        [[package]]
+        name = "leaf2"
+        version = "0.1.0"
+        source = { editable = "../workspace2/packages/leaf2" }
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+        ]
+
+        [[package]]
+        name = "workspace1"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "leaf1" },
+            { name = "workspace2" },
+        ]
+
+        [package.optional-dependencies]
+        async = [
+            { name = "typing-extensions" },
+        ]
+
+        [[package]]
+        name = "workspace2"
+        version = "0.1.0"
+        source = { directory = "../workspace2" }
+        dependencies = [
+            { name = "leaf2" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace1), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    "###);
+
+    // Install from the lockfile. This should include the first-party packages, but no third-party
+    // packages, since they all rely on extras.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace1), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + leaf1==0.1.0 (from file://[TEMP_DIR]/workspace1/packages/leaf1)
+     + leaf2==0.1.0 (from file://[TEMP_DIR]/workspace2/packages/leaf2)
+     + workspace1==0.1.0 (from file://[TEMP_DIR]/workspace1)
+     + workspace2==0.1.0 (from file://[TEMP_DIR]/workspace2)
+    "###);
+
+    // Install from the lockfile with the `async` extra. This should include `typing-extensions`,
+    // but not `iniconfig` or `packaging`, since we're installing the root package, whereas
+    // `iniconfig` is an extra on another package, and `packaging` is an extra in another workspace.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async").arg("--frozen").current_dir(&workspace1), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
+/// Lock a project in which a given dependency is requested from two different members, once as
+/// editable, and once as non-editable.
+#[test]
+fn lock_transitive_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace (`workspace1`) with a dependency on another workspace (`workspace2`).
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf"]
+
+        [project.optional-dependencies]
+        async = ["typing-extensions>=4", "leaf[async]"]
+
+        [tool.uv.sources]
+        leaf = { workspace = true }
+        workspace2 = { path = "../workspace2" }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    let leaf = workspace.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        async = ["iniconfig>=2"]
+    "#})?;
+    leaf.child("src/__init__.py").touch()?;
+
+    // Lock the workspace.
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { editable = "packages/leaf" }
+
+        [package.optional-dependencies]
+        async = [
+            { name = "iniconfig" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+        ]
+
+        [[package]]
+        name = "workspace"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "leaf" },
+        ]
+
+        [package.optional-dependencies]
+        async = [
+            { name = "leaf" },
+            { name = "leaf", extra = ["async"] },
+            { name = "typing-extensions" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Install from the lockfile. This should include the first-party packages, but no third-party
+    // packages, since they all rely on extras.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtualenv at: .venv
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + leaf==0.1.0 (from file://[TEMP_DIR]/workspace/packages/leaf)
+     + workspace==0.1.0 (from file://[TEMP_DIR]/workspace)
+    "###);
+
+    // Install from the lockfile with the `async` extra. This should include `typing-extensions`
+    // and `iniconfig`.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async").arg("--frozen").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
