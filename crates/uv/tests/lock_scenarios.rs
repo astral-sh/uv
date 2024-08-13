@@ -117,7 +117,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -225,7 +225,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -341,7 +341,7 @@ fn fork_basic() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -676,7 +676,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -789,7 +789,7 @@ fn fork_upgrade() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -939,7 +939,7 @@ fn fork_incomplete_markers() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1069,7 +1069,7 @@ fn fork_marker_accrue() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1310,7 +1310,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1474,7 +1474,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1639,7 +1639,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1777,7 +1777,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1933,7 +1933,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2061,7 +2061,7 @@ fn fork_marker_inherit() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2217,7 +2217,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2355,7 +2355,7 @@ fn fork_marker_selection() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2517,7 +2517,7 @@ fn fork_marker_track() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2646,7 +2646,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -2925,7 +2925,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -3164,7 +3164,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -3586,7 +3586,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -3782,7 +3782,7 @@ fn preferences_dependent_forking() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -3960,7 +3960,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4043,7 +4043,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4126,7 +4126,7 @@ fn fork_requires_python_full() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4225,7 +4225,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -4305,7 +4305,7 @@ fn fork_requires_python() -> Result<()> {
         .lock()
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;

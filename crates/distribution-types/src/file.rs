@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -193,6 +194,12 @@ impl From<Url> for UrlString {
 
 impl From<&Url> for UrlString {
     fn from(value: &Url) -> Self {
+        UrlString(value.to_string())
+    }
+}
+
+impl From<Cow<'_, Url>> for UrlString {
+    fn from(value: Cow<'_, Url>) -> Self {
         UrlString(value.to_string())
     }
 }

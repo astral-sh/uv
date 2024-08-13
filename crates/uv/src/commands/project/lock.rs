@@ -8,7 +8,9 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
+use distribution_types::{
+    Diagnostic, FlatIndexLocation, IndexUrl, UnresolvedRequirementSpecification, UrlString,
+};
 use pep440_rs::Version;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -427,7 +429,53 @@ async fn do_lock(
         existing_lock.and_then(|lock| lock.fork_markers().clone())
     });
 
-    let resolution = match existing_lock.filter(|_| upgrade.is_none()) {
+    // If any upgrades are specified, don't use the existing lockfile.
+    let existing_lock = existing_lock.filter(|_| upgrade.is_none());
+
+    // If the user provided at least one index URL (from the command line, or from a configuration
+    // file), don't use the existing lockfile if it references any registries that are no longer
+    // included in the current configuration.
+    let existing_lock = existing_lock.filter(|lock| {
+        //  If _no_ indexes were provided, we assume that the user wants to reuse the existing
+        // distributions, even though a failure to reuse the lockfile will result in re-resolving
+        // against PyPI by default.
+        if settings.index_locations.is_none() {
+            return true;
+        }
+
+        // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
+        let indexes = settings
+            .index_locations
+            .indexes()
+            .map(IndexUrl::redacted)
+            .chain(
+                settings
+                    .index_locations
+                    .flat_index()
+                    .map(FlatIndexLocation::redacted),
+            )
+            .map(UrlString::from)
+            .collect::<BTreeSet<_>>();
+
+        // Find any packages in the lockfile that reference a registry that is no longer included in
+        // the current configuration.
+        for package in lock.packages() {
+            let Some(index) = package.index() else {
+                continue;
+            };
+            if !indexes.contains(index) {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to removal of referenced registry: {index}"
+                );
+                return false;
+            }
+        }
+
+        true
+    });
+
+    let resolution = match existing_lock {
         None => None,
 
         // Try to resolve using metadata in the lockfile.

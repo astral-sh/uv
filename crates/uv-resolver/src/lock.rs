@@ -1210,8 +1210,17 @@ impl Package {
         &self.id.version
     }
 
+    /// Return the fork markers for this package, if any.
     pub fn fork_markers(&self) -> Option<&BTreeSet<MarkerTree>> {
         self.fork_markers.as_ref()
+    }
+
+    /// Return the index URL for this package, if it is a registry source.
+    pub fn index(&self) -> Option<&UrlString> {
+        match &self.id.source {
+            Source::Registry(url) => Some(url),
+            _ => None,
+        }
     }
 
     /// Returns a [`VersionId`] for this package that can be used for resolution.
