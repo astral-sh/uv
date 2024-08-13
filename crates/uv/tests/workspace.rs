@@ -1008,8 +1008,8 @@ fn workspace_inherit_sources() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because library was not found in the cache and leaf==0.1.0 depends on library, we can conclude that leaf==0.1.0 cannot be used.
-          And because only leaf==0.1.0 is available and you require leaf, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because library was not found in the cache and leaf depends on library, we can conclude that the requirements for leaf are unsatisfiable.
+          And because leaf is a workspace member we can conclude that the requirements for your workspace are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###

@@ -124,6 +124,17 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
+                if let Some(name) = self.workspace_package(package) {
+                    return format!(
+                        "{name} depends on {}",
+                        PackageRange::dependency(dependency, &dependency_set)
+                    );
+                };
+                if let Some(dependency) = self.workspace_package(dependency) {
+                    if matches!(&**package, PubGrubPackageInner::Root(_)) {
+                        return format!("{dependency} is a workspace member");
+                    }
+                };
                 match &**package {
                     PubGrubPackageInner::Root(Some(name)) => format!(
                         "{name} depends on {}",
@@ -152,16 +163,24 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         match terms_vec.as_slice() {
             [] => "the requirements are unsatisfiable".into(),
             [(root, _)] if matches!(&**(*root), PubGrubPackageInner::Root(_)) => {
-                "the requirements are unsatisfiable".into()
+                if self.workspace_members.is_empty() {
+                    "the requirements are unsatisfiable".into()
+                } else {
+                    "the requirements for your workspace are unsatisfiable".into()
+                }
             }
             [(package, Term::Positive(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
             {
-                let range = self.simplify_set(range, package);
-                format!(
-                    "{} cannot be used",
-                    PackageRange::compatibility(package, &range)
-                )
+                if let Some(name) = self.workspace_package(package) {
+                    format!("the requirements for {name} are unsatisfiable")
+                } else {
+                    let range = self.simplify_set(range, package);
+                    format!(
+                        "{} cannot be used",
+                        PackageRange::compatibility(package, &range)
+                    )
+                }
             }
             [(package, Term::Negative(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
@@ -217,6 +236,10 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         external2: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
+        if self.should_conclude_early(current_terms) {
+            return "".into();
+        }
+
         let external = self.format_both_external(external1, external2);
         let terms = self.format_terms(current_terms);
 
@@ -236,8 +259,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         derived2: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
-        // TODO: order should be chosen to make it more logical.
+        if self.should_conclude_early(current_terms) {
+            return "".into();
+        }
 
+        // TODO: order should be chosen to make it more logical.
         let derived1_terms = self.format_terms(&derived1.terms);
         let derived2_terms = self.format_terms(&derived2.terms);
         let current_terms = self.format_terms(current_terms);
@@ -262,8 +288,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
-        // TODO: order should be chosen to make it more logical.
+        if self.should_conclude_early(current_terms) {
+            return "".into();
+        }
 
+        // TODO: order should be chosen to make it more logical.
         let derived_terms = self.format_terms(&derived.terms);
         let external = self.format_external(external);
         let current_terms = self.format_terms(current_terms);
@@ -283,6 +312,10 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
+        if self.should_conclude_early(current_terms) {
+            return "".into();
+        }
+
         let external = self.format_external(external);
         let terms = self.format_terms(current_terms);
 
@@ -318,8 +351,24 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
-        let external = self.format_both_external(prior_external, external);
+        if self.should_conclude_early(current_terms) {
+            return "".into();
+        }
+
         let terms = self.format_terms(current_terms);
+
+        // Special case workspace members in conclusions
+        if let External::NoVersions(package, _) = prior_external {
+            if self.workspace_package(package).is_some() {
+                return format!(
+                    "And because {} we can conclude that {}",
+                    self.format_external(external),
+                    Padded::from_string("", &terms, "."),
+                );
+            }
+        }
+
+        let external = self.format_both_external(prior_external, external);
 
         format!(
             "And because {}we can conclude that {}",
@@ -330,6 +379,34 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 }
 
 impl PubGrubReportFormatter<'_> {
+    /// Determine if we should stop early instead of displaying the conclusion
+    /// when formatting an explanation, i.e., if we already made a sufficient
+    /// conclusion and the remaining context is too verbose.
+    fn should_conclude_early(
+        &self,
+        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+    ) -> bool {
+        // If we're in a single-project, and we're about to display the
+        // conclusion, short-circuit because we've already concluded.
+        if self.workspace_members.len() == 1 {
+            if current_terms.is_empty() {
+                return true;
+            }
+
+            if current_terms.len() == 1 {
+                // TODO(zanieb): This is not an idiomatic way to check if it is
+                // a root package.
+                if matches!( current_terms.iter().collect::<Vec<_>>().as_slice(),
+                    [(root, _)] if matches!(&**(*root), PubGrubPackageInner::Root(_)))
+                {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     /// Format two external incompatibilities, combining them if possible.
     fn format_both_external(
         &self,
@@ -485,6 +562,32 @@ impl PubGrubReportFormatter<'_> {
         hints
     }
 
+    /// Returns true if the workspace has a single project.
+    fn is_single_project_workspace(&self) -> bool {
+        self.workspace_members.len() == 1
+    }
+
+    /// Return a display name for the package if it is a workspace member.
+    fn workspace_package<'a>(&self, package: &'a PubGrubPackage) -> Option<WorkspacePackage<'a>> {
+        match &**package {
+            PubGrubPackageInner::Package { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. } => {
+                if self.workspace_members.contains(name) {
+                    if self.is_single_project_workspace() {
+                        Some(WorkspacePackage::Project(name))
+                    } else {
+                        Some(WorkspacePackage::Member(name))
+                    }
+                } else {
+                    None
+                }
+            }
+
+            _ => None,
+        }
+    }
+
     fn index_hints(
         package: &PubGrubPackage,
         name: &PackageName,
@@ -614,6 +717,20 @@ impl PubGrubReportFormatter<'_> {
                     version: version.clone(),
                 });
             }
+        }
+    }
+}
+
+enum WorkspacePackage<'a> {
+    Project(&'a PackageName),
+    Member(&'a PackageName),
+}
+
+impl std::fmt::Display for WorkspacePackage<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WorkspacePackage::Project(_name) => write!(f, "your project"),
+            WorkspacePackage::Member(name) => write!(f, "{name}"),
         }
     }
 }

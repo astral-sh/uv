@@ -419,8 +419,8 @@ fn conflict_in_fork() -> Result<()> {
           And because only the following versions of package-a{sys_platform == 'darwin'} are available:
               package-a{sys_platform == 'darwin'}==1.0.0
               package-a{sys_platform == 'darwin'}>=2
-          and project==0.1.0 depends on package-a{sys_platform == 'darwin'}<2, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+          and your project depends on package-a{sys_platform == 'darwin'}<2, we can conclude that the requirements for your project are unsatisfiable.
+
     "###
     );
 
@@ -483,8 +483,8 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
-      ╰─▶ Because project==0.1.0 depends on package-a>=2 and package-a<2, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because project==0.1.0 depends on package-a>=2 and package-a<2, we can conclude that the requirements for your project are unsatisfiable.
+
     "###
     );
 
@@ -1136,8 +1136,8 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (sys_platform == 'linux'):
-      ╰─▶ Because project==0.1.0 depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because project==0.1.0 depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that the requirements for your project are unsatisfiable.
+
     "###
     );
 
@@ -2715,8 +2715,8 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0 and package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
-          And because project==0.1.0 depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+          And because project==0.1.0 depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that the requirements for your project are unsatisfiable.
+
     "###
     );
 
@@ -2793,8 +2793,8 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
               package-c{sys_platform == 'linux'}==1.0.0
               package-c{sys_platform == 'linux'}>=2.0.0
           and package-a==1.0.0 depends on package-c{sys_platform == 'linux'}<2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
-          And because project==0.1.0 depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+          And because project==0.1.0 depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that the requirements for your project are unsatisfiable.
+
     "###
     );
 
