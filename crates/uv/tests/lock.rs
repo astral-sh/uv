@@ -7617,3 +7617,38 @@ fn lock_mismatched_versions() -> Result<()> {
 
     Ok(())
 }
+
+/// This checks that overlapping marker expressions with disjoint
+/// version constraints fails to resolve.
+#[test]
+fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+            "datasets < 2.19",
+            "datasets >= 2.19 ; python_version > '3.10'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+      × No solution found when resolving dependencies for split (python_version > '3.10'):
+      ╰─▶ Because only datasets{python_version > '3.10'}<2.19 is available and project==0.1.0 depends on datasets{python_version > '3.10'}>=2.19, we can conclude that project==0.1.0 cannot be used.
+          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    Ok(())
+}
