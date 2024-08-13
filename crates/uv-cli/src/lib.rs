@@ -2815,6 +2815,12 @@ pub struct ToolListArgs {
     /// Whether to display the path to each tool environment and installed executable.
     #[arg(long)]
     pub show_paths: bool,
+
+    // Hide unused global Python options.
+    #[arg(long, hide = true)]
+    pub python_preference: Option<PythonPreference>,
+    #[arg(long, hide = true)]
+    pub no_python_downloads: bool,
 }
 
 #[derive(Args)]

@@ -2549,27 +2549,10 @@ uv tool list [OPTIONS]
 
 <p>For example, spinners or progress bars.</p>
 
-</dd><dt><code>--no-python-downloads</code></dt><dd><p>Disable automatic downloads of Python</p>
-
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
-
-<p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>only-managed</code>:  Only use managed Python installations; never use system Python installations</li>
-
-<li><code>managed</code>:  Prefer managed Python installations over system Python installations</li>
-
-<li><code>system</code>:  Prefer system Python installations over managed Python installations</li>
-
-<li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
-</ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt><code>--show-paths</code></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
