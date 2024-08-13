@@ -100,5 +100,6 @@ self-update:
 
 ## Next steps
 
-Read the [guides](../guides/index.md) for an introduction to each feature or check out
-[concept](../concepts/index.md) pages for in-depth details about uv's features.
+Read the [guides](../guides/index.md) for an introduction to each feature, check out
+[concept](../concepts/index.md) pages for in-depth details about uv's features, or learn how to
+[get help](./help.md) if you run into any problems.
