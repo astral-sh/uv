@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.36
+
+### Preview features
+
+- Add resolver error context to `run` and `tool run` ([#5991](https://github.com/astral-sh/uv/pull/5991))
+- Avoid replacing executables on no-op upgrades ([#5998](https://github.com/astral-sh/uv/pull/5998))
+- Colocate Python install cache with destination directory ([#6043](https://github.com/astral-sh/uv/pull/6043))
+- Filter mixed sources from `--find-links` entries in lockfile ([#6025](https://github.com/astral-sh/uv/pull/6025))
+- Fix some outdated documentation discussing Python environments ([#6058](https://github.com/astral-sh/uv/pull/6058))
+- Fix projects guide typo ([#6033](https://github.com/astral-sh/uv/pull/6033))
+- Fix tools guide typo ([#6027](https://github.com/astral-sh/uv/pull/6027))
+- Hide python options in `uv tool list` help ([#6003](https://github.com/astral-sh/uv/pull/6003))
+- Improve top-level help for `uv tool` commands ([#5983](https://github.com/astral-sh/uv/pull/5983))
+- Move help documentation into dedicated page ([#6057](https://github.com/astral-sh/uv/pull/6057))
+- Remove `editable: false` support ([#5987](https://github.com/astral-sh/uv/pull/5987))
+- Remove uses of `Option<MarkerTree>` in `ResolutionGraph` ([#6035](https://github.com/astral-sh/uv/pull/6035))
+- Resolve relative `tool.uv.sources` relative to containing project ([#6045](https://github.com/astral-sh/uv/pull/6045))
+- Support PEP 723 scripts in `uv add` and `uv remove` ([#5995](https://github.com/astral-sh/uv/pull/5995))
+- Support `tool.uv` in PEP 723 scripts ([#5990](https://github.com/astral-sh/uv/pull/5990))
+- Treat local indexes as registry sources in lockfile ([#6016](https://github.com/astral-sh/uv/pull/6016))
+- Use simplified paths in lockfile ([#6049](https://github.com/astral-sh/uv/pull/6049))
+- Use upgrade-specific output for tool upgrade ([#5997](https://github.com/astral-sh/uv/pull/5997))
+
 ## 0.2.35
 
 ### Preview features
