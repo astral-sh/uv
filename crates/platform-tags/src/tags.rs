@@ -975,7 +975,7 @@ mod tests {
         py32-none-any
         py31-none-any
         py30-none-any
-        "###)
+        "###);
     }
 
     /// Check full tag ordering.
