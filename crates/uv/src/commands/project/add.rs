@@ -2,12 +2,12 @@ use std::collections::hash_map::Entry;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use cache_key::RepositoryUrl;
 use owo_colors::OwoColorize;
+use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
-
-use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
-use uv_auth::store_credentials_from_url;
+use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -16,6 +16,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
+use uv_git::GIT_STORE;
 use uv_normalize::PackageName;
 use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
@@ -328,6 +329,37 @@ pub(crate) async fn add(
                     branch.clone(),
                 )?
             }
+        };
+
+        // Redact any credentials. By default, we avoid writing sensitive credentials to files that
+        // will be checked into version control (e.g., `pyproject.toml` and `uv.lock`). Instead,
+        // we store the credentials in a global store, and reuse them during resolution. The
+        // expectation is that subsequent resolutions steps will succeed by reading from (e.g.) the
+        // user's credentials store, rather than by reading from the `pyproject.toml` file.
+        let source = match source {
+            Some(Source::Git {
+                mut git,
+                subdirectory,
+                rev,
+                tag,
+                branch,
+            }) => {
+                let credentials = Credentials::from_url(&git);
+                if let Some(credentials) = credentials {
+                    debug!("Caching credentials for: {git}");
+                    GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
+                    let _ = git.set_username("");
+                    let _ = git.set_password(None);
+                };
+                Some(Source::Git {
+                    git,
+                    subdirectory,
+                    rev,
+                    tag,
+                    branch,
+                })
+            }
+            _ => source,
         };
 
         // Update the `pyproject.toml`.

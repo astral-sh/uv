@@ -5271,9 +5271,6 @@ fn lock_redact_git() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"]
-
-        [tool.uv]
-        index-url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
         "#,
         token = token,
     })?;
