@@ -941,6 +941,43 @@ mod tests {
         );
     }
 
+    /// Ensure the tags returned do not include the `manylinux` tags
+    /// when `manylinux_incompatible` is set to `false`.
+    #[test]
+    fn test_manylinux_incompatible() {
+        let tags = Tags::from_env(
+            &Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            (3, 9),
+            "cpython",
+            (3, 9),
+            false,
+            false,
+        )
+        .unwrap();
+        assert_snapshot!(
+            tags,
+            @r###"
+        cp39-none-any
+        py39-none-any
+        py3-none-any
+        py38-none-any
+        py37-none-any
+        py36-none-any
+        py35-none-any
+        py34-none-any
+        py33-none-any
+        py32-none-any
+        py31-none-any
+        py30-none-any
+        "###)
+    }
+
     /// Check full tag ordering.
     /// The list is displayed in decreasing priority.
     ///
