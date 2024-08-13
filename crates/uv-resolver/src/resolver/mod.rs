@@ -2808,20 +2808,36 @@ impl Forks {
 
                 let mut new = vec![];
                 for mut fork in std::mem::take(&mut forks) {
-                    if fork.markers.is_disjoint(&markers) {
+                    // Take the intersection of (1) the existing fork's markers and (2) the new
+                    // fork's markers.
+                    let mut combined_markers = markers.clone();
+                    combined_markers.and(fork.markers.clone());
+
+                    // If they're disjoint, just keep the existing fork.
+                    if combined_markers.is_false() {
                         new.push(fork);
                         continue;
                     }
+
                     let not_markers = markers.negate();
-                    let mut new_markers = markers.clone();
-                    new_markers.and(fork.markers.negate());
-                    if !fork.markers.is_disjoint(&not_markers) {
+
+                    // Take the intersection of (1) the existing fork's markers and (2) the new
+                    // fork's _negated_ markers.
+                    let mut combined_negated_markers = not_markers.clone();
+                    combined_negated_markers.and(fork.markers.clone());
+
+                    // If they're disjoint, ignore the additional fork.
+                    if !combined_negated_markers.is_false() {
                         let mut new_fork = fork.clone();
-                        new_fork.intersect(not_markers);
+                        new_fork.set_markers(combined_negated_markers);
                         new.push(new_fork);
                     }
+
+                    let mut new_markers = markers.clone();
+                    new_markers.and(fork.markers.negate());
+
                     fork.dependencies.push(dep.clone());
-                    fork.intersect(markers);
+                    fork.set_markers(combined_markers);
                     new.push(fork);
                     markers = new_markers;
                 }
@@ -2866,8 +2882,10 @@ struct Fork {
 }
 
 impl Fork {
-    fn intersect(&mut self, markers: MarkerTree) {
-        self.markers.and(markers);
+    /// Set the [`MarkerTree`] for this fork, and update the dependencies to only include those
+    /// that are compatible with the new markers.
+    fn set_markers(&mut self, markers: MarkerTree) {
+        self.markers = markers;
         self.dependencies.retain(|dep| {
             let Some(markers) = dep.package.marker() else {
                 return true;
