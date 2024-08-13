@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.36
+
+### Bug fixes
+
+- Use consistent canonicalization for URLs ([#5980](https://github.com/astral-sh/uv/pull/5980))
+- Improve warning message when parsing `pyproject.toml` fails ([#6009](https://github.com/astral-sh/uv/pull/6009))
+- Improve handling of overlapping markers in universal resolver ([#5887](https://github.com/astral-sh/uv/pull/5887))
+
 ## 0.2.35
 
 ### CLI
@@ -1805,4 +1813,5 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Fix diagram alignment ([#1354](https://github.com/astral-sh/uv/pull/1354))
 - Grammar nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
 <!-- prettier-ignore-end -->
+
 
