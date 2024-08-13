@@ -2353,7 +2353,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
-                            marker: MarkerTree::TRUE
+                            marker: MarkerTree::TRUE,
                         };
                         edges.insert(edge);
                     }
@@ -2404,7 +2404,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
-                            marker: MarkerTree::from(dependency_marker.clone())
+                            marker: MarkerTree::from(dependency_marker.clone()),
                         };
                         edges.insert(edge);
                     }
@@ -2430,7 +2430,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
-                            marker: MarkerTree::from(dependency_marker.clone())
+                            marker: MarkerTree::from(dependency_marker.clone()),
                         };
                         edges.insert(edge);
                     }

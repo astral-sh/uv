@@ -137,7 +137,11 @@ impl ResolutionGraph {
 
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
-            let marker = resolution.markers.fork_markers().cloned().unwrap_or_default();
+            let marker = resolution
+                .markers
+                .fork_markers()
+                .cloned()
+                .unwrap_or_default();
 
             // Add every edge to the graph, propagating the marker for the current fork, if
             // necessary.
@@ -147,7 +151,13 @@ impl ResolutionGraph {
                     continue;
                 }
 
-                Self::add_edge(&mut petgraph, &mut inverse, root_index, edge, marker.clone());
+                Self::add_edge(
+                    &mut petgraph,
+                    &mut inverse,
+                    root_index,
+                    edge,
+                    marker.clone(),
+                );
             }
         }
 
@@ -251,9 +261,9 @@ impl ResolutionGraph {
         {
             // If either the existing marker or new marker is `true`, then the dependency is
             // included unconditionally, and so the combined marker is `true`.
-            marker.or(edge_marker.clone());
+            marker.or(edge_marker);
         } else {
-            petgraph.update_edge(from_index, to_index, edge_marker.clone());
+            petgraph.update_edge(from_index, to_index, edge_marker);
         }
     }
 
