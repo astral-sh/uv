@@ -85,6 +85,7 @@ nav:
       - Installation: getting-started/installation.md
       - First steps: getting-started/first-steps.md
       - Features: getting-started/features.md
+      - Getting help: getting-started/help.md
   - Guides:
       - guides/index.md
       - Installing Python: guides/install-python.md
