@@ -5312,7 +5312,7 @@ fn lock_redact_git() -> Result<()> {
         [[package]]
         name = "uv-private-pypackage"
         version = "0.1.0"
-        source = { git = "https://***@github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
+        source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
         "###
         );
     });
@@ -5339,7 +5339,7 @@ fn lock_redact_git() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/)
-     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
     Ok(())

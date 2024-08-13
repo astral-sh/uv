@@ -2002,6 +2002,10 @@ impl From<GitSourceKind> for GitReference {
 fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     let mut url = git_dist.git.repository().clone();
 
+    // Redact the credentials.
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+
     // Clear out any existing state.
     url.set_fragment(None);
     url.set_query(None);
