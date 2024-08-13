@@ -21,6 +21,8 @@ pub enum LookaheadError {
     Download(BuiltDist, #[source] uv_distribution::Error),
     #[error("Failed to download and build: `{0}`")]
     DownloadAndBuild(SourceDist, #[source] uv_distribution::Error),
+    #[error("Failed to build: `{0}`")]
+    Build(SourceDist, #[source] uv_distribution::Error),
     #[error(transparent)]
     UnsupportedUrl(#[from] distribution_types::Error),
 }
@@ -180,7 +182,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .map_err(|err| match &dist {
                         Dist::Built(built) => LookaheadError::Download(built.clone(), err),
                         Dist::Source(source) => {
-                            LookaheadError::DownloadAndBuild(source.clone(), err)
+                            if source.is_local() {
+                                LookaheadError::Build(source.clone(), err)
+                            } else {
+                                LookaheadError::DownloadAndBuild(source.clone(), err)
+                            }
                         }
                     })?;
 

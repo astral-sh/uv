@@ -175,7 +175,7 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `project @ file://[TEMP_DIR]/path_dep`
+    error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
     --- stdout:
