@@ -1,0 +1,254 @@
+[project]
+name = "warehouse"
+version = "1.0.0"
+requires-python = "==3.11.*"
+dependencies = [
+  "alembic>=0.7.0",
+  "alembic-postgresql-enum",
+  "Automat",
+  "argon2-cffi",
+  "b2sdk",
+  "Babel",
+  "bcrypt",
+  "boto3",
+  "celery[sqs]>=5.2.2,<5.3.2",
+  "celery-redbeat",
+  "certifi",
+  "click",
+  "cryptography",
+  "datadog>=0.19.0",
+  "disposable-email-domains",
+  "elasticsearch>=7.0.0,<7.11.0",
+  "elasticsearch_dsl>=7.0.0,<8.0.0",
+  "first",
+  "forcediphttpsadapter",
+  "github-reserved-names>=1.0.0",
+  "google-cloud-bigquery",
+  "google-cloud-storage",
+  "hiredis",
+  "html5lib",
+  "humanize",
+  "itsdangerous",
+  "Jinja2>=2.8",
+  "kombu[sqs]<5.3.2", # https://github.com/jazzband/pip-tools/issues/1577
+  "limits",
+  "linehaul",
+  "lxml",
+  "mistune",
+  "msgpack",
+  "natsort",
+  "orjson",
+  "packaging>=23.2",
+  "packaging_legacy",
+  "paginate>=0.5.2",
+  "paginate_sqlalchemy",
+  "passlib>=1.6.4",
+  "premailer",
+  "psycopg[c]",
+  "pycurl",
+  "pydantic",
+  "pyqrcode",
+  "pyramid>=2.0",
+  "pymacaroons",
+  "pyramid_jinja2>=2.5",
+  "pyramid_mailer>=0.14.1",
+  "pyramid_openapi3>=0.17.1",
+  "pyramid_retry>=0.3",
+  "pyramid_rpc>=0.7",
+  "pyramid_services>=2.1",
+  "pyramid_tm>=0.12",
+  "python-slugify",
+  "pytz",
+  "PyJWT[crypto]>=2.8.0",
+  "readme-renderer[md]>=36.0",
+  "requests",
+  "requests-aws4auth",
+  "redis>=2.8.0,<6.0.0",
+  "rfc3986",
+  "sentry-sdk",
+  "setuptools",
+  "sqlalchemy[asyncio]>=2.0,<3.0",
+  "stdlib-list",
+  "stripe",
+  "structlog",
+  "transaction",
+  "trove-classifiers",
+  "ua-parser",
+  "urllib3<2", # See https://github.com/pypi/warehouse/issues/14671,
+  "webauthn>=1.0.0,<3.0.0",
+  "whitenoise",
+  "WTForms[email]>=2.0.0",
+  "zope.sqlalchemy",
+  "zxcvbn",
+]
+
+[project.optional-dependencies]
+deploy = [
+  "gunicorn==22.0.0",
+  "ddtrace==2.8.5"
+]
+
+[tool.uv]
+dev-dependencies = [
+  "Sphinx",
+  "asyncudp>=0.7",
+  "black==24.4.2",
+  "cairosvg",
+  "celery-types",
+  "coverage",
+  "curlylint",
+  "doc8>=1.1.0",
+  "factory_boy",
+  "flake8",
+  "freezegun",
+  "furo",
+  "hupper>=1.9",
+  "isort>=5.13.1",
+  "mkdocs",
+  "mkdocs-macros-plugin",
+  "mkdocs-material",
+  "mkdocs-rss-plugin",
+  "msgpack-types",
+  "mypy",
+  "mypy-zope",
+  "myst-parser",
+  "pep8-naming",
+  "pillow",
+  "pip-api",
+  "pip-tools>=1.0",
+  "pretend",
+  "pyramid_debugtoolbar>=2.5",
+  "pytest-icdiff",
+  "pytest-postgresql>=3.1.3,<7.0.0",
+  "pytest-randomly",
+  "pytest-socket",
+  "pytest>=3.0.0",
+  "pytz",
+  "pyupgrade",
+  "repository-service-tuf",
+  "responses>=0.5.1",
+  "sphinx-autobuild",
+  "sphinxcontrib-httpdomain",
+  "sphinxcontrib-mermaid",
+  "types-WTForms",
+  "types-WebOb",
+  "types-babel",
+  "types-boto3",
+  "types-certifi",
+  "types-first",
+  "types-html5lib",
+  "types-itsdangerous",
+  "types-passlib",
+  "types-python-slugify",
+  "types-pytz",
+  "types-redis",
+  "types-requests==2.31.0.6", # See https://github.com/pypi/warehouse/issues/14671
+  "types-setuptools",
+  "types-stripe",
+  "types-zxcvbn",
+  "webtest",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.coverage.run]
+branch = true
+dynamic_context = "test_function"
+source = ["warehouse"]
+omit = [
+  # We don't want to get coverage information for our migrations.
+  "warehouse/migrations/*",
+  # We don't want to actually cover our __main__.py file because it is hard
+  # to cover and it really just acts as a tiny shim to a function.
+  "warehouse/__main__.py",
+  # Again, tiny shim code that we don't actually need to test and trying to
+  # do so would just get in the way.
+  "warehouse/wsgi.py",
+  # And again, tiny shim code.
+  "warehouse/celery.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "class \\w+\\(Interface\\):",
+  "if (typing\\.)?TYPE_CHECKING:",
+]
+
+# Don't show us anything that's already 100% covered.
+skip_covered = true
+
+[tool.curlylint]
+include = '\.(html|jinja|txt)$'
+# For jinja's i18n extension:
+template_tags = [['trans', 'pluralize', 'endtrans']]
+
+[tool.isort]
+profile = 'black'
+lines_between_types = 1
+combine_as_imports = true
+known_first_party = ['warehouse', 'tests']
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+warn_unused_ignores = true
+plugins = ["mypy_zope:plugin"]
+exclude = ["warehouse/locale/.*", "warehouse/migrations/versions.*"]
+cache_dir = "dev/.mypy_cache"
+
+[[tool.mypy.overrides]]
+# These modules do not yet have types available.
+module = [
+  "alembic_postgresql_enum.*",
+  "automat.*",
+  "bpython.*", # https://github.com/bpython/bpython/issues/892
+  "b2sdk.*", # https://github.com/Backblaze/b2-sdk-python/issues/148
+  "celery.app.backends.*",
+  "celery.backends.redis.*",
+  "elasticsearch_dsl.*", # https://github.com/elastic/elasticsearch-dsl-py/issues/1533
+  "github_reserved_names.*",
+  "google.cloud.*",
+  "forcediphttpsadapter.*",
+  "IPython.*", # has types, but only installed in dev
+  "linehaul.*",
+  "packaging_legacy.*",
+  "paginate.*",
+  "paginate_sqlalchemy.*",
+  "premailer.*",
+  "pymacaroons.*", # https://github.com/ecordell/pymacaroons/issues/41
+  "pyramid.*", # https://github.com/Pylons/pyramid/issues/2638
+  "pyramid_jinja2.*",
+  "pyramid_mailer.*",
+  "pyramid_retry.*",
+  "pyramid_rpc.*",
+  "pyqrcode.*",
+  "requests_aws4auth.*", # https://github.com/tedder/requests-aws4auth/issues/53
+  "rfc3986.*",
+  "transaction.*",
+  "ua_parser.*", # https://github.com/ua-parser/uap-python/issues/110
+  "venusian.*",
+  "whitenoise.*",
+  "zope.sqlalchemy.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = [
+  "--disable-socket",
+  "--allow-hosts=localhost,::1,notdatadog,stripe",
+  "--durations=20",
+]
+cache_dir = "dev/.pytest_cache"
+norecursedirs = ['build', 'dist', 'node_modules', '*.egg-info', '.state requirements']
+markers = [
+  'unit: Quick running unit tests which test small units of functionality.',
+  'functional: Slower running tests which test the entire system is functioning.',
+]
+filterwarnings = [
+  'ignore::warehouse.admin.services.InsecureStorageWarning',
+  'ignore::warehouse.utils.exceptions.InsecureOIDCPublisherWarning',
+  'ignore::warehouse.packaging.services.InsecureStorageWarning',
+]

@@ -30,6 +30,32 @@ static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
 pub const PACKSE_VERSION: &str = "0.3.34";
 
+/// Wraps a group of `uv lock` snapshots and runs them multiple times in sequence.
+///
+/// This is useful to ensure that resolution runs independent of an existing lockfile
+/// and does not change across repeated calls to `uv lock`.
+///
+/// We squash the `unused_macros` lint since this isn't used in every
+/// grouping of tests.
+#[allow(unused_macros)]
+macro_rules! deterministic_lock {
+    ($context:ident => $($x:tt)*) => {
+        insta::allow_duplicates! {
+            // Run the first resolution.
+            $($x)*
+
+            // Run a second resolution with the new lockfile.
+            $($x)*
+
+            // Run a final clean resolution without a lockfile to ensure identical results.
+            let _ = fs_err::remove_file(&$context.temp_dir.join("uv.lock"));
+            $($x)*
+        }
+    };
+}
+#[allow(unused_imports)]
+pub(crate) use deterministic_lock;
+
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {

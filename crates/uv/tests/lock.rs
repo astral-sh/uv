@@ -8,32 +8,12 @@ use insta::assert_snapshot;
 use std::io::BufReader;
 use url::Url;
 
-use common::{uv_snapshot, TestContext};
+use common::{deterministic_lock, uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
 use crate::common::{build_vendor_links_url, decode_token, packse_index_url};
 
 mod common;
-
-/// Wraps a group of snapshots and runs them multiple times in sequence.
-///
-/// This is useful to ensure that resolution runs independent of an existing lockfile
-/// and does not change across repeated calls to `uv lock`.
-macro_rules! deterministic {
-    ($context:ident => $($x:tt)*) => {
-        insta::allow_duplicates! {
-            // Run the first resolution.
-            $($x)*
-
-            // Run a second resolution with the new lockfile.
-            $($x)*
-
-            // Run a final clean resolution without a lockfile to ensure identical results.
-            let _ = fs_err::remove_file(&$context.temp_dir.join("uv.lock"));
-            $($x)*
-        }
-    };
-}
 
 /// Lock a requirement from PyPI.
 #[test]
@@ -51,7 +31,7 @@ fn lock_wheel_registry() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -164,7 +144,7 @@ fn lock_sdist_registry() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
         success: true
         exit_code: 0
@@ -251,7 +231,7 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
             success: true
             exit_code: 0
@@ -346,7 +326,7 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
             success: true
             exit_code: 0
@@ -403,7 +383,7 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
             success: true
             exit_code: 0
@@ -460,7 +440,7 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
             success: true
             exit_code: 0
@@ -522,7 +502,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
                 success: true
                 exit_code: 0
@@ -608,7 +588,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
                 success: true
                 exit_code: 0
@@ -672,7 +652,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
                 success: true
                 exit_code: 0
@@ -725,7 +705,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
                 success: true
                 exit_code: 0
@@ -778,7 +758,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
                 success: true
                 exit_code: 0
@@ -838,7 +818,7 @@ fn lock_wheel_url() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -950,7 +930,7 @@ fn lock_sdist_url() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1063,7 +1043,7 @@ fn lock_project_extra() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1291,7 +1271,7 @@ fn lock_dependency_extra() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1491,7 +1471,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
     let lockfile = context.temp_dir.join("uv.lock");
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1765,7 +1745,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -1950,7 +1930,7 @@ fn lock_upgrade_log() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2111,7 +2091,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2265,7 +2245,7 @@ fn lock_preference() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2433,7 +2413,7 @@ fn lock_git_sha() -> Result<()> {
     )?;
 
     let mut lock = String::new();
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2558,7 +2538,7 @@ fn lock_git_sha() -> Result<()> {
         );
     });
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         // Relock with `--upgrade`.
         uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("uv-public-pypackage"), @r###"
         success: true
@@ -2624,7 +2604,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: false
         exit_code: 1
@@ -2662,7 +2642,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2813,7 +2793,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -2954,7 +2934,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3096,7 +3076,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3168,7 +3148,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3266,7 +3246,7 @@ fn lock_requires_python_star() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3378,7 +3358,7 @@ fn lock_requires_python_pre() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3488,7 +3468,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3568,7 +3548,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3663,7 +3643,7 @@ fn lock_dev() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3766,7 +3746,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3830,7 +3810,7 @@ fn lock_multiple_markers() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -3935,7 +3915,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     "#})?;
     context.temp_dir.child("c/c/__init__.py").touch()?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
         success: true
         exit_code: 0
@@ -4000,7 +3980,7 @@ fn lock_cycles() -> Result<()> {
         "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock(), @r###"
         success: true
         exit_code: 0
@@ -4202,7 +4182,7 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    deterministic! { context =>
+    deterministic_lock! { context =>
         uv_snapshot!(context.filters(), context.lock().arg("--preview"), @r###"
         success: true
         exit_code: 0

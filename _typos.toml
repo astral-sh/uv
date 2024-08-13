@@ -1,6 +1,7 @@
 [files]
 extend-exclude = [
     "**/snapshots/",
+    "ecosystem/**",
     "scripts/**/*.in",
 ]
 ignore-hidden = false
