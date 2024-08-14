@@ -323,6 +323,11 @@ impl PubGrubReportFormatter<'_> {
     ///
     /// If not given the root package, returns `None`.
     fn format_root_requires(&self, package: &PubGrubPackage) -> Option<String> {
+        if self.is_workspace() {
+            if matches!(&**package, PubGrubPackageInner::Root(_)) {
+                return Some(format!("your workspace requires"));
+            }
+        }
         match &**package {
             PubGrubPackageInner::Root(Some(name)) => Some(format!("{name} depends on")),
             PubGrubPackageInner::Root(None) => Some("you require".to_string()),
@@ -335,11 +340,21 @@ impl PubGrubReportFormatter<'_> {
     ///
     /// If not given the root package, returns `None`.
     fn format_root(&self, package: &PubGrubPackage) -> Option<String> {
+        if self.is_workspace() {
+            if matches!(&**package, PubGrubPackageInner::Root(_)) {
+                return Some(format!("your workspace's requirements"));
+            }
+        }
         match &**package {
             PubGrubPackageInner::Root(Some(name)) => Some(format!("{name}")),
             PubGrubPackageInner::Root(None) => Some("your requirements".to_string()),
             _ => None,
         }
+    }
+
+    /// Whether the resolution error is for a workspace
+    fn is_workspace(&self) -> bool {
+        !self.workspace_members.is_empty()
     }
 
     /// Create a [`PackageRange::compatibility`] display with this formatter attached.
