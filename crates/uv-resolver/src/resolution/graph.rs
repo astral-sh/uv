@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use indexmap::IndexSet;
 use petgraph::{
     graph::{Graph, NodeIndex},
@@ -32,8 +30,7 @@ use crate::{
     ResolverMarkers, VersionsResponse,
 };
 
-pub(crate) type MarkersForDistribution =
-    FxHashMap<(Version, Option<VerbatimUrl>), BTreeSet<MarkerTree>>;
+pub(crate) type MarkersForDistribution = FxHashMap<(Version, Option<VerbatimUrl>), Vec<MarkerTree>>;
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
@@ -45,7 +42,7 @@ pub struct ResolutionGraph {
     pub(crate) requires_python: Option<RequiresPython>,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
     /// recreate them in subsequent resolutions.
-    pub(crate) fork_markers: Option<BTreeSet<MarkerTree>>,
+    pub(crate) fork_markers: Vec<MarkerTree>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
@@ -111,14 +108,12 @@ impl ResolutionGraph {
                     // For packages with diverging versions, store which version comes from which
                     // fork.
                     if let Some(markers) = resolution.markers.fork_markers() {
-                        let entry = package_markers
+                        package_markers
                             .entry(package.name.clone())
                             .or_default()
                             .entry((version.clone(), package.url.clone().map(|url| url.verbatim)))
-                            .or_default();
-                        if !entry.contains(markers) {
-                            entry.insert(markers.clone());
-                        }
+                            .or_default()
+                            .push(markers.clone());
                     }
                 }
 
@@ -177,26 +172,26 @@ impl ResolutionGraph {
 
         let fork_markers = if let [resolution] = resolutions {
             match resolution.markers {
-                ResolverMarkers::Universal { .. } | ResolverMarkers::SpecificEnvironment(_) => None,
+                ResolverMarkers::Universal { .. } | ResolverMarkers::SpecificEnvironment(_) => {
+                    vec![]
+                }
                 ResolverMarkers::Fork(_) => {
                     panic!("A single fork must be universal");
                 }
             }
         } else {
-            Some(
-                resolutions
-                    .iter()
-                    .map(|resolution| {
-                        resolution
-                            .markers
-                            .fork_markers()
-                            .expect("A non-forking resolution exists in forking mode")
-                            .clone()
-                    })
-                    // Any unsatisfiable forks were skipped.
-                    .filter(|fork| !fork.is_false())
-                    .collect(),
-            )
+            resolutions
+                .iter()
+                .map(|resolution| {
+                    resolution
+                        .markers
+                        .fork_markers()
+                        .expect("A non-forking resolution exists in forking mode")
+                        .clone()
+                })
+                // Any unsatisfiable forks were skipped.
+                .filter(|fork| !fork.is_false())
+                .collect()
         };
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
@@ -630,7 +625,7 @@ impl ResolutionGraph {
         package_name: &PackageName,
         version: &Version,
         url: Option<&VerbatimUrl>,
-    ) -> Option<&BTreeSet<MarkerTree>> {
+    ) -> Option<&Vec<MarkerTree>> {
         let package_markers = &self.package_markers.get(package_name)?;
         if package_markers.len() == 1 {
             None

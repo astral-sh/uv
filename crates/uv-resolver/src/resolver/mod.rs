@@ -324,17 +324,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.requires_python.clone(),
         );
         let mut preferences = self.preferences.clone();
-        let mut forked_states = if let ResolverMarkers::Universal {
-            fork_preferences: Some(fork_preferences),
-        } = &self.markers
-        {
-            fork_preferences
-                .iter()
-                .map(|fork_preference| state.clone().with_markers(fork_preference.clone()))
-                .collect()
-        } else {
-            vec![state]
-        };
+        let mut forked_states =
+            if let ResolverMarkers::Universal { fork_preferences } = &self.markers {
+                if fork_preferences.is_empty() {
+                    vec![state]
+                } else {
+                    fork_preferences
+                        .iter()
+                        .rev()
+                        .map(|fork_preference| state.clone().with_markers(fork_preference.clone()))
+                        .collect()
+                }
+            } else {
+                vec![state]
+            };
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
@@ -413,7 +416,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .expect("A non-forking resolution exists in forking mode")
                             .clone());
                         existing_resolution.markers = if new_markers.is_true() {
-                            ResolverMarkers::universal(None)
+                            ResolverMarkers::universal(vec![])
                         } else {
                             ResolverMarkers::Fork(new_markers)
                         };
@@ -1452,16 +1455,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // then it could be correct to introduce a new fork.
         // But in order to remove this, I think we need to make
         // `is_definitively_empty_set` better than it is today.
-        if matches!(
-            self.markers,
-            ResolverMarkers::Universal {
-                fork_preferences: Some(_)
+        if let ResolverMarkers::Universal { fork_preferences } = markers {
+            if !fork_preferences.is_empty() {
+                return Ok(Dependencies::Unforkable(dependencies));
             }
-        ) {
-            Ok(Dependencies::Unforkable(dependencies))
-        } else {
-            Ok(Dependencies::Available(dependencies))
         }
+
+        Ok(Dependencies::Available(dependencies))
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,
@@ -1825,7 +1825,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     // We don't have access to the fork state when prefetching, so assume that
                     // pre-release versions are allowed.
-                    &ResolverMarkers::universal(None),
+                    &ResolverMarkers::universal(vec![]),
                 ) else {
                     return Ok(None);
                 };
