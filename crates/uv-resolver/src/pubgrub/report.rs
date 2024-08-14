@@ -326,7 +326,7 @@ impl PubGrubReportFormatter<'_> {
     fn format_root_requires(&self, package: &PubGrubPackage) -> Option<String> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
-                return Some(format!("your workspace requires"));
+                return Some("your workspace requires".to_string());
             }
         }
         match &**package {
@@ -343,19 +343,35 @@ impl PubGrubReportFormatter<'_> {
     fn format_root(&self, package: &PubGrubPackage) -> Option<String> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
-                return Some(format!("your workspace's requirements"));
+                return Some("your workspace's requirements".to_string());
             }
         }
         match &**package {
-            PubGrubPackageInner::Root(Some(_)) => Some(format!("the requirements")),
+            PubGrubPackageInner::Root(Some(_)) => Some("the requirements".to_string()),
             PubGrubPackageInner::Root(None) => Some("the requirements".to_string()),
             _ => None,
         }
     }
 
-    /// Whether the resolution error is for a workspace
+    /// Whether the resolution error is for a workspace.
     fn is_workspace(&self) -> bool {
         !self.workspace_members.is_empty()
+    }
+
+    /// Return a display name for the package if it is a workspace member.
+    fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<String> {
+        match &**package {
+            PubGrubPackageInner::Package { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. } => {
+                if self.workspace_members.contains(name) {
+                    Some(format!("{name}"))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     /// Create a [`PackageRange::compatibility`] display with this formatter attached.
@@ -1039,6 +1055,13 @@ impl std::fmt::Display for PackageRange<'_> {
             .and_then(|formatter| formatter.format_root(self.package))
         {
             return write!(f, "{root}");
+        }
+        // Exit early for workspace members, only a single version is available
+        if let Some(member) = self
+            .formatter
+            .and_then(|formatter| formatter.format_workspace_member(self.package))
+        {
+            return write!(f, "{member}");
         }
         let package = self.package;
 
