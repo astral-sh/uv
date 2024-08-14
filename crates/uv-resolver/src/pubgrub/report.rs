@@ -523,7 +523,7 @@ impl PubGrubReportFormatter<'_> {
                     reason: reason.clone(),
                 });
             }
-            Some(UnavailablePackage::NotFound) => {}
+            Some(UnavailablePackage::NotFound | UnavailablePackage::WorkspaceMember) => {}
             None => {}
         }
 

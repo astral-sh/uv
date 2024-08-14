@@ -1192,7 +1192,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
       ╰─▶ Because only httpx<=9999 is available and leaf==0.1.0 depends on httpx>9999, we can conclude that leaf==0.1.0 cannot be used.
-          And because only leaf==0.1.0 is available and you require leaf, we can conclude that the requirements are unsatisfiable.
+          And because leaf is a workspace member and you require leaf, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -1247,8 +1247,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because only bar==0.1.0 is available and bar==0.1.0 depends on anyio==4.2.0, we can conclude that all versions of bar depend on anyio==4.2.0.
-          And because foo==0.1.0 depends on anyio==4.1.0 and only foo==0.1.0 is available, we can conclude that all versions of bar and all versions of foo are incompatible.
+      ╰─▶ Because bar is a workspace member and bar==0.1.0 depends on anyio==4.2.0, we can conclude that all versions of bar depend on anyio==4.2.0.
+          And because foo==0.1.0 depends on anyio==4.1.0 and foo is a workspace member, we can conclude that all versions of bar and all versions of foo are incompatible.
           And because you require bar and foo, we can conclude that the requirements are unsatisfiable.
     "###
     );
@@ -1315,8 +1315,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because only bird==0.1.0 is available and bird==0.1.0 depends on anyio==4.3.0, we can conclude that all versions of bird depend on anyio==4.3.0.
-          And because knot==0.1.0 depends on anyio==4.2.0 and only knot==0.1.0 is available, we can conclude that all versions of bird and all versions of knot are incompatible.
+      ╰─▶ Because bird is a workspace member and bird==0.1.0 depends on anyio==4.3.0, we can conclude that all versions of bird depend on anyio==4.3.0.
+          And because knot==0.1.0 depends on anyio==4.2.0 and knot is a workspace member, we can conclude that all versions of bird and all versions of knot are incompatible.
           And because you require bird and knot, we can conclude that the requirements are unsatisfiable.
     "###
     );

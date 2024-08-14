@@ -452,8 +452,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .term_intersection_for_package(&state.next)
                             .expect("a package was chosen but we don't have a term");
 
-                        // Check if the decision was due to the package being unavailable
                         if let PubGrubPackageInner::Package { ref name, .. } = &*state.next {
+                            // Check if the decision was due to the package being a
+                            // workspace member
+                            if self.workspace_members.contains(name) {
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::custom_term(
+                                        state.next.clone(),
+                                        term_intersection.clone(),
+                                        UnavailableReason::Package(
+                                            UnavailablePackage::WorkspaceMember,
+                                        ),
+                                    ));
+                                continue;
+                            }
+
+                            // Check if the decision was due to the package being unavailable
                             if let Some(entry) = self.unavailable_packages.get(name) {
                                 state
                                     .pubgrub
@@ -1746,7 +1761,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                         Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
                         Dist::Source(source_dist) => {
-                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                            if source_dist.is_local() {
+                                ResolveError::Build(Box::new(source_dist), err)
+                            } else {
+                                ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                            }
                         }
                     })?;
 
@@ -1893,7 +1912,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         ResolveError::Fetch(Box::new(built_dist), err)
                                     }
                                     Dist::Source(source_dist) => {
-                                        ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                        if source_dist.is_local() {
+                                            ResolveError::Build(Box::new(source_dist), err)
+                                        } else {
+                                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                        }
                                     }
                                 })?;
 
