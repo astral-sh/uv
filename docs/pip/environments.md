@@ -111,5 +111,5 @@ If the `--system` flag is included, uv will skip virtual environments search for
 version. Similarly, when running a command that does not mutate the environment such as
 `uv pip compile`, uv does not _require_ a virtual environment — however, a Python interpreter is
 still required. See the documentation on
-[Python discovery](../concepts/python-versions.md#discovery-order) for details on the discovery of
-installed Python versions.
+[Python discovery](../concepts/python-versions.md#discovery-of-python-versions) for details on the
+discovery of installed Python versions.
