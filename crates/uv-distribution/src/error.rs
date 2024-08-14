@@ -46,8 +46,8 @@ pub enum Error {
     CacheEncode(#[from] rmp_serde::encode::Error),
 
     // Build error
-    #[error("Failed to build: `{0}`")]
-    Build(String, #[source] anyhow::Error),
+    #[error(transparent)]
+    Build(anyhow::Error),
     #[error("Failed to build editable: `{0}`")]
     BuildEditable(String, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]

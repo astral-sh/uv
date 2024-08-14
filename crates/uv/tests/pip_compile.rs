@@ -11776,7 +11776,6 @@ fn incompatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to build: `requests==1.2.0`
       Caused by: Failed to install requirements from setup.py build (resolve)
       Caused by: No solution found when resolving: setuptools>=40.8.0
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that the requirements are unsatisfiable.

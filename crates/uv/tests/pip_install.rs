@@ -176,7 +176,6 @@ dependencies = ["flask==1.0.x"]
 
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
-      Caused by: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
     --- stdout:
     configuration error: `project.dependencies[0]` must be pep508
@@ -3413,7 +3412,6 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Failed to build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
 
@@ -3484,7 +3482,6 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Failed to build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
 
@@ -6261,7 +6258,6 @@ fn incompatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to build: `requests==1.2.0`
       Caused by: Failed to install requirements from setup.py build (resolve)
       Caused by: No solution found when resolving: setuptools>=40.8.0
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that the requirements are unsatisfiable.
@@ -6338,7 +6334,6 @@ fn install_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Failed to build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
 
