@@ -1431,29 +1431,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ))
             }
         };
-
-        // At present, if we know that we are running resolution
-        // starting with an existing set of forks, then we
-        // explicitly and forcefully prevent any new forks from
-        // being created. The motivation for doing this is that our
-        // `is_definitively_empty_set` logic for detecting whether
-        // a marker expression matches the empty set isn't yet
-        // bullet proof. Moreover, when re-running resolution, it's
-        // possible for new forks to get generated that ultimately are
-        // superfluous due to empty set markers. While we do filter
-        // these out, we do it via `is_definitively_empty_set`.
-        //
-        // Ideally we wouldn't do this here forcefully since if
-        // the input requirements change (i.e., `pyproject.toml`),
-        // then it could be correct to introduce a new fork.
-        // But in order to remove this, I think we need to make
-        // `is_definitively_empty_set` better than it is today.
-        if let ResolverMarkers::Universal { fork_preferences } = markers {
-            if !fork_preferences.is_empty() {
-                return Ok(Dependencies::Unforkable(dependencies));
-            }
-        }
-
         Ok(Dependencies::Available(dependencies))
     }
 
