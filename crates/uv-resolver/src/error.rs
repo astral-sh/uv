@@ -260,10 +260,10 @@ fn collapse_unavailable_workspace_members(
                         _,
                         UnavailableReason::Package(UnavailablePackage::WorkspaceMember),
                     )),
-                    mut other,
+                    ref mut other,
                 )
                 | (
-                    mut other,
+                    ref mut other,
                     DerivationTree::External(External::Custom(
                         _,
                         _,
@@ -271,10 +271,10 @@ fn collapse_unavailable_workspace_members(
                     )),
                 ) => {
                     // First, recursively collapse the other side of the tree
-                    collapse_unavailable_workspace_members(&mut other);
+                    collapse_unavailable_workspace_members(other);
 
                     // Then, replace this node with the other tree
-                    *tree = other.clone()
+                    *tree = other.clone();
                 }
                 // If not, just recurse
                 _ => {
