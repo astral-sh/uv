@@ -102,6 +102,8 @@ fn add_registry() -> Result<()> {
         dependencies = [
             { name = "anyio" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -260,6 +262,8 @@ fn add_git() -> Result<()> {
             { name = "anyio" },
             { name = "uv-public-pypackage" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "anyio", specifier = "==3.7.0" },
             { name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" },
@@ -367,6 +371,8 @@ fn add_git_private_source() -> Result<()> {
         dependencies = [
             { name = "uv-private-pypackage" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
@@ -464,6 +470,8 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = [
             { name = "uv-private-pypackage" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
@@ -665,6 +673,8 @@ fn add_git_raw() -> Result<()> {
             { name = "anyio" },
             { name = "uv-public-pypackage" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "anyio", specifier = "==3.7.0" },
             { name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1" },
@@ -863,6 +873,8 @@ fn add_unnamed() -> Result<()> {
         dependencies = [
             { name = "uv-public-pypackage" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
 
         [[package]]
@@ -984,7 +996,9 @@ fn add_remove_dev() -> Result<()> {
             { name = "anyio" },
         ]
 
-        [package.requires-dev]
+        [package.metadata]
+
+        [package.metadata.requires-dev]
         dev = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -1186,12 +1200,14 @@ fn add_remove_optional() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
-        requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = "==3.7.0" }]
 
         [package.optional-dependencies]
         io = [
             { name = "anyio" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = "==3.7.0" }]
 
         [[package]]
         name = "sniffio"
@@ -1419,6 +1435,8 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = [
             { name = "child2" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "child2", editable = "child2" }]
 
         [[package]]
@@ -1618,6 +1636,8 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = [
             { name = "child2" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "child2", editable = "child2" }]
 
         [[package]]
@@ -1872,6 +1892,8 @@ fn update() -> Result<()> {
         dependencies = [
             { name = "requests", extra = ["socks", "use-chardet-on-py3"] },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "requests", extras = ["security", "socks", "use-chardet-on-py3"], marker = "python_version > '3.7'", git = "https://github.com/psf/requests?tag=v2.32.3" }]
 
         [[package]]
@@ -1893,14 +1915,6 @@ fn update() -> Result<()> {
             { name = "idna" },
             { name = "urllib3" },
         ]
-        requires-dist = [
-            { name = "charset-normalizer", specifier = "<4,>=2" },
-            { name = "idna", specifier = "<4,>=2.5" },
-            { name = "urllib3", specifier = "<3,>=1.21.1" },
-            { name = "certifi", specifier = ">=2017.4.17" },
-            { name = "pysocks", marker = "extra == 'socks'", specifier = "!=1.5.7,>=1.5.6" },
-            { name = "chardet", marker = "extra == 'use-chardet-on-py3'", specifier = "<6,>=3.0.2" },
-        ]
 
         [package.optional-dependencies]
         socks = [
@@ -1908,6 +1922,16 @@ fn update() -> Result<()> {
         ]
         use-chardet-on-py3 = [
             { name = "chardet" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "charset-normalizer", specifier = "<4,>=2" },
+            { name = "idna", specifier = "<4,>=2.5" },
+            { name = "urllib3", specifier = "<3,>=1.21.1" },
+            { name = "certifi", specifier = ">=2017.4.17" },
+            { name = "pysocks", marker = "extra == 'socks'", specifier = "!=1.5.7,>=1.5.6" },
+            { name = "chardet", marker = "extra == 'use-chardet-on-py3'", specifier = "<6,>=3.0.2" },
         ]
 
         [[package]]
@@ -2109,6 +2133,8 @@ fn add_no_clean() -> Result<()> {
         dependencies = [
             { name = "iniconfig" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "###
         );
@@ -2875,12 +2901,14 @@ fn add_lower_bound_optional() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
-        requires-dist = [{ name = "anyio", marker = "extra == 'io'" }]
 
         [package.optional-dependencies]
         io = [
             { name = "anyio" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", marker = "extra == 'io'" }]
 
         [[package]]
         name = "sniffio"
@@ -2970,6 +2998,8 @@ fn add_lower_bound_local() -> Result<()> {
         dependencies = [
             { name = "local-simple-a" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "local-simple-a" }]
         "###
         );

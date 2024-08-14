@@ -1101,6 +1101,8 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = [
             { name = "library" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "library", editable = "../library" }]
 
         [[package]]

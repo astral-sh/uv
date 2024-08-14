@@ -564,7 +564,7 @@ impl Lock {
             }
         }
 
-        // Write the manifest that was used to generate the resoution.
+        // Write the manifest that was used to generate the resolution.
         {
             let mut manifest_table = Table::new();
 
@@ -779,6 +779,7 @@ impl Lock {
                     .map(|requirement| normalize_requirement(requirement, workspace))
                     .collect();
                 let actual: Vec<_> = package
+                    .metadata
                     .requires_dist
                     .iter()
                     .cloned()
@@ -811,6 +812,7 @@ impl Lock {
                     })
                     .collect();
                 let actual: BTreeMap<GroupName, Vec<Requirement>> = package
+                    .metadata
                     .requires_dev
                     .iter()
                     .map(|(group, requirements)| {
@@ -995,10 +997,8 @@ pub struct Package {
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
     /// The resolved development dependencies of the package.
     dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
-    /// The exact requirements from the `requires-dist` metadata.
-    requires_dist: Vec<Requirement>,
-    /// The exact requirements from the `dev-dependencies` metadata.
-    requires_dev: BTreeMap<GroupName, Vec<Requirement>>,
+    /// The exact requirements from the package metadata.
+    metadata: PackageMetadata,
 }
 
 impl Package {
@@ -1027,8 +1027,11 @@ impl Package {
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dev_dependencies: BTreeMap::default(),
-            requires_dist,
-            requires_dev,
+            metadata: PackageMetadata {
+                requires_dist,
+
+                requires_dev,
+            },
         })
     }
 
@@ -1343,29 +1346,14 @@ impl Package {
             table.insert("wheels", value(wheels));
         }
 
-        if !self.requires_dist.is_empty() {
-            let requires_dist = self
-                .requires_dist
-                .iter()
-                .map(|requirement| {
-                    serde::Serialize::serialize(
-                        &requirement,
-                        toml_edit::ser::ValueSerializer::new(),
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let requires_dist = match requires_dist.as_slice() {
-                [] => Array::new(),
-                [requirement] => Array::from_iter([requirement]),
-                requires_dist => each_element_on_its_line_array(requires_dist.iter()),
-            };
-            table.insert("requires-dist", value(requires_dist));
-        }
+        // Write the package metadata, if non-empty.
+        {
+            let mut metadata_table = Table::new();
 
-        if !self.requires_dev.is_empty() {
-            let mut requires_dev = Table::new();
-            for (extra, deps) in &self.requires_dev {
-                let deps = deps
+            if !self.metadata.requires_dist.is_empty() {
+                let requires_dist = self
+                    .metadata
+                    .requires_dist
                     .iter()
                     .map(|requirement| {
                         serde::Serialize::serialize(
@@ -1374,17 +1362,42 @@ impl Package {
                         )
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                let deps = match deps.as_slice() {
+                let requires_dist = match requires_dist.as_slice() {
                     [] => Array::new(),
                     [requirement] => Array::from_iter([requirement]),
-                    deps => each_element_on_its_line_array(deps.iter()),
+                    requires_dist => each_element_on_its_line_array(requires_dist.iter()),
                 };
-                if !deps.is_empty() {
-                    requires_dev.insert(extra.as_ref(), value(deps));
+                metadata_table.insert("requires-dist", value(requires_dist));
+            }
+
+            if !self.metadata.requires_dev.is_empty() {
+                let mut requires_dev = Table::new();
+                for (extra, deps) in &self.metadata.requires_dev {
+                    let deps = deps
+                        .iter()
+                        .map(|requirement| {
+                            serde::Serialize::serialize(
+                                &requirement,
+                                toml_edit::ser::ValueSerializer::new(),
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let deps = match deps.as_slice() {
+                        [] => Array::new(),
+                        [requirement] => Array::from_iter([requirement]),
+                        deps => each_element_on_its_line_array(deps.iter()),
+                    };
+                    if !deps.is_empty() {
+                        requires_dev.insert(extra.as_ref(), value(deps));
+                    }
+                }
+                if !requires_dev.is_empty() {
+                    metadata_table.insert("requires-dev", Item::Table(requires_dev));
                 }
             }
-            if !requires_dev.is_empty() {
-                table.insert("requires-dev", Item::Table(requires_dev));
+
+            if !metadata_table.is_empty() {
+                table.insert("metadata", Item::Table(metadata_table));
             }
         }
 
@@ -1479,9 +1492,7 @@ struct PackageWire {
     #[serde(flatten)]
     id: PackageId,
     #[serde(default)]
-    requires_dist: Vec<Requirement>,
-    #[serde(default)]
-    requires_dev: BTreeMap<GroupName, Vec<Requirement>>,
+    metadata: PackageMetadata,
     #[serde(default)]
     sdist: Option<SourceDist>,
     #[serde(default)]
@@ -1496,6 +1507,15 @@ struct PackageWire {
     dev_dependencies: BTreeMap<GroupName, Vec<DependencyWire>>,
 }
 
+#[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct PackageMetadata {
+    #[serde(default)]
+    requires_dist: Vec<Requirement>,
+    #[serde(default)]
+    requires_dev: BTreeMap<GroupName, Vec<Requirement>>,
+}
+
 impl PackageWire {
     fn unwire(
         self,
@@ -1508,8 +1528,7 @@ impl PackageWire {
         };
         Ok(Package {
             id: self.id,
-            requires_dist: self.requires_dist,
-            requires_dev: self.requires_dev,
+            metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self.fork_markers,
@@ -1535,8 +1554,7 @@ impl From<Package> for PackageWire {
         };
         PackageWire {
             id: dist.id,
-            requires_dist: dist.requires_dist,
-            requires_dev: dist.requires_dev,
+            metadata: dist.metadata,
             sdist: dist.sdist,
             wheels: dist.wheels,
             fork_markers: dist.fork_markers,

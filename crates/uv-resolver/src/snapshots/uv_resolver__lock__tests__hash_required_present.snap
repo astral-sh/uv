@@ -62,8 +62,10 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
-                requires_dist: [],
-                requires_dev: {},
+                metadata: PackageMetadata {
+                    requires_dist: [],
+                    requires_dev: {},
+                },
             },
         ],
         by_id: {
