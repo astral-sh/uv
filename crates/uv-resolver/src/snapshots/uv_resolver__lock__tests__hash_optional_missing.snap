@@ -57,6 +57,8 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
+                requires_dist: [],
+                requires_dev: {},
             },
         ],
         by_id: {
@@ -72,5 +74,8 @@ Ok(
                 ),
             }: 0,
         },
+        members: [],
+        constraints: [],
+        overrides: [],
     },
 )

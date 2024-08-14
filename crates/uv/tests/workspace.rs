@@ -1084,6 +1084,10 @@ fn workspace_inherit_sources() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+        members = [
+            "leaf",
+            "workspace",
+        ]
 
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -1095,6 +1099,7 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = [
             { name = "library" },
         ]
+        requires-dist = [{ name = "library", editable = "../library" }]
 
         [[package]]
         name = "library"

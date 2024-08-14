@@ -59,7 +59,6 @@ pub(crate) use crate::resolver::availability::{
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 use crate::resolver::groups::Groups;
-pub(crate) use crate::resolver::index::FxOnceMap;
 pub use crate::resolver::index::InMemoryIndex;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,

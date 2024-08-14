@@ -2,49 +2,40 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
-use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 
 use either::Either;
 use itertools::Itertools;
 use petgraph::visit::EdgeRef;
 use pubgrub::Range;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
+use tracing::debug;
 use url::Url;
 
 use cache_key::RepositoryUrl;
 use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, GitSourceDist, HashComparison, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, PrioritizedDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, SourceDistCompatibility,
-    ToUrlError, UrlString, VersionId, WheelCompatibility,
+    DistributionMetadata, FileLocation, GitSourceDist, HashPolicy, IndexUrl, Name, PathBuiltDist,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
+    Resolution, ResolvedDist, ToUrlError, UrlString,
 };
-use pep440_rs::{Version, VersionSpecifier};
-use pep508_rs::{
-    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, VerbatimUrl, VerbatimUrlError,
-};
+use pep440_rs::Version;
+use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use platform_tags::{TagCompatibility, TagPriority, Tags};
-use pypi_types::{
-    HashDigest, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, Requirement, RequirementSource,
-};
-use uv_configuration::{ExtrasSpecification, Upgrade};
-use uv_distribution::{ArchiveMetadata, Metadata};
-use uv_fs::{PortablePath, PortablePathBuf, Simplified};
+use pypi_types::{HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement, RequirementSource};
+use uv_configuration::ExtrasSpecification;
+use uv_distribution::DistributionDatabase;
+use uv_fs::{relative_to, PortablePath, PortablePathBuf, Simplified};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_workspace::VirtualProject;
+use uv_types::BuildContext;
+use uv_workspace::{VirtualProject, Workspace};
 
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::resolver::FxOnceMap;
-use crate::{
-    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
-    ResolutionMode, VersionMap, VersionsResponse,
-};
+use crate::{ExcludeNewer, PrereleaseMode, RequiresPython, ResolutionGraph, ResolutionMode};
 
 /// The current version of the lockfile format.
 const VERSION: u32 = 1;
@@ -58,7 +49,7 @@ pub struct Lock {
     fork_markers: Vec<MarkerTree>,
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
-    /// We discard the lockfile if these options match.
+    /// We discard the lockfile if these options don't match.
     options: ResolverOptions,
     /// The actual locked version and their metadata.
     packages: Vec<Package>,
@@ -74,6 +65,12 @@ pub struct Lock {
     /// that exists in this map. That is, there are no dependencies that don't
     /// have a corresponding locked package entry in the same lockfile.
     by_id: FxHashMap<PackageId, usize>,
+    /// Requirements that were provided when generating the lockfile.
+    members: Vec<PackageName>,
+    /// Constraints that were provided when generating the lockfile.
+    constraints: Vec<Requirement>,
+    /// Overrides that were provided when generating the lockfile.
+    overrides: Vec<Requirement>,
 }
 
 impl Lock {
@@ -208,6 +205,9 @@ impl Lock {
             packages,
             requires_python,
             options,
+            vec![],
+            vec![],
+            vec![],
             graph.fork_markers.clone(),
         )?;
         Ok(lock)
@@ -219,6 +219,9 @@ impl Lock {
         mut packages: Vec<Package>,
         requires_python: Option<RequiresPython>,
         options: ResolverOptions,
+        members: Vec<PackageName>,
+        constraints: Vec<Requirement>,
+        overrides: Vec<Requirement>,
         fork_markers: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -379,7 +382,41 @@ impl Lock {
             options,
             packages,
             by_id,
+            members,
+            constraints,
+            overrides,
         })
+    }
+
+    /// Record the requirements that were used to generate this lock.
+    #[must_use]
+    pub fn with_members(mut self, members: Vec<PackageName>) -> Self {
+        self.members = members;
+        self
+    }
+
+    /// Record the constraints that were used to generate this lock.
+    #[must_use]
+    pub fn with_constraints(mut self, constraints: Vec<Requirement>) -> Self {
+        self.constraints = constraints;
+        self
+    }
+
+    /// Record the overrides that were used to generate this lock.
+    #[must_use]
+    pub fn with_overrides(mut self, overrides: Vec<Requirement>) -> Self {
+        self.overrides = overrides;
+        self
+    }
+
+    /// Returns the number of packages in the lockfile.
+    pub fn len(&self) -> usize {
+        self.packages.len()
+    }
+
+    /// Returns `true` if the lockfile contains no packages.
+    pub fn is_empty(&self) -> bool {
+        self.packages.is_empty()
     }
 
     /// Returns the [`Package`] entries in this lock.
@@ -410,6 +447,16 @@ impl Lock {
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
         self.options.exclude_newer
+    }
+
+    /// Returns the constraints that were used to generate this lock.
+    pub fn constraints(&self) -> &[Requirement] {
+        &self.constraints
+    }
+
+    /// Returns the overrides that were used to generate this lock.
+    pub fn overrides(&self) -> &[Requirement] {
+        &self.overrides
     }
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
@@ -548,6 +595,53 @@ impl Lock {
             doc.insert("options", Item::Table(options_table));
         }
 
+        if !self.members.is_empty() {
+            doc.insert(
+                "members",
+                value(each_element_on_its_line_array(
+                    self.members.iter().map(std::string::ToString::to_string),
+                )),
+            );
+        }
+
+        if !self.constraints.is_empty() {
+            let constraints = self
+                .constraints
+                .iter()
+                .map(|requirement| {
+                    serde::Serialize::serialize(
+                        &requirement,
+                        toml_edit::ser::ValueSerializer::new(),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let constraints = match constraints.as_slice() {
+                [] => Array::new(),
+                [requirement] => Array::from_iter([requirement]),
+                constraints => each_element_on_its_line_array(constraints.iter()),
+            };
+            doc.insert("constraints", value(constraints));
+        }
+
+        if !self.overrides.is_empty() {
+            let overrides = self
+                .overrides
+                .iter()
+                .map(|requirement| {
+                    serde::Serialize::serialize(
+                        &requirement,
+                        toml_edit::ser::ValueSerializer::new(),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let overrides = match overrides.as_slice() {
+                [] => Array::new(),
+                [requirement] => Array::from_iter([requirement]),
+                overrides => each_element_on_its_line_array(overrides.iter()),
+            };
+            doc.insert("overrides", value(overrides));
+        }
+
         // Count the number of packages for each package name. When
         // there's only one package for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
@@ -588,62 +682,203 @@ impl Lock {
         dist
     }
 
-    /// Convert the [`Lock`] to a [`InMemoryIndex`] that can be used for resolution.
-    ///
-    /// Any packages specified to be upgraded will be ignored.
-    pub fn to_index(
+    /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
+    pub async fn satisfies<Context: BuildContext>(
         &self,
-        install_path: &Path,
-        upgrade: &Upgrade,
-    ) -> Result<InMemoryIndex, LockError> {
-        let distributions =
-            FxOnceMap::with_capacity_and_hasher(self.packages.len(), BuildHasherDefault::default());
-        let mut packages: FxHashMap<_, BTreeMap<Version, PrioritizedDist>> =
-            FxHashMap::with_capacity_and_hasher(self.packages.len(), FxBuildHasher);
+        workspace: &Workspace,
+        members: &[PackageName],
+        constraints: &[Requirement],
+        overrides: &[Requirement],
+        tags: &Tags,
+        database: &DistributionDatabase<'_, Context>,
+    ) -> Result<bool, LockError> {
+        let mut queue: VecDeque<&Package> = VecDeque::new();
+        let mut seen = FxHashSet::default();
 
-        for package in &self.packages {
-            // Skip packages that may be upgraded from their pinned version.
-            if upgrade.contains(package.name()) {
+        // Validate that the lockfile was generated with the same root members.
+        {
+            let expected = members;
+            let actual = &self.members;
+            if expected != actual {
+                debug!(
+                    "Mismatched members:\n  expected: {:?}\n  found: {:?}",
+                    expected, actual
+                );
+                return Ok(false);
+            }
+        }
+
+        // Validate that the lockfile was generated with the same constraints.
+        {
+            let expected: Vec<_> = constraints
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, workspace))
+                .collect();
+            let actual: Vec<_> = self
+                .constraints
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, workspace))
+                .collect();
+            if expected != actual {
+                debug!(
+                    "Mismatched constraints:\n  expected: {:?}\n  found: {:?}",
+                    expected, actual
+                );
+                return Ok(false);
+            }
+        }
+
+        // Validate that the lockfile was generated with the same overrides.
+        {
+            let expected: Vec<_> = overrides
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, workspace))
+                .collect();
+            let actual: Vec<_> = self
+                .overrides
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, workspace))
+                .collect();
+            if expected != actual {
+                debug!(
+                    "Mismatched overrides:\n  expected: {:?}\n  found: {:?}",
+                    expected, actual
+                );
+                return Ok(false);
+            }
+        }
+
+        // Add the workspace packages to the queue.
+        for root_name in workspace.packages().keys() {
+            let root = self
+                .find_by_name(root_name)
+                .expect("found too many packages matching root");
+
+            let Some(root) = root else {
+                // The package is not in the lockfile, so it can't be satisfied.
+                debug!("Workspace package `{root_name}` not found in lockfile");
+                return Ok(false);
+            };
+
+            // Add the base package.
+            queue.push_back(root);
+        }
+
+        while let Some(package) = queue.pop_front() {
+            // Assume that registry dependencies are immutable.
+            if matches!(package.id.source, Source::Registry(..)) {
                 continue;
             }
 
-            match package.id.source {
-                Source::Registry(..) | Source::Git(..) => {}
-                // Skip local and direct URL dependencies, as their metadata may have been mutated
-                // without a version change.
-                Source::Path(..)
-                | Source::Directory(..)
-                | Source::Editable(..)
-                | Source::Direct(..) => continue,
+            // Get the metadata for the distribution.
+            let dist = package.to_dist(workspace.install_path(), tags)?;
+
+            let Ok(archive) = database
+                .get_or_build_wheel_metadata(&dist, HashPolicy::None)
+                .await
+            else {
+                debug!("Failed to get metadata for: {}", package.id);
+                return Ok(false);
+            };
+
+            // Validate the `requires-dist` metadata.
+            {
+                let expected: Vec<_> = archive
+                    .metadata
+                    .requires_dist
+                    .into_iter()
+                    .map(|requirement| normalize_requirement(requirement, workspace))
+                    .collect();
+                let actual: Vec<_> = package
+                    .requires_dist
+                    .iter()
+                    .cloned()
+                    .map(|requirement| normalize_requirement(requirement, workspace))
+                    .collect();
+
+                if expected != actual {
+                    debug!(
+                        "Mismatched `requires-dist` for {}:\n  expected: {:?}\n  found: {:?}",
+                        package.id, expected, actual
+                    );
+                    return Ok(false);
+                }
             }
 
-            // Add registry distributions to the package index.
-            if let Some(prioritized_dist) = package.to_prioritized_dist(install_path)? {
-                packages
-                    .entry(package.name().clone())
-                    .or_default()
-                    .insert(package.id.version.clone(), prioritized_dist);
+            // Validate the `requires-dev` metadata.
+            {
+                let expected: BTreeMap<GroupName, Vec<Requirement>> = archive
+                    .metadata
+                    .dev_dependencies
+                    .into_iter()
+                    .map(|(group, requirements)| {
+                        (
+                            group,
+                            requirements
+                                .into_iter()
+                                .map(|requirement| normalize_requirement(requirement, workspace))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+                let actual: BTreeMap<GroupName, Vec<Requirement>> = package
+                    .requires_dev
+                    .iter()
+                    .map(|(group, requirements)| {
+                        (
+                            group.clone(),
+                            requirements
+                                .iter()
+                                .cloned()
+                                .map(|requirement| normalize_requirement(requirement, workspace))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+
+                if expected != actual {
+                    debug!(
+                        "Mismatched `requires-dev` for {}:\n  expected: {:?}\n  found: {:?}",
+                        package.id, expected, actual
+                    );
+                    return Ok(false);
+                }
             }
 
-            // Extract the distribution metadata.
-            let version_id = package.version_id(install_path)?;
-            let hashes = package.hashes();
-            let metadata = package.to_metadata(install_path)?;
+            // Recurse.
+            // TODO(charlie): Do we care about extras here, or any other fields on the `Dependency`?
+            // Should we instead recurse on `requires_dist`?
+            for dep in &package.dependencies {
+                if seen.insert(&dep.package_id) {
+                    let dep_dist = self.find_by_id(&dep.package_id);
+                    queue.push_back(dep_dist);
+                }
+            }
 
-            // Add metadata to the distributions index.
-            let response = MetadataResponse::Found(ArchiveMetadata::with_hashes(metadata, hashes));
-            distributions.done(version_id, Arc::new(response));
+            for dependencies in package.optional_dependencies.values() {
+                for dep in dependencies {
+                    if seen.insert(&dep.package_id) {
+                        let dep_dist = self.find_by_id(&dep.package_id);
+                        queue.push_back(dep_dist);
+                    }
+                }
+            }
+
+            for dependencies in package.dev_dependencies.values() {
+                for dep in dependencies {
+                    if seen.insert(&dep.package_id) {
+                        let dep_dist = self.find_by_id(&dep.package_id);
+                        queue.push_back(dep_dist);
+                    }
+                }
+            }
         }
 
-        let packages = packages
-            .into_iter()
-            .map(|(name, versions)| {
-                let response = VersionsResponse::Found(vec![VersionMap::from(versions)]);
-                (name, Arc::new(response))
-            })
-            .collect();
-
-        Ok(InMemoryIndex::with(packages, distributions))
+        Ok(true)
     }
 }
 
@@ -674,6 +909,13 @@ struct LockWire {
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
+    // TODO(charlie): Group these under a `ResolverManifest`.
+    #[serde(default)]
+    members: Vec<PackageName>,
+    #[serde(default)]
+    constraints: Vec<Requirement>,
+    #[serde(default)]
+    overrides: Vec<Requirement>,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
 }
@@ -685,6 +927,9 @@ impl From<Lock> for LockWire {
             requires_python: lock.requires_python,
             fork_markers: lock.fork_markers,
             options: lock.options,
+            members: lock.members,
+            constraints: lock.constraints,
+            overrides: lock.overrides,
             packages: lock.packages.into_iter().map(PackageWire::from).collect(),
         }
     }
@@ -721,6 +966,9 @@ impl TryFrom<LockWire> for Lock {
             packages,
             wire.requires_python,
             wire.options,
+            wire.members,
+            wire.constraints,
+            wire.overrides,
             wire.fork_markers,
         )
     }
@@ -740,6 +988,12 @@ pub struct Package {
     dependencies: Vec<Dependency>,
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
     dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
+
+    // TODO(charlie): Group these under `PackageMetadata`.
+    // TODO(charlie): Add `requires-python`.
+    // TODO(charlie): Add `provides-extra`.
+    requires_dist: Vec<Requirement>,
+    requires_dev: BTreeMap<GroupName, Vec<Requirement>>,
 }
 
 impl Package {
@@ -750,6 +1004,16 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist);
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
+        let requires_dist = if matches!(id.source, Source::Registry(..)) {
+            vec![]
+        } else {
+            annotated_dist.metadata.requires_dist.clone()
+        };
+        let requires_dev = if matches!(id.source, Source::Registry(..)) {
+            BTreeMap::default()
+        } else {
+            annotated_dist.metadata.dev_dependencies.clone()
+        };
         Ok(Package {
             id,
             sdist,
@@ -758,6 +1022,8 @@ impl Package {
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dev_dependencies: BTreeMap::default(),
+            requires_dist,
+            requires_dev,
         })
     }
 
@@ -1001,119 +1267,6 @@ impl Package {
         Ok(Some(sdist))
     }
 
-    /// Convert the [`Package`] to a [`PrioritizedDist`] that can be used for resolution, if
-    /// it has a registry source.
-    fn to_prioritized_dist(
-        &self,
-        workspace_root: &Path,
-    ) -> Result<Option<PrioritizedDist>, LockError> {
-        let prioritized_dist = match &self.id.source {
-            Source::Registry(url) => {
-                let mut prioritized_dist = PrioritizedDist::default();
-
-                // Add the source distribution.
-                if let Some(distribution_types::SourceDist::Registry(sdist)) =
-                    self.to_source_dist(workspace_root)?
-                {
-                    // When resolving from a lockfile all sources are equally compatible.
-                    let compat = SourceDistCompatibility::Compatible(HashComparison::Matched);
-                    let hash = self
-                        .sdist
-                        .as_ref()
-                        .and_then(|sdist| sdist.hash().map(|h| h.0.clone()));
-                    prioritized_dist.insert_source(sdist, hash, compat);
-                };
-
-                // Add any wheels.
-                for wheel in &self.wheels {
-                    let hash = wheel.hash.as_ref().map(|h| h.0.clone());
-                    let wheel = wheel.to_registry_dist(url.to_url())?;
-                    let compat =
-                        WheelCompatibility::Compatible(HashComparison::Matched, None, None);
-                    prioritized_dist.insert_built(wheel, hash, compat);
-                }
-
-                prioritized_dist
-            }
-            _ => return Ok(None),
-        };
-
-        Ok(Some(prioritized_dist))
-    }
-
-    /// Convert the [`Package`] to [`Metadata`] that can be used for resolution.
-    pub fn to_metadata(&self, workspace_root: &Path) -> Result<Metadata, LockError> {
-        let name = self.name().clone();
-        let version = self.id.version.clone();
-        let provides_extras = self.optional_dependencies.keys().cloned().collect();
-
-        let mut dependency_extras = FxHashMap::default();
-        let mut requires_dist = self
-            .dependencies
-            .iter()
-            .filter_map(|dep| {
-                dep.to_requirement(workspace_root, &mut dependency_extras)
-                    .transpose()
-            })
-            .collect::<Result<Vec<_>, LockError>>()?;
-
-        // Denormalize optional dependencies.
-        for (extra, deps) in &self.optional_dependencies {
-            for dep in deps {
-                if let Some(mut dep) = dep.to_requirement(workspace_root, &mut dependency_extras)? {
-                    // Add back the extra marker expression.
-                    dep.marker
-                        .and(MarkerTree::expression(MarkerExpression::Extra {
-                            operator: ExtraOperator::Equal,
-                            name: extra.clone(),
-                        }));
-
-                    requires_dist.push(dep);
-                }
-            }
-        }
-
-        // Denormalize extras for each dependency.
-        for req in &mut requires_dist {
-            if let Some(extras) = dependency_extras.remove(&req.name) {
-                req.extras = extras;
-            }
-        }
-
-        let dev_dependencies = self
-            .dev_dependencies
-            .iter()
-            .map(|(group, deps)| {
-                let mut dependency_extras = FxHashMap::default();
-                let mut deps = deps
-                    .iter()
-                    .filter_map(|dep| {
-                        dep.to_requirement(workspace_root, &mut dependency_extras)
-                            .transpose()
-                    })
-                    .collect::<Result<Vec<_>, LockError>>()?;
-
-                // Denormalize extras for each development dependency.
-                for dep in &mut deps {
-                    if let Some(extras) = dependency_extras.remove(&dep.name) {
-                        dep.extras = extras;
-                    }
-                }
-
-                Ok((group.clone(), deps))
-            })
-            .collect::<Result<_, LockError>>()?;
-
-        Ok(Metadata {
-            name,
-            version,
-            requires_dist,
-            dev_dependencies,
-            provides_extras,
-            requires_python: None,
-        })
-    }
-
     fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> anyhow::Result<Table> {
         let mut table = Table::new();
 
@@ -1145,9 +1298,13 @@ impl Package {
                     deps.iter()
                         .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
                 );
-                optional_deps.insert(extra.as_ref(), value(deps));
+                if !deps.is_empty() {
+                    optional_deps.insert(extra.as_ref(), value(deps));
+                }
             }
-            table.insert("optional-dependencies", Item::Table(optional_deps));
+            if !optional_deps.is_empty() {
+                table.insert("optional-dependencies", Item::Table(optional_deps));
+            }
         }
 
         if !self.dev_dependencies.is_empty() {
@@ -1157,9 +1314,13 @@ impl Package {
                     deps.iter()
                         .map(|dep| dep.to_toml(dist_count_by_name).into_inline_table()),
                 );
-                dev_dependencies.insert(extra.as_ref(), value(deps));
+                if !deps.is_empty() {
+                    dev_dependencies.insert(extra.as_ref(), value(deps));
+                }
             }
-            table.insert("dev-dependencies", Item::Table(dev_dependencies));
+            if !dev_dependencies.is_empty() {
+                table.insert("dev-dependencies", Item::Table(dev_dependencies));
+            }
         }
 
         if let Some(ref sdist) = self.sdist {
@@ -1175,6 +1336,51 @@ impl Package {
                     .into_iter(),
             );
             table.insert("wheels", value(wheels));
+        }
+
+        if !self.requires_dist.is_empty() {
+            let requires_dist = self
+                .requires_dist
+                .iter()
+                .map(|requirement| {
+                    serde::Serialize::serialize(
+                        &requirement,
+                        toml_edit::ser::ValueSerializer::new(),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let requires_dist = match requires_dist.as_slice() {
+                [] => Array::new(),
+                [requirement] => Array::from_iter([requirement]),
+                requires_dist => each_element_on_its_line_array(requires_dist.iter()),
+            };
+            table.insert("requires-dist", value(requires_dist));
+        }
+
+        if !self.requires_dev.is_empty() {
+            let mut requires_dev = Table::new();
+            for (extra, deps) in &self.requires_dev {
+                let deps = deps
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let deps = match deps.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    deps => each_element_on_its_line_array(deps.iter()),
+                };
+                if !deps.is_empty() {
+                    requires_dev.insert(extra.as_ref(), value(deps));
+                }
+            }
+            if !requires_dev.is_empty() {
+                table.insert("requires-dev", Item::Table(requires_dev));
+            }
         }
 
         Ok(table)
@@ -1223,17 +1429,6 @@ impl Package {
         }
     }
 
-    /// Returns a [`VersionId`] for this package that can be used for resolution.
-    fn version_id(&self, workspace_root: &Path) -> Result<VersionId, LockError> {
-        match &self.id.source {
-            Source::Registry(_) => Ok(VersionId::NameVersion(
-                self.name().clone(),
-                self.id.version.clone(),
-            )),
-            _ => Ok(self.to_source_dist(workspace_root)?.unwrap().version_id()),
-        }
-    }
-
     /// Returns all the hashes associated with this [`Package`].
     fn hashes(&self) -> Vec<HashDigest> {
         let mut hashes = Vec::new();
@@ -1279,6 +1474,10 @@ struct PackageWire {
     #[serde(flatten)]
     id: PackageId,
     #[serde(default)]
+    requires_dist: Vec<Requirement>,
+    #[serde(default)]
+    requires_dev: BTreeMap<GroupName, Vec<Requirement>>,
+    #[serde(default)]
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
@@ -1304,6 +1503,8 @@ impl PackageWire {
         };
         Ok(Package {
             id: self.id,
+            requires_dist: self.requires_dist,
+            requires_dev: self.requires_dev,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self.fork_markers,
@@ -1329,6 +1530,8 @@ impl From<Package> for PackageWire {
         };
         PackageWire {
             id: dist.id,
+            requires_dist: dist.requires_dist,
+            requires_dev: dist.requires_dev,
             sdist: dist.sdist,
             wheels: dist.wheels,
             fork_markers: dist.fork_markers,
@@ -2322,82 +2525,6 @@ impl Dependency {
         }
     }
 
-    /// Convert the [`Dependency`] to a [`Requirement`] that can be used for resolution.
-    pub(crate) fn to_requirement(
-        &self,
-        workspace_root: &Path,
-        extras: &mut FxHashMap<PackageName, Vec<ExtraName>>,
-    ) -> Result<Option<Requirement>, LockError> {
-        // Keep track of extras, these will be denormalized later.
-        if !self.extra.is_empty() {
-            extras
-                .entry(self.package_id.name.clone())
-                .or_default()
-                .extend(self.extra.iter().cloned());
-        }
-
-        // Reconstruct the `RequirementSource` from the `Source`.
-        let source = match &self.package_id.source {
-            Source::Registry(_) => RequirementSource::Registry {
-                // We don't store the version specifier that was originally used for resolution in
-                // the lockfile, so this might be too restrictive. However, this is the only version
-                // we have the metadata for, so if resolution fails we will need to fallback to a
-                // clean resolve.
-                specifier: VersionSpecifier::equals_version(self.package_id.version.clone()).into(),
-                index: None,
-            },
-            Source::Git(repository, git) => {
-                let git_url = uv_git::GitUrl::from_commit(
-                    repository.to_url(),
-                    GitReference::from(git.kind.clone()),
-                    git.precise,
-                );
-
-                let parsed_url = ParsedUrl::Git(ParsedGitUrl {
-                    url: git_url.clone(),
-                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
-                });
-                RequirementSource::from_verbatim_parsed_url(parsed_url)
-            }
-            Source::Direct(url, direct) => {
-                let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl {
-                    url: url.to_url(),
-                    subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
-                    ext: DistExtension::from_path(url.as_ref())?,
-                });
-                RequirementSource::from_verbatim_parsed_url(parsed_url)
-            }
-            Source::Path(ref path) => RequirementSource::Path {
-                lock_path: path.clone(),
-                install_path: workspace_root.join(path),
-                url: verbatim_url(workspace_root.join(path), &self.package_id)?,
-                ext: DistExtension::from_path(path)?,
-            },
-            Source::Directory(ref path) => RequirementSource::Directory {
-                editable: false,
-                lock_path: path.clone(),
-                install_path: workspace_root.join(path),
-                url: verbatim_url(workspace_root.join(path), &self.package_id)?,
-            },
-            Source::Editable(ref path) => RequirementSource::Directory {
-                editable: true,
-                lock_path: path.clone(),
-                install_path: workspace_root.join(path),
-                url: verbatim_url(workspace_root.join(path), &self.package_id)?,
-            },
-        };
-
-        let requirement = Requirement {
-            name: self.package_id.name.clone(),
-            marker: self.marker.clone(),
-            origin: None,
-            extras: Vec::new(),
-            source,
-        };
-
-        Ok(Some(requirement))
-    }
-
     /// Returns the TOML representation of this dependency.
     fn to_toml(&self, dist_count_by_name: &FxHashMap<PackageName, u64>) -> Table {
         let mut table = Table::new();
@@ -2517,6 +2644,101 @@ impl<'de> serde::Deserialize<'de> for Hash {
     {
         let string = String::deserialize(d)?;
         string.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+/// Normalize a [`Requirement`], which could come from a lockfile, a `pyproject.toml`, etc.
+///
+/// Performs the following steps:
+///
+/// 1. Removes any sensitive credentials.
+/// 2. Ensures that the lock and install paths are appropriately framed with respect to the
+///    current [`Workspace`].
+/// 3. Removes the `origin` field, which is only used in `requirements.txt`.
+fn normalize_requirement(requirement: Requirement, workspace: &Workspace) -> Requirement {
+    match requirement.source {
+        RequirementSource::Git {
+            mut repository,
+            reference,
+            precise,
+            subdirectory,
+            url,
+        } => {
+            // Redact the repository URL.
+            let _ = repository.set_password(None);
+            let _ = repository.set_username("");
+
+            // Redact the PEP 508 URL.
+            let mut url = url.to_url();
+            let _ = url.set_password(None);
+            let _ = url.set_username("");
+            let url = VerbatimUrl::from_url(url);
+
+            Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                marker: requirement.marker,
+                source: RequirementSource::Git {
+                    repository,
+                    reference,
+                    precise,
+                    subdirectory,
+                    url,
+                },
+                origin: None,
+            }
+        }
+        RequirementSource::Path {
+            install_path,
+            lock_path,
+            ext,
+            url: _,
+        } => {
+            let install_path = uv_fs::normalize_path(&workspace.install_path().join(install_path));
+            let lock_path = relative_to(workspace.lock_path(), &lock_path).unwrap();
+            let url = VerbatimUrl::from_path(&install_path).unwrap();
+            Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                marker: requirement.marker,
+                source: RequirementSource::Path {
+                    install_path,
+                    lock_path,
+                    ext,
+                    url,
+                },
+                origin: None,
+            }
+        }
+        RequirementSource::Directory {
+            install_path,
+            lock_path,
+            editable,
+            url: _,
+        } => {
+            let install_path = uv_fs::normalize_path(&workspace.install_path().join(install_path));
+            let lock_path = relative_to(workspace.lock_path(), &lock_path).unwrap();
+            let url = VerbatimUrl::from_path(&install_path).unwrap();
+            Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                marker: requirement.marker,
+                source: RequirementSource::Directory {
+                    install_path,
+                    lock_path,
+                    editable,
+                    url,
+                },
+                origin: None,
+            }
+        }
+        _ => Requirement {
+            name: requirement.name,
+            extras: requirement.extras,
+            marker: requirement.marker,
+            source: requirement.source,
+            origin: None,
+        },
     }
 }
 

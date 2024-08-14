@@ -10,7 +10,7 @@ use pep440_rs::VersionSpecifiers;
 use pep508_rs::{
     marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
 };
-use uv_fs::PortablePathBuf;
+use uv_fs::{PortablePathBuf, CWD};
 use uv_git::{GitReference, GitSha, GitUrl};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -65,6 +65,45 @@ impl Requirement {
     /// Returns `true` if the requirement is editable.
     pub fn is_editable(&self) -> bool {
         self.source.is_editable()
+    }
+
+    /// Remove any sensitive credentials from the requirement.
+    #[must_use]
+    pub fn redact(self) -> Requirement {
+        match self.source {
+            RequirementSource::Git {
+                mut repository,
+                reference,
+                precise,
+                subdirectory,
+                url,
+            } => {
+                // Redact the repository URL.
+                let _ = repository.set_password(None);
+                let _ = repository.set_username("");
+
+                // Redact the PEP 508 URL.
+                let mut url = url.to_url();
+                let _ = url.set_password(None);
+                let _ = url.set_username("");
+                let url = VerbatimUrl::from_url(url);
+
+                Self {
+                    name: self.name,
+                    extras: self.extras,
+                    marker: self.marker,
+                    source: RequirementSource::Git {
+                        repository,
+                        reference,
+                        precise,
+                        subdirectory,
+                        url,
+                    },
+                    origin: self.origin,
+                }
+            }
+            _ => self,
+        }
     }
 }
 
@@ -554,6 +593,10 @@ impl From<RequirementSource> for RequirementSourceWire {
             } => {
                 let mut url = repository;
 
+                // Redact the credentials.
+                let _ = url.set_username("");
+                let _ = url.set_password(None);
+
                 // Clear out any existing state.
                 url.set_fragment(None);
                 url.set_query(None);
@@ -595,26 +638,26 @@ impl From<RequirementSource> for RequirementSourceWire {
                 }
             }
             RequirementSource::Path {
-                install_path,
-                lock_path: _,
+                install_path: _,
+                lock_path,
                 ext: _,
                 url: _,
             } => Self::Path {
-                path: PortablePathBuf::from(install_path),
+                path: PortablePathBuf::from(lock_path),
             },
             RequirementSource::Directory {
-                install_path,
-                lock_path: _,
+                install_path: _,
+                lock_path,
                 editable,
                 url: _,
             } => {
                 if editable {
                     Self::Editable {
-                        editable: PortablePathBuf::from(install_path),
+                        editable: PortablePathBuf::from(lock_path),
                     }
                 } else {
                     Self::Directory {
-                        directory: PortablePathBuf::from(install_path),
+                        directory: PortablePathBuf::from(lock_path),
                     }
                 }
             }
@@ -631,31 +674,46 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 Ok(Self::Registry { specifier, index })
             }
             RequirementSourceWire::Git { git } => {
-                let mut url = Url::parse(&git)?;
+                let mut repository = Url::parse(&git)?;
 
                 let mut reference = GitReference::DefaultBranch;
                 let mut subdirectory = None;
-                for (key, val) in url.query_pairs() {
+                for (key, val) in repository.query_pairs() {
                     match &*key {
                         "tag" => reference = GitReference::Tag(val.into_owned()),
                         "branch" => reference = GitReference::Branch(val.into_owned()),
                         "rev" => reference = GitReference::from_rev(val.into_owned()),
-                        "subdirectory" => subdirectory = Some(PathBuf::from(val.into_owned())),
+                        "subdirectory" => subdirectory = Some(val.into_owned()),
                         _ => continue,
                     };
                 }
 
-                let precise = url.fragment().map(GitSha::from_str).transpose()?;
+                let precise = repository.fragment().map(GitSha::from_str).transpose()?;
 
-                url.set_query(None);
-                url.set_fragment(None);
+                // Clear out any existing state.
+                repository.set_fragment(None);
+                repository.set_query(None);
+
+                // Redact the credentials.
+                let _ = repository.set_username("");
+                let _ = repository.set_password(None);
+
+                // Create a PEP 508-compatible URL.
+                let mut url = Url::parse(&format!("git+{repository}"))?;
+                if let Some(rev) = reference.as_str() {
+                    url.set_path(&format!("{}@{}", url.path(), rev));
+                }
+                if let Some(subdirectory) = &subdirectory {
+                    url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
+                }
+                let url = VerbatimUrl::from_url(url);
 
                 Ok(Self::Git {
-                    repository: url.clone(),
+                    repository,
                     reference,
                     precise,
-                    subdirectory,
-                    url: VerbatimUrl::from_url(url),
+                    subdirectory: subdirectory.map(PathBuf::from),
+                    url,
                 })
             }
             RequirementSourceWire::Direct { url, subdirectory } => Ok(Self::Url {
@@ -665,32 +723,38 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 ext: DistExtension::from_path(url.path())
                     .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
             }),
+            // TODO(charlie): The use of `CWD` here is incorrect. These should be resolved relative
+            // to the workspace root, but we don't have access to it here. When comparing these
+            // sources in the lockfile, we replace the URL anyway.
             RequirementSourceWire::Path { path } => {
                 let path = PathBuf::from(path);
+                let url = VerbatimUrl::parse_path(&path, &*CWD)?;
                 Ok(Self::Path {
-                    url: VerbatimUrl::from_path(path.as_path())?,
                     ext: DistExtension::from_path(path.as_path())
                         .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
                     install_path: path.clone(),
                     lock_path: path,
+                    url,
                 })
             }
             RequirementSourceWire::Directory { directory } => {
                 let directory = PathBuf::from(directory);
+                let url = VerbatimUrl::parse_path(&directory, &*CWD)?;
                 Ok(Self::Directory {
-                    url: VerbatimUrl::from_path(directory.as_path())?,
                     install_path: directory.clone(),
                     lock_path: directory,
                     editable: false,
+                    url,
                 })
             }
             RequirementSourceWire::Editable { editable } => {
                 let editable = PathBuf::from(editable);
+                let url = VerbatimUrl::parse_path(&editable, &*CWD)?;
                 Ok(Self::Directory {
-                    url: VerbatimUrl::from_path(editable.as_path())?,
                     install_path: editable.clone(),
                     lock_path: editable,
                     editable: true,
+                    url,
                 })
             }
         }

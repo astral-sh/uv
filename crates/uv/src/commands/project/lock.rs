@@ -9,7 +9,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use distribution_types::{
-    Diagnostic, FlatIndexLocation, IndexUrl, UnresolvedRequirementSpecification, UrlString,
+    FlatIndexLocation, IndexUrl, UnresolvedRequirementSpecification, UrlString,
 };
 use pep440_rs::Version;
 use uv_auth::store_credentials_from_url;
@@ -17,11 +17,13 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
+use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
+use uv_requirements::NamedRequirementsResolver;
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverMarkers,
 };
@@ -31,6 +33,7 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
+use crate::commands::reporters::ResolverReporter;
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
@@ -260,6 +263,21 @@ async fn do_lock(
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
 
+    // Collect the list of members.
+    let members = {
+        let mut members = workspace.packages().keys().cloned().collect::<Vec<_>>();
+        members.sort();
+
+        // If this is a non-virtual project with a single member, we can omit it from the lockfile.
+        // If any members are added or removed, it will inherently mismatch. If the member is
+        // renamed, it will also mismatch.
+        if members.len() == 1 && !workspace.is_virtual() {
+            members.clear();
+        }
+
+        members
+    };
+
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
     let requires_python = find_requires_python(workspace)?;
@@ -335,8 +353,59 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &build_constraints,
+        interpreter,
+        index_locations,
+        &flat_index,
+        &state.index,
+        &state.git,
+        &state.in_flight,
+        index_strategy,
+        setup_py,
+        config_setting,
+        build_isolation,
+        link_mode,
+        build_options,
+        exclude_newer,
+        sources,
+        concurrency,
+        preview,
+    );
+
+    let database =
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview);
+
+    // Annoyingly, we have to resolve any unnamed overrides upfront.
+    let overrides = NamedRequirementsResolver::new(
+        overrides,
+        &hasher,
+        &state.index,
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+    )
+    .with_reporter(ResolverReporter::from(printer))
+    .resolve()
+    .await?;
+
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = existing_lock.filter(|lock| {
+        if lock.constraints() != constraints {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in constraints"
+            );
+            return false;
+        }
+        if lock.overrides() != overrides {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in overrides"
+            );
+            return false;
+        }
         if lock.resolution_mode() != options.resolution_mode {
             let _ = writeln!(
                 printer.stderr(),
@@ -401,19 +470,23 @@ async fn do_lock(
 
     let start = std::time::Instant::now();
 
-    let requires_python = find_requires_python(workspace)?;
     let existing_lock = existing_lock.filter(|lock| {
-        match (lock.requires_python(), requires_python.as_ref()) {
+        match (lock.requires_python(), requires_python) {
             // If the Requires-Python bound in the lockfile is weaker or equivalent to the
             // Requires-Python bound in the workspace, we should have the necessary wheels to perform
             // a locked resolution.
-            (None, Some(_)) => true,
-            (Some(locked), Some(specified)) if locked.bound() == specified.bound() => true,
-
-            // On the other hand, if the bound in the lockfile is stricter, meaning the
-            // bound has since been weakened, we have to perform a clean resolution to ensure
-            // we fetch the necessary wheels.
-            _ => false,
+            (None, _) => true,
+            (Some(locked), specified) => {
+                if locked.bound() == specified.bound() {
+                    true
+                } else {
+                    // On the other hand, if the bound in the lockfile is stricter, meaning the
+                    // bound has since been weakened, we have to perform a clean resolution to ensure
+                    // we fetch the necessary wheels.
+                    debug!("Ignoring existing lockfile due to change in `requires-python`");
+                    false
+                }
+            }
         }
     });
 
@@ -432,7 +505,10 @@ async fn do_lock(
     });
 
     // If any upgrades are specified, don't use the existing lockfile.
-    let existing_lock = existing_lock.filter(|_| upgrade.is_none());
+    let existing_lock = existing_lock.filter(|_| {
+        debug!("Ignoring existing lockfile due to `--upgrade`");
+        upgrade.is_none()
+    });
 
     // If the user provided at least one index URL (from the command line, or from a configuration
     // file), don't use the existing lockfile if it references any registries that are no longer
@@ -477,7 +553,7 @@ async fn do_lock(
         true
     });
 
-    let resolution = match existing_lock {
+    let existing_lock = match existing_lock {
         None => None,
 
         // Try to resolve using metadata in the lockfile.
@@ -486,117 +562,50 @@ async fn do_lock(
         // but we rely on the lockfile for the metadata of any existing distributions. If we have
         // any outdated metadata we fall back to a clean resolve.
         Some(lock) => {
-            debug!("Resolving with existing `uv.lock`");
-
-            // Prefill the index with the lockfile metadata.
-            let index = lock.to_index(workspace.install_path(), upgrade)?;
-
-            // Create a build dispatch.
-            let build_dispatch = BuildDispatch::new(
-                &client,
-                cache,
-                &build_constraints,
-                interpreter,
-                index_locations,
-                &flat_index,
-                &index,
-                &state.git,
-                &state.in_flight,
-                index_strategy,
-                setup_py,
-                config_setting,
-                build_isolation,
-                link_mode,
-                build_options,
-                exclude_newer,
-                sources,
-                concurrency,
-                preview,
-            );
-
-            // Resolve the requirements.
-            pip::operations::resolve(
-                requirements.clone(),
-                constraints.clone(),
-                overrides.clone(),
-                dev.clone(),
-                source_trees.clone(),
-                None,
-                &extras,
-                preferences.clone(),
-                EmptyInstalledPackages,
-                &hasher,
-                &Reinstall::default(),
-                upgrade,
-                None,
-                resolver_markers.clone(),
-                python_requirement.clone(),
-                &client,
-                &flat_index,
-                &index,
-                &build_dispatch,
-                concurrency,
-                options,
-                Box::new(SummaryResolveLogger),
-                printer,
-                preview,
-            )
-            .await
-            .inspect_err(|err| debug!("Resolution with `uv.lock` failed: {err}"))
-            .ok()
-            .filter(|resolution| {
-                // Ensure no diagnostics were emitted that may be caused by stale metadata in the lockfile.
-                if resolution.diagnostics().is_empty() {
-                    return true;
-                }
-
-                debug!("Resolution with `uv.lock` failed due to diagnostics:");
-                for diagnostic in resolution.diagnostics() {
-                    debug!("- {}", diagnostic.message());
-                }
-
-                false
-            })
+            if lock
+                .satisfies(
+                    workspace,
+                    &members,
+                    &constraints,
+                    &overrides,
+                    interpreter.tags()?,
+                    &database,
+                )
+                .await?
+            {
+                debug!("Existing `uv.lock` satisfies workspace requirements");
+                Some(lock)
+            } else {
+                debug!("Existing `uv.lock` does not satisfy workspace requirements; ignoring...");
+                None
+            }
         }
     };
 
-    let resolution = match resolution {
+    match existing_lock {
         // Resolution from the lockfile succeeded.
-        Some(resolution) => resolution,
+        Some(lock) => {
+            // Print the success message after completing resolution.
+            logger.on_complete(lock.len(), start, printer)?;
+
+            // TODO(charlie): Avoid cloning here.
+            Ok(lock.clone())
+        }
 
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         None => {
             debug!("Starting clean resolution");
 
-            // Create a build dispatch.
-            let build_dispatch = BuildDispatch::new(
-                &client,
-                cache,
-                &build_constraints,
-                interpreter,
-                index_locations,
-                &flat_index,
-                &state.index,
-                &state.git,
-                &state.in_flight,
-                index_strategy,
-                setup_py,
-                config_setting,
-                build_isolation,
-                link_mode,
-                build_options,
-                exclude_newer,
-                sources,
-                concurrency,
-                preview,
-            );
-
             // Resolve the requirements.
-            pip::operations::resolve(
+            let resolution = pip::operations::resolve(
                 requirements,
-                constraints,
-                overrides,
+                constraints.clone(),
+                overrides
+                    .iter()
+                    .cloned()
+                    .map(UnresolvedRequirementSpecification::from)
+                    .collect(),
                 dev,
                 source_trees,
                 None,
@@ -619,17 +628,22 @@ async fn do_lock(
                 printer,
                 preview,
             )
-            .await?
+            .await?;
+
+            // Print the success message after completing resolution.
+            logger.on_complete(resolution.len(), start, printer)?;
+
+            // Notify the user of any resolution diagnostics.
+            pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+
+            let lock = Lock::from_resolution_graph(&resolution)?
+                .with_members(members)
+                .with_constraints(constraints)
+                .with_overrides(overrides);
+
+            Ok(lock)
         }
-    };
-
-    // Print the success message after completing resolution.
-    logger.on_complete(resolution.len(), start, printer)?;
-
-    // Notify the user of any resolution diagnostics.
-    pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
-
-    Ok(Lock::from_resolution_graph(&resolution)?)
+    }
 }
 
 /// Write the lockfile to disk.
