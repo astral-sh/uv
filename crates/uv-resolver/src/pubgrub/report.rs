@@ -330,6 +330,9 @@ impl PubGrubReportFormatter<'_> {
     fn format_root_requires(&self, package: &PubGrubPackage) -> Option<String> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
+                if self.is_single_project_workspace() {
+                    return Some("your project requires".to_string());
+                }
                 return Some("your workspace requires".to_string());
             }
         }
@@ -347,7 +350,10 @@ impl PubGrubReportFormatter<'_> {
     fn format_root(&self, package: &PubGrubPackage) -> Option<String> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
-                return Some("your workspace's requirements".to_string());
+                if self.is_single_project_workspace() {
+                    return Some("your projects's requirements".to_string());
+                }
+                return Some("your workspaces's requirements".to_string());
             }
         }
         match &**package {
@@ -362,6 +368,11 @@ impl PubGrubReportFormatter<'_> {
         !self.workspace_members.is_empty()
     }
 
+    /// Whether the resolution error is for a workspace with a exactly one project.
+    fn is_single_project_workspace(&self) -> bool {
+        self.workspace_members.len() == 1
+    }
+
     /// Return a display name for the package if it is a workspace member.
     fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<String> {
         match &**package {
@@ -369,7 +380,11 @@ impl PubGrubReportFormatter<'_> {
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Dev { name, .. } => {
                 if self.workspace_members.contains(name) {
-                    Some(format!("{name}"))
+                    if self.is_single_project_workspace() {
+                        Some("your project".to_string())
+                    } else {
+                        Some(format!("{name}"))
+                    }
                 } else {
                     None
                 }
