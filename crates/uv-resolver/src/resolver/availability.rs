@@ -74,6 +74,8 @@ pub(crate) enum UnavailablePackage {
     InvalidMetadata(String),
     /// The package has an invalid structure.
     InvalidStructure(String),
+    /// No other versions of the package can be used because it is a workspace member
+    WorkspaceMember,
 }
 
 impl UnavailablePackage {
@@ -85,6 +87,7 @@ impl UnavailablePackage {
             UnavailablePackage::MissingMetadata => "does not include a `METADATA` file",
             UnavailablePackage::InvalidMetadata(_) => "has invalid metadata",
             UnavailablePackage::InvalidStructure(_) => "has an invalid package format",
+            UnavailablePackage::WorkspaceMember => "is a workspace member",
         }
     }
 }
