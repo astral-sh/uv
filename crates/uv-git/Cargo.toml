@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 cache-key = { workspace = true }
 uv-fs = { workspace = true }
+uv-auth = { workspace = true }
 
 anyhow = { workspace = true }
 cargo-util = { workspace = true }
