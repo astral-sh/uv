@@ -2578,7 +2578,7 @@ fn add_error() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of xyz and project depends on xyz, we can conclude that project cannot be used.
+      ╰─▶ Because there are no versions of xyz and project depends on xyz, we can conclude that project's requirements are unsatisfiable.
           And because your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);

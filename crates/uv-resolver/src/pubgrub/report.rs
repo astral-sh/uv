@@ -153,7 +153,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
             {
                 let range = self.simplify_set(range, package);
-                format!("{} cannot be used", self.compatible_range(package, &range))
+                if let Some(member) = self.format_workspace_member(package) {
+                    format!("{member}'s requirements are unsatisfiable")
+                } else {
+                    format!("{} cannot be used", self.compatible_range(package, &range))
+                }
             }
             [(package, Term::Negative(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>

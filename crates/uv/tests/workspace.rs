@@ -1008,7 +1008,7 @@ fn workspace_inherit_sources() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because library was not found in the cache and leaf depends on library, we can conclude that leaf cannot be used.
+      ╰─▶ Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
@@ -1200,7 +1200,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because only httpx<=9999 is available and leaf depends on httpx>9999, we can conclude that leaf cannot be used.
+      ╰─▶ Because only httpx<=9999 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );

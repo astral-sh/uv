@@ -5015,7 +5015,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
-      ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python ABI tag and project depends on dearpygui==1.9.1, we can conclude that project cannot be used.
+      ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python ABI tag and project depends on dearpygui==1.9.1, we can conclude that project's requirements are unsatisfiable.
           And because your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###);
 
@@ -8210,7 +8210,7 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (python_version > '3.10'):
-      ╰─▶ Because only datasets{python_version > '3.10'}<2.19 is available and project depends on datasets{python_version > '3.10'}>=2.19, we can conclude that project cannot be used.
+      ╰─▶ Because only datasets{python_version > '3.10'}<2.19 is available and project depends on datasets{python_version > '3.10'}>=2.19, we can conclude that project's requirements are unsatisfiable.
           And because your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###);
 

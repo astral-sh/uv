@@ -537,7 +537,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
-      ╰─▶ Because project depends on package-a>=2 and package-a<2, we can conclude that project cannot be used.
+      ╰─▶ Because project depends on package-a>=2 and package-a<2, we can conclude that project's requirements are unsatisfiable.
           And because your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
@@ -1262,7 +1262,7 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (sys_platform == 'linux'):
-      ╰─▶ Because project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that project cannot be used.
+      ╰─▶ Because project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that project's requirements are unsatisfiable.
           And because your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
