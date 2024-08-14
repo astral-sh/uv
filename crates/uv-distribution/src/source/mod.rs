@@ -1226,12 +1226,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .is_fresh()
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
+                let path = if let Some(subdirectory) = resource.subdirectory {
+                    Cow::Owned(fetch.path().join(subdirectory))
+                } else {
+                    Cow::Borrowed(fetch.path())
+                };
+
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
-                        fetch.path(),
-                        fetch.path(),
+                        &path,
+                        &path,
                         self.build_context.sources(),
                         self.preview_mode,
                     )
