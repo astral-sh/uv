@@ -1823,6 +1823,110 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn lock_narrowed_python_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.7"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.7"
+        dependencies = ["dependency ; python_version < '3.9'", "dependency ; python_version > '3.10'"]
+
+        [tool.uv.sources]
+        dependency = { path = "./dependency" }
+        "#,
+    )?;
+
+    let lockfile = context.temp_dir.join("uv.lock");
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(&lockfile).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.7"
+        environment-markers = [
+            "python_version < '3.9'",
+            "python_version >= '3.9' and python_version <= '3.10'",
+            "python_version > '3.10'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "dependency"
+        version = "0.1.0"
+        source = { directory = "dependency" }
+        dependencies = [
+            { name = "iniconfig", marker = "python_version < '3.9' or python_version > '3.10'" },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "dependency", marker = "python_version < '3.9' or python_version > '3.10'" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    warning: `uv.sources` is experimental and may change without warning
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    "###);
+
+    Ok(())
+}
+
 /// Lock a project with a dependency that requests a non-existent extra.
 #[test]
 fn lock_dependency_non_existent_extra() -> Result<()> {
