@@ -65,12 +65,8 @@ pub struct Lock {
     /// that exists in this map. That is, there are no dependencies that don't
     /// have a corresponding locked package entry in the same lockfile.
     by_id: FxHashMap<PackageId, usize>,
-    /// Requirements that were provided when generating the lockfile.
-    members: Vec<PackageName>,
-    /// Constraints that were provided when generating the lockfile.
-    constraints: Vec<Requirement>,
-    /// Overrides that were provided when generating the lockfile.
-    overrides: Vec<Requirement>,
+    /// The input requirements to the resolution.
+    manifest: ResolverManifest,
 }
 
 impl Lock {
@@ -205,9 +201,7 @@ impl Lock {
             packages,
             requires_python,
             options,
-            vec![],
-            vec![],
-            vec![],
+            ResolverManifest::default(),
             graph.fork_markers.clone(),
         )?;
         Ok(lock)
@@ -219,9 +213,7 @@ impl Lock {
         mut packages: Vec<Package>,
         requires_python: Option<RequiresPython>,
         options: ResolverOptions,
-        members: Vec<PackageName>,
-        constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
+        manifest: ResolverManifest,
         fork_markers: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -382,30 +374,14 @@ impl Lock {
             options,
             packages,
             by_id,
-            members,
-            constraints,
-            overrides,
+            manifest,
         })
     }
 
     /// Record the requirements that were used to generate this lock.
     #[must_use]
-    pub fn with_members(mut self, members: Vec<PackageName>) -> Self {
-        self.members = members;
-        self
-    }
-
-    /// Record the constraints that were used to generate this lock.
-    #[must_use]
-    pub fn with_constraints(mut self, constraints: Vec<Requirement>) -> Self {
-        self.constraints = constraints;
-        self
-    }
-
-    /// Record the overrides that were used to generate this lock.
-    #[must_use]
-    pub fn with_overrides(mut self, overrides: Vec<Requirement>) -> Self {
-        self.overrides = overrides;
+    pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
+        self.manifest = manifest;
         self
     }
 
@@ -447,16 +423,6 @@ impl Lock {
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
         self.options.exclude_newer
-    }
-
-    /// Returns the constraints that were used to generate this lock.
-    pub fn constraints(&self) -> &[Requirement] {
-        &self.constraints
-    }
-
-    /// Returns the overrides that were used to generate this lock.
-    pub fn overrides(&self) -> &[Requirement] {
-        &self.overrides
     }
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
@@ -574,7 +540,7 @@ impl Lock {
         // Write the settings that were used to generate the resolution.
         // This enables us to invalidate the lockfile if the user changes
         // their settings.
-        if self.options != ResolverOptions::default() {
+        {
             let mut options_table = Table::new();
 
             if self.options.resolution_mode != ResolutionMode::default() {
@@ -592,54 +558,71 @@ impl Lock {
             if let Some(exclude_newer) = self.options.exclude_newer {
                 options_table.insert("exclude-newer", value(exclude_newer.to_string()));
             }
-            doc.insert("options", Item::Table(options_table));
+
+            if !options_table.is_empty() {
+                doc.insert("options", Item::Table(options_table));
+            }
         }
 
-        if !self.members.is_empty() {
-            doc.insert(
-                "members",
-                value(each_element_on_its_line_array(
-                    self.members.iter().map(std::string::ToString::to_string),
-                )),
-            );
-        }
+        // Write the manifest that was used to generate the resoution.
+        {
+            let mut manifest_table = Table::new();
 
-        if !self.constraints.is_empty() {
-            let constraints = self
-                .constraints
-                .iter()
-                .map(|requirement| {
-                    serde::Serialize::serialize(
-                        &requirement,
-                        toml_edit::ser::ValueSerializer::new(),
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let constraints = match constraints.as_slice() {
-                [] => Array::new(),
-                [requirement] => Array::from_iter([requirement]),
-                constraints => each_element_on_its_line_array(constraints.iter()),
-            };
-            doc.insert("constraints", value(constraints));
-        }
+            if !self.manifest.members.is_empty() {
+                manifest_table.insert(
+                    "members",
+                    value(each_element_on_its_line_array(
+                        self.manifest
+                            .members
+                            .iter()
+                            .map(std::string::ToString::to_string),
+                    )),
+                );
+            }
 
-        if !self.overrides.is_empty() {
-            let overrides = self
-                .overrides
-                .iter()
-                .map(|requirement| {
-                    serde::Serialize::serialize(
-                        &requirement,
-                        toml_edit::ser::ValueSerializer::new(),
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let overrides = match overrides.as_slice() {
-                [] => Array::new(),
-                [requirement] => Array::from_iter([requirement]),
-                overrides => each_element_on_its_line_array(overrides.iter()),
-            };
-            doc.insert("overrides", value(overrides));
+            if !self.manifest.constraints.is_empty() {
+                let constraints = self
+                    .manifest
+                    .constraints
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let constraints = match constraints.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    constraints => each_element_on_its_line_array(constraints.iter()),
+                };
+                manifest_table.insert("constraints", value(constraints));
+            }
+
+            if !self.manifest.overrides.is_empty() {
+                let overrides = self
+                    .manifest
+                    .overrides
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let overrides = match overrides.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    overrides => each_element_on_its_line_array(overrides.iter()),
+                };
+                manifest_table.insert("overrides", value(overrides));
+            }
+
+            if !manifest_table.is_empty() {
+                doc.insert("manifest", Item::Table(manifest_table));
+            }
         }
 
         // Count the number of packages for each package name. When
@@ -698,7 +681,7 @@ impl Lock {
         // Validate that the lockfile was generated with the same root members.
         {
             let expected = members;
-            let actual = &self.members;
+            let actual = &self.manifest.members;
             if expected != actual {
                 debug!(
                     "Mismatched members:\n  expected: {:?}\n  found: {:?}",
@@ -716,6 +699,7 @@ impl Lock {
                 .map(|requirement| normalize_requirement(requirement, workspace))
                 .collect();
             let actual: Vec<_> = self
+                .manifest
                 .constraints
                 .iter()
                 .cloned()
@@ -738,6 +722,7 @@ impl Lock {
                 .map(|requirement| normalize_requirement(requirement, workspace))
                 .collect();
             let actual: Vec<_> = self
+                .manifest
                 .overrides
                 .iter()
                 .cloned()
@@ -809,7 +794,7 @@ impl Lock {
                 }
             }
 
-            // Validate the `requires-dev` metadata.
+            // Validate the `dev-dependencies` metadata.
             {
                 let expected: BTreeMap<GroupName, Vec<Requirement>> = archive
                     .metadata
@@ -896,6 +881,34 @@ struct ResolverOptions {
     exclude_newer: Option<ExcludeNewer>,
 }
 
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct ResolverManifest {
+    /// The workspace members included in the lockfile.
+    #[serde(default)]
+    members: Vec<PackageName>,
+    /// The constraints provided to the resolver.
+    #[serde(default)]
+    constraints: Vec<Requirement>,
+    /// The overrides provided to the resolver.
+    #[serde(default)]
+    overrides: Vec<Requirement>,
+}
+
+impl ResolverManifest {
+    pub fn new(
+        members: Vec<PackageName>,
+        constraints: Vec<Requirement>,
+        overrides: Vec<Requirement>,
+    ) -> Self {
+        Self {
+            members,
+            constraints,
+            overrides,
+        }
+    }
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
@@ -909,13 +922,8 @@ struct LockWire {
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
-    // TODO(charlie): Group these under a `ResolverManifest`.
     #[serde(default)]
-    members: Vec<PackageName>,
-    #[serde(default)]
-    constraints: Vec<Requirement>,
-    #[serde(default)]
-    overrides: Vec<Requirement>,
+    manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
 }
@@ -927,9 +935,7 @@ impl From<Lock> for LockWire {
             requires_python: lock.requires_python,
             fork_markers: lock.fork_markers,
             options: lock.options,
-            members: lock.members,
-            constraints: lock.constraints,
-            overrides: lock.overrides,
+            manifest: lock.manifest,
             packages: lock.packages.into_iter().map(PackageWire::from).collect(),
         }
     }
@@ -966,9 +972,7 @@ impl TryFrom<LockWire> for Lock {
             packages,
             wire.requires_python,
             wire.options,
-            wire.members,
-            wire.constraints,
-            wire.overrides,
+            wire.manifest,
             wire.fork_markers,
         )
     }
@@ -985,14 +989,15 @@ pub struct Package {
     ///
     /// Named `environment-markers` in `uv.lock`.
     fork_markers: Vec<MarkerTree>,
+    /// The resolved dependencies of the package.
     dependencies: Vec<Dependency>,
+    /// The resolved optional dependencies of the package.
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
+    /// The resolved development dependencies of the package.
     dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
-
-    // TODO(charlie): Group these under `PackageMetadata`.
-    // TODO(charlie): Add `requires-python`.
-    // TODO(charlie): Add `provides-extra`.
+    /// The exact requirements from the `requires-dist` metadata.
     requires_dist: Vec<Requirement>,
+    /// The exact requirements from the `dev-dependencies` metadata.
     requires_dev: BTreeMap<GroupName, Vec<Requirement>>,
 }
 

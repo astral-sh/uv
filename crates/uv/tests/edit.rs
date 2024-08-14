@@ -1402,13 +1402,15 @@ fn add_remove_workspace() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "child1",
             "child2",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "child1"
@@ -1482,13 +1484,15 @@ fn add_remove_workspace() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "child1",
             "child2",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "child1"
@@ -1597,13 +1601,15 @@ fn add_workspace_editable() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "child1",
             "child2",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "child1"

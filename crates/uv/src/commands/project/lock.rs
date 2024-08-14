@@ -25,7 +25,8 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::NamedRequirementsResolver;
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverMarkers,
+    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
+    ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -392,20 +393,6 @@ async fn do_lock(
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = existing_lock.filter(|lock| {
-        if lock.constraints() != constraints {
-            let _ = writeln!(
-                printer.stderr(),
-                "Ignoring existing lockfile due to change in constraints"
-            );
-            return false;
-        }
-        if lock.overrides() != overrides {
-            let _ = writeln!(
-                printer.stderr(),
-                "Ignoring existing lockfile due to change in overrides"
-            );
-            return false;
-        }
         if lock.resolution_mode() != options.resolution_mode {
             let _ = writeln!(
                 printer.stderr(),
@@ -636,12 +623,13 @@ async fn do_lock(
             // Notify the user of any resolution diagnostics.
             pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-            let lock = Lock::from_resolution_graph(&resolution)?
-                .with_members(members)
-                .with_constraints(constraints)
-                .with_overrides(overrides);
-
-            Ok(lock)
+            Ok(
+                Lock::from_resolution_graph(&resolution)?.with_manifest(ResolverManifest::new(
+                    members,
+                    constraints,
+                    overrides,
+                )),
+            )
         }
     }
 }

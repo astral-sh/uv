@@ -134,8 +134,10 @@ Ok(
                 ),
             }: 1,
         },
-        members: [],
-        constraints: [],
-        overrides: [],
+        manifest: ResolverManifest {
+            members: [],
+            constraints: [],
+            overrides: [],
+        },
     },
 )

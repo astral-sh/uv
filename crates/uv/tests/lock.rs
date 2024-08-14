@@ -1214,15 +1214,13 @@ fn lock_project_with_overrides() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Ignoring existing lockfile due to change in overrides
     Resolved 9 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
 
     // Install the base dependencies from the lockfile.
@@ -1279,15 +1277,13 @@ fn lock_project_with_constraints() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Ignoring existing lockfile due to change in constraints
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
 
     // Install the base dependencies from the lockfile.
@@ -5329,13 +5325,15 @@ fn lock_dev_transitive() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "bar",
             "baz",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "bar"
@@ -7344,13 +7342,15 @@ fn lock_editable() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "leaf",
             "workspace",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "leaf"
@@ -7421,13 +7421,15 @@ fn lock_editable() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "leaf",
             "workspace",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "leaf"
@@ -7576,13 +7578,15 @@ fn lock_mixed_extras() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "leaf1",
             "workspace1",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "iniconfig"
@@ -7762,13 +7766,15 @@ fn lock_transitive_extra() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "leaf",
             "workspace",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "iniconfig"
@@ -8212,13 +8218,15 @@ fn lock_remove_member() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "leaf",
             "project",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "anyio"
@@ -8474,13 +8482,15 @@ fn lock_add_member() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "leaf",
             "project",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "anyio"
@@ -8651,7 +8661,6 @@ fn lock_new_constraints() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Ignoring existing lockfile due to change in constraints
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -8664,7 +8673,6 @@ fn lock_new_constraints() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Ignoring existing lockfile due to change in constraints
     Resolved 4 packages in [TIME]
     Updated anyio v4.3.0 -> v4.2.0
     "###);
@@ -8678,10 +8686,12 @@ fn lock_new_constraints() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        constraints = [{ name = "anyio", specifier = "<4.3" }]
 
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
+        constraints = [{ name = "anyio", specifier = "<4.3" }]
 
         [[package]]
         name = "anyio"
@@ -8775,12 +8785,14 @@ fn lock_remove_member_virtual() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        members = [
-            "leaf",
-        ]
 
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
+        members = [
+            "leaf",
+        ]
 
         [[package]]
         name = "anyio"

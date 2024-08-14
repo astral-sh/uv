@@ -1084,13 +1084,15 @@ fn workspace_inherit_sources() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
         members = [
             "leaf",
             "workspace",
         ]
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
 
         [[package]]
         name = "leaf"

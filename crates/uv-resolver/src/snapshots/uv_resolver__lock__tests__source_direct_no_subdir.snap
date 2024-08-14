@@ -54,8 +54,10 @@ Ok(
                 ),
             }: 0,
         },
-        members: [],
-        constraints: [],
-        overrides: [],
+        manifest: ResolverManifest {
+            members: [],
+            constraints: [],
+            overrides: [],
+        },
     },
 )
