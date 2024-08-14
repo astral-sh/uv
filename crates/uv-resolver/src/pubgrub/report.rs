@@ -353,7 +353,7 @@ impl PubGrubReportFormatter<'_> {
                 if self.is_single_project_workspace() {
                     return Some("your projects's requirements".to_string());
                 }
-                return Some("your workspaces's requirements".to_string());
+                return Some("your workspace's requirements".to_string());
             }
         }
         match &**package {

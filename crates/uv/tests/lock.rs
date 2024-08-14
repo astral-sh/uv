@@ -2748,7 +2748,7 @@ fn lock_requires_python() -> Result<()> {
                   pygls>=1.1.0,<1.3.0
                   pygls>1.3.0
                cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
-              And because your project depends on pygls>=1.1.0 and your project requires your project, we can conclude that your projects's requirements are unsatisfiable.
+              And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
               hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
         "###);
@@ -5016,7 +5016,6 @@ fn lock_requires_python_no_wheels() -> Result<()> {
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python ABI tag and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
-          And because your project requires your project, we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -8211,7 +8210,6 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (python_version > '3.10'):
       ╰─▶ Because only datasets{python_version > '3.10'}<2.19 is available and your project depends on datasets{python_version > '3.10'}>=2.19, we can conclude that your project's requirements are unsatisfiable.
-          And because your project requires your project, we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     Ok(())

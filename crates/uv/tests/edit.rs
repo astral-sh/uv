@@ -2579,7 +2579,6 @@ fn add_error() -> Result<()> {
     warning: `uv add` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
-          And because your project requires your project, we can conclude that your projects's requirements are unsatisfiable.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
