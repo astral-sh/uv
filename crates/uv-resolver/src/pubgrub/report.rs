@@ -146,7 +146,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         match terms_vec.as_slice() {
             [] => "the requirements are unsatisfiable".into(),
             [(root, _)] if matches!(&**(*root), PubGrubPackageInner::Root(_)) => {
-                "the requirements are unsatisfiable".into()
+                let root = self.format_root(root).unwrap();
+                format!("{root} are unsatisfiable")
             }
             [(package, Term::Positive(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
@@ -346,8 +347,8 @@ impl PubGrubReportFormatter<'_> {
             }
         }
         match &**package {
-            PubGrubPackageInner::Root(Some(name)) => Some(format!("{name}")),
-            PubGrubPackageInner::Root(None) => Some("your requirements".to_string()),
+            PubGrubPackageInner::Root(Some(_)) => Some(format!("the requirements")),
+            PubGrubPackageInner::Root(None) => Some("the requirements".to_string()),
             _ => None,
         }
     }

@@ -474,7 +474,7 @@ fn conflict_in_fork() -> Result<()> {
               package-a{sys_platform == 'darwin'}==1.0.0
               package-a{sys_platform == 'darwin'}>=2
           we can conclude that package-a{sys_platform == 'darwin'}<2 is incompatible.
-          And because project==0.1.0 depends on package-a{sys_platform == 'darwin'}<2 and your workspace requires project, we can conclude that the requirements are unsatisfiable.
+          And because project==0.1.0 depends on package-a{sys_platform == 'darwin'}<2 and your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
 
@@ -538,7 +538,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because project==0.1.0 depends on package-a>=2 and package-a<2, we can conclude that project==0.1.0 cannot be used.
-          And because your workspace requires project, we can conclude that the requirements are unsatisfiable.
+          And because your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
 
@@ -1263,7 +1263,7 @@ fn fork_marker_disjoint() -> Result<()> {
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies for split (sys_platform == 'linux'):
       ╰─▶ Because project==0.1.0 depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that project==0.1.0 cannot be used.
-          And because your workspace requires project, we can conclude that the requirements are unsatisfiable.
+          And because your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
 
@@ -3025,7 +3025,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0 and package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because project==0.1.0 depends on package-a{sys_platform == 'linux'}==1.0.0, we can conclude that project==0.1.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
-          And because project==0.1.0 depends on package-b{sys_platform == 'darwin'}==1.0.0 and your workspace requires project, we can conclude that the requirements are unsatisfiable.
+          And because project==0.1.0 depends on package-b{sys_platform == 'darwin'}==1.0.0 and your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
 
@@ -3103,7 +3103,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
               package-c{sys_platform == 'linux'}>=2.0.0
           we can conclude that package-b==1.0.0 and package-c{sys_platform == 'linux'}<2.0.0 are incompatible.
           And because package-a==1.0.0 depends on package-c{sys_platform == 'linux'}<2.0.0 and project==0.1.0 depends on package-a==1.0.0, we can conclude that package-b==1.0.0 and project==0.1.0 are incompatible.
-          And because project==0.1.0 depends on package-b==1.0.0 and your workspace requires project, we can conclude that the requirements are unsatisfiable.
+          And because project==0.1.0 depends on package-b==1.0.0 and your workspace requires project, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
 
