@@ -216,7 +216,12 @@ impl std::fmt::Display for NoSolutionError {
             python_requirement: &self.python_requirement,
             workspace_members: &self.workspace_members,
         };
-        let report = DefaultStringReporter::report_with_formatter(&self.error, &formatter);
+
+        // Transform the error tree for reporting
+        let mut tree = self.error.clone();
+        collapse_unavailable_workspace_members(&mut tree);
+
+        let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
         write!(f, "{report}")?;
 
         // Include any additional hints.
@@ -233,6 +238,83 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         Ok(())
+    }
+}
+
+/// Given a [`DerivationTree`], collapse any [`UnavailablePackage::WorkspaceMember`] incompatibilities
+/// to avoid saying things like "only <workspace-member>==0.1.0 is available".
+fn collapse_unavailable_workspace_members(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                // If one node is an unavailable workspace member...
+                (
+                    DerivationTree::External(External::Custom(
+                        _,
+                        _,
+                        UnavailableReason::Package(UnavailablePackage::WorkspaceMember),
+                    )),
+                    mut other,
+                )
+                | (
+                    mut other,
+                    DerivationTree::External(External::Custom(
+                        _,
+                        _,
+                        UnavailableReason::Package(UnavailablePackage::WorkspaceMember),
+                    )),
+                ) => {
+                    // First, recursively collapse the other side of the tree
+                    collapse_unavailable_workspace_members(&mut other);
+
+                    // Then, replace this node with the other tree
+                    *tree = other.clone()
+                }
+                // If not, just recurse
+                _ => {
+                    collapse_unavailable_workspace_members(Arc::make_mut(&mut derived.cause1));
+                    collapse_unavailable_workspace_members(Arc::make_mut(&mut derived.cause2));
+                }
+            }
+        }
+    }
+}
+
+fn iter_tree(
+    error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    depth: usize,
+) {
+    match error {
+        DerivationTree::Derived(derived) => {
+            iter_tree(&derived.cause1, depth + 1);
+            iter_tree(&derived.cause2, depth + 1);
+        }
+        DerivationTree::External(external) => {
+            print!("{}", "  ".repeat(depth));
+            match external {
+                External::FromDependencyOf(package, version, dependency, dependency_version) => {
+                    println!("{package}{version} depends on {dependency}{dependency_version}");
+                }
+                External::Custom(package, versions, reason) => match reason {
+                    UnavailableReason::Package(_) => println!("{package} {reason}"),
+                    UnavailableReason::Version(_) => {
+                        println!("{package}{versions} {reason}");
+                    }
+                },
+                External::NoVersions(package, versions) => {
+                    println!("no versions of {package}{versions}");
+                }
+                External::NotRoot(package, versions) => {
+                    println!("not root {package}{versions}");
+                }
+            }
+        }
     }
 }
 
