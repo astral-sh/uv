@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
@@ -26,7 +25,7 @@ pub struct Preference {
     marker: MarkerTree,
     /// If coming from a package with diverging versions, the markers of the forks this preference
     /// is part of, otherwise `None`.
-    fork_markers: Option<BTreeSet<MarkerTree>>,
+    fork_markers: Vec<MarkerTree>,
     hashes: Vec<HashDigest>,
 }
 
@@ -58,7 +57,7 @@ impl Preference {
             version: specifier.version().clone(),
             marker: requirement.marker,
             // requirements.txt doesn't have fork annotations.
-            fork_markers: None,
+            fork_markers: vec![],
             hashes: entry
                 .hashes
                 .iter()
@@ -79,7 +78,7 @@ impl Preference {
             version: version.clone(),
             marker: MarkerTree::TRUE,
             // Installed distributions don't have fork annotations.
-            fork_markers: None,
+            fork_markers: vec![],
             hashes: Vec::new(),
         }
     }
@@ -90,7 +89,7 @@ impl Preference {
             name: package.id.name.clone(),
             version: package.id.version.clone(),
             marker: MarkerTree::TRUE,
-            fork_markers: package.fork_markers().cloned(),
+            fork_markers: package.fork_markers().to_vec(),
             hashes: Vec::new(),
         }
     }
@@ -133,34 +132,22 @@ impl Preferences {
                     continue;
                 }
 
-                if !preference
-                    .fork_markers
-                    .as_ref()
-                    .map(|fork_markers| {
-                        fork_markers
-                            .iter()
-                            .any(|marker| marker.evaluate(markers, &[]))
-                    })
-                    .unwrap_or(true)
-                {
-                    trace!("Excluding {preference} from preferences due to unmatched fork markers");
-                    continue;
+                if !preference.fork_markers.is_empty() {
+                    if !preference
+                        .fork_markers
+                        .iter()
+                        .any(|marker| marker.evaluate(markers, &[]))
+                    {
+                        trace!(
+                            "Excluding {preference} from preferences due to unmatched fork markers"
+                        );
+                        continue;
+                    }
                 }
             }
 
             // Flatten the list of markers into individual entries.
-            if let Some(fork_markers) = &preference.fork_markers {
-                for fork_marker in fork_markers {
-                    slf.insert(
-                        preference.name.clone(),
-                        Some(fork_marker.clone()),
-                        Pin {
-                            version: preference.version.clone(),
-                            hashes: preference.hashes.clone(),
-                        },
-                    );
-                }
-            } else {
+            if preference.fork_markers.is_empty() {
                 slf.insert(
                     preference.name,
                     None,
@@ -169,6 +156,17 @@ impl Preferences {
                         hashes: preference.hashes,
                     },
                 );
+            } else {
+                for fork_marker in preference.fork_markers {
+                    slf.insert(
+                        preference.name.clone(),
+                        Some(fork_marker),
+                        Pin {
+                            version: preference.version.clone(),
+                            hashes: preference.hashes.clone(),
+                        },
+                    );
+                }
             }
         }
 

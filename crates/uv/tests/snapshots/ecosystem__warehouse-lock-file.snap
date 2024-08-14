@@ -6,9 +6,9 @@ version = 1
 requires-python = ">=3.11, <3.12"
 environment-markers = [
     "python_version < '3.11'",
-    "python_version >= '3.13'",
     "python_version >= '3.11.[X]' and python_version < '3.12'",
     "python_version >= '3.12' and python_version < '3.13'",
+    "python_version >= '3.13'",
 ]
 
 [options]

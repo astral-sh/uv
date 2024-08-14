@@ -55,8 +55,7 @@ pub struct Lock {
     version: u32,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
-    #[serde(rename = "environment-markers")]
-    fork_markers: Option<BTreeSet<MarkerTree>>,
+    fork_markers: Vec<MarkerTree>,
     /// The range of supported Python versions.
     requires_python: Option<RequiresPython>,
     /// We discard the lockfile if these options match.
@@ -131,7 +130,8 @@ impl Lock {
             if dist.is_base() {
                 let fork_markers = graph
                     .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
-                    .cloned();
+                    .cloned()
+                    .unwrap_or_default();
                 let mut locked_dist = Package::from_annotated_dist(dist, fork_markers)?;
 
                 // Add all dependencies
@@ -219,7 +219,7 @@ impl Lock {
         mut packages: Vec<Package>,
         requires_python: Option<RequiresPython>,
         options: ResolverOptions,
-        fork_markers: Option<BTreeSet<MarkerTree>>,
+        fork_markers: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
         // check for duplicates.
@@ -414,8 +414,8 @@ impl Lock {
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
     /// markers of those forks, otherwise `None`.
-    pub fn fork_markers(&self) -> &Option<BTreeSet<MarkerTree>> {
-        &self.fork_markers
+    pub fn fork_markers(&self) -> &[MarkerTree] {
+        self.fork_markers.as_slice()
     }
 
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
@@ -514,9 +514,9 @@ impl Lock {
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
-        if let Some(ref fork_markers) = self.fork_markers {
+        if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                fork_markers
+                self.fork_markers
                     .iter()
                     .filter_map(MarkerTree::contents)
                     .map(|marker| marker.to_string()),
@@ -669,8 +669,8 @@ struct LockWire {
     requires_python: Option<RequiresPython>,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
-    #[serde(rename = "environment-markers")]
-    fork_markers: Option<BTreeSet<MarkerTree>>,
+    #[serde(rename = "environment-markers", default)]
+    fork_markers: Vec<MarkerTree>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
@@ -736,7 +736,7 @@ pub struct Package {
     /// the next resolution.
     ///
     /// Named `environment-markers` in `uv.lock`.
-    fork_markers: Option<BTreeSet<MarkerTree>>,
+    fork_markers: Vec<MarkerTree>,
     dependencies: Vec<Dependency>,
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
     dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
@@ -745,7 +745,7 @@ pub struct Package {
 impl Package {
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
-        fork_markers: Option<BTreeSet<MarkerTree>>,
+        fork_markers: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist);
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
@@ -1119,9 +1119,9 @@ impl Package {
 
         self.id.to_toml(None, &mut table);
 
-        if let Some(ref fork_markers) = self.fork_markers {
+        if !self.fork_markers.is_empty() {
             let wheels = each_element_on_its_line_array(
-                fork_markers
+                self.fork_markers
                     .iter()
                     .filter_map(MarkerTree::contents)
                     .map(|marker| marker.to_string()),
@@ -1211,8 +1211,8 @@ impl Package {
     }
 
     /// Return the fork markers for this package, if any.
-    pub fn fork_markers(&self) -> Option<&BTreeSet<MarkerTree>> {
-        self.fork_markers.as_ref()
+    pub fn fork_markers(&self) -> &[MarkerTree] {
+        self.fork_markers.as_slice()
     }
 
     /// Return the index URL for this package, if it is a registry source.
@@ -1283,7 +1283,7 @@ struct PackageWire {
     #[serde(default)]
     wheels: Vec<Wheel>,
     #[serde(default, rename = "environment-markers")]
-    fork_markers: BTreeSet<MarkerTree>,
+    fork_markers: Vec<MarkerTree>,
     #[serde(default)]
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
@@ -1306,7 +1306,7 @@ impl PackageWire {
             id: self.id,
             sdist: self.sdist,
             wheels: self.wheels,
-            fork_markers: (!self.fork_markers.is_empty()).then_some(self.fork_markers),
+            fork_markers: self.fork_markers,
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
                 .optional_dependencies
@@ -1331,7 +1331,7 @@ impl From<Package> for PackageWire {
             id: dist.id,
             sdist: dist.sdist,
             wheels: dist.wheels,
-            fork_markers: dist.fork_markers.unwrap_or_default(),
+            fork_markers: dist.fork_markers,
             dependencies: wire_deps(dist.dependencies),
             optional_dependencies: dist
                 .optional_dependencies

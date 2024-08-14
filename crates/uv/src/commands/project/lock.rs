@@ -424,9 +424,11 @@ async fn do_lock(
     // the environment changed, e.g. the python bound check above can lead to different forking.
     let resolver_markers = ResolverMarkers::universal(if upgrade.is_all() {
         // We're discarding all preferences, so we're also discarding the existing forks.
-        None
+        vec![]
     } else {
-        existing_lock.and_then(|lock| lock.fork_markers().clone())
+        existing_lock
+            .map(|lock| lock.fork_markers().to_vec())
+            .unwrap_or_default()
     });
 
     // If any upgrades are specified, don't use the existing lockfile.

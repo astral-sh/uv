@@ -14,7 +14,7 @@ use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolutionGraph, ResolverMarkers};
 
 static UNIVERSAL_MARKERS: ResolverMarkers = ResolverMarkers::Universal {
-    fork_preferences: None,
+    fork_preferences: vec![],
 };
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
