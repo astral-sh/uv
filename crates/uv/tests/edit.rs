@@ -2507,7 +2507,7 @@ fn add_error() -> Result<()> {
     warning: `uv add` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and project==0.1.0 depends on xyz, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+          And because you require project, we can conclude that the requirements are unsatisfiable.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
