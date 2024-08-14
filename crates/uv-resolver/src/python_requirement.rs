@@ -1,5 +1,4 @@
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::MarkerTree;
 use uv_python::{Interpreter, PythonVersion};
 
 use crate::{RequiresPython, RequiresPythonBound};
@@ -69,17 +68,6 @@ impl PythonRequirement {
     /// Return the target version of Python.
     pub fn target(&self) -> Option<&PythonTarget> {
         self.target.as_ref()
-    }
-
-    /// Return a [`MarkerTree`] representing the Python requirement.
-    ///
-    /// See: [`RequiresPython::to_marker_tree`]
-    pub fn to_marker_tree(&self) -> Option<MarkerTree> {
-        if let Some(PythonTarget::RequiresPython(requires_python)) = self.target.as_ref() {
-            Some(requires_python.to_marker_tree())
-        } else {
-            None
-        }
     }
 }
 

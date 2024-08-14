@@ -3,7 +3,6 @@ use petgraph::{
     graph::{Graph, NodeIndex},
     Directed, Direction,
 };
-use pubgrub::Range;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use distribution_types::{
@@ -168,21 +167,6 @@ impl ResolutionGraph {
             .target()
             .and_then(PythonTarget::as_requires_python)
             .cloned();
-
-        // Normalize any markers.
-        if let Some(ref requires_python) = requires_python {
-            for edge in petgraph.edge_indices() {
-                petgraph[edge] = petgraph[edge].clone().simplify_python_versions(
-                    Range::from(requires_python.bound_major_minor().clone()),
-                    Range::from(requires_python.bound().clone()),
-                );
-            }
-            // The above simplification may turn some markers into
-            // "always false." In which case, we should remove that
-            // edge since it can never be traversed in any marker
-            // environment.
-            petgraph.retain_edges(|graph, edge| !graph[edge].is_false());
-        }
 
         let fork_markers = if let [resolution] = resolutions {
             match resolution.markers {
