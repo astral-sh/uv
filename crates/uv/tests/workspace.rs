@@ -1383,7 +1383,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: Failed to download and build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
+    error: Failed to build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
       Caused by: Failed to parse entry for: `anyio`
       Caused by: Package is not included as workspace package in `tool.uv.workspace`
     "###

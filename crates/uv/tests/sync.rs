@@ -757,6 +757,8 @@ fn sync_relative_wheel() -> Result<()> {
             dependencies = [
                 { name = "ok" },
             ]
+
+            [package.metadata]
             requires-dist = [{ name = "ok", path = "wheels/ok-1.0.0-py3-none-any.whl" }]
             "###
             );

@@ -108,6 +108,8 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         dependencies = [
             { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -128,9 +130,10 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -138,6 +141,8 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -232,6 +237,8 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         dependencies = [
             { name = "package-a" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", specifier = ">=1" },
             { name = "package-a", specifier = "<2" },
@@ -252,9 +259,10 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -262,6 +270,8 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -364,6 +374,8 @@ fn fork_basic() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -384,9 +396,10 @@ fn fork_basic() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -394,6 +407,8 @@ fn fork_basic() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -715,6 +730,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
             { name = "package-b", marker = "sys_platform == 'linux'" },
             { name = "package-c", marker = "sys_platform == 'darwin'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = "==4.4.0" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "==4.3.0" },
@@ -737,9 +754,10 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -747,6 +765,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -846,6 +866,8 @@ fn fork_upgrade() -> Result<()> {
         dependencies = [
             { name = "package-foo" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "package-foo" }]
         "###
         );
@@ -863,9 +885,10 @@ fn fork_upgrade() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -873,6 +896,8 @@ fn fork_upgrade() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1009,6 +1034,8 @@ fn fork_incomplete_markers() -> Result<()> {
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version >= '3.11'" },
             { name = "package-b" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "python_version < '3.10'", specifier = "==1" },
             { name = "package-a", marker = "python_version >= '3.11'", specifier = "==2" },
@@ -1030,9 +1057,10 @@ fn fork_incomplete_markers() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1040,6 +1068,8 @@ fn fork_incomplete_markers() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1156,6 +1186,8 @@ fn fork_marker_accrue() -> Result<()> {
             { name = "package-a", marker = "implementation_name == 'cpython'" },
             { name = "package-b", marker = "implementation_name == 'pypy'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "implementation_name == 'cpython'", specifier = "==1.0.0" },
             { name = "package-b", marker = "implementation_name == 'pypy'", specifier = "==1.0.0" },
@@ -1176,9 +1208,10 @@ fn fork_marker_accrue() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1186,6 +1219,8 @@ fn fork_marker_accrue() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1413,6 +1448,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -1433,9 +1470,10 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1443,6 +1481,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1593,6 +1633,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -1613,9 +1655,10 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1623,6 +1666,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1774,6 +1819,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -1794,9 +1841,10 @@ fn fork_marker_inherit_combined() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1804,6 +1852,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1928,6 +1978,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -1948,9 +2000,10 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1958,6 +2011,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2100,6 +2155,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -2120,9 +2177,10 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2130,6 +2188,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2244,6 +2304,8 @@ fn fork_marker_inherit() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -2264,9 +2326,10 @@ fn fork_marker_inherit() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2274,6 +2337,8 @@ fn fork_marker_inherit() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2416,6 +2481,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-b" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
@@ -2437,9 +2504,10 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2447,6 +2515,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2571,6 +2641,8 @@ fn fork_marker_selection() -> Result<()> {
             { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
@@ -2592,9 +2664,10 @@ fn fork_marker_selection() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2602,6 +2675,8 @@ fn fork_marker_selection() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2750,6 +2825,8 @@ fn fork_marker_track() -> Result<()> {
             { name = "package-b", version = "2.7", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-b", version = "2.8", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
@@ -2771,9 +2848,10 @@ fn fork_marker_track() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2781,6 +2859,8 @@ fn fork_marker_track() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2896,6 +2976,8 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
             { name = "package-a" },
             { name = "package-b" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", specifier = "==1.0.0" },
             { name = "package-b", specifier = "==1.0.0" },
@@ -2916,9 +2998,10 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2926,6 +3009,8 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3191,6 +3276,8 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         dependencies = [
             { name = "package-a" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "python_version < '3.10'", specifier = ">=1.0.0" },
             { name = "package-a", marker = "python_version >= '3.10'", specifier = ">=1.1.0" },
@@ -3212,9 +3299,10 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3222,6 +3310,8 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3447,6 +3537,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         dependencies = [
             { name = "package-cleaver" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "package-cleaver" }]
         "###
         );
@@ -3464,9 +3556,10 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3474,6 +3567,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3882,6 +3977,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
             { name = "package-cleaver" },
             { name = "package-foo" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-cleaver" },
             { name = "package-foo" },
@@ -3903,9 +4000,10 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3913,6 +4011,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4095,6 +4195,8 @@ fn preferences_dependent_forking() -> Result<()> {
             { name = "package-cleaver" },
             { name = "package-foo" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-cleaver" },
             { name = "package-foo" },
@@ -4116,9 +4218,10 @@ fn preferences_dependent_forking() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4126,6 +4229,8 @@ fn preferences_dependent_forking() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4290,6 +4395,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'illumos'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'windows'" },
         ]
+
+        [package.metadata]
         requires-dist = [
             { name = "package-a", marker = "sys_platform == 'windows'", specifier = ">=2" },
             { name = "package-a", marker = "sys_platform == 'illumos'", specifier = "<2" },
@@ -4310,9 +4417,10 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4320,6 +4428,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4389,6 +4499,8 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
         "###
         );
@@ -4406,9 +4518,10 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4416,6 +4529,8 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4485,6 +4600,8 @@ fn fork_requires_python_full() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
         "###
         );
@@ -4502,9 +4619,10 @@ fn fork_requires_python_full() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4512,6 +4630,8 @@ fn fork_requires_python_full() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4597,6 +4717,8 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         dependencies = [
             { name = "package-a", marker = "python_version == '3.10'" },
         ]
+
+        [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_version == '3.10'", specifier = "==1.0.0" }]
         "###
         );
@@ -4614,9 +4736,10 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4624,6 +4747,8 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4690,6 +4815,8 @@ fn fork_requires_python() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_version == '3.9'", specifier = "==1.0.0" }]
         "###
         );
@@ -4707,9 +4834,10 @@ fn fork_requires_python() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
     context
         .lock()
-        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4717,6 +4845,8 @@ fn fork_requires_python() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
+    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(lock2, lock);
 
     Ok(())
 }

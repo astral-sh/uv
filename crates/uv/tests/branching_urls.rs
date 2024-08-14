@@ -225,6 +225,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
         { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.12'" },
         { name = "b" },
     ]
+
+    [package.metadata]
     requires-dist = [
         { name = "anyio", marker = "python_version >= '3.12'", specifier = "==4.3.0" },
         { name = "anyio", marker = "python_version < '3.12'", specifier = "==4.2.0" },
@@ -271,6 +273,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
         { name = "b1", marker = "python_version < '3.12'" },
         { name = "b2", marker = "python_version >= '3.12'" },
     ]
+
+    [package.metadata]
     requires-dist = [
         { name = "b1", marker = "python_version < '3.12'", directory = "../b1" },
         { name = "b2", marker = "python_version >= '3.12'", directory = "../b2" },
@@ -283,6 +287,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
     dependencies = [
         { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_version < '3.12'" },
     ]
+
+    [package.metadata]
     requires-dist = [{ name = "iniconfig", url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }]
 
     [[package]]
@@ -292,6 +298,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
     dependencies = [
         { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_version >= '3.12'" },
     ]
+
+    [package.metadata]
     requires-dist = [{ name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
 
     [[package]]
@@ -413,6 +421,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
         { name = "b1", marker = "python_version < '3.12'" },
         { name = "b2", marker = "python_version >= '3.12'" },
     ]
+
+    [package.metadata]
     requires-dist = [
         { name = "anyio", marker = "python_version >= '3.12'", specifier = "==4.3.0" },
         { name = "anyio", marker = "python_version < '3.12'", specifier = "==4.2.0" },
@@ -459,6 +469,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     dependencies = [
         { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
     ]
+
+    [package.metadata]
     requires-dist = [{ name = "iniconfig", specifier = "==1.1.1" }]
 
     [[package]]
@@ -468,6 +480,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     dependencies = [
         { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.12'" },
     ]
+
+    [package.metadata]
     requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
 
     [[package]]
@@ -566,6 +580,8 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
         { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
         { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_version >= '3.12'" },
     ]
+
+    [package.metadata]
     requires-dist = [
         { name = "iniconfig", marker = "python_version < '3.12'", specifier = "==1.1.1" },
         { name = "iniconfig", marker = "python_version >= '3.12'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
@@ -649,6 +665,8 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
         { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_version < '3.12'" },
         { name = "iniconfig", version = "2.0.0", source = { git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" }, marker = "python_version >= '3.12'" },
     ]
+
+    [package.metadata]
     requires-dist = [
         { name = "iniconfig", marker = "python_version < '3.12'", url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" },
         { name = "iniconfig", marker = "python_version >= '3.12'", git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" },
@@ -770,6 +788,8 @@ fn dont_pre_visit_url_packages() -> Result<()> {
         { name = "b" },
         { name = "c" },
     ]
+
+    [package.metadata]
     requires-dist = [
         { name = "c", specifier = "==0.1.0" },
         { name = "b", directory = "b" },
@@ -782,6 +802,8 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     dependencies = [
         { name = "c" },
     ]
+
+    [package.metadata]
     requires-dist = [{ name = "c", directory = "../c" }]
 
     [[package]]
