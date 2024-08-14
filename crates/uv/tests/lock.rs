@@ -3626,19 +3626,17 @@ fn lock_python_version_marker_complement() -> Result<()> {
         );
     });
 
-    // TODO(charlie): This test became non-deterministic in https://github.com/astral-sh/uv/pull/6065.
-    // But that fix is correct, and the non-determinism itself is a bug.
-    // // Re-run with `--locked`.
-    // uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
-    // success: false
-    // exit_code: 2
-    // ----- stdout -----
-    //
-    // ----- stderr -----
-    // warning: `uv lock` is experimental and may change without warning
-    // Resolved 4 packages in [TIME]
-    // error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    // "###);
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    "###);
 
     Ok(())
 }
