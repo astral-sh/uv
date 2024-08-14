@@ -400,29 +400,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         );
                     }
 
-                    // If another fork had the same resolution, merge into that fork instead.
-                    if let Some(existing_resolution) = resolutions
-                        .iter_mut()
-                        .find(|existing_resolution| resolution.same_graph(existing_resolution))
-                    {
-                        let ResolverMarkers::Fork(existing_markers) = &existing_resolution.markers
-                        else {
-                            panic!("A non-forking resolution exists in forking mode")
-                        };
-                        let mut new_markers = existing_markers.clone();
-                        new_markers.or(resolution
-                            .markers
-                            .fork_markers()
-                            .expect("A non-forking resolution exists in forking mode")
-                            .clone());
-                        existing_resolution.markers = if new_markers.is_true() {
-                            ResolverMarkers::universal(vec![])
-                        } else {
-                            ResolverMarkers::Fork(new_markers)
-                        };
-                        continue 'FORK;
-                    }
-
                     Self::trace_resolution(&resolution);
                     resolutions.push(resolution);
                     continue 'FORK;
@@ -2514,21 +2491,6 @@ pub(crate) struct ResolutionDependencyEdge {
     pub(crate) to_extra: Option<ExtraName>,
     pub(crate) to_dev: Option<GroupName>,
     pub(crate) marker: MarkerTree,
-}
-
-impl Resolution {
-    /// Whether we got two identical resolutions in two separate forks.
-    ///
-    /// Ignores pins since the which distribution we prioritized for each version doesn't matter.
-    fn same_graph(&self, other: &Self) -> bool {
-        // TODO(konsti): The edges being equal is not a requirement for the graph being equal. While
-        // an exact solution is too much here, we should ignore different in edges that point to
-        // nodes that are always installed. Example: root requires foo, root requires bar. bar
-        // forks, and one for the branches has bar -> foo while the other doesn't. The resolution
-        // is still the same graph since the presence or absence of the bar -> foo edge cannot
-        // change which packages and versions are installed.
-        self.nodes == other.nodes && self.edges == other.edges
-    }
 }
 
 impl ResolutionPackage {
