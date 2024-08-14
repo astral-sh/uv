@@ -7527,7 +7527,7 @@ fn lock_mismatched_sources() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
     warning: `uv.sources` is experimental and may change without warning
-    error: Failed to download and build: `project @ file://[TEMP_DIR]/`
+    error: Failed to build: `project @ file://[TEMP_DIR]/`
       Caused by: Failed to parse entry for: `uv-public-pypackage`
       Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
     "###);

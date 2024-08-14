@@ -1464,10 +1464,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 },
             )
             .await
-            .map_err(|err| Error::Build(source.to_string(), err))?
+            .map_err(Error::Build)?
             .wheel(cache_shard)
             .await
-            .map_err(|err| Error::Build(source.to_string(), err))?;
+            .map_err(Error::Build)?;
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
@@ -1555,13 +1555,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 },
             )
             .await
-            .map_err(|err| Error::Build(source.to_string(), err))?;
+            .map_err(Error::Build)?;
 
         // Build the metadata.
-        let dist_info = builder
-            .metadata()
-            .await
-            .map_err(|err| Error::Build(source.to_string(), err))?;
+        let dist_info = builder.metadata().await.map_err(Error::Build)?;
         let Some(dist_info) = dist_info else {
             return Ok(None);
         };

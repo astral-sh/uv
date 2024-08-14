@@ -1744,7 +1744,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                         Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
                         Dist::Source(source_dist) => {
-                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                            if source_dist.is_local() {
+                                ResolveError::Build(Box::new(source_dist), err)
+                            } else {
+                                ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                            }
                         }
                     })?;
 
@@ -1891,7 +1895,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         ResolveError::Fetch(Box::new(built_dist), err)
                                     }
                                     Dist::Source(source_dist) => {
-                                        ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                        if source_dist.is_local() {
+                                            ResolveError::Build(Box::new(source_dist), err)
+                                        } else {
+                                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                        }
                                     }
                                 })?;
 
