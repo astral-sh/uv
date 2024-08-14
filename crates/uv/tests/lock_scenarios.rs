@@ -130,10 +130,9 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -141,8 +140,6 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -259,10 +256,9 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -270,8 +266,6 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -396,10 +390,9 @@ fn fork_basic() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -407,8 +400,6 @@ fn fork_basic() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -754,10 +745,9 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -765,8 +755,6 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -885,10 +873,9 @@ fn fork_upgrade() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -896,8 +883,6 @@ fn fork_upgrade() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1057,10 +1042,9 @@ fn fork_incomplete_markers() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1068,8 +1052,6 @@ fn fork_incomplete_markers() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1208,10 +1190,9 @@ fn fork_marker_accrue() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1219,8 +1200,6 @@ fn fork_marker_accrue() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1470,10 +1449,9 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1481,8 +1459,6 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1655,10 +1631,9 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1666,8 +1641,6 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1841,10 +1814,9 @@ fn fork_marker_inherit_combined() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -1852,8 +1824,6 @@ fn fork_marker_inherit_combined() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2000,10 +1970,9 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2011,8 +1980,6 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2177,10 +2144,9 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2188,8 +2154,6 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2326,10 +2290,9 @@ fn fork_marker_inherit() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2337,8 +2300,6 @@ fn fork_marker_inherit() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2504,10 +2465,9 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2515,8 +2475,6 @@ fn fork_marker_limited_inherit() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2664,10 +2622,9 @@ fn fork_marker_selection() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2675,8 +2632,6 @@ fn fork_marker_selection() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2848,10 +2803,9 @@ fn fork_marker_track() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -2859,8 +2813,6 @@ fn fork_marker_track() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2998,10 +2950,9 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3009,8 +2960,6 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3299,10 +3248,9 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3310,8 +3258,6 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3556,10 +3502,9 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -3567,8 +3512,6 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4000,10 +3943,9 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4011,8 +3953,6 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4218,10 +4158,9 @@ fn preferences_dependent_forking() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4229,8 +4168,6 @@ fn preferences_dependent_forking() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4417,10 +4354,9 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4428,8 +4364,6 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4518,10 +4452,9 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4529,8 +4462,6 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4619,10 +4550,9 @@ fn fork_requires_python_full() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4630,8 +4560,6 @@ fn fork_requires_python_full() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4736,10 +4664,9 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4747,8 +4674,6 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4834,10 +4759,9 @@ fn fork_requires_python() -> Result<()> {
 
     // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
     // by upgrading an irrelevant package.
-    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
-    // URL fragments that are removed when writing to disk.
     context
         .lock()
+        .arg("--locked")
         .arg("--upgrade-package")
         .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
@@ -4845,8 +4769,6 @@ fn fork_requires_python() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }

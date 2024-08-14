@@ -172,11 +172,17 @@ impl UrlString {
     }
 
     /// Return the [`UrlString`] with any query parameters and fragments removed.
-    pub fn base(&self) -> &str {
+    pub fn base_str(&self) -> &str {
         self.as_ref()
             .split_once(['#', '?'])
             .map(|(path, _)| path)
             .unwrap_or(self.as_ref())
+    }
+
+    /// Return the [`UrlString`] with any query parameters and fragments removed.
+    #[must_use]
+    pub fn as_base_url(&self) -> Self {
+        Self(self.base_str().to_string())
     }
 }
 
