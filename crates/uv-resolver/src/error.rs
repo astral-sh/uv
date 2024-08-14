@@ -286,38 +286,6 @@ fn collapse_unavailable_workspace_members(
     }
 }
 
-fn iter_tree(
-    error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
-    depth: usize,
-) {
-    match error {
-        DerivationTree::Derived(derived) => {
-            iter_tree(&derived.cause1, depth + 1);
-            iter_tree(&derived.cause2, depth + 1);
-        }
-        DerivationTree::External(external) => {
-            print!("{}", "  ".repeat(depth));
-            match external {
-                External::FromDependencyOf(package, version, dependency, dependency_version) => {
-                    println!("{package}{version} depends on {dependency}{dependency_version}");
-                }
-                External::Custom(package, versions, reason) => match reason {
-                    UnavailableReason::Package(_) => println!("{package} {reason}"),
-                    UnavailableReason::Version(_) => {
-                        println!("{package}{versions} {reason}");
-                    }
-                },
-                External::NoVersions(package, versions) => {
-                    println!("no versions of {package}{versions}");
-                }
-                External::NotRoot(package, versions) => {
-                    println!("not root {package}{versions}");
-                }
-            }
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct NoSolutionHeader {
     /// The [`ResolverMarkers`] that caused the failure.
