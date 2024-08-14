@@ -786,9 +786,6 @@ source = { registry = "https://pypi.org/simple" }
 environment-markers = [
     "python_version < '3.7' and platform_machine == 'arm64' and platform_system == 'Darwin'",
 ]
-dependencies = [
-    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" } },
-]
 sdist = { url = "https://files.pythonhosted.org/packages/1d/69/8cc725b5d38968fd118e4ce56a483b16e75b7793854c1a392ec4a34eeb31/datasets-2.14.4.tar.gz", hash = "sha256:ef29c2b5841de488cd343cfc26ab979bff77efa4d2285af51f1ad7db5c46a83b", size = 2178719 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/66/f8/38298237d18d4b6a8ee5dfe390e97bed5adb8e01ec6f9680c0ddf3066728/datasets-2.14.4-py3-none-any.whl", hash = "sha256:29336bd316a7d827ccd4da2236596279b20ca2ac78f64c04c9483da7cbc2459b", size = 519335 },
@@ -963,7 +960,6 @@ dependencies = [
     { name = "datasets", version = "2.20.0", source = { registry = "https://pypi.org/simple" } },
     { name = "dill" },
     { name = "fsspec", version = "2024.5.0", source = { registry = "https://pypi.org/simple" }, extra = ["http"] },
-    { name = "fsspec", version = "2024.6.1", source = { registry = "https://pypi.org/simple" } },
     { name = "huggingface-hub" },
     { name = "multiprocess" },
     { name = "numpy" },
@@ -1901,8 +1897,8 @@ dependencies = [
     { name = "packaging" },
     { name = "regex" },
     { name = "rich" },
-    { name = "tensorflow-text", version = "2.7.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_system != 'Darwin'" },
-    { name = "tensorflow-text", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_system != 'Darwin'" },
+    { name = "tensorflow-text", version = "2.7.3", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.13' and platform_system != 'Darwin'" },
+    { name = "tensorflow-text", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.13' and platform_system != 'Darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/da/bf/7f34bfd78555f8ce68f51f6583b4a91a279e34dee2013047e338529c3f8a/keras_nlp-0.14.4.tar.gz", hash = "sha256:abd5886efc60d52f0970ac43d3791c87624bfa8f7a7048a66f9dbcb2d1d28771", size = 331838 }
 wheels = [
@@ -2220,7 +2216,7 @@ environment-markers = [
     "(python_version >= '3.13' and platform_machine != 'aarch64' and platform_system != 'Darwin') or (python_version >= '3.13' and platform_system != 'Darwin' and platform_system != 'Linux')",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_version >= '3.10'" },
+    { name = "numpy", marker = "python_version >= '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/39/7d/8d85fcba868758b3a546e6914e727abd8f29ea6918079f816975c9eecd63/ml_dtypes-0.3.2.tar.gz", hash = "sha256:533059bc5f1764fac071ef54598db358c167c51a718f68f5bb55e3dee79d2967", size = 692014 }
 wheels = [
@@ -2269,7 +2265,7 @@ environment-markers = [
     "(python_version >= '3.12' and python_version < '3.13' and platform_machine != 'aarch64' and platform_system != 'Darwin') or (python_version >= '3.12' and python_version < '3.13' and platform_system != 'Darwin' and platform_system != 'Linux')",
 ]
 dependencies = [
-    { name = "numpy" },
+    { name = "numpy", marker = "python_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/dd/50/17ab8a66d66bdf55ff6dea6fe2df424061cee65c6d772abc871bb563f91b/ml_dtypes-0.4.0.tar.gz", hash = "sha256:eaf197e72f4f7176a19fe3cb8b61846b38c6757607e7bf9cd4b1d84cd3e74deb", size = 692650 }
 wheels = [
@@ -5016,8 +5012,8 @@ name = "tensorflow-macos"
 version = "2.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tensorflow-cpu-aws", marker = "(platform_machine == 'aarch64' and platform_system == 'Linux') or (platform_machine == 'arm64' and platform_system == 'Linux')" },
-    { name = "tensorflow-intel", marker = "platform_system == 'Windows'" },
+    { name = "tensorflow-cpu-aws", marker = "(python_version >= '3.13' and platform_machine == 'aarch64' and platform_system == 'Linux') or (python_version >= '3.13' and platform_machine == 'arm64' and platform_system == 'Linux')" },
+    { name = "tensorflow-intel", marker = "python_version >= '3.13' and platform_system == 'Windows'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/c8/b90dc41b1eefc2894801a120cf268b1f25440981fcf966fb055febce8348/tensorflow_macos-2.15.1-cp310-cp310-macosx_12_0_arm64.whl", hash = "sha256:b8f01d7615fe4ff3b15a12f84471bd5344fed187543c4a091da3ddca51b6dc26", size = 2158 },
@@ -5072,9 +5068,9 @@ environment-markers = [
     "(python_version >= '3.13' and platform_machine != 'aarch64' and platform_system != 'Darwin') or (python_version >= '3.13' and platform_system != 'Darwin' and platform_system != 'Linux')",
 ]
 dependencies = [
-    { name = "tensorflow", version = "2.15.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'arm64' or platform_system != 'Darwin'" },
+    { name = "tensorflow", version = "2.15.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_version >= '3.13' and platform_machine != 'arm64') or (python_version >= '3.13' and platform_system != 'Darwin')" },
     { name = "tensorflow-hub", marker = "python_version >= '3.13'" },
-    { name = "tensorflow-macos", marker = "platform_machine == 'arm64' and platform_system == 'Darwin'" },
+    { name = "tensorflow-macos", marker = "python_version >= '3.13' and platform_machine == 'arm64' and platform_system == 'Darwin'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/0f/d260a5cc7d86d25eb67bb919f957106b76af4a039f064526290d9cf5d93e/tensorflow_text-2.15.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:db09ada839eb92aa23afc6c4e37257e6665d64ae048cfdce6374b5aa33f8f006", size = 6441513 },

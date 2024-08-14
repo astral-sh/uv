@@ -134,16 +134,30 @@ impl ResolutionGraph {
                 )?;
             }
         }
+
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
-            // Add every edge to the graph.
+            let marker = resolution
+                .markers
+                .fork_markers()
+                .cloned()
+                .unwrap_or_default();
+
+            // Add every edge to the graph, propagating the marker for the current fork, if
+            // necessary.
             for edge in &resolution.edges {
-                if !seen.insert(edge) {
+                if !seen.insert((edge, marker.clone())) {
                     // Insert each node only once.
                     continue;
                 }
 
-                Self::add_edge(&mut petgraph, &mut inverse, root_index, edge);
+                Self::add_edge(
+                    &mut petgraph,
+                    &mut inverse,
+                    root_index,
+                    edge,
+                    marker.clone(),
+                );
             }
         }
 
@@ -216,6 +230,7 @@ impl ResolutionGraph {
         inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
         edge: &ResolutionDependencyEdge,
+        marker: MarkerTree,
     ) {
         let from_index = edge.from.as_ref().map_or(root_index, |from| {
             inverse[&PackageRef {
@@ -234,15 +249,21 @@ impl ResolutionGraph {
             group: edge.to_dev.as_ref(),
         }];
 
+        let edge_marker = {
+            let mut edge_marker = edge.marker.clone();
+            edge_marker.and(marker);
+            edge_marker
+        };
+
         if let Some(marker) = petgraph
             .find_edge(from_index, to_index)
             .and_then(|edge| petgraph.edge_weight_mut(edge))
         {
             // If either the existing marker or new marker is `true`, then the dependency is
             // included unconditionally, and so the combined marker is `true`.
-            marker.or(edge.marker.clone());
+            marker.or(edge_marker);
         } else {
-            petgraph.update_edge(from_index, to_index, edge.marker.clone());
+            petgraph.update_edge(from_index, to_index, edge_marker);
         }
     }
 

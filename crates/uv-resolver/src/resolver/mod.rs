@@ -2353,36 +2353,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
-                            // This propagates markers from the fork to
-                            // packages without any markers. These might wind
-                            // up be duplicative (and are even further merged
-                            // via disjunction when a ResolutionGraph is
-                            // constructed), but normalization should simplify
-                            // most such cases.
-                            //
-                            // In a previous implementation of marker
-                            // propagation, markers were propagated at the
-                            // time a fork was created. But this was crucially
-                            // missing a key detail: the specific version of
-                            // a package outside of a fork can be determined
-                            // by the forks of its dependencies, even when
-                            // that package is not part of a fork at the time
-                            // the forks were created. In that case, it was
-                            // possible for two versions of the same package
-                            // to be unconditionally included in a resolution,
-                            // which must never be.
-                            //
-                            // See https://github.com/astral-sh/uv/pull/5583
-                            // for an example of where this occurs with
-                            // `Sphinx`.
-                            //
-                            // Here, instead, we do the marker propagation
-                            // after resolution has completed. This relies
-                            // on the fact that the markers aren't otherwise
-                            // needed during resolution (which I believe is
-                            // true), but is a more robust approach that should
-                            // capture all cases.
-                            marker: self.markers.fork_markers().cloned().unwrap_or_default(),
+                            marker: MarkerTree::TRUE,
                         };
                         edges.insert(edge);
                     }

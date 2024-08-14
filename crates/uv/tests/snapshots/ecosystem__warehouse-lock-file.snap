@@ -3144,7 +3144,7 @@ name = "redis"
 version = "5.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "async-timeout", marker = "python_full_version < '3.11.[X]'" },
+    { name = "async-timeout", marker = "python_full_version < '3.11.[X]' and python_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/48/10/defc227d65ea9c2ff5244645870859865cba34da7373477c8376629746ec/redis-5.0.8.tar.gz", hash = "sha256:0c5b10d387568dfe0698c6fad6615750c24170e548ca2deac10c649d463e9870", size = 4595651 }
 wheels = [
