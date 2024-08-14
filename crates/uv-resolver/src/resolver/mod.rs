@@ -2706,39 +2706,35 @@ impl Forks {
             markers: MarkerTree::TRUE,
         }];
         let mut diverging_packages = BTreeSet::new();
-        for (name, mut deps) in name_to_deps {
-            assert!(!deps.is_empty(), "every name has at least one dependency");
-            // We never fork if there's only one dependency
-            // specification for a given package name. This particular
-            // strategy results in a "conservative" approach to forking
-            // that gives up correctness in some cases in exchange for
-            // more limited forking. More limited forking results in
-            // simpler-and-easier-to-understand lock files and faster
-            // resolving. The correctness we give up manifests when
-            // two transitive non-sibling dependencies conflict. In
-            // that case, we don't detect the fork ahead of time (at
-            // present).
-            if deps.len() == 1 {
-                let dep = deps.pop().unwrap();
-                let markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
-                for fork in &mut forks {
-                    if !fork.markers.is_disjoint(&markers) {
-                        fork.dependencies.push(dep.clone());
-                    }
-                }
-                continue;
-            }
+        for (name, deps) in name_to_deps {
             for dep in deps {
                 // We assume that the marker has already been Python-simplified.
                 let mut markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
                 if markers.is_false() {
-                    // If the markers can never be satisfied, then we
-                    // can drop this dependency unceremoniously.
+                    // A marker that we know never matches any environment
+                    // can be skipped entirely because its dependency will
+                    // never be included in any circumstance.
+                    continue;
+                }
+                if forks.is_empty() {
+                    // If we don't have any forks yet, we just seed it with
+                    // two forks from `markers` and `not(markers)`.
+                    if !markers.is_true() {
+                        diverging_packages.insert(name.clone());
+                        forks.push(Fork {
+                            dependencies: vec![],
+                            markers: markers.negate(),
+                        });
+                    }
+                    forks.push(Fork {
+                        dependencies: vec![dep],
+                        markers,
+                    });
                     continue;
                 }
                 if markers.is_true() {
-                    // Or, if the markers are always true, then we just
-                    // add the dependency to every fork unconditionally.
+                    // If our markers match every marker environment,
+                    // then the dependency should be added to every fork.
                     for fork in &mut forks {
                         if !fork.markers.is_disjoint(&markers) {
                             fork.dependencies.push(dep.clone());
@@ -2746,15 +2742,17 @@ impl Forks {
                     }
                     continue;
                 }
-                // Otherwise, we *should* need to add a new fork...
-                diverging_packages.insert(name.clone());
+                // Otherwise, we *may* need to add a new fork...
 
                 let mut new = vec![];
+                let mut found_overlap = false;
                 for mut fork in std::mem::take(&mut forks) {
                     if fork.markers.is_disjoint(&markers) {
                         new.push(fork);
                         continue;
                     }
+                    found_overlap = true;
+                    diverging_packages.insert(name.clone());
 
                     let not_markers = simplify_python(markers.negate(), python_requirement);
                     let mut new_markers = markers.clone();
@@ -2769,6 +2767,14 @@ impl Forks {
                     new.push(fork);
                     markers = new_markers;
                 }
+                // It should always be the case that a non-trivial marker
+                // expression ALWAYS overlaps with one of our forks, since the
+                // markers on our forks should always cover the Universe.
+                assert!(
+                    found_overlap,
+                    "expected to find marker overlap with existing fork, \
+                     but found none, this is a bug in uv, please report it",
+                );
                 forks = new;
             }
         }
