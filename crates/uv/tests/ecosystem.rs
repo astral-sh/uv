@@ -1,9 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::path::{Path, PathBuf};
-
 use anyhow::Result;
-use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
 use common::{deterministic_lock, TestContext};
@@ -96,9 +93,8 @@ fn pretix() -> Result<()> {
 /// is, there should be a directory at `./ecosystem/{name}` from the
 /// root of the `uv` repository.
 fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
-    let dir = PathBuf::from(format!("../../ecosystem/{name}"));
     let context = TestContext::new(python_version);
-    setup_project_dir(&context, &dir)?;
+    context.copy_ecosystem_project(name);
 
     deterministic_lock! { context =>
         let mut cmd = context.lock();
@@ -129,9 +125,8 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
 /// ecosystem packages even if re-locking is producing different
 /// results.
 fn lock_ecosystem_package_non_deterministic(python_version: &str, name: &str) -> Result<()> {
-    let dir = PathBuf::from(format!("../../ecosystem/{name}"));
     let context = TestContext::new(python_version);
-    setup_project_dir(&context, &dir)?;
+    context.copy_ecosystem_project(name);
 
     let mut cmd = context.lock();
     cmd.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
@@ -149,30 +144,5 @@ fn lock_ecosystem_package_non_deterministic(python_version: &str, name: &str) ->
     }, {
         assert_snapshot!(format!("{name}-lock-file"), lock);
     });
-    Ok(())
-}
-
-/// Copies the project specific files from `project_dir` into the given
-/// test context.
-fn setup_project_dir(ctx: &TestContext, project_dir: &Path) -> Result<()> {
-    // Ideally I think we'd probably just do a recursive copy,
-    // but for now we just look for the specific files we want.
-    let required_files = ["pyproject.toml"];
-    for file_name in required_files {
-        let file_contents = fs_err::read_to_string(project_dir.join(file_name))?;
-        let test_file = ctx.temp_dir.child(file_name);
-        test_file.write_str(&file_contents)?;
-    }
-
-    let optional_files = ["PKG-INFO"];
-    for file_name in optional_files {
-        let path = project_dir.join(file_name);
-        if !path.exists() {
-            continue;
-        }
-        let file_contents = fs_err::read_to_string(path)?;
-        let test_file = ctx.temp_dir.child(file_name);
-        test_file.write_str(&file_contents)?;
-    }
     Ok(())
 }
