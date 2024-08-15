@@ -1524,13 +1524,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return None;
                     }
 
-                    Cow::Owned(Requirement {
-                        name: requirement.name.clone(),
-                        extras: requirement.extras.clone(),
-                        source: requirement.source.clone(),
-                        origin: requirement.origin.clone(),
-                        marker
-                    })
+                    if marker == requirement.marker {
+                        requirement
+                    } else {
+                        Cow::Owned(Requirement {
+                            name: requirement.name.clone(),
+                            extras: requirement.extras.clone(),
+                            source: requirement.source.clone(),
+                            origin: requirement.origin.clone(),
+                            marker
+                        })
+                    }
                 } else {
                     requirement
                 };
@@ -1591,13 +1595,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     return None;
                                 }
 
-                                Cow::Owned(Requirement {
-                                    name: constraint.name.clone(),
-                                    extras: constraint.extras.clone(),
-                                    source: constraint.source.clone(),
-                                    origin: constraint.origin.clone(),
-                                    marker
-                                })
+                                if marker == constraint.marker {
+                                    Cow::Borrowed(constraint)
+                                } else {
+                                    Cow::Owned(Requirement {
+                                        name: constraint.name.clone(),
+                                        extras: constraint.extras.clone(),
+                                        source: constraint.source.clone(),
+                                        origin: constraint.origin.clone(),
+                                        marker
+                                    })
+                                }
                             } else {
                                 // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
                                 // and the constraint is `requests ; python_version == '3.6'`, the
