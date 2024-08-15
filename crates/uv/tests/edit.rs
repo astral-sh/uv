@@ -1924,16 +1924,6 @@ fn update() -> Result<()> {
             { name = "chardet" },
         ]
 
-        [package.metadata]
-        requires-dist = [
-            { name = "certifi", specifier = ">=2017.4.17" },
-            { name = "chardet", marker = "extra == 'use-chardet-on-py3'", specifier = "<6,>=3.0.2" },
-            { name = "charset-normalizer", specifier = "<4,>=2" },
-            { name = "idna", specifier = "<4,>=2.5" },
-            { name = "pysocks", marker = "extra == 'socks'", specifier = "!=1.5.7,>=1.5.6" },
-            { name = "urllib3", specifier = "<3,>=1.21.1" },
-        ]
-
         [[package]]
         name = "urllib3"
         version = "2.2.1"
