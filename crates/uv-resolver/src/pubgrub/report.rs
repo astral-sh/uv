@@ -1058,6 +1058,15 @@ impl PackageRange<'_> {
     /// be singular or plural e.g. if false use "<range> depends on <...>" and
     /// if true use "<range> depend on <...>"
     fn plural(&self) -> bool {
+        // If a workspace member, always use the singular form (otherwise, it'd be "all versions of")
+        if self
+            .formatter
+            .and_then(|formatter| formatter.format_workspace_member(self.package))
+            .is_some()
+        {
+            return false;
+        }
+
         let mut segments = self.range.iter();
         if let Some(segment) = segments.next() {
             // A single unbounded compatibility segment is always plural ("all versions of").

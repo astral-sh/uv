@@ -1381,7 +1381,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because only bar is available and bar depends on anyio==4.2.0, we can conclude that bar depend on anyio==4.2.0.
+      ╰─▶ Because only bar is available and bar depends on anyio==4.2.0, we can conclude that bar depends on anyio==4.2.0.
           And because foo depends on anyio==4.1.0, we can conclude that foo and bar are incompatible.
           And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "###
@@ -1440,7 +1440,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because bar depends on bar and bar depends on anyio==4.2.0, we can conclude that bar depend on anyio==4.2.0.
+      ╰─▶ Because bar depends on bar and bar depends on anyio==4.2.0, we can conclude that bar depends on anyio==4.2.0.
           And because foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
           And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "###
