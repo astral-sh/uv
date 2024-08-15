@@ -127,3 +127,8 @@ nav:
       - Resolver: reference/resolver-internals.md
       - Versioning: reference/versioning.md
       - Platform support: reference/platforms.md
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
