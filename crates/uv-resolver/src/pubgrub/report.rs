@@ -30,6 +30,8 @@ pub(crate) struct PubGrubReportFormatter<'a> {
 
     /// The versions that were available for each package
     pub(crate) python_requirement: &'a PythonRequirement,
+
+    pub(crate) workspace_members: &'a BTreeSet<PackageName>,
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
@@ -53,12 +55,12 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     return if let Some(target) = self.python_requirement.target() {
                         format!(
                             "the requested {package} version ({target}) does not satisfy {}",
-                            PackageRange::compatibility(package, set)
+                            self.compatible_range(package, set)
                         )
                     } else {
                         format!(
                             "the requested {package} version does not satisfy {}",
-                            PackageRange::compatibility(package, set)
+                            self.compatible_range(package, set)
                         )
                     };
                 }
@@ -69,7 +71,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     return format!(
                         "the current {package} version ({}) does not satisfy {}",
                         self.python_requirement.installed(),
-                        PackageRange::compatibility(package, set)
+                        self.compatible_range(package, set)
                     );
                 }
 
@@ -86,57 +88,51 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     if segments == 1 {
                         format!(
                             "only {} is available",
-                            PackageRange::compatibility(package, &complement)
+                            self.compatible_range(package, &complement)
                         )
                     // Complex case, there are multiple ranges
                     } else {
                         format!(
                             "only the following versions of {} {}",
                             package,
-                            PackageRange::available(package, &complement)
+                            self.availability_range(package, &complement)
                         )
                     }
                 }
             }
-            External::Custom(package, set, reason) => match &**package {
-                PubGrubPackageInner::Root(Some(name)) => {
-                    format!("{name} cannot be used because {reason}")
-                }
-                PubGrubPackageInner::Root(None) => {
-                    format!("your requirements cannot be used because {reason}")
-                }
-                _ => match reason {
-                    UnavailableReason::Package(reason) => {
-                        // While there may be a term attached, this error applies to the entire
-                        // package, so we show it for the entire package
-                        format!("{}{reason}", Padded::new("", &package, " "))
+            External::Custom(package, set, reason) => {
+                if let Some(root) = self.format_root(package) {
+                    format!("{root} cannot be used because {reason}")
+                } else {
+                    match reason {
+                        UnavailableReason::Package(reason) => {
+                            // While there may be a term attached, this error applies to the entire
+                            // package, so we show it for the entire package
+                            format!("{}{reason}", Padded::new("", &package, " "))
+                        }
+                        UnavailableReason::Version(reason) => {
+                            format!(
+                                "{}{reason}",
+                                Padded::new("", &self.compatible_range(package, set), " ")
+                            )
+                        }
                     }
-                    UnavailableReason::Version(reason) => {
-                        format!(
-                            "{}{reason}",
-                            Padded::new("", &PackageRange::compatibility(package, set), " ")
-                        )
-                    }
-                },
-            },
+                }
+            }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
-                match &**package {
-                    PubGrubPackageInner::Root(Some(name)) => format!(
-                        "{name} depends on {}",
-                        PackageRange::dependency(dependency, &dependency_set)
-                    ),
-                    PubGrubPackageInner::Root(None) => format!(
-                        "you require {}",
-                        PackageRange::dependency(dependency, &dependency_set)
-                    ),
-                    _ => format!(
-                        "{}",
-                        PackageRange::compatibility(package, &package_set)
-                            .depends_on(dependency, &dependency_set),
-                    ),
+                if let Some(root) = self.format_root_requires(package) {
+                    return format!(
+                        "{root} {}",
+                        self.dependency_range(dependency, &dependency_set)
+                    );
                 }
+                format!(
+                    "{}",
+                    self.compatible_range(package, &package_set)
+                        .depends_on(dependency, &dependency_set),
+                )
             }
         }
     }
@@ -150,25 +146,24 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
         match terms_vec.as_slice() {
             [] => "the requirements are unsatisfiable".into(),
             [(root, _)] if matches!(&**(*root), PubGrubPackageInner::Root(_)) => {
-                "the requirements are unsatisfiable".into()
+                let root = self.format_root(root).unwrap();
+                format!("{root} are unsatisfiable")
             }
             [(package, Term::Positive(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
             {
                 let range = self.simplify_set(range, package);
-                format!(
-                    "{} cannot be used",
-                    PackageRange::compatibility(package, &range)
-                )
+                if let Some(member) = self.format_workspace_member(package) {
+                    format!("{member}'s requirements are unsatisfiable")
+                } else {
+                    format!("{} cannot be used", self.compatible_range(package, &range))
+                }
             }
             [(package, Term::Negative(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
             {
                 let range = self.simplify_set(range, package);
-                format!(
-                    "{} must be used",
-                    PackageRange::compatibility(package, &range)
-                )
+                format!("{} must be used", self.compatible_range(package, &range))
             }
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => self.format_external(
                 &External::FromDependencyOf((*p1).clone(), r1.clone(), (*p2).clone(), r2.clone()),
@@ -180,7 +175,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 let mut result = String::new();
                 let str_terms: Vec<_> = slice
                     .iter()
-                    .map(|(p, t)| format!("{}", PackageTerm::new(p, t)))
+                    .map(|(p, t)| format!("{}", PackageTerm::new(p, t, self)))
                     .collect();
                 for (index, term) in str_terms.iter().enumerate() {
                     result.push_str(term);
@@ -195,7 +190,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     }
                 }
                 if let [(p, t)] = slice {
-                    if PackageTerm::new(p, t).plural() {
+                    if PackageTerm::new(p, t, self).plural() {
                         result.push_str(" are incompatible");
                     } else {
                         result.push_str(" is incompatible");
@@ -328,6 +323,88 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 }
 
 impl PubGrubReportFormatter<'_> {
+    /// Return the formatting for "the root package requires", if the given
+    /// package is the root package.
+    ///
+    /// If not given the root package, returns `None`.
+    fn format_root_requires(&self, package: &PubGrubPackage) -> Option<String> {
+        if self.is_workspace() {
+            if matches!(&**package, PubGrubPackageInner::Root(_)) {
+                return Some("your workspace requires".to_string());
+            }
+        }
+        match &**package {
+            PubGrubPackageInner::Root(Some(name)) => Some(format!("{name} depends on")),
+            PubGrubPackageInner::Root(None) => Some("you require".to_string()),
+            _ => None,
+        }
+    }
+
+    /// Return the formatting for "the root package", if the given
+    /// package is the root package.
+    ///
+    /// If not given the root package, returns `None`.
+    fn format_root(&self, package: &PubGrubPackage) -> Option<String> {
+        if self.is_workspace() {
+            if matches!(&**package, PubGrubPackageInner::Root(_)) {
+                return Some("your workspace's requirements".to_string());
+            }
+        }
+        match &**package {
+            PubGrubPackageInner::Root(Some(_)) => Some("the requirements".to_string()),
+            PubGrubPackageInner::Root(None) => Some("the requirements".to_string()),
+            _ => None,
+        }
+    }
+
+    /// Whether the resolution error is for a workspace.
+    fn is_workspace(&self) -> bool {
+        !self.workspace_members.is_empty()
+    }
+
+    /// Return a display name for the package if it is a workspace member.
+    fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<String> {
+        match &**package {
+            PubGrubPackageInner::Package { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Dev { name, .. } => {
+                if self.workspace_members.contains(name) {
+                    Some(format!("{name}"))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Create a [`PackageRange::compatibility`] display with this formatter attached.
+    fn compatible_range<'a>(
+        &'a self,
+        package: &'a PubGrubPackage,
+        range: &'a Range<Version>,
+    ) -> PackageRange<'a> {
+        PackageRange::compatibility(package, range, Some(self))
+    }
+
+    /// Create a [`PackageRange::dependency`] display with this formatter attached.
+    fn dependency_range<'a>(
+        &'a self,
+        package: &'a PubGrubPackage,
+        range: &'a Range<Version>,
+    ) -> PackageRange<'a> {
+        PackageRange::dependency(package, range, Some(self))
+    }
+
+    /// Create a [`PackageRange::availability`] display with this formatter attached.
+    fn availability_range<'a>(
+        &'a self,
+        package: &'a PubGrubPackage,
+        range: &'a Range<Version>,
+    ) -> PackageRange<'a> {
+        PackageRange::availability(package, range, Some(self))
+    }
+
     /// Format two external incompatibilities, combining them if possible.
     fn format_both_external(
         &self,
@@ -340,33 +417,26 @@ impl PubGrubReportFormatter<'_> {
                 External::FromDependencyOf(package2, _, dependency2, dependency_set2),
             ) if package1 == package2 => {
                 let dependency_set1 = self.simplify_set(dependency_set1, dependency1);
-                let dependency1 = PackageRange::dependency(dependency1, &dependency_set1);
+                let dependency1 = self.dependency_range(dependency1, &dependency_set1);
 
                 let dependency_set2 = self.simplify_set(dependency_set2, dependency2);
-                let dependency2 = PackageRange::dependency(dependency2, &dependency_set2);
+                let dependency2 = self.dependency_range(dependency2, &dependency_set2);
 
-                match &**package1 {
-                    PubGrubPackageInner::Root(Some(name)) => format!(
-                        "{name} depends on {}and {}",
+                if let Some(root) = self.format_root_requires(package1) {
+                    return format!(
+                        "{root} {}and {}",
                         Padded::new("", &dependency1, " "),
                         dependency2,
-                    ),
-                    PubGrubPackageInner::Root(None) => format!(
-                        "you require {}and {}",
-                        Padded::new("", &dependency1, " "),
-                        dependency2,
-                    ),
-                    _ => {
-                        let package_set = self.simplify_set(package_set1, package1);
-
-                        format!(
-                            "{}",
-                            PackageRange::compatibility(package1, &package_set)
-                                .depends_on(dependency1.package, &dependency_set1)
-                                .and(dependency2.package, &dependency_set2),
-                        )
-                    }
+                    );
                 }
+                let package_set = self.simplify_set(package_set1, package1);
+
+                format!(
+                    "{}",
+                    self.compatible_range(package1, &package_set)
+                        .depends_on(dependency1.package, &dependency_set1)
+                        .and(dependency2.package, &dependency_set2),
+                )
             }
             _ => {
                 let external1 = self.format_external(external1);
@@ -521,7 +591,7 @@ impl PubGrubReportFormatter<'_> {
                     reason: reason.clone(),
                 });
             }
-            Some(UnavailablePackage::NotFound) => {}
+            Some(UnavailablePackage::NotFound | UnavailablePackage::WorkspaceMember) => {}
             None => {}
         }
 
@@ -716,7 +786,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    PackageRange::compatibility(package, range).bold()
+                    PackageRange::compatibility(package, range, None).bold()
                 )
             }
             Self::NoIndex => {
@@ -831,7 +901,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.bold(),
-                    PackageRange::compatibility(package, package_set).bold(),
+                    PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
                     package_requires_python.bold(),
                 )
@@ -844,12 +914,15 @@ impl std::fmt::Display for PubGrubHint {
 struct PackageTerm<'a> {
     package: &'a PubGrubPackage,
     term: &'a Term<Range<Version>>,
+    formatter: &'a PubGrubReportFormatter<'a>,
 }
 
 impl std::fmt::Display for PackageTerm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.term {
-            Term::Positive(set) => write!(f, "{}", PackageRange::compatibility(self.package, set)),
+            Term::Positive(set) => {
+                write!(f, "{}", self.formatter.compatible_range(self.package, set))
+            }
             Term::Negative(set) => {
                 if let Some(version) = set.as_singleton() {
                     // Note we do not handle the "root" package here but we should never
@@ -860,7 +933,8 @@ impl std::fmt::Display for PackageTerm<'_> {
                     write!(
                         f,
                         "{}",
-                        PackageRange::compatibility(self.package, &set.complement())
+                        self.formatter
+                            .compatible_range(self.package, &set.complement())
                     )
                 }
             }
@@ -870,19 +944,29 @@ impl std::fmt::Display for PackageTerm<'_> {
 
 impl PackageTerm<'_> {
     /// Create a new [`PackageTerm`] from a [`PubGrubPackage`] and a [`Term`].
-    fn new<'a>(package: &'a PubGrubPackage, term: &'a Term<Range<Version>>) -> PackageTerm<'a> {
-        PackageTerm { package, term }
+    fn new<'a>(
+        package: &'a PubGrubPackage,
+        term: &'a Term<Range<Version>>,
+        formatter: &'a PubGrubReportFormatter<'a>,
+    ) -> PackageTerm<'a> {
+        PackageTerm {
+            package,
+            term,
+            formatter,
+        }
     }
 
     /// Returns `true` if the predicate following this package term should be singular or plural.
     fn plural(&self) -> bool {
         match self.term {
-            Term::Positive(set) => PackageRange::compatibility(self.package, set).plural(),
+            Term::Positive(set) => self.formatter.compatible_range(self.package, set).plural(),
             Term::Negative(set) => {
                 if set.as_singleton().is_some() {
                     false
                 } else {
-                    PackageRange::compatibility(self.package, &set.complement()).plural()
+                    self.formatter
+                        .compatible_range(self.package, &set.complement())
+                        .plural()
                 }
             }
         }
@@ -903,9 +987,49 @@ struct PackageRange<'a> {
     package: &'a PubGrubPackage,
     range: &'a Range<Version>,
     kind: PackageRangeKind,
+    formatter: Option<&'a PubGrubReportFormatter<'a>>,
 }
 
 impl PackageRange<'_> {
+    fn compatibility<'a>(
+        package: &'a PubGrubPackage,
+        range: &'a Range<Version>,
+        formatter: Option<&'a PubGrubReportFormatter<'a>>,
+    ) -> PackageRange<'a> {
+        PackageRange {
+            package,
+            range,
+            kind: PackageRangeKind::Compatibility,
+            formatter,
+        }
+    }
+
+    fn dependency<'a>(
+        package: &'a PubGrubPackage,
+        range: &'a Range<Version>,
+        formatter: Option<&'a PubGrubReportFormatter<'a>>,
+    ) -> PackageRange<'a> {
+        PackageRange {
+            package,
+            range,
+            kind: PackageRangeKind::Dependency,
+            formatter,
+        }
+    }
+
+    fn availability<'a>(
+        package: &'a PubGrubPackage,
+        range: &'a Range<Version>,
+        formatter: Option<&'a PubGrubReportFormatter<'a>>,
+    ) -> PackageRange<'a> {
+        PackageRange {
+            package,
+            range,
+            kind: PackageRangeKind::Available,
+            formatter,
+        }
+    }
+
     /// Returns a boolean indicating if the predicate following this package range should
     /// be singular or plural e.g. if false use "<range> depends on <...>" and
     /// if true use "<range> depend on <...>"
@@ -930,11 +1054,20 @@ impl PackageRange<'_> {
 impl std::fmt::Display for PackageRange<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Exit early for the root package — the range is not meaningful
-        let package = match &**self.package {
-            PubGrubPackageInner::Root(Some(name)) => return write!(f, "{name}"),
-            PubGrubPackageInner::Root(None) => return write!(f, "your requirements"),
-            _ => self.package,
-        };
+        if let Some(root) = self
+            .formatter
+            .and_then(|formatter| formatter.format_root(self.package))
+        {
+            return write!(f, "{root}");
+        }
+        // Exit early for workspace members, only a single version is available
+        if let Some(member) = self
+            .formatter
+            .and_then(|formatter| formatter.format_workspace_member(self.package))
+        {
+            return write!(f, "{member}");
+        }
+        let package = self.package;
 
         if self.range.is_empty() {
             return write!(f, "{package} ∅");
@@ -982,33 +1115,6 @@ impl std::fmt::Display for PackageRange<'_> {
 }
 
 impl PackageRange<'_> {
-    fn compatibility<'a>(
-        package: &'a PubGrubPackage,
-        range: &'a Range<Version>,
-    ) -> PackageRange<'a> {
-        PackageRange {
-            package,
-            range,
-            kind: PackageRangeKind::Compatibility,
-        }
-    }
-
-    fn dependency<'a>(package: &'a PubGrubPackage, range: &'a Range<Version>) -> PackageRange<'a> {
-        PackageRange {
-            package,
-            range,
-            kind: PackageRangeKind::Dependency,
-        }
-    }
-
-    fn available<'a>(package: &'a PubGrubPackage, range: &'a Range<Version>) -> PackageRange<'a> {
-        PackageRange {
-            package,
-            range,
-            kind: PackageRangeKind::Available,
-        }
-    }
-
     fn depends_on<'a>(
         &'a self,
         package: &'a PubGrubPackage,
@@ -1016,7 +1122,12 @@ impl PackageRange<'_> {
     ) -> DependsOn<'a> {
         DependsOn {
             package: self,
-            dependency1: PackageRange::dependency(package, range),
+            dependency1: PackageRange {
+                package,
+                range,
+                kind: PackageRangeKind::Dependency,
+                formatter: self.formatter,
+            },
             dependency2: None,
         }
     }
@@ -1035,7 +1146,12 @@ impl<'a> DependsOn<'a> {
     ///
     /// Note this overwrites previous calls to `DependsOn::and`.
     fn and(mut self, package: &'a PubGrubPackage, range: &'a Range<Version>) -> DependsOn<'a> {
-        self.dependency2 = Some(PackageRange::dependency(package, range));
+        self.dependency2 = Some(PackageRange {
+            package,
+            range,
+            kind: PackageRangeKind::Dependency,
+            formatter: self.package.formatter,
+        });
         self
     }
 }

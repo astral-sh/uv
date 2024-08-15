@@ -596,6 +596,7 @@ async fn do_lock(
                 dev,
                 source_trees,
                 None,
+                Some(workspace.packages().keys().cloned().collect()),
                 &extras,
                 preferences,
                 EmptyInstalledPackages,

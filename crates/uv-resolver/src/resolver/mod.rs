@@ -102,6 +102,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     hasher: HashStrategy,
     markers: ResolverMarkers,
     python_requirement: PythonRequirement,
+    workspace_members: BTreeSet<PackageName>,
     /// This is derived from `PythonRequirement` once at initialization
     /// time. It's used in universal mode to filter our dependencies with
     /// a `python_version` marker expression that has no overlap with the
@@ -225,6 +226,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             ),
             groups: Groups::from_manifest(&manifest, markers.marker_environment()),
             project: manifest.project,
+            workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
@@ -449,8 +451,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .term_intersection_for_package(&state.next)
                             .expect("a package was chosen but we don't have a term");
 
-                        // Check if the decision was due to the package being unavailable
                         if let PubGrubPackageInner::Package { ref name, .. } = &*state.next {
+                            // Check if the decision was due to the package being a
+                            // workspace member
+                            if self.workspace_members.contains(name) {
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::custom_term(
+                                        state.next.clone(),
+                                        term_intersection.clone(),
+                                        UnavailableReason::Package(
+                                            UnavailablePackage::WorkspaceMember,
+                                        ),
+                                    ));
+                                continue;
+                            }
+
+                            // Check if the decision was due to the package being unavailable
                             if let Some(entry) = self.unavailable_packages.get(name) {
                                 state
                                     .pubgrub
@@ -1988,6 +2005,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             incomplete_packages,
             fork_urls,
             markers,
+            self.workspace_members.clone(),
         ))
     }
 

@@ -125,6 +125,7 @@ pub struct NoSolutionError {
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
     markers: ResolverMarkers,
+    workspace_members: BTreeSet<PackageName>,
 }
 
 impl NoSolutionError {
@@ -139,6 +140,7 @@ impl NoSolutionError {
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
+        workspace_members: BTreeSet<PackageName>,
     ) -> Self {
         Self {
             error,
@@ -150,6 +152,7 @@ impl NoSolutionError {
             incomplete_packages,
             fork_urls,
             markers,
+            workspace_members,
         }
     }
 
@@ -211,8 +214,14 @@ impl std::fmt::Display for NoSolutionError {
         let formatter = PubGrubReportFormatter {
             available_versions: &self.available_versions,
             python_requirement: &self.python_requirement,
+            workspace_members: &self.workspace_members,
         };
-        let report = DefaultStringReporter::report_with_formatter(&self.error, &formatter);
+
+        // Transform the error tree for reporting
+        let mut tree = self.error.clone();
+        collapse_unavailable_workspace_members(&mut tree);
+
+        let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
         write!(f, "{report}")?;
 
         // Include any additional hints.
@@ -229,6 +238,51 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         Ok(())
+    }
+}
+
+/// Given a [`DerivationTree`], collapse any [`UnavailablePackage::WorkspaceMember`] incompatibilities
+/// to avoid saying things like "only <workspace-member>==0.1.0 is available".
+fn collapse_unavailable_workspace_members(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                // If one node is an unavailable workspace member...
+                (
+                    DerivationTree::External(External::Custom(
+                        _,
+                        _,
+                        UnavailableReason::Package(UnavailablePackage::WorkspaceMember),
+                    )),
+                    ref mut other,
+                )
+                | (
+                    ref mut other,
+                    DerivationTree::External(External::Custom(
+                        _,
+                        _,
+                        UnavailableReason::Package(UnavailablePackage::WorkspaceMember),
+                    )),
+                ) => {
+                    // First, recursively collapse the other side of the tree
+                    collapse_unavailable_workspace_members(other);
+
+                    // Then, replace this node with the other tree
+                    *tree = other.clone();
+                }
+                // If not, just recurse
+                _ => {
+                    collapse_unavailable_workspace_members(Arc::make_mut(&mut derived.cause1));
+                    collapse_unavailable_workspace_members(Arc::make_mut(&mut derived.cause2));
+                }
+            }
+        }
     }
 }
 
