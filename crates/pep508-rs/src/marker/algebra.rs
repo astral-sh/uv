@@ -164,16 +164,15 @@ impl InternerGuard<'_> {
             } => match python_version_to_full_version(normalize_specifier(specifier)) {
                 Ok(specifier) => (
                     Variable::Version(MarkerValueVersion::PythonFullVersion),
-                    Edges::from_specifier(&specifier),
+                    Edges::from_specifier(specifier),
                 ),
                 Err(node) => return node,
             },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
-            MarkerExpression::Version { key, specifier } => (
-                Variable::Version(key),
-                Edges::from_specifier(&normalize_specifier(specifier)),
-            ),
+            MarkerExpression::Version { key, specifier } => {
+                (Variable::Version(key), Edges::from_specifier(specifier))
+            }
             // The `in` and `contains` operators are a bit different than other operators.
             // In particular, they do not represent a particular value for the corresponding
             // variable, and can overlap. For example, `'nux' in os_name` and `os_name == 'Linux'`
@@ -545,8 +544,9 @@ impl Edges {
     }
 
     /// Returns the [`Edges`] for a version specifier.
-    fn from_specifier(specifier: &VersionSpecifier) -> Edges {
-        let specifier = PubGrubSpecifier::from_release_specifier(specifier).unwrap();
+    fn from_specifier(specifier: VersionSpecifier) -> Edges {
+        let specifier =
+            PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
         Edges::Version {
             edges: Edges::from_range(&specifier.into()),
         }
@@ -773,9 +773,13 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     // [`Display`] output. We must normalize all versions to remove trailing `0`s to remove the
     // distinction between versions like `3.9` and `3.9.0`, depending on which form was added to
     // the global marker interner first.
-    if let Some(end) = release.iter().rposition(|segment| *segment != 0) {
-        if end > 0 {
-            release = &release[..=end];
+    //
+    // Note that we cannot strip trailing `0`s for star equality, as `==3.0.*` is different from `==3.*`.
+    if !operator.is_star() {
+        if let Some(end) = release.iter().rposition(|segment| *segment != 0) {
+            if end > 0 {
+                release = &release[..=end];
+            }
         }
     }
 
@@ -787,6 +791,10 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
 /// Returns `Err` with a constant node if the equivalent comparison is always `true` or `false`.
 fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<VersionSpecifier, NodeId> {
     let major_minor = match *specifier.version().release() {
+        // `python_version == 3.*` is equivalent to `python_full_version == 3.*`
+        // and adding a trailing `0` would be incorrect.
+        [_major] if specifier.operator().is_star() => return Ok(specifier),
+
         // Note that `python_version == 3` matches `3.0.1`, `3.0.2`, etc.
         [major] => Some((major, 0)),
         [major, minor] => Some((major, minor)),

@@ -1815,6 +1815,15 @@ mod test {
         assert_simplifies("python_version <= '3.9.0'", "python_full_version < '3.10'");
 
         assert_simplifies(
+            "python_version == '3.*'",
+            "python_full_version >= '3' and python_full_version < '4'",
+        );
+        assert_simplifies(
+            "python_version == '3.0.*'",
+            "python_full_version == '3.0.*'",
+        );
+
+        assert_simplifies(
             "python_version < '3.17' or python_version < '3.18'",
             "python_full_version < '3.18'",
         );
