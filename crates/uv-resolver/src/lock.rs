@@ -754,8 +754,8 @@ impl Lock {
         }
 
         while let Some(package) = queue.pop_front() {
-            // Assume that registry dependencies are immutable.
-            if matches!(package.id.source, Source::Registry(..)) {
+            // If the package is immutable, we don't need to validate it (or its dependencies).
+            if package.id.source.is_immutable() {
                 continue;
             }
 
@@ -1009,12 +1009,12 @@ impl Package {
         let id = PackageId::from_annotated_dist(annotated_dist);
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
-        let requires_dist = if matches!(id.source, Source::Registry(..)) {
+        let requires_dist = if id.source.is_immutable() {
             vec![]
         } else {
             annotated_dist.metadata.requires_dist.clone()
         };
-        let requires_dev = if matches!(id.source, Source::Registry(..)) {
+        let requires_dev = if id.source.is_immutable() {
             BTreeMap::default()
         } else {
             annotated_dist.metadata.dev_dependencies.clone()
@@ -1793,6 +1793,14 @@ impl Source {
                     .map(ToString::to_string),
             },
         )
+    }
+
+    /// Returns `true` if the source should be considered immutable.
+    ///
+    /// We assume that registry sources are immutable. In other words, we expect that once a
+    /// package-version is published to a registry, its metadata will not change.
+    fn is_immutable(&self) -> bool {
+        matches!(self, Self::Registry(..))
     }
 
     fn to_toml(&self, table: &mut Table) {
