@@ -770,9 +770,9 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     // Strip any trailing `0`s.
     //
     // The [`Version`] type ignores trailing `0`s for equality, but still preserves them in it's
-    // [`Display`] output. We must normalize all versions to remove trailing `0`s to remove the
-    // distinction between versions like `3.9` and `3.9.0`, depending on which form was added to
-    // the global marker interner first.
+    // [`Display`] output. We must normalize all versions by stripping trailing `0`s to remove the
+    // distinction between versions like `3.9` and `3.9.0`, whose output will depend on which form
+    // was added to the global marker interner first.
     //
     // Note that we cannot strip trailing `0`s for star equality, as `==3.0.*` is different from `==3.*`.
     if !operator.is_star() {
@@ -794,7 +794,6 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
         // `python_version == 3.*` is equivalent to `python_full_version == 3.*`
         // and adding a trailing `0` would be incorrect.
         [_major] if specifier.operator().is_star() => return Ok(specifier),
-
         // Note that `python_version == 3` matches `3.0.1`, `3.0.2`, etc.
         [major] => Some((major, 0)),
         [major, minor] => Some((major, minor)),
