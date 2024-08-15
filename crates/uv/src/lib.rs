@@ -1147,6 +1147,14 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
+
+            // Use raw sources if requirements files are provided as input.
+            let raw_sources = if args.requirements.is_empty() {
+                args.raw_sources
+            } else {
+                true
+            };
+
             let requirements = args
                 .packages
                 .into_iter()
@@ -1165,7 +1173,7 @@ async fn run_project(
                 requirements,
                 args.editable,
                 args.dependency_type,
-                args.raw_sources,
+                raw_sources,
                 args.rev,
                 args.tag,
                 args.branch,

@@ -2929,7 +2929,7 @@ fn add_requirements_file() -> Result<()> {
     "#})?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Flask==2.3.2")?;
+    requirements_txt.write_str("Flask==2.3.2\ngit+https://github.com/agronholm/anyio.git@4.4.0")?;
 
     uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt"), @r###"
     success: true
@@ -2941,13 +2941,16 @@ fn add_requirements_file() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
+     + anyio==4.4.0 (from git+https://github.com/agronholm/anyio.git@053e8f0a0f7b0f4a47a012eb5c6b1d9d84344e6a)
      + blinker==1.7.0
      + click==8.1.7
      + flask==2.3.2
+     + idna==3.6
      + itsdangerous==2.1.2
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
      + werkzeug==3.0.1
     "###);
 
@@ -2965,6 +2968,7 @@ fn add_requirements_file() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "flask==2.3.2",
+            "anyio @ git+https://github.com/agronholm/anyio.git@4.4.0",
         ]
         "###
         );
