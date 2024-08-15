@@ -105,6 +105,19 @@ impl Lock {
                         python_full_version.clone(),
                     );
                 }
+
+                for markers in &mut package.fork_markers {
+                    *markers = markers.clone().simplify_python_versions(
+                        python_version.clone(),
+                        python_full_version.clone(),
+                    );
+                }
+            }
+
+            for markers in &mut lock.fork_markers {
+                *markers = markers
+                    .clone()
+                    .simplify_python_versions(python_version.clone(), python_full_version.clone());
             }
         }
 
