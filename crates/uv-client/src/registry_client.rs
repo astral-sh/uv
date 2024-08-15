@@ -16,7 +16,7 @@ use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
+use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name, RemoteSource};
 use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -491,7 +491,7 @@ impl RegistryClient {
         url: &Url,
     ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
-        let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
+        let filename = WheelFilename::from_str(&file.filename().expect("STOPSHIP")).map_err(ErrorKind::WheelFilename)?;
         if file.dist_info_metadata {
             let mut url = url.clone();
             url.set_path(&format!("{}.metadata", url.path()));
@@ -835,7 +835,7 @@ impl SimpleMetadata {
         // Group the distributions by version and kind
         for file in files {
             let Some(filename) =
-                DistFilename::try_from_filename(file.filename.as_str(), package_name)
+                DistFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;

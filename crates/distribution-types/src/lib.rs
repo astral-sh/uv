@@ -768,11 +768,59 @@ impl DistributionMetadata for Dist {
 
 impl RemoteSource for File {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
-        Ok(Cow::Borrowed(&self.filename))
+        let url = match &self.url {
+            FileLocation::RelativeUrl(_, url) => url,
+            FileLocation::AbsoluteUrl(url) => url.as_ref(),
+        };
+
+        // Take the last segment.
+        let last = url
+            .split('/')
+            .last()
+            .ok_or_else(|| Error::MissingUrlSegments(url.to_string()))?;
+
+        // Strip any query or fragment.
+        let last = last.split_once(['#', '?'])
+            .map(|(path, _)| path)
+            .unwrap_or(last);
+
+        // Decode the filename, which may be percent-encoded.
+        let filename = urlencoding::decode(last)?;
+
+        Ok(filename)
     }
 
     fn size(&self) -> Option<u64> {
         self.size
+    }
+}
+
+impl RemoteSource for FileLocation {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        let url = match self {
+            Self::RelativeUrl(_, url) => url,
+            Self::AbsoluteUrl(url) => url.as_ref(),
+        };
+
+        // Take the last segment.
+        let last = url
+            .split('/')
+            .last()
+            .ok_or_else(|| Error::MissingUrlSegments(self.to_string()))?;
+
+        // Strip any query or fragment.
+        let last = last.split_once(['#', '?'])
+            .map(|(path, _)| path)
+            .unwrap_or(last);
+
+        // Decode the filename, which may be percent-encoded.
+        let filename = urlencoding::decode(last)?;
+
+        Ok(filename)
+    }
+
+    fn size(&self) -> Option<u64> {
+        None
     }
 }
 
@@ -781,7 +829,7 @@ impl RemoteSource for Url {
         // Identify the last segment of the URL as the filename.
         let path_segments = self
             .path_segments()
-            .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
+            .ok_or_else(|| Error::MissingUrlSegments(self.to_string()))?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
         let last = path_segments.last().expect("path segments is non-empty");
@@ -796,20 +844,40 @@ impl RemoteSource for Url {
         None
     }
 }
+//
+// impl RemoteSource for UrlString {
+//     fn filename(&self) -> Result<Cow<'_, str>, Error> {
+//         // Take the last segment.
+//         let last = self
+//             .base_str()
+//             .split('/')
+//             .last()
+//             .ok_or_else(|| Error::MissingUrlSegments(self.to_string()))?;
+//
+//         // Strip any query or fragment.
+//         let last = last.split_once(['#', '?'])
+//             .map(|(path, _)| path)
+//             .unwrap_or(last);
+//
+//         // Decode the filename, which may be percent-encoded.
+//         let filename = urlencoding::decode(last)?;
+//
+//         Ok(filename)
+//     }
+//
+//     fn size(&self) -> Option<u64> {
+//         None
+//     }
+// }
 
-impl RemoteSource for UrlString {
+impl RemoteSource for PathBuf {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
-        // Take the last segment, stripping any query or fragment.
+        // Take the last segment.
         let last = self
-            .base_str()
-            .split('/')
-            .last()
-            .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
+            .file_name()
+            .ok_or_else(|| Error::MissingPathSegments(self.clone()))?;
 
-        // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(last)?;
-
-        Ok(filename)
+        Ok(last.to_string_lossy())
     }
 
     fn size(&self) -> Option<u64> {

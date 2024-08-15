@@ -6,7 +6,7 @@ use tracing::{debug, info_span, warn, Instrument};
 use url::Url;
 
 use distribution_filename::DistFilename;
-use distribution_types::{File, FileLocation, FlatIndexLocation, IndexUrl, UrlString};
+use distribution_types::{File, FileLocation, FlatIndexLocation, IndexUrl, RemoteSource, UrlString};
 use uv_cache::{Cache, CacheBucket};
 
 use crate::cached_client::{CacheControl, CachedClientError};
@@ -204,7 +204,7 @@ impl<'a> FlatIndexClient<'a> {
                     .into_iter()
                     .filter_map(|file| {
                         Some((
-                            DistFilename::try_from_normalized_filename(&file.filename)?,
+                            DistFilename::try_from_normalized_filename(&file.filename()?)?,
                             file,
                             IndexUrl::from(flat_index.clone()),
                         ))
@@ -254,12 +254,19 @@ impl<'a> FlatIndexClient<'a> {
                 continue;
             };
 
+            let Some(filename) = DistFilename::try_from_normalized_filename(&filename) else {
+                debug!(
+                    "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
+                    entry.path().display()
+                );
+                continue;
+            };
+
             // SAFETY: The index path is itself constructed from a URL.
             let url = Url::from_file_path(entry.path()).unwrap();
 
             let file = File {
                 dist_info_metadata: false,
-                filename: filename.to_string(),
                 hashes: Vec::new(),
                 requires_python: None,
                 size: None,
@@ -268,13 +275,6 @@ impl<'a> FlatIndexClient<'a> {
                 yanked: None,
             };
 
-            let Some(filename) = DistFilename::try_from_normalized_filename(&filename) else {
-                debug!(
-                    "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
-                    entry.path().display()
-                );
-                continue;
-            };
             dists.push((filename, file, IndexUrl::from(flat_index.clone())));
         }
         Ok(FlatIndexEntries::from_entries(dists))

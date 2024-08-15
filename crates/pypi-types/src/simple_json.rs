@@ -27,7 +27,7 @@ fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>
     // response probably shouldn't have an impact on things downstream from
     // this. That is, if something depends on ordering, then it should
     // probably be the thing that does the sorting.)
-    files.sort_unstable_by(|f1, f2| f1.filename.cmp(&f2.filename));
+    files.sort_unstable_by(|f1, f2| f1.url.cmp(&f2.url));
     Ok(files)
 }
 
@@ -42,7 +42,6 @@ pub struct File {
     pub core_metadata: Option<CoreMetadata>,
     pub dist_info_metadata: Option<CoreMetadata>,
     pub data_dist_info_metadata: Option<CoreMetadata>,
-    pub filename: String,
     pub hashes: Hashes,
     /// There are a number of invalid specifiers on PyPI, so we first try to parse it into a
     /// [`VersionSpecifiers`] according to spec (PEP 440), then a [`LenientVersionSpecifiers`] with

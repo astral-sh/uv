@@ -54,7 +54,7 @@ impl SimpleHtml {
         // response probably shouldn't have an impact on things downstream from
         // this. That is, if something depends on ordering, then it should
         // probably be the thing that does the sorting.)
-        files.sort_unstable_by(|f1, f2| f1.filename.cmp(&f2.filename));
+        files.sort_unstable_by(|f1, f2| f1.url.cmp(&f2.url));
 
         Ok(Self { base, files })
     }
@@ -102,13 +102,6 @@ impl SimpleHtml {
             .split('/')
             .last()
             .ok_or_else(|| Error::MissingFilename(href.to_string()))?;
-
-        // Strip any query string from the filename.
-        let filename = filename.split('?').next().unwrap_or(filename);
-
-        // Unquote the filename.
-        let filename = urlencoding::decode(filename)
-            .map_err(|_| Error::UnsupportedFilename(filename.to_string()))?;
 
         // Extract the `requires-python` value, which should be set on the
         // `data-requires-python` attribute.
@@ -159,7 +152,6 @@ impl SimpleHtml {
             yanked,
             requires_python,
             hashes,
-            filename: filename.to_string(),
             url: decoded.to_string(),
             size: None,
             upload_time: None,

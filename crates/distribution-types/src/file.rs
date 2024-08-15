@@ -28,7 +28,6 @@ pub enum FileConversionError {
 #[archive_attr(derive(Debug))]
 pub struct File {
     pub dist_info_metadata: bool,
-    pub filename: String,
     pub hashes: Vec<HashDigest>,
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<u64>,
@@ -51,7 +50,6 @@ impl File {
                 .or(file.dist_info_metadata.as_ref())
                 .or(file.data_dist_info_metadata.as_ref())
                 .is_some_and(CoreMetadata::is_available),
-            filename: file.filename,
             hashes: file.hashes.into_digests(),
             requires_python: file
                 .requires_python

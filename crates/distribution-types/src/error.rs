@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use url::Url;
 
 use uv_normalize::PackageName;
@@ -14,7 +15,10 @@ pub enum Error {
     WheelFilename(#[from] distribution_filename::WheelFilenameError),
 
     #[error("Could not extract path segments from URL: {0}")]
-    MissingPathSegments(String),
+    MissingUrlSegments(String),
+
+    #[error("Could not extract path segments from path: {0}")]
+    MissingPathSegments(PathBuf),
 
     #[error("Distribution not found at: {0}")]
     NotFound(Url),
