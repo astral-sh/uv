@@ -320,8 +320,8 @@ fn run_pep723_script() -> Result<()> {
     Reading inline script metadata from: main.py
     "###);
 
-    // Running a script with `--no-project` should warn.
-    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("--no-project").arg("main.py"), @r###"
+    // Running a script with `--locked` should warn.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("--locked").arg("main.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -329,7 +329,7 @@ fn run_pep723_script() -> Result<()> {
 
     ----- stderr -----
     Reading inline script metadata from: main.py
-    warning: `--no-project` is a no-op for Python scripts with inline metadata, which always run in isolation
+    warning: `--locked` is a no-op for Python scripts with inline metadata, which always run in isolation
     "###);
 
     // If the script can't be resolved, we should reference the script.

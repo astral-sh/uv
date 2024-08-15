@@ -224,16 +224,16 @@ pub(crate) async fn run(
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
+        if no_project {
+            debug!(
+                "`--no-project` is a no-op for Python scripts with inline metadata; ignoring..."
+            );
+        }
         if !extras.is_empty() {
             warn_user_once!("Extras are not supported for Python scripts with inline metadata");
         }
         if !dev {
             warn_user_once!("`--no-dev` is not supported for Python scripts with inline metadata");
-        }
-        if no_project {
-            warn_user_once!(
-                "`--no-project` is a no-op for Python scripts with inline metadata, which always run in isolation"
-            );
         }
         if package.is_some() {
             warn_user_once!(
@@ -279,7 +279,7 @@ pub(crate) async fn run(
         let project = if no_project {
             // If the user runs with `--no-project` and we can't find a project, warn.
             if project.is_none() {
-                warn_user_once!("`--no-project` was provided, but no project was found");
+                debug!("`--no-project` was provided, but no project was found; ignoring...");
             }
 
             // If the user ran with `--no-project` and provided a project-only setting, warn.
