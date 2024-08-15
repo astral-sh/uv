@@ -2143,7 +2143,7 @@ pub struct RunArgs {
     #[arg(long, value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
-    /// Run the tool in an isolated virtual environment.
+    /// Run the command in an isolated virtual environment.
     ///
     /// Usually, the project environment is reused for performance. This option
     /// forces a fresh environment to be used for the project, enforcing strict

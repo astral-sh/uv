@@ -147,7 +147,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--extra-index-url</code> flag.</p>
 
-</dd><dt><code>--isolated</code></dt><dd><p>Run the tool in an isolated virtual environment.</p>
+</dd><dt><code>--isolated</code></dt><dd><p>Run the command in an isolated virtual environment.</p>
 
 <p>Usually, the project environment is reused for performance. This option forces a fresh environment to be used for the project, enforcing strict isolation between dependencies and declaration of requirements.</p>
 
