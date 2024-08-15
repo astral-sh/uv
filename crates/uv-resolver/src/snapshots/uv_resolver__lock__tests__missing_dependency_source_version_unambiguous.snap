@@ -50,6 +50,10 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
+                metadata: PackageMetadata {
+                    requires_dist: [],
+                    requires_dev: {},
+                },
             },
             Package {
                 id: PackageId {
@@ -104,6 +108,10 @@ Ok(
                 ],
                 optional_dependencies: {},
                 dev_dependencies: {},
+                metadata: PackageMetadata {
+                    requires_dist: [],
+                    requires_dev: {},
+                },
             },
         ],
         by_id: {
@@ -129,6 +137,11 @@ Ok(
                     ),
                 ),
             }: 1,
+        },
+        manifest: ResolverManifest {
+            members: [],
+            constraints: [],
+            overrides: [],
         },
     },
 )

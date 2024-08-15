@@ -29,6 +29,10 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
+                metadata: PackageMetadata {
+                    requires_dist: [],
+                    requires_dev: {},
+                },
             },
         ],
         by_id: {
@@ -41,6 +45,11 @@ Ok(
                     "path/to/dir",
                 ),
             }: 0,
+        },
+        manifest: ResolverManifest {
+            members: [],
+            constraints: [],
+            overrides: [],
         },
     },
 )

@@ -103,6 +103,9 @@ fn add_registry() -> Result<()> {
             { name = "anyio" },
         ]
 
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+
         [[package]]
         name = "sniffio"
         version = "1.3.1"
@@ -260,6 +263,12 @@ fn add_git() -> Result<()> {
             { name = "uv-public-pypackage" },
         ]
 
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio", specifier = "==3.7.0" },
+            { name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" },
+        ]
+
         [[package]]
         name = "sniffio"
         version = "1.3.1"
@@ -363,6 +372,9 @@ fn add_git_private_source() -> Result<()> {
             { name = "uv-private-pypackage" },
         ]
 
+        [package.metadata]
+        requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
+
         [[package]]
         name = "uv-private-pypackage"
         version = "0.1.0"
@@ -458,6 +470,9 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = [
             { name = "uv-private-pypackage" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
 
         [[package]]
         name = "uv-private-pypackage"
@@ -659,6 +674,12 @@ fn add_git_raw() -> Result<()> {
             { name = "uv-public-pypackage" },
         ]
 
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio", specifier = "==3.7.0" },
+            { name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1" },
+        ]
+
         [[package]]
         name = "sniffio"
         version = "1.3.1"
@@ -853,6 +874,9 @@ fn add_unnamed() -> Result<()> {
             { name = "uv-public-pypackage" },
         ]
 
+        [package.metadata]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
+
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
@@ -971,6 +995,11 @@ fn add_remove_dev() -> Result<()> {
         dev = [
             { name = "anyio" },
         ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
         name = "sniffio"
@@ -1176,6 +1205,9 @@ fn add_remove_optional() -> Result<()> {
         io = [
             { name = "anyio" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = "==3.7.0" }]
 
         [[package]]
         name = "sniffio"
@@ -1390,6 +1422,12 @@ fn add_remove_workspace() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
+        [manifest]
+        members = [
+            "child1",
+            "child2",
+        ]
+
         [[package]]
         name = "child1"
         version = "0.1.0"
@@ -1397,6 +1435,9 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = [
             { name = "child2" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child2", editable = "child2" }]
 
         [[package]]
         name = "child2"
@@ -1464,6 +1505,12 @@ fn add_remove_workspace() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
+        members = [
+            "child1",
+            "child2",
+        ]
 
         [[package]]
         name = "child1"
@@ -1576,6 +1623,12 @@ fn add_workspace_editable() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
+        [manifest]
+        members = [
+            "child1",
+            "child2",
+        ]
+
         [[package]]
         name = "child1"
         version = "0.1.0"
@@ -1583,6 +1636,9 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = [
             { name = "child2" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child2", editable = "child2" }]
 
         [[package]]
         name = "child2"
@@ -1837,6 +1893,9 @@ fn update() -> Result<()> {
             { name = "requests", extra = ["socks", "use-chardet-on-py3"] },
         ]
 
+        [package.metadata]
+        requires-dist = [{ name = "requests", extras = ["security", "socks", "use-chardet-on-py3"], marker = "python_version > '3.7'", git = "https://github.com/psf/requests?tag=v2.32.3" }]
+
         [[package]]
         name = "pysocks"
         version = "1.7.1"
@@ -1863,6 +1922,16 @@ fn update() -> Result<()> {
         ]
         use-chardet-on-py3 = [
             { name = "chardet" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "charset-normalizer", specifier = "<4,>=2" },
+            { name = "idna", specifier = "<4,>=2.5" },
+            { name = "urllib3", specifier = "<3,>=1.21.1" },
+            { name = "certifi", specifier = ">=2017.4.17" },
+            { name = "pysocks", marker = "extra == 'socks'", specifier = "!=1.5.7,>=1.5.6" },
+            { name = "chardet", marker = "extra == 'use-chardet-on-py3'", specifier = "<6,>=3.0.2" },
         ]
 
         [[package]]
@@ -2064,6 +2133,9 @@ fn add_no_clean() -> Result<()> {
         dependencies = [
             { name = "iniconfig" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "###
         );
     });
@@ -2835,6 +2907,9 @@ fn add_lower_bound_optional() -> Result<()> {
             { name = "anyio" },
         ]
 
+        [package.metadata]
+        requires-dist = [{ name = "anyio", marker = "extra == 'io'" }]
+
         [[package]]
         name = "sniffio"
         version = "1.3.1"
@@ -2923,6 +2998,9 @@ fn add_lower_bound_local() -> Result<()> {
         dependencies = [
             { name = "local-simple-a" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "local-simple-a" }]
         "###
         );
     });

@@ -71,9 +71,24 @@ fn {{module_name}}() -> Result<()> {
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
+        .env_remove("UV_EXCLUDE_NEWER")
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
+    // by upgrading an irrelevant package.
+    // TODO(charlie): This should use `--locked`, but currently fails due to differences in
+    // URL fragments that are removed when writing to disk.
+    context
+        .lock()
+        .arg("--upgrade-package")
+        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -81,6 +96,8 @@ fn {{module_name}}() -> Result<()> {
         .success();
     let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     assert_eq!(lock2, lock);
+
+
     {{/expected.satisfiable}}
 
     Ok(())

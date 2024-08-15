@@ -1088,6 +1088,12 @@ fn workspace_inherit_sources() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
+        [manifest]
+        members = [
+            "leaf",
+            "workspace",
+        ]
+
         [[package]]
         name = "leaf"
         version = "0.1.0"
@@ -1095,6 +1101,9 @@ fn workspace_inherit_sources() -> Result<()> {
         dependencies = [
             { name = "library" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "library", editable = "../library" }]
 
         [[package]]
         name = "library"
@@ -1374,7 +1383,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: Failed to download and build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
+    error: Failed to build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
       Caused by: Failed to parse entry for: `anyio`
       Caused by: Package is not included as workspace package in `tool.uv.workspace`
     "###
