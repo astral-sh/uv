@@ -37,7 +37,18 @@ use crate::{
 /// // VersionSpecifiers derefs into a list of specifiers
 /// assert_eq!(version_specifiers.iter().position(|specifier| *specifier.operator() == Operator::LessThan), Some(1));
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    Clone,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 #[cfg_attr(feature = "pyo3", pyclass(sequence))]

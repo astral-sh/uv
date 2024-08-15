@@ -355,22 +355,22 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "msgspec", specifier = ">=0.18.4" },
-    { name = "twine", specifier = ">=4.0.2" },
-    { name = "hatchling", specifier = ">=1.20.0" },
     { name = "chevron-blue", specifier = ">=0.2.1" },
-    { name = "setuptools", specifier = ">=69.1.1" },
-    { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "pypiserver", marker = "extra == 'index'", specifier = ">=2.0.1" },
+    { name = "hatchling", specifier = ">=1.20.0" },
+    { name = "msgspec", specifier = ">=0.18.4" },
     { name = "packse", extras = ["index"], marker = "extra == 'serve'" },
+    { name = "pypiserver", marker = "extra == 'index'", specifier = ">=2.0.1" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
+    { name = "setuptools", specifier = ">=69.1.1" },
+    { name = "twine", specifier = ">=4.0.2" },
     { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "syrupy", specifier = ">=4.6.0" },
-    { name = "pytest", specifier = ">=7.4.3" },
     { name = "psutil", specifier = ">=5.9.7" },
+    { name = "pytest", specifier = ">=7.4.3" },
+    { name = "syrupy", specifier = ">=4.6.0" },
 ]
 
 [[package]]

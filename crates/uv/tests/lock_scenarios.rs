@@ -224,8 +224,8 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", specifier = ">=1" },
             { name = "package-a", specifier = "<2" },
+            { name = "package-a", specifier = ">=1" },
         ]
         "###
         );
@@ -3671,9 +3671,9 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
+            { name = "package-bar" },
             { name = "package-cleaver" },
             { name = "package-foo" },
-            { name = "package-bar" },
         ]
         "###
         );
@@ -3873,9 +3873,9 @@ fn preferences_dependent_forking() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
+            { name = "package-bar" },
             { name = "package-cleaver" },
             { name = "package-foo" },
-            { name = "package-bar" },
         ]
         "###
         );

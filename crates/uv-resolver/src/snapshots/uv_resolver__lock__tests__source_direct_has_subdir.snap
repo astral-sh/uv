@@ -37,7 +37,7 @@ Ok(
                 optional_dependencies: {},
                 dev_dependencies: {},
                 metadata: PackageMetadata {
-                    requires_dist: [],
+                    requires_dist: {},
                     requires_dev: {},
                 },
             },
@@ -61,9 +61,9 @@ Ok(
             }: 0,
         },
         manifest: ResolverManifest {
-            members: [],
-            constraints: [],
-            overrides: [],
+            members: {},
+            constraints: {},
+            overrides: {},
         },
     },
 )
