@@ -1520,7 +1520,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     );
 
                     if marker.is_false() {
-                        debug!("skipping {requirement} because of Requires-Python: {requires_python}");
+                        trace!("skipping {requirement} because of Requires-Python: {requires_python}");
                         return None;
                     }
 
@@ -1543,7 +1543,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // this fork (but will be part of another fork).
                 if let ResolverMarkers::Fork(markers) = markers {
                     if markers.is_disjoint(&requirement.marker) {
-                        debug!("skipping {requirement} because of context resolver markers {markers:?}");
+                        trace!("skipping {requirement} because of context resolver markers {markers:?}");
                         return None;
                     }
                 }
@@ -1591,7 +1591,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 // and the constraint is `requests ; python_version == '3.6'`, the
                                 // constraint should only apply when _both_ markers are true.
                                 if marker.is_false() {
-                                    debug!("skipping {constraint} because of Requires-Python: {requires_python}");
+                                    trace!("skipping {constraint} because of Requires-Python: {requires_python}");
                                     return None;
                                 }
 
@@ -1630,7 +1630,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             // this fork (but will be part of another fork).
                             if let ResolverMarkers::Fork(markers) = markers {
                                 if markers.is_disjoint(&constraint.marker) {
-                                    debug!("skipping {constraint} because of context resolver markers {markers:?}");
+                                    trace!("skipping {constraint} because of context resolver markers {markers:?}");
                                     return None;
                                 }
                             }
