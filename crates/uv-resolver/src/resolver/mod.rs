@@ -2738,7 +2738,7 @@ impl Forks {
                 continue;
             }
             for dep in deps {
-                debug!("Looking at dep: {dep:?}");
+                // We assume that the marker has already been Python-simplified.
                 let mut markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
                 if markers.is_false() {
                     // If the markers can never be satisfied, then we
