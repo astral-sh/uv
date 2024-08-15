@@ -8,9 +8,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_types::{
-    FlatIndexLocation, IndexLocations, IndexUrl, UnresolvedRequirementSpecification, UrlString,
-};
+use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
 use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
@@ -29,7 +27,7 @@ use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::NamedRequirementsResolver;
 use uv_resolver::{
     FlatIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
-    ResolverMarkers,
+    ResolverMarkers, SatisfiesResult,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -627,54 +625,80 @@ impl ValidatedLock {
         // However, iIf _no_ indexes were provided, we assume that the user wants to reuse the existing
         // distributions, even though a failure to reuse the lockfile will result in re-resolving
         // against PyPI by default.
-        if !index_locations.is_none() {
-            // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
-            let indexes = index_locations
-                .indexes()
-                .map(IndexUrl::redacted)
-                .chain(
-                    index_locations
-                        .flat_index()
-                        .map(FlatIndexLocation::redacted),
-                )
-                .map(UrlString::from)
-                .collect::<BTreeSet<_>>();
-
-            // Find any packages in the lockfile that reference a registry that is no longer included in
-            // the current configuration.
-            for package in lock.packages() {
-                let Some(index) = package.index() else {
-                    continue;
-                };
-                if !indexes.contains(index) {
-                    let _ = writeln!(
-                        printer.stderr(),
-                        "Ignoring existing lockfile due to removal of referenced registry: {index}"
-                    );
-
-                    // It's fine to prefer the existing versions, though.
-                    return Ok(Self::Preferable(lock));
-                }
-            }
-        }
+        let indexes = if index_locations.is_none() {
+            None
+        } else {
+            Some(index_locations)
+        };
 
         // Determine whether the lockfile satisfies the workspace requirements.
-        if lock
+        match lock
             .satisfies(
                 workspace,
                 members,
                 constraints,
                 overrides,
+                indexes,
                 interpreter.tags()?,
                 database,
             )
             .await?
         {
-            debug!("Existing `uv.lock` satisfies workspace requirements");
-            Ok(Self::Satisfies(lock))
-        } else {
-            debug!("Existing `uv.lock` does not satisfy workspace requirements; ignoring...");
-            Ok(Self::Preferable(lock))
+            SatisfiesResult::Satisfied => {
+                debug!("Existing `uv.lock` satisfies workspace requirements");
+                Ok(Self::Satisfies(lock))
+            }
+            SatisfiesResult::MismatchedMembers(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched members:\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedConstraints(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched constraints:\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedOverrides(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched overrides:\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingRoot(name) => {
+                debug!("Ignoring existing lockfile due to missing root package: `{name}`");
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingIndex(name, version, index) => {
+                debug!(
+                    "Ignoring existing lockfile due to missing index: `{name}` `{version}` from `{index}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingMetadata(name, version) => {
+                debug!(
+                    "Ignoring existing lockfile due to missing metadata for: `{name}=={version}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedRequiresDist(name, version, expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedDevDependencies(name, version, expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
         }
     }
 
@@ -699,7 +723,7 @@ impl ValidatedLock {
 }
 
 /// Write the lockfile to disk.
-pub(crate) async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> {
+async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> {
     let encoded = lock.to_toml()?;
     fs_err::tokio::write(workspace.install_path().join("uv.lock"), encoded).await?;
     Ok(())
@@ -708,7 +732,7 @@ pub(crate) async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), Pro
 /// Read the lockfile from the workspace.
 ///
 /// Returns `Ok(None)` if the lockfile does not exist.
-pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
+async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
     match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
         Ok(encoded) => match Lock::from_toml(&encoded) {
             Ok(lock) => Ok(Some(lock)),
