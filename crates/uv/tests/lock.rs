@@ -2518,93 +2518,6 @@ fn lock_preference() -> Result<()> {
 fn lock_git_sha() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Lock to a specific commit on `main`.
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979"]
-        "#,
-    )?;
-
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-
-        ----- stderr -----
-        warning: `uv lock` is experimental and may change without warning
-        Resolved 2 packages in [TIME]
-        "###);
-
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { editable = "." }
-        dependencies = [
-            { name = "uv-public-pypackage" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }]
-
-        [[package]]
-        name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
-        );
-    });
-
-    // Rewrite the lockfile, as if it were locked against `main`.
-    let lock = lock.replace("rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979", "rev=main");
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { editable = "." }
-        dependencies = [
-            { name = "uv-public-pypackage" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }]
-
-        [[package]]
-        name = "uv-public-pypackage"
-        version = "0.1.0"
-        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
-        );
-    });
-
-    fs_err::write(context.temp_dir.join("uv.lock"), lock)?;
-
     // Lock against `main`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2617,26 +2530,10 @@ fn lock_git_sha() -> Result<()> {
         "#,
     )?;
 
-    // Note that we do not use `deterministic!` here because the results depend on the existing lockfile.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
-    Resolved 2 packages in [TIME]
-    "###);
-
-    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
-
-    // The lockfile should resolve to `0dacfd662c64cb4ceb16e6cf65a157a8b715b979`, even though it's
-    // not the latest commit on `main`.
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
+    // Write the lockfile such that it's locked against `main`, but a specific commit that isn't
+    // the latest.
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str(r#"
         version = 1
         requires-python = ">=3.12"
 
@@ -2658,9 +2555,30 @@ fn lock_git_sha() -> Result<()> {
         name = "uv-public-pypackage"
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=main#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
-        "###
-        );
-    });
+    "#)?;
+
+    // Lock against `main`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@main"]
+        "#,
+    )?;
+
+    // The lockfile should be unchanged.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 2 packages in [TIME]
+    "###);
 
     // Relock with `--upgrade`.
     uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("uv-public-pypackage"), @r###"

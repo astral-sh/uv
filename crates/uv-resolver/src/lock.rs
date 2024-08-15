@@ -1808,8 +1808,10 @@ impl Source {
     ///
     /// We assume that registry sources are immutable. In other words, we expect that once a
     /// package-version is published to a registry, its metadata will not change.
+    ///
+    /// We also assume that Git sources are immutable, since a Git source encodes a specific commit.
     fn is_immutable(&self) -> bool {
-        matches!(self, Self::Registry(..))
+        matches!(self, Self::Registry(..) | Self::Git(_, _))
     }
 
     fn to_toml(&self, table: &mut Table) {
