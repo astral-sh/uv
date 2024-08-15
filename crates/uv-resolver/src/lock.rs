@@ -17,9 +17,10 @@ use cache_key::RepositoryUrl;
 use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist,
-    DistributionMetadata, FileLocation, GitSourceDist, HashPolicy, IndexUrl, Name, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Resolution, ResolvedDist, ToUrlError, UrlString,
+    DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
+    IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, ToUrlError,
+    UrlString,
 };
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
@@ -630,9 +631,10 @@ impl Lock {
         members: &[PackageName],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        indexes: Option<&IndexLocations>,
         tags: &Tags,
         database: &DistributionDatabase<'_, Context>,
-    ) -> Result<bool, LockError> {
+    ) -> Result<SatisfiesResult<'_>, LockError> {
         let mut queue: VecDeque<&Package> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
@@ -645,7 +647,7 @@ impl Lock {
                     "Mismatched members:\n  expected: {:?}\n  found: {:?}",
                     expected, actual
                 );
-                return Ok(false);
+                return Ok(SatisfiesResult::MismatchedMembers(expected, actual));
             }
         }
 
@@ -668,7 +670,7 @@ impl Lock {
                     "Mismatched constraints:\n  expected: {:?}\n  found: {:?}",
                     expected, actual
                 );
-                return Ok(false);
+                return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
         }
 
@@ -691,9 +693,19 @@ impl Lock {
                     "Mismatched overrides:\n  expected: {:?}\n  found: {:?}",
                     expected, actual
                 );
-                return Ok(false);
+                return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
             }
         }
+
+        // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
+        let indexes = indexes.map(|locations| {
+            locations
+                .indexes()
+                .map(IndexUrl::redacted)
+                .chain(locations.flat_index().map(FlatIndexLocation::redacted))
+                .map(UrlString::from)
+                .collect::<BTreeSet<_>>()
+        });
 
         // Add the workspace packages to the queue.
         for root_name in workspace.packages().keys() {
@@ -704,7 +716,7 @@ impl Lock {
             let Some(root) = root else {
                 // The package is not in the lockfile, so it can't be satisfied.
                 debug!("Workspace package `{root_name}` not found in lockfile");
-                return Ok(false);
+                return Ok(SatisfiesResult::MissingRoot(root_name.clone()));
             };
 
             // Add the base package.
@@ -712,6 +724,20 @@ impl Lock {
         }
 
         while let Some(package) = queue.pop_front() {
+            // If the lockfile references an index that was not provided, we can't validate it.
+            if let Source::Registry(index) = &package.id.source {
+                if indexes
+                    .as_ref()
+                    .is_some_and(|indexes| !indexes.contains(index))
+                {
+                    return Ok(SatisfiesResult::MissingIndex(
+                        &package.id.name,
+                        &package.id.version,
+                        index,
+                    ));
+                }
+            }
+
             // If the package is immutable, we don't need to validate it (or its dependencies).
             if package.id.source.is_immutable() {
                 continue;
@@ -725,7 +751,10 @@ impl Lock {
                 .await
             else {
                 debug!("Failed to get metadata for: {}", package.id);
-                return Ok(false);
+                return Ok(SatisfiesResult::MissingMetadata(
+                    &package.id.name,
+                    &package.id.version,
+                ));
             };
 
             // Validate the `requires-dist` metadata.
@@ -749,7 +778,12 @@ impl Lock {
                         "Mismatched `requires-dist` for {}:\n  expected: {:?}\n  found: {:?}",
                         package.id, expected, actual
                     );
-                    return Ok(false);
+                    return Ok(SatisfiesResult::MismatchedRequiresDist(
+                        &package.id.name,
+                        &package.id.version,
+                        expected,
+                        actual,
+                    ));
                 }
             }
 
@@ -790,7 +824,12 @@ impl Lock {
                         "Mismatched `requires-dev` for {}:\n  expected: {:?}\n  found: {:?}",
                         package.id, expected, actual
                     );
-                    return Ok(false);
+                    return Ok(SatisfiesResult::MismatchedDevDependencies(
+                        &package.id.name,
+                        &package.id.version,
+                        expected,
+                        actual,
+                    ));
                 }
             }
 
@@ -823,8 +862,41 @@ impl Lock {
             }
         }
 
-        Ok(true)
+        Ok(SatisfiesResult::Satisfied)
     }
+}
+
+/// The result of checking if a lockfile satisfies a set of requirements.
+#[derive(Debug)]
+pub enum SatisfiesResult<'lock> {
+    /// The lockfile satisfies the requirements.
+    Satisfied,
+    /// The lockfile uses a different set of workspace members.
+    MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
+    /// The lockfile uses a different set of constraints.
+    MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses a different set of overrides.
+    MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile is missing a workspace member.
+    MissingRoot(PackageName),
+    /// The lockfile referenced an index that was not provided
+    MissingIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
+    /// The resolver failed to generate metadata for a given package.
+    MissingMetadata(&'lock PackageName, &'lock Version),
+    /// A package in the lockfile contains different `requires-dist` metadata than expected.
+    MismatchedRequiresDist(
+        &'lock PackageName,
+        &'lock Version,
+        BTreeSet<Requirement>,
+        BTreeSet<Requirement>,
+    ),
+    /// A package in the lockfile contains different `dev-dependencies` metadata than expected.
+    MismatchedDevDependencies(
+        &'lock PackageName,
+        &'lock Version,
+        BTreeMap<GroupName, BTreeSet<Requirement>>,
+        BTreeMap<GroupName, BTreeSet<Requirement>>,
+    ),
 }
 
 /// We discard the lockfile if these options match.

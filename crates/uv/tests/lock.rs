@@ -8203,7 +8203,6 @@ fn lock_change_index() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-    Ignoring existing lockfile due to removal of referenced registry: https://pypi-proxy.fly.dev/basic-auth/simple
     Resolved 2 packages in [TIME]
     "###);
 
