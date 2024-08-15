@@ -493,7 +493,9 @@ impl VersionSpecifier {
     }
 
     /// Returns the version specifiers whose union represents the given range.
-    pub fn from_bounds(
+    ///
+    /// This function is not applicable to ranges involving pre-release versions.
+    pub fn from_release_only_bounds(
         bounds: (&Bound<Version>, &Bound<Version>),
     ) -> impl Iterator<Item = VersionSpecifier> {
         let (b1, b2) = match bounds {

@@ -75,7 +75,7 @@ fn collect_dnf(
 
                 for bounds in range.iter() {
                     let current = path.len();
-                    for specifier in VersionSpecifier::from_bounds(bounds) {
+                    for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
                         path.push(MarkerExpression::Version {
                             key: marker.key().clone(),
                             specifier,
