@@ -13,7 +13,9 @@ use uv_normalize::PackageName;
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::{PubGrubPackage, PubGrubReportFormatter, PubGrubSpecifierError};
+use crate::pubgrub::{
+    PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
+};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
 
@@ -221,6 +223,11 @@ impl std::fmt::Display for NoSolutionError {
         let mut tree = self.error.clone();
         collapse_unavailable_workspace_members(&mut tree);
 
+        if self.workspace_members.len() == 1 {
+            let project = self.workspace_members.iter().next().unwrap();
+            drop_root_dependency_on_project(&mut tree, project);
+        }
+
         let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
         write!(f, "{report}")?;
 
@@ -280,6 +287,62 @@ fn collapse_unavailable_workspace_members(
                 _ => {
                     collapse_unavailable_workspace_members(Arc::make_mut(&mut derived.cause1));
                     collapse_unavailable_workspace_members(Arc::make_mut(&mut derived.cause2));
+                }
+            }
+        }
+    }
+}
+
+/// Given a [`DerivationTree`], drop dependency incompatibilities from the root
+/// to the project.
+///
+/// Intended to effectively change the root to a workspace member in single project
+/// workspaces, avoiding a level of indirection like "And because your project
+/// requires your project, we can conclude that your projects's requirements are
+/// unsatisfiable."
+fn drop_root_dependency_on_project(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    project: &PackageName,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                // If one node is a dependency incompatibility...
+                (
+                    DerivationTree::External(External::FromDependencyOf(package, _, dependency, _)),
+                    ref mut other,
+                )
+                | (
+                    ref mut other,
+                    DerivationTree::External(External::FromDependencyOf(package, _, dependency, _)),
+                ) => {
+                    // And the parent is the root package...
+                    if !matches!(&**package, PubGrubPackageInner::Root(_)) {
+                        return;
+                    }
+
+                    // And the dependency is the project...
+                    let PubGrubPackageInner::Package { name, .. } = &**dependency else {
+                        return;
+                    };
+                    if name != project {
+                        return;
+                    }
+
+                    // Recursively collapse the other side of the tree
+                    drop_root_dependency_on_project(other, project);
+
+                    // Then, replace this node with the other tree
+                    *tree = other.clone();
+                }
+                // If not, just recurse
+                _ => {
+                    drop_root_dependency_on_project(Arc::make_mut(&mut derived.cause1), project);
+                    drop_root_dependency_on_project(Arc::make_mut(&mut derived.cause2), project);
                 }
             }
         }
