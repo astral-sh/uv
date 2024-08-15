@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir, SymlinkToFile};
+use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -736,25 +736,7 @@ impl TestContext {
     /// This panics (fails the current test) for any failure.
     pub fn copy_ecosystem_project(&self, name: &str) {
         let project_dir = PathBuf::from(format!("../../ecosystem/{name}"));
-        // Ideally I think we'd probably just do a recursive copy,
-        // but for now we just look for the specific files we want.
-        let required_files = ["pyproject.toml"];
-        for file_name in required_files {
-            let file_contents = fs_err::read_to_string(project_dir.join(file_name)).unwrap();
-            let test_file = self.temp_dir.child(file_name);
-            test_file.write_str(&file_contents).unwrap();
-        }
-
-        let optional_files = ["PKG-INFO"];
-        for file_name in optional_files {
-            let path = project_dir.join(file_name);
-            if !path.exists() {
-                continue;
-            }
-            let file_contents = fs_err::read_to_string(path).unwrap();
-            let test_file = self.temp_dir.child(file_name);
-            test_file.write_str(&file_contents).unwrap();
-        }
+        self.temp_dir.copy_from(project_dir, &["*"]).unwrap();
     }
 }
 
