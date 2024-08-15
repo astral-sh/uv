@@ -680,9 +680,9 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same root members.
         {
-            let expected = members;
+            let expected = members.iter().cloned().collect::<BTreeSet<_>>();
             let actual = &self.manifest.members;
-            if expected != actual {
+            if expected != *actual {
                 debug!(
                     "Mismatched members:\n  expected: {:?}\n  found: {:?}",
                     expected, actual
@@ -693,12 +693,12 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same constraints.
         {
-            let expected: Vec<_> = constraints
+            let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, workspace))
                 .collect();
-            let actual: Vec<_> = self
+            let actual: BTreeSet<_> = self
                 .manifest
                 .constraints
                 .iter()
@@ -716,12 +716,12 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same overrides.
         {
-            let expected: Vec<_> = overrides
+            let expected: BTreeSet<_> = overrides
                 .iter()
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, workspace))
                 .collect();
-            let actual: Vec<_> = self
+            let actual: BTreeSet<_> = self
                 .manifest
                 .overrides
                 .iter()
@@ -772,13 +772,13 @@ impl Lock {
 
             // Validate the `requires-dist` metadata.
             {
-                let expected: Vec<_> = archive
+                let expected: BTreeSet<_> = archive
                     .metadata
                     .requires_dist
                     .into_iter()
                     .map(|requirement| normalize_requirement(requirement, workspace))
                     .collect();
-                let actual: Vec<_> = package
+                let actual: BTreeSet<_> = package
                     .metadata
                     .requires_dist
                     .iter()
@@ -797,7 +797,7 @@ impl Lock {
 
             // Validate the `dev-dependencies` metadata.
             {
-                let expected: BTreeMap<GroupName, Vec<Requirement>> = archive
+                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = archive
                     .metadata
                     .dev_dependencies
                     .into_iter()
@@ -811,7 +811,7 @@ impl Lock {
                         )
                     })
                     .collect();
-                let actual: BTreeMap<GroupName, Vec<Requirement>> = package
+                let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
                     .metadata
                     .requires_dev
                     .iter()
@@ -888,25 +888,25 @@ struct ResolverOptions {
 pub struct ResolverManifest {
     /// The workspace members included in the lockfile.
     #[serde(default)]
-    members: Vec<PackageName>,
+    members: BTreeSet<PackageName>,
     /// The constraints provided to the resolver.
     #[serde(default)]
-    constraints: Vec<Requirement>,
+    constraints: BTreeSet<Requirement>,
     /// The overrides provided to the resolver.
     #[serde(default)]
-    overrides: Vec<Requirement>,
+    overrides: BTreeSet<Requirement>,
 }
 
 impl ResolverManifest {
     pub fn new(
-        members: Vec<PackageName>,
-        constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
+        members: impl IntoIterator<Item = PackageName>,
+        constraints: impl IntoIterator<Item = Requirement>,
+        overrides: impl IntoIterator<Item = Requirement>,
     ) -> Self {
         Self {
-            members,
-            constraints,
-            overrides,
+            members: members.into_iter().collect(),
+            constraints: constraints.into_iter().collect(),
+            overrides: overrides.into_iter().collect(),
         }
     }
 }
@@ -1010,14 +1010,24 @@ impl Package {
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist)?;
         let wheels = Wheel::from_annotated_dist(annotated_dist)?;
         let requires_dist = if id.source.is_immutable() {
-            vec![]
+            BTreeSet::default()
         } else {
-            annotated_dist.metadata.requires_dist.clone()
+            annotated_dist
+                .metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .collect()
         };
         let requires_dev = if id.source.is_immutable() {
             BTreeMap::default()
         } else {
-            annotated_dist.metadata.dev_dependencies.clone()
+            annotated_dist
+                .metadata
+                .dev_dependencies
+                .iter()
+                .map(|(k, v)| (k.clone(), v.iter().cloned().collect()))
+                .collect()
         };
         Ok(Package {
             id,
@@ -1029,7 +1039,6 @@ impl Package {
             dev_dependencies: BTreeMap::default(),
             metadata: PackageMetadata {
                 requires_dist,
-
                 requires_dev,
             },
         })
@@ -1511,9 +1520,9 @@ struct PackageWire {
 #[serde(rename_all = "kebab-case")]
 struct PackageMetadata {
     #[serde(default)]
-    requires_dist: Vec<Requirement>,
+    requires_dist: BTreeSet<Requirement>,
     #[serde(default)]
-    requires_dev: BTreeMap<GroupName, Vec<Requirement>>,
+    requires_dev: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
 impl PackageWire {

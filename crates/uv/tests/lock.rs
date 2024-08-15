@@ -854,24 +854,24 @@ fn lock_wheel_url() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "idna", specifier = ">=2.8" },
-            { name = "sniffio", specifier = ">=1.1" },
-            { name = "exceptiongroup", marker = "python_version < '3.11'", specifier = ">=1.0.2" },
-            { name = "typing-extensions", marker = "python_version < '3.11'", specifier = ">=4.1" },
-            { name = "packaging", marker = "extra == 'doc'" },
-            { name = "sphinx", marker = "extra == 'doc'", specifier = ">=7" },
-            { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
-            { name = "sphinx-autodoc-typehints", marker = "extra == 'doc'", specifier = ">=1.2.0" },
             { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
             { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
+            { name = "exceptiongroup", marker = "python_version < '3.11'", specifier = ">=1.0.2" },
             { name = "exceptiongroup", marker = "extra == 'test'", specifier = ">=1.2.0" },
             { name = "hypothesis", marker = "extra == 'test'", specifier = ">=4.0" },
+            { name = "idna", specifier = ">=2.8" },
+            { name = "packaging", marker = "extra == 'doc'" },
             { name = "psutil", marker = "extra == 'test'", specifier = ">=5.9" },
             { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0" },
             { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.6.1" },
-            { name = "trustme", marker = "extra == 'test'" },
-            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
+            { name = "sniffio", specifier = ">=1.1" },
+            { name = "sphinx", marker = "extra == 'doc'", specifier = ">=7" },
+            { name = "sphinx-autodoc-typehints", marker = "extra == 'doc'", specifier = ">=1.2.0" },
+            { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
+            { name = "trustme", marker = "extra == 'test'" },
+            { name = "typing-extensions", marker = "python_version < '3.11'", specifier = ">=4.1" },
+            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
         ]
 
         [[package]]
@@ -987,24 +987,24 @@ fn lock_sdist_url() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "idna", specifier = ">=2.8" },
-            { name = "sniffio", specifier = ">=1.1" },
-            { name = "exceptiongroup", marker = "python_version < '3.11'", specifier = ">=1.0.2" },
-            { name = "typing-extensions", marker = "python_version < '3.11'", specifier = ">=4.1" },
-            { name = "packaging", marker = "extra == 'doc'" },
-            { name = "sphinx", marker = "extra == 'doc'", specifier = ">=7" },
-            { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
-            { name = "sphinx-autodoc-typehints", marker = "extra == 'doc'", specifier = ">=1.2.0" },
             { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
             { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
+            { name = "exceptiongroup", marker = "python_version < '3.11'", specifier = ">=1.0.2" },
             { name = "exceptiongroup", marker = "extra == 'test'", specifier = ">=1.2.0" },
             { name = "hypothesis", marker = "extra == 'test'", specifier = ">=4.0" },
+            { name = "idna", specifier = ">=2.8" },
+            { name = "packaging", marker = "extra == 'doc'" },
             { name = "psutil", marker = "extra == 'test'", specifier = ">=5.9" },
             { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0" },
             { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.6.1" },
-            { name = "trustme", marker = "extra == 'test'" },
-            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
+            { name = "sniffio", specifier = ">=1.1" },
+            { name = "sphinx", marker = "extra == 'doc'", specifier = ">=7" },
+            { name = "sphinx-autodoc-typehints", marker = "extra == 'doc'", specifier = ">=1.2.0" },
+            { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
+            { name = "trustme", marker = "extra == 'test'" },
+            { name = "typing-extensions", marker = "python_version < '3.11'", specifier = ">=4.1" },
+            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
         ]
 
         [[package]]
@@ -2073,8 +2073,8 @@ fn lock_upgrade_log() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "markupsafe", specifier = "<2" },
             { name = "iniconfig" },
+            { name = "markupsafe", specifier = "<2" },
         ]
         "###
         );
@@ -3797,12 +3797,12 @@ fn lock_python_version_marker_complement() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "iniconfig", marker = "python_version >= '3.10'" },
-            { name = "iniconfig", marker = "python_version < '3.10'" },
-            { name = "attrs", marker = "python_version > '3.10'" },
             { name = "attrs", marker = "python_version <= '3.10'" },
-            { name = "typing-extensions", marker = "python_full_version > '3.10'" },
+            { name = "attrs", marker = "python_version > '3.10'" },
+            { name = "iniconfig", marker = "python_version < '3.10'" },
+            { name = "iniconfig", marker = "python_version >= '3.10'" },
             { name = "typing-extensions", marker = "python_full_version <= '3.10'" },
+            { name = "typing-extensions", marker = "python_full_version > '3.10'" },
         ]
 
         [[package]]
@@ -4332,8 +4332,8 @@ fn lock_cycles() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "testtools", specifier = "==2.3.0" },
             { name = "fixtures", specifier = "==3.0.0" },
+            { name = "testtools", specifier = "==2.3.0" },
         ]
 
         [[package]]
@@ -5176,8 +5176,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "[TEMP_DIR]/v1" },
             { name = "dependency", marker = "sys_platform != 'darwin'", directory = "[TEMP_DIR]/v2" },
+            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "[TEMP_DIR]/v1" },
         ]
 
         [[package]]
@@ -5450,8 +5450,8 @@ fn lock_dev_transitive() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "foo", directory = "../foo" },
             { name = "baz", editable = "baz" },
+            { name = "foo", directory = "../foo" },
             { name = "iniconfig", specifier = ">1" },
         ]
 
@@ -7803,8 +7803,8 @@ fn lock_mixed_extras() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "leaf1", editable = "packages/leaf1" },
-            { name = "workspace2", directory = "../workspace2" },
             { name = "typing-extensions", marker = "extra == 'async'", specifier = ">=4" },
+            { name = "workspace2", directory = "../workspace2" },
         ]
 
         [[package]]
@@ -7992,8 +7992,8 @@ fn lock_transitive_extra() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "leaf", editable = "packages/leaf" },
-            { name = "typing-extensions", marker = "extra == 'async'", specifier = ">=4" },
             { name = "leaf", extras = ["async"], marker = "extra == 'async'", editable = "packages/leaf" },
+            { name = "typing-extensions", marker = "extra == 'async'", specifier = ">=4" },
         ]
         "###
         );
@@ -9374,6 +9374,140 @@ fn lock_missing_metadata() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+/// Lock a `pyproject.toml`, reorder the dependencies, and ensure that the lockfile is _not_ updated
+/// on the next run.
+#[test]
+fn lock_reorder() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio", "iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "anyio" },
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio" },
+            { name = "iniconfig" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
+
+    // Reorder the dependencies.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig", "anyio"]
+        "#,
+    )?;
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 5 packages in [TIME]
+    "###);
 
     Ok(())
 }

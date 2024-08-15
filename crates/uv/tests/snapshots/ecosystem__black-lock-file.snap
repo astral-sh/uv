@@ -204,18 +204,18 @@ uvloop = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", marker = "implementation_name == 'pypy' and sys_platform == 'win32' and extra == 'd'", specifier = "!=3.9.0,>=3.7.4" },
+    { name = "aiohttp", marker = "(implementation_name != 'pypy' and extra == 'd') or (sys_platform != 'win32' and extra == 'd')", specifier = ">=3.7.4" },
     { name = "click", specifier = ">=8.0.0" },
+    { name = "colorama", marker = "extra == 'colorama'", specifier = ">=0.4.3" },
+    { name = "ipython", marker = "extra == 'jupyter'", specifier = ">=7.8.0" },
     { name = "mypy-extensions", specifier = ">=0.4.3" },
     { name = "packaging", specifier = ">=22.0" },
     { name = "pathspec", specifier = ">=0.9.0" },
     { name = "platformdirs", specifier = ">=2" },
+    { name = "tokenize-rt", marker = "extra == 'jupyter'", specifier = ">=3.2.0" },
     { name = "tomli", marker = "python_version < '3.11'", specifier = ">=1.1.0" },
     { name = "typing-extensions", marker = "python_version < '3.11'", specifier = ">=4.0.1" },
-    { name = "colorama", marker = "extra == 'colorama'", specifier = ">=0.4.3" },
-    { name = "aiohttp", marker = "implementation_name == 'pypy' and sys_platform == 'win32' and extra == 'd'", specifier = "!=3.9.0,>=3.7.4" },
-    { name = "aiohttp", marker = "(implementation_name != 'pypy' and extra == 'd') or (sys_platform != 'win32' and extra == 'd')", specifier = ">=3.7.4" },
-    { name = "ipython", marker = "extra == 'jupyter'", specifier = ">=7.8.0" },
-    { name = "tokenize-rt", marker = "extra == 'jupyter'", specifier = ">=3.2.0" },
     { name = "uvloop", marker = "extra == 'uvloop'", specifier = ">=0.15.2" },
 ]
 
