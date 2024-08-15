@@ -40,7 +40,7 @@ use crate::{ExcludeNewer, PrereleaseMode, RequiresPython, ResolutionGraph, Resol
 /// The current version of the lockfile format.
 const VERSION: u32 = 1;
 
-#[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     version: u32,

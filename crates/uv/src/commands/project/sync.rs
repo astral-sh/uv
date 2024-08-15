@@ -89,7 +89,7 @@ pub(crate) async fn sync(
     )
     .await
     {
-        Ok(lock) => lock,
+        Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -107,7 +107,7 @@ pub(crate) async fn sync(
     do_sync(
         &project,
         &venv,
-        &lock.lock,
+        &lock,
         &extras,
         dev,
         modifications,
