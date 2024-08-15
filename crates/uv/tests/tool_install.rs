@@ -2222,7 +2222,7 @@ fn tool_install_preserve_environment() {
     ----- stderr -----
     warning: `uv tool install` is experimental and may change without warning
     error: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
-    And because you require packaging==0.0.1, we can conclude that the requirements are unsatisfiable.
+    And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
     "###);
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.

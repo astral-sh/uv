@@ -921,6 +921,6 @@ fn tool_run_resolution_error() {
     ----- stderr -----
     warning: `uv tool run` is experimental and may change without warning
       × No solution found when resolving tool dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
 }

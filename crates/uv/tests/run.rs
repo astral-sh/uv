@@ -352,7 +352,7 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
     Reading inline script metadata from: main.py
       × No solution found when resolving script dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -539,7 +539,7 @@ fn run_with() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
       × No solution found when resolving `--with` dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     "###);
 
     Ok(())

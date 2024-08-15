@@ -357,8 +357,8 @@ impl PubGrubReportFormatter<'_> {
             }
         }
         match &**package {
-            PubGrubPackageInner::Root(Some(_)) => Some("the requirements".to_string()),
-            PubGrubPackageInner::Root(None) => Some("the requirements".to_string()),
+            PubGrubPackageInner::Root(Some(_)) => Some("your requirements".to_string()),
+            PubGrubPackageInner::Root(None) => Some("your requirements".to_string()),
             _ => None,
         }
     }
