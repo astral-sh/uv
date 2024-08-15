@@ -24,22 +24,22 @@ pub(crate) fn requires_python(tree: &MarkerTree) -> Option<RequiresPythonBound> 
                 }
             },
             MarkerTreeKind::String(marker) => {
-                for (_, tree) in marker.children() {
+                for (_, tree) in marker.edges() {
                     collect_python_markers(&tree, markers);
                 }
             }
             MarkerTreeKind::In(marker) => {
-                for (_, tree) in marker.children() {
+                for (_, tree) in marker.edges() {
                     collect_python_markers(&tree, markers);
                 }
             }
             MarkerTreeKind::Contains(marker) => {
-                for (_, tree) in marker.children() {
+                for (_, tree) in marker.edges() {
                     collect_python_markers(&tree, markers);
                 }
             }
             MarkerTreeKind::Extra(marker) => {
-                for (_, tree) in marker.children() {
+                for (_, tree) in marker.edges() {
                     collect_python_markers(&tree, markers);
                 }
             }

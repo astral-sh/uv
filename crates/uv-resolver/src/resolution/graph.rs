@@ -531,19 +531,19 @@ impl ResolutionGraph {
                 }
                 MarkerTreeKind::String(marker) => {
                     set.insert(MarkerParam::String(marker.key().clone()));
-                    for (_, tree) in marker.children() {
+                    for (_, tree) in marker.edges() {
                         add_marker_params_from_tree(&tree, set);
                     }
                 }
                 MarkerTreeKind::In(marker) => {
                     set.insert(MarkerParam::String(marker.key().clone()));
-                    for (_, tree) in marker.children() {
+                    for (_, tree) in marker.edges() {
                         add_marker_params_from_tree(&tree, set);
                     }
                 }
                 MarkerTreeKind::Contains(marker) => {
                     set.insert(MarkerParam::String(marker.key().clone()));
-                    for (_, tree) in marker.children() {
+                    for (_, tree) in marker.edges() {
                         add_marker_params_from_tree(&tree, set);
                     }
                 }
@@ -553,7 +553,7 @@ impl ResolutionGraph {
                 // user. We don't track those here, since we're only
                 // interested in which markers are used.
                 MarkerTreeKind::Extra(marker) => {
-                    for (_, tree) in marker.children() {
+                    for (_, tree) in marker.edges() {
                         add_marker_params_from_tree(&tree, set);
                     }
                 }

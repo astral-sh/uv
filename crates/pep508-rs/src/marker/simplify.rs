@@ -76,7 +76,7 @@ fn collect_dnf(
             }
         }
         MarkerTreeKind::String(marker) => {
-            for (tree, range) in collect_edges(marker.children()) {
+            for (tree, range) in collect_edges(marker.edges()) {
                 // Detect whether the range for this edge can be simplified as an inequality.
                 if let Some(excluded) = range_inequality(&range) {
                     let current = path.len();
@@ -109,7 +109,7 @@ fn collect_dnf(
             }
         }
         MarkerTreeKind::In(marker) => {
-            for (value, tree) in marker.children() {
+            for (value, tree) in marker.edges() {
                 let operator = if value {
                     MarkerOperator::In
                 } else {
@@ -128,7 +128,7 @@ fn collect_dnf(
             }
         }
         MarkerTreeKind::Contains(marker) => {
-            for (value, tree) in marker.children() {
+            for (value, tree) in marker.edges() {
                 let operator = if value {
                     MarkerOperator::Contains
                 } else {
@@ -147,7 +147,7 @@ fn collect_dnf(
             }
         }
         MarkerTreeKind::Extra(marker) => {
-            for (value, tree) in marker.children() {
+            for (value, tree) in marker.edges() {
                 let operator = if value {
                     ExtraOperator::Equal
                 } else {
@@ -267,7 +267,7 @@ fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
 }
 
 /// Merge any edges that lead to identical subtrees into a single range.
-fn collect_edges<'a, T>(
+pub(crate) fn collect_edges<'a, T>(
     map: impl ExactSizeIterator<Item = (&'a Range<T>, MarkerTree)>,
 ) -> IndexMap<MarkerTree, Range<T>, FxBuildHasher>
 where

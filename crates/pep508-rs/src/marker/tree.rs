@@ -812,7 +812,7 @@ impl MarkerTree {
                 }
             }
             MarkerTreeKind::String(marker) => {
-                for (range, tree) in marker.children() {
+                for (range, tree) in marker.edges() {
                     let l_string = env.get_string(marker.key());
 
                     if range.as_singleton().is_none() {
@@ -889,13 +889,13 @@ impl MarkerTree {
                 tree.evaluate_extras_and_python_version(extras, python_versions)
             }),
             MarkerTreeKind::String(marker) => marker
-                .children()
+                .edges()
                 .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
             MarkerTreeKind::In(marker) => marker
-                .children()
+                .edges()
                 .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
             MarkerTreeKind::Contains(marker) => marker
-                .children()
+                .edges()
                 .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
             MarkerTreeKind::Extra(marker) => marker
                 .edge(extras.contains(marker.name()))
@@ -913,15 +913,15 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
-            MarkerTreeKind::String(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras(extras)),
-            MarkerTreeKind::In(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras(extras)),
-            MarkerTreeKind::Contains(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras(extras)),
+            MarkerTreeKind::String(marker) => {
+                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
+            }
+            MarkerTreeKind::In(marker) => {
+                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
+            }
+            MarkerTreeKind::Contains(marker) => {
+                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
+            }
             MarkerTreeKind::Extra(marker) => marker
                 .edge(extras.contains(marker.name()))
                 .evaluate_extras(extras),
@@ -956,19 +956,19 @@ impl MarkerTree {
                 return;
             }
             MarkerTreeKind::In(marker) => {
-                for (_, tree) in marker.children() {
+                for (_, tree) in marker.edges() {
                     tree.report_deprecated_options(reporter);
                 }
                 return;
             }
             MarkerTreeKind::Contains(marker) => {
-                for (_, tree) in marker.children() {
+                for (_, tree) in marker.edges() {
                     tree.report_deprecated_options(reporter);
                 }
                 return;
             }
             MarkerTreeKind::Extra(marker) => {
-                for (_, tree) in marker.children() {
+                for (_, tree) in marker.edges() {
                     tree.report_deprecated_options(reporter);
                 }
                 return;
@@ -1019,7 +1019,7 @@ impl MarkerTree {
             _ => {}
         }
 
-        for (_, tree) in string_marker.children() {
+        for (_, tree) in string_marker.edges() {
             tree.report_deprecated_options(reporter);
         }
     }
@@ -1123,15 +1123,86 @@ impl MarkerTree {
 
 impl fmt::Debug for MarkerTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.is_true() {
-            return write!(f, "true");
+        self.fmt_indented(f, 0)
+    }
+}
+
+impl MarkerTree {
+    // Formats a [`MarkerTree`] as a graph.
+    fn fmt_indented(&self, f: &mut fmt::Formatter<'_>, level: usize) -> fmt::Result {
+        match self.kind() {
+            MarkerTreeKind::True => return write!(f, "true"),
+            MarkerTreeKind::False => return write!(f, "false"),
+            MarkerTreeKind::Version(kind) => {
+                for (tree, range) in simplify::collect_edges(kind.edges()) {
+                    writeln!(f)?;
+                    for _ in 0..level {
+                        write!(f, "  ")?;
+                    }
+
+                    write!(f, "{key}{range} -> ", key = kind.key())?;
+                    tree.fmt_indented(f, level + 1)?;
+                }
+            }
+            MarkerTreeKind::String(kind) => {
+                for (tree, range) in simplify::collect_edges(kind.edges()) {
+                    writeln!(f)?;
+                    for _ in 0..level {
+                        write!(f, "  ")?;
+                    }
+
+                    write!(f, "{key}{range} -> ", key = kind.key())?;
+                    tree.fmt_indented(f, level + 1)?;
+                }
+            }
+            MarkerTreeKind::In(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in {} -> ", kind.key(), kind.value())?;
+                kind.edge(true).fmt_indented(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} not in {} -> ", kind.key(), kind.value())?;
+                kind.edge(false).fmt_indented(f, level + 1)?;
+            }
+            MarkerTreeKind::Contains(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
+                kind.edge(true).fmt_indented(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
+                kind.edge(false).fmt_indented(f, level + 1)?;
+            }
+            MarkerTreeKind::Extra(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "extra == {} -> ", kind.name())?;
+                kind.edge(true).fmt_indented(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "extra == {} -> ", kind.name())?;
+                kind.edge(false).fmt_indented(f, level + 1)?;
+            }
         }
 
-        if self.is_false() {
-            return write!(f, "false");
-        }
-
-        write!(f, "{}", self.contents().unwrap())
+        Ok(())
     }
 }
 
@@ -1195,7 +1266,7 @@ impl StringMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Range<String>, MarkerTree)> {
+    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Range<String>, MarkerTree)> {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
@@ -1223,7 +1294,7 @@ impl InMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to the boolean evaluation of the expression.
-    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+    pub fn edges(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
         [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
     }
 
@@ -1258,7 +1329,7 @@ impl ContainsMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to the boolean evaluation of the expression.
-    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+    pub fn edges(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
         [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
     }
 
@@ -1287,7 +1358,7 @@ impl ExtraMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to the boolean evaluation of the expression.
-    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+    pub fn edges(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
         [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
     }
 
