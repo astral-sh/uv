@@ -36,7 +36,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{ProjectError, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{pip, project, ExitStatus, SharedState};
+use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -387,7 +387,7 @@ pub(crate) async fn run(
                 .await?
             };
 
-            let lock = match project::lock::do_safe_lock(
+            let result = match project::lock::do_safe_lock(
                 locked,
                 frozen,
                 project.workspace(),
@@ -407,8 +407,8 @@ pub(crate) async fn run(
             )
             .await
             {
-                Ok(lock) => lock,
-                Err(ProjectError::Operation(pip::operations::Error::Resolve(
+                Ok(result) => result,
+                Err(ProjectError::Operation(operations::Error::Resolve(
                     uv_resolver::ResolveError::NoSolution(err),
                 ))) => {
                     let report = miette::Report::msg(format!("{err}")).context(err.header());
@@ -421,7 +421,7 @@ pub(crate) async fn run(
             project::sync::do_sync(
                 &project,
                 &venv,
-                &lock.lock,
+                result.lock(),
                 &extras,
                 dev,
                 Modifications::Sufficient,

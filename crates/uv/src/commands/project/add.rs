@@ -441,7 +441,7 @@ pub(crate) async fn add(
     )
     .await
     {
-        Ok(lock) => lock,
+        Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
@@ -463,8 +463,8 @@ pub(crate) async fn add(
     if !raw_sources {
         // Extract the minimum-supported version for each dependency.
         let mut minimum_version =
-            FxHashMap::with_capacity_and_hasher(lock.lock.packages().len(), FxBuildHasher);
-        for dist in lock.lock.packages() {
+            FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
+        for dist in lock.packages() {
             let name = dist.name();
             let version = dist.version();
             match minimum_version.entry(name) {
@@ -563,7 +563,7 @@ pub(crate) async fn add(
     project::sync::do_sync(
         &project,
         &venv,
-        &lock.lock,
+        &lock,
         &extras,
         dev,
         Modifications::Sufficient,

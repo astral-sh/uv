@@ -128,19 +128,6 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -248,19 +235,6 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -382,19 +356,6 @@ fn fork_basic() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -743,19 +704,6 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -865,19 +813,6 @@ fn fork_upgrade() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -1040,19 +975,6 @@ fn fork_incomplete_markers() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -1182,19 +1104,6 @@ fn fork_marker_accrue() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -1447,19 +1356,6 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -1623,19 +1519,6 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -1812,19 +1695,6 @@ fn fork_marker_inherit_combined() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -1962,19 +1832,6 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -2142,19 +1999,6 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -2282,19 +2126,6 @@ fn fork_marker_inherit() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -2463,19 +2294,6 @@ fn fork_marker_limited_inherit() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -2614,19 +2432,6 @@ fn fork_marker_selection() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -2801,19 +2606,6 @@ fn fork_marker_track() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -2942,19 +2734,6 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -3246,19 +3025,6 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -3494,19 +3260,6 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -3941,19 +3694,6 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -4156,19 +3896,6 @@ fn preferences_dependent_forking() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -4352,19 +4079,6 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -4450,19 +4164,6 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -4542,19 +4243,6 @@ fn fork_requires_python_full() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
@@ -4662,19 +4350,6 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         .assert()
         .success();
 
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
     Ok(())
 }
 
@@ -4751,19 +4426,6 @@ fn fork_requires_python() -> Result<()> {
     context
         .lock()
         .arg("--locked")
-        .env_remove("UV_EXCLUDE_NEWER")
-        .arg("--index-url")
-        .arg(packse_index_url())
-        .assert()
-        .success();
-
-    // Assert the idempotence of `uv lock` when resolving with the lockfile preferences,
-    // by upgrading an irrelevant package.
-    context
-        .lock()
-        .arg("--locked")
-        .arg("--upgrade-package")
-        .arg("packse")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
         .arg(packse_index_url())
