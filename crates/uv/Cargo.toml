@@ -93,6 +93,7 @@ insta = { version = "1.36.1", features = ["filters", "json"] }
 predicates = { version = "3.0.4" }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
+similar = { version = "2.6.0" }
 zip = { workspace = true }
 
 [package.metadata.cargo-shear]
