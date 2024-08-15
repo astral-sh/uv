@@ -2934,9 +2934,9 @@ fn compile_yanked_version_indirect() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of attrs are available:
-              attrs<=20.3.0
+              attrs<20.3.0
               attrs==21.1.0
-              attrs>=21.2.0
+              attrs>21.2.0
           and attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
           And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
     "###
