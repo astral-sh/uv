@@ -279,7 +279,7 @@ fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
 }
 
 /// Merge any edges that lead to identical subtrees into a single range.
-fn collect_edges<'a, T>(
+pub(crate) fn collect_edges<'a, T>(
     map: impl ExactSizeIterator<Item = (&'a Range<T>, MarkerTree)>,
 ) -> IndexMap<MarkerTree, Range<T>, FxBuildHasher>
 where

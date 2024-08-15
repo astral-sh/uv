@@ -1202,12 +1202,97 @@ impl fmt::Debug for MarkerTree {
         if self.is_true() {
             return write!(f, "true");
         }
-
         if self.is_false() {
             return write!(f, "false");
         }
-
         write!(f, "{}", self.contents().unwrap())
+    }
+}
+
+impl MarkerTree {
+    /// Formats a [`MarkerTree`] as a graph.
+    ///
+    /// This is useful for debugging when one wants to look at a
+    /// representation of a `MarkerTree` that is more faithful to its
+    /// internal representation.
+    pub fn debug_graph(&self) -> MarkerTreeDebugGraph<'_> {
+        MarkerTreeDebugGraph { marker: self }
+    }
+
+    fn fmt_graph(&self, f: &mut fmt::Formatter<'_>, level: usize) -> fmt::Result {
+        match self.kind() {
+            MarkerTreeKind::True => return write!(f, "true"),
+            MarkerTreeKind::False => return write!(f, "false"),
+            MarkerTreeKind::Version(kind) => {
+                for (tree, range) in simplify::collect_edges(kind.edges()) {
+                    writeln!(f)?;
+                    for _ in 0..level {
+                        write!(f, "  ")?;
+                    }
+
+                    write!(f, "{key}{range} -> ", key = kind.key())?;
+                    tree.fmt_graph(f, level + 1)?;
+                }
+            }
+            MarkerTreeKind::String(kind) => {
+                for (tree, range) in simplify::collect_edges(kind.children()) {
+                    writeln!(f)?;
+                    for _ in 0..level {
+                        write!(f, "  ")?;
+                    }
+
+                    write!(f, "{key}{range} -> ", key = kind.key())?;
+                    tree.fmt_graph(f, level + 1)?;
+                }
+            }
+            MarkerTreeKind::In(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in {} -> ", kind.key(), kind.value())?;
+                kind.edge(true).fmt_graph(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} not in {} -> ", kind.key(), kind.value())?;
+                kind.edge(false).fmt_graph(f, level + 1)?;
+            }
+            MarkerTreeKind::Contains(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
+                kind.edge(true).fmt_graph(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
+                kind.edge(false).fmt_graph(f, level + 1)?;
+            }
+            MarkerTreeKind::Extra(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "extra == {} -> ", kind.name())?;
+                kind.edge(true).fmt_graph(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "extra == {} -> ", kind.name())?;
+                kind.edge(false).fmt_graph(f, level + 1)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -1220,6 +1305,20 @@ impl PartialOrd for MarkerTree {
 impl Ord for MarkerTree {
     fn cmp(&self, other: &Self) -> Ordering {
         self.kind().cmp(&other.kind())
+    }
+}
+
+/// Formats a [`MarkerTree`] as a graph.
+///
+/// This type is created by the [`MarkerTree::debug_graph`] routine.
+#[derive(Clone)]
+pub struct MarkerTreeDebugGraph<'a> {
+    marker: &'a MarkerTree,
+}
+
+impl<'a> fmt::Debug for MarkerTreeDebugGraph<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.marker.fmt_graph(f, 0)
     }
 }
 
