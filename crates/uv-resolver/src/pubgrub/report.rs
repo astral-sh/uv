@@ -115,7 +115,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         };
                         format!(
                             "only {} is available",
-                            self.compatible_range(
+                            self.availability_range(
                                 package,
                                 &Range::from_range_bounds((lower, upper))
                             )
