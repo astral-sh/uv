@@ -817,7 +817,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
                 VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
             }
 
-            // `==3.7.*`, `!=3.7.*`, `!=3.7` already represent the equivalent `python_full_version`
+            // `==3.7.*`, `!=3.7.*`, `~=3.7` already represent the equivalent `python_full_version`
             // comparison.
             Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => specifier,
         })
