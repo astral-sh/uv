@@ -2119,10 +2119,7 @@ impl SourceDist {
             return Ok(None);
         }
 
-        let url = reg_dist
-            .file
-            .url
-            .to_url_string()
+        let url = normalize_file_location(&reg_dist.file.url)
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
         let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
@@ -2147,7 +2144,7 @@ impl SourceDist {
             return Err(kind.into());
         };
         Ok(SourceDist::Url {
-            url: UrlString::from(direct_dist.url.to_url()),
+            url: normalize_url(direct_dist.url.to_url()),
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
@@ -2177,7 +2174,7 @@ impl SourceDist {
         let mut table = InlineTable::new();
         match &self {
             SourceDist::Url { url, .. } => {
-                table.insert("url", Value::from(url.base()));
+                table.insert("url", Value::from(url.as_ref()));
             }
             SourceDist::Path { path, .. } => {
                 table.insert("path", Value::from(PortablePath::from(path).to_string()));
@@ -2377,10 +2374,7 @@ impl Wheel {
 
     fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
         let filename = wheel.filename.clone();
-        let url = wheel
-            .file
-            .url
-            .to_url_string()
+        let url = normalize_file_location(&wheel.file.url)
             .map_err(LockErrorKind::InvalidFileUrl)
             .map_err(LockError::from)?;
         let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
@@ -2396,7 +2390,7 @@ impl Wheel {
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
         Wheel {
             url: WheelWireSource::Url {
-                url: direct_dist.url.to_url().into(),
+                url: normalize_url(direct_dist.url.to_url()),
             },
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
@@ -2489,7 +2483,7 @@ impl Wheel {
         let mut table = InlineTable::new();
         match &self.url {
             WheelWireSource::Url { url } => {
-                table.insert("url", Value::from(url.base()));
+                table.insert("url", Value::from(url.as_ref()));
             }
             WheelWireSource::Filename { filename } => {
                 table.insert("filename", Value::from(filename.to_string()));
@@ -2668,6 +2662,20 @@ impl<'de> serde::Deserialize<'de> for Hash {
         let string = String::deserialize(d)?;
         string.parse().map_err(serde::de::Error::custom)
     }
+}
+
+/// Convert a [`FileLocation`] into a normalized [`UrlString`].
+fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
+    match location {
+        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.as_base_url()),
+        _ => Ok(normalize_url(location.to_url()?)),
+    }
+}
+
+/// Convert a [`Url`] into a normalized [`UrlString`].
+fn normalize_url(mut url: Url) -> UrlString {
+    url.set_fragment(None);
+    UrlString::from(url)
 }
 
 /// Normalize a [`Requirement`], which could come from a lockfile, a `pyproject.toml`, etc.
