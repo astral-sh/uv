@@ -3,7 +3,7 @@
 use anyhow::Result;
 use insta::assert_snapshot;
 
-use common::{deterministic_lock, TestContext};
+use common::TestContext;
 
 mod common;
 
@@ -96,23 +96,21 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
     let context = TestContext::new(python_version);
     context.copy_ecosystem_project(name);
 
-    deterministic_lock! { context =>
-        let mut cmd = context.lock();
-        cmd.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
-        let (snapshot, _) = common::run_and_format(
-            &mut cmd,
-            context.filters(),
-            name,
-            Some(common::WindowsFilters::Platform),
-        );
-        insta::assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
+    let mut cmd = context.lock();
+    cmd.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
+    let (snapshot, _) = common::run_and_format(
+        &mut cmd,
+        context.filters(),
+        name,
+        Some(common::WindowsFilters::Platform),
+    );
+    insta::assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
 
-        let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(format!("{name}-lock-file"), lock);
-        });
-    }
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(format!("{name}-lock-file"), lock);
+    });
     Ok(())
 }
