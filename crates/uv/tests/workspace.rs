@@ -1200,7 +1200,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because only httpx<=9999 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
+      ╰─▶ Because only httpx<9999 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );

@@ -83,14 +83,44 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     format!("there is no version of {package}{set}")
                 } else {
                     let complement = set.complement();
-                    let segments = complement.iter().count();
-                    // Simple case, there's a single range to report
-                    if segments == 1 {
+                    let segments: Vec<_> = complement.iter().collect();
+
+                    // A single segment
+                    if let [(lower, upper)] = segments.as_slice() {
+                        // If the bound is inclusive, and the version is _not_
+                        // available, change it to an exclusive bound.
+                        let lower = match lower {
+                            Bound::Included(version)
+                                if !self
+                                    .available_versions
+                                    .get(package)
+                                    .map(|versions| versions.contains(version))
+                                    .unwrap_or(true) =>
+                            {
+                                Bound::Excluded(version.clone())
+                            }
+                            _ => (*lower).clone(),
+                        };
+                        let upper = match upper {
+                            Bound::Included(version)
+                                if !self
+                                    .available_versions
+                                    .get(package)
+                                    .map(|versions| versions.contains(version))
+                                    .unwrap_or(true) =>
+                            {
+                                Bound::Excluded(version.clone())
+                            }
+                            _ => (*upper).clone(),
+                        };
                         format!(
                             "only {} is available",
-                            self.compatible_range(package, &complement)
+                            self.compatible_range(
+                                package,
+                                &Range::from_range_bounds((lower, upper))
+                            )
                         )
-                    // Complex case, there are multiple ranges
+                    // Multiple segments
                     } else {
                         format!(
                             "only the following versions of {} {}",
