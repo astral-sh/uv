@@ -893,9 +893,9 @@ fn fork_incomplete_markers() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "python_version < '3.10'",
-            "python_version >= '3.10' and python_version < '3.11'",
-            "python_version >= '3.11'",
+            "python_full_version < '3.10'",
+            "python_full_version == '3.10.*'",
+            "python_full_version >= '3.11'",
         ]
 
         [[package]]
@@ -903,7 +903,7 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         environment-markers = [
-            "python_version < '3.10'",
+            "python_full_version < '3.10'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-1.0.0.tar.gz", hash = "sha256:dd56de2e560b3f95c529c44cbdae55d9b1ada826ddd3e19d3ea45438224ad603" }
         wheels = [
@@ -915,7 +915,7 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         environment-markers = [
-            "python_version >= '3.11'",
+            "python_full_version >= '3.11'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-2.0.0.tar.gz", hash = "sha256:580f1454a172036c89f5cfbefe52f175b011806a61f243eb476526bcc186e0be" }
         wheels = [
@@ -927,7 +927,7 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-c", marker = "python_version == '3.10'" },
+            { name = "package-c", marker = "python_full_version < '3.11'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_b-1.0.0.tar.gz", hash = "sha256:c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1" }
         wheels = [
@@ -948,15 +948,15 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version < '3.10'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version >= '3.11'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_full_version < '3.10'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_full_version >= '3.11'" },
             { name = "package-b" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "python_version < '3.10'", specifier = "==1" },
-            { name = "package-a", marker = "python_version >= '3.11'", specifier = "==2" },
+            { name = "package-a", marker = "python_full_version < '3.10'", specifier = "==1" },
+            { name = "package-a", marker = "python_full_version >= '3.11'", specifier = "==2" },
             { name = "package-b" },
         ]
         "###
@@ -2978,9 +2978,9 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "python_version < '3.10'",
-            "python_version >= '3.10' and python_version < '3.11'",
-            "python_version >= '3.11'",
+            "python_full_version < '3.10'",
+            "python_full_version == '3.10.*'",
+            "python_full_version >= '3.11'",
         ]
 
         [[package]]
@@ -3002,9 +3002,9 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "python_version < '3.10'", specifier = ">=1.0.0" },
-            { name = "package-a", marker = "python_version >= '3.10'", specifier = ">=1.1.0" },
-            { name = "package-a", marker = "python_version >= '3.11'", specifier = ">=1.2.0" },
+            { name = "package-a", marker = "python_full_version < '3.10'", specifier = ">=1.0.0" },
+            { name = "package-a", marker = "python_full_version >= '3.10'", specifier = ">=1.1.0" },
+            { name = "package-a", marker = "python_full_version >= '3.11'", specifier = ">=1.2.0" },
         ]
         "###
         );
@@ -4326,11 +4326,11 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", marker = "python_version == '3.10'" },
+            { name = "package-a", marker = "python_full_version < '3.11'" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "package-a", marker = "python_version == '3.10'", specifier = "==1.0.0" }]
+        requires-dist = [{ name = "package-a", marker = "python_full_version == '3.10.*'", specifier = "==1.0.0" }]
         "###
         );
     });
@@ -4412,7 +4412,7 @@ fn fork_requires_python() -> Result<()> {
         source = { editable = "." }
 
         [package.metadata]
-        requires-dist = [{ name = "package-a", marker = "python_version == '3.9'", specifier = "==1.0.0" }]
+        requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9.*'", specifier = "==1.0.0" }]
         "###
         );
     });

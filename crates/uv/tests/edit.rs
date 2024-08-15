@@ -1770,7 +1770,7 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_version > '3.7'",
+            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_full_version >= '3.8'",
         ]
         "###
         );
@@ -1808,7 +1808,7 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_version > '3.7'",
+            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_full_version >= '3.8'",
         ]
 
         [tool.uv.sources]
@@ -1890,7 +1890,7 @@ fn update() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "requests", extras = ["security", "socks", "use-chardet-on-py3"], marker = "python_version > '3.7'", git = "https://github.com/psf/requests?tag=v2.32.3" }]
+        requires-dist = [{ name = "requests", extras = ["security", "socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" }]
 
         [[package]]
         name = "pysocks"

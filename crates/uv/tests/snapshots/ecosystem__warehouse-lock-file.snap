@@ -3,11 +3,11 @@ source: crates/uv/tests/ecosystem.rs
 expression: lock
 ---
 version = 1
-requires-python = ">=3.11, <3.12"
+requires-python = "==3.11.*"
 environment-markers = [
-    "python_version < '3.12'",
-    "python_version < '3.13'",
-    "python_version >= '3.13'",
+    "python_full_version < '3.12'",
+    "python_full_version < '3.13'",
+    "python_full_version >= '3.13'",
 ]
 
 [options]
@@ -194,7 +194,7 @@ dependencies = [
     { name = "annotated-types" },
     { name = "logfury" },
     { name = "requests" },
-    { name = "typing-extensions", marker = "python_version < '3.12'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/53/2b4ac6ef318444bde570c36219ff0c8cd2207fb2fd8183d88fdf4f0445ab/b2sdk-2.5.0.tar.gz", hash = "sha256:d7c20125e64508a730e56307d75284790079cdb88e63851fff820a09b24fb1d9", size = 203212 }
 wheels = [
@@ -321,7 +321,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore-stubs" },
     { name = "types-s3transfer" },
-    { name = "typing-extensions", marker = "python_version < '3.12'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6e/d6/da4a554a6436944cb47cfb84754e8a2e37b04e3ff6dfea3c4958e2eb93ed/boto3_stubs-1.34.156.tar.gz", hash = "sha256:c34220a00b6bd00a3cd326bc5d7e3296b7d1dab1a15660df6f8fba4ae307ff39", size = 88866 }
 wheels = [
@@ -3143,7 +3143,7 @@ name = "redis"
 version = "5.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "async-timeout", marker = "python_full_version < '3.11.[X]' and python_version < '3.12'" },
+    { name = "async-timeout", marker = "python_full_version < '3.11.[X]'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/48/10/defc227d65ea9c2ff5244645870859865cba34da7373477c8376629746ec/redis-5.0.8.tar.gz", hash = "sha256:0c5b10d387568dfe0698c6fad6615750c24170e548ca2deac10c649d463e9870", size = 4595651 }
 wheels = [
@@ -3643,7 +3643,7 @@ name = "sqlalchemy"
 version = "2.0.32"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "greenlet", marker = "(python_version < '3.13' and platform_machine == 'AMD64') or (python_version < '3.13' and platform_machine == 'WIN32') or (python_version < '3.13' and platform_machine == 'aarch64') or (python_version < '3.13' and platform_machine == 'amd64') or (python_version < '3.13' and platform_machine == 'ppc64le') or (python_version < '3.13' and platform_machine == 'win32') or (python_version < '3.13' and platform_machine == 'x86_64')" },
+    { name = "greenlet", marker = "(python_full_version < '3.13' and platform_machine == 'AMD64') or (python_full_version < '3.13' and platform_machine == 'WIN32') or (python_full_version < '3.13' and platform_machine == 'aarch64') or (python_full_version < '3.13' and platform_machine == 'amd64') or (python_full_version < '3.13' and platform_machine == 'ppc64le') or (python_full_version < '3.13' and platform_machine == 'win32') or (python_full_version < '3.13' and platform_machine == 'x86_64')" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/af/6f/967e987683908af816aa3072c1a6997ac9933cf38d66b0474fb03f253323/SQLAlchemy-2.0.32.tar.gz", hash = "sha256:c1b88cc8b02b6a5f0efb0345a03672d4c897dc7d92585176f88c67346f565ea8", size = 9546691 }

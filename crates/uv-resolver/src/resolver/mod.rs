@@ -1515,7 +1515,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // supported by the root, skip it.
                 let requirement = if let Some(requires_python) = python_requirement.target().and_then(|target| target.as_requires_python()).filter(|_| !requirement.marker.is_true()) {
                     let marker = requirement.marker.clone().simplify_python_versions(
-                        Range::from(requires_python.bound_major_minor().clone()),
                         Range::from(requires_python.bound().clone()),
                     );
 
@@ -1582,7 +1581,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             // supported by the root, skip it.
                             let constraint = if let Some(requires_python) = python_requirement.target().and_then(|target| target.as_requires_python()).filter(|_| !constraint.marker.is_true()) {
                                 let mut marker = constraint.marker.clone().simplify_python_versions(
-                                    Range::from(requires_python.bound_major_minor().clone()),
                                     Range::from(requires_python.bound().clone()),
                                 );
                                 marker.and(requirement.marker.clone());
@@ -2888,10 +2886,7 @@ fn simplify_python(marker: MarkerTree, python_requirement: &PythonRequirement) -
         .target()
         .and_then(|target| target.as_requires_python())
     {
-        marker.simplify_python_versions(
-            Range::from(requires_python.bound_major_minor().clone()),
-            Range::from(requires_python.bound().clone()),
-        )
+        marker.simplify_python_versions(Range::from(requires_python.bound().clone()))
     } else {
         marker
     }
