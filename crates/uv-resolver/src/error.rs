@@ -125,6 +125,7 @@ pub struct NoSolutionError {
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
     markers: ResolverMarkers,
+    workspace_members: BTreeSet<PackageName>,
 }
 
 impl NoSolutionError {
@@ -139,6 +140,7 @@ impl NoSolutionError {
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
+        workspace_members: BTreeSet<PackageName>,
     ) -> Self {
         Self {
             error,
@@ -150,6 +152,7 @@ impl NoSolutionError {
             incomplete_packages,
             fork_urls,
             markers,
+            workspace_members,
         }
     }
 
@@ -211,6 +214,7 @@ impl std::fmt::Display for NoSolutionError {
         let formatter = PubGrubReportFormatter {
             available_versions: &self.available_versions,
             python_requirement: &self.python_requirement,
+            workspace_members: &self.workspace_members,
         };
         let report = DefaultStringReporter::report_with_formatter(&self.error, &formatter);
         write!(f, "{report}")?;

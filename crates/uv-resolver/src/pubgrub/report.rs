@@ -30,6 +30,8 @@ pub(crate) struct PubGrubReportFormatter<'a> {
 
     /// The versions that were available for each package
     pub(crate) python_requirement: &'a PythonRequirement,
+
+    pub(crate) workspace_members: &'a BTreeSet<PackageName>,
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
