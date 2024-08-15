@@ -1331,6 +1331,124 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
     Ok(())
 }
 
+/// Tests error messages when a workspace member's dependencies conflict with
+/// another member's optional dependencies.
+#[test]
+#[cfg(feature = "pypi")]
+fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create two workspace members with incompatible pins
+    let foo = workspace.child("packages").child("foo");
+    foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        dependencies = ["anyio==4.1.0"]
+    "#})?;
+    foo.child("src/__init__.py").touch()?;
+    let bar = workspace.child("packages").child("bar");
+    bar.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+
+        [project.optional-dependencies]
+        some_extra = ["anyio==4.2.0"]
+    "#})?;
+    bar.child("src/__init__.py").touch()?;
+
+    // Resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only bar is available and bar depends on anyio==4.2.0, we can conclude that bar depend on anyio==4.2.0.
+          And because foo depends on anyio==4.1.0, we can conclude that foo and bar are incompatible.
+          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests error messages when a workspace member's dependencies conflict with
+/// another member's development dependencies.
+#[test]
+#[cfg(feature = "pypi")]
+fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create two workspace members with incompatible pins
+    let foo = workspace.child("packages").child("foo");
+    foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        dependencies = ["anyio==4.1.0"]
+    "#})?;
+    foo.child("src/__init__.py").touch()?;
+    let bar = workspace.child("packages").child("bar");
+    bar.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+
+        [tool.uv]
+        dev-dependencies = ["anyio==4.2.0"]
+    "#})?;
+    bar.child("src/__init__.py").touch()?;
+
+    // Resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because bar depends on bar and bar depends on anyio==4.2.0, we can conclude that bar depend on anyio==4.2.0.
+          And because foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
+          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Tests error messages when a workspace member's name shadows a dependency of
 /// another member.
 #[test]
