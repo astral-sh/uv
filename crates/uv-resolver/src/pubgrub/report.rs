@@ -83,19 +83,28 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     format!("there is no version of {package}{set}")
                 } else {
                     let complement = set.complement();
-                    let segments = complement.iter().count();
-                    // Simple case, there's a single range to report
-                    if segments == 1 {
+                    let range =
+                        // Note that sometimes we do not have a range of available versions, e.g.,
+                        // when a package is from a non-registry source. In that case, we cannot
+                        // perform further simplicifaction of the range.
+                        if let Some(available_versions) = self.available_versions.get(package) {
+                            update_availability_range(&complement, available_versions)
+                        } else {
+                            complement
+                        };
+                    if range.is_empty() {
+                        return format!("there are no versions of {package}");
+                    }
+                    if range.iter().count() == 1 {
                         format!(
                             "only {} is available",
-                            self.compatible_range(package, &complement)
+                            self.availability_range(package, &range)
                         )
-                    // Complex case, there are multiple ranges
                     } else {
                         format!(
                             "only the following versions of {} {}",
                             package,
-                            self.availability_range(package, &complement)
+                            self.availability_range(package, &range)
                         )
                     }
                 }
@@ -1064,6 +1073,94 @@ impl PackageRange<'_> {
             false
         }
     }
+}
+
+/// Create a range with improved segments for reporting the available versions for a package.
+fn update_availability_range(
+    range: &Range<Version>,
+    available_versions: &BTreeSet<Version>,
+) -> Range<Version> {
+    let mut new_range = Range::empty();
+
+    // Construct an available range to help guide simplification. Note this is not strictly correct,
+    // as the available range should have many holes in it. However, for this use-case it should be
+    // okay — we just may avoid simplifying some segments _inside_ the available range.
+    let (available_range, first_available, last_available) =
+        match (available_versions.first(), available_versions.last()) {
+            // At least one version is available
+            (Some(first), Some(last)) => {
+                let range = Range::<Version>::from_range_bounds((
+                    Bound::Included(first.clone()),
+                    Bound::Included(last.clone()),
+                ));
+                // If only one version is available, return this as the bound immediately
+                if first == last {
+                    return range;
+                }
+                (range, first, last)
+            }
+            // SAFETY: If there's only a single item, `first` and `last` should both
+            // return `Some`.
+            (Some(_), None) | (None, Some(_)) => unreachable!(),
+            // No versions are available; nothing to do
+            (None, None) => return Range::empty(),
+        };
+
+    for segment in range.iter() {
+        let (lower, upper) = segment;
+        let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
+
+        // Drop the segment if it's disjoint with the available range, e.g., if the segment is
+        // `foo>999`, and the the available versions are all `<10` it's useless to show.
+        if segment_range.is_disjoint(&available_range) {
+            continue;
+        }
+
+        // Replace the segment if it's captured by the available range, e.g., if the segment is
+        // `foo<1000` and the available versions are all `<10` we can simplify to `foo<10`.
+        if available_range.subset_of(&segment_range) {
+            // If the segment only has a lower or upper bound, only take the relevant part of the
+            // available range. This avoids replacing `foo<100` with `foo>1,<2`, instead using
+            // `foo<2` to avoid extra noise.
+            if matches!(lower, Bound::Unbounded) {
+                new_range = new_range.union(&Range::from_range_bounds((
+                    Bound::Unbounded,
+                    Bound::Included(last_available.clone()),
+                )));
+            } else if matches!(upper, Bound::Unbounded) {
+                new_range = new_range.union(&Range::from_range_bounds((
+                    Bound::Included(first_available.clone()),
+                    Bound::Unbounded,
+                )));
+            } else {
+                new_range = new_range.union(&available_range);
+            }
+            continue;
+        }
+
+        // If the bound is inclusive, and the version is _not_ available, change it to an exclusive
+        // bound to avoid confusion, e.g., if the segment is `foo<=10` and the available versions
+        // do not include `foo 10`, we should instead say `foo<10`.
+        let lower = match lower {
+            Bound::Included(version) if !available_versions.contains(version) => {
+                Bound::Excluded(version.clone())
+            }
+            _ => (*lower).clone(),
+        };
+        let upper = match upper {
+            Bound::Included(version) if !available_versions.contains(version) => {
+                Bound::Excluded(version.clone())
+            }
+            _ => (*upper).clone(),
+        };
+
+        // Note this repeated-union construction is not particularly efficient, but there's not
+        // better API exposed by PubGrub. Since we're just generating an error message, it's
+        // probably okay, but we should investigate a better upstream API.
+        new_range = new_range.union(&Range::from_range_bounds((lower, upper)));
+    }
+
+    new_range
 }
 
 impl std::fmt::Display for PackageRange<'_> {
