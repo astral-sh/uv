@@ -221,7 +221,7 @@ impl std::fmt::Display for NoSolutionError {
 
         // Transform the error tree for reporting
         let mut tree = self.error.clone();
-        collapse_unavailable_workspace_members(&mut tree);
+        collapse_no_versions_of_workspace_members(&mut tree, &self.workspace_members);
 
         if self.workspace_members.len() == 1 {
             let project = self.workspace_members.iter().next().unwrap();
@@ -248,10 +248,11 @@ impl std::fmt::Display for NoSolutionError {
     }
 }
 
-/// Given a [`DerivationTree`], collapse any [`UnavailablePackage::WorkspaceMember`] incompatibilities
+/// Given a [`DerivationTree`], collapse any `NoVersion` incompatibilities for workspace members
 /// to avoid saying things like "only <workspace-member>==0.1.0 is available".
-fn collapse_unavailable_workspace_members(
+fn collapse_no_versions_of_workspace_members(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    workspace_members: &BTreeSet<PackageName>,
 ) {
     match tree {
         DerivationTree::External(_) => {}
@@ -260,33 +261,36 @@ fn collapse_unavailable_workspace_members(
                 Arc::make_mut(&mut derived.cause1),
                 Arc::make_mut(&mut derived.cause2),
             ) {
-                // If one node is an unavailable workspace member...
-                (
-                    DerivationTree::External(External::Custom(
-                        _,
-                        _,
-                        UnavailableReason::Package(UnavailablePackage::WorkspaceMember),
-                    )),
-                    ref mut other,
-                )
-                | (
-                    ref mut other,
-                    DerivationTree::External(External::Custom(
-                        _,
-                        _,
-                        UnavailableReason::Package(UnavailablePackage::WorkspaceMember),
-                    )),
-                ) => {
-                    // First, recursively collapse the other side of the tree
-                    collapse_unavailable_workspace_members(other);
+                // If we have a node for a package with no versions...
+                (DerivationTree::External(External::NoVersions(package, _)), ref mut other)
+                | (ref mut other, DerivationTree::External(External::NoVersions(package, _))) => {
+                    // First, always recursively visit the other side of the tree
+                    collapse_no_versions_of_workspace_members(other, workspace_members);
 
-                    // Then, replace this node with the other tree
+                    // Then, if the package is a workspace member...
+                    let (PubGrubPackageInner::Package { name, .. }
+                    | PubGrubPackageInner::Extra { name, .. }
+                    | PubGrubPackageInner::Dev { name, .. }) = &**package
+                    else {
+                        return;
+                    };
+                    if !workspace_members.contains(name) {
+                        return;
+                    }
+
+                    // Replace this node with the other tree
                     *tree = other.clone();
                 }
                 // If not, just recurse
                 _ => {
-                    collapse_unavailable_workspace_members(Arc::make_mut(&mut derived.cause1));
-                    collapse_unavailable_workspace_members(Arc::make_mut(&mut derived.cause2));
+                    collapse_no_versions_of_workspace_members(
+                        Arc::make_mut(&mut derived.cause1),
+                        workspace_members,
+                    );
+                    collapse_no_versions_of_workspace_members(
+                        Arc::make_mut(&mut derived.cause2),
+                        workspace_members,
+                    );
                 }
             }
         }
