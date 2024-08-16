@@ -1,8 +1,8 @@
 use std::ffi::OsString;
+use std::fmt::Display;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::{borrow::Cow, fmt::Display};
 
 use anstream::eprint;
 use anyhow::{bail, Context};
@@ -12,9 +12,10 @@ use tokio::process::Command;
 use tracing::{debug, warn};
 
 use distribution_types::{Name, UnresolvedRequirementSpecification};
-use pep440_rs::Version;
-use pypi_types::Requirement;
-use uv_cache::Cache;
+use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep508_rs::MarkerTree;
+use pypi_types::{Requirement, RequirementSource};
+use uv_cache::{Cache, Refresh, Timestamp};
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode};
@@ -75,7 +76,7 @@ pub(crate) async fn run(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     if preview.is_disabled() {
@@ -84,7 +85,7 @@ pub(crate) async fn run(
 
     // treat empty command as `uv tool list`
     let Some(command) = command else {
-        return tool_list(false, PreviewMode::Enabled, cache, printer).await;
+        return tool_list(false, PreviewMode::Enabled, &cache, printer).await;
     };
 
     let (target, args) = command.split();
@@ -92,15 +93,18 @@ pub(crate) async fn run(
         return Err(anyhow::anyhow!("No tool command provided"));
     };
 
-    let (target, from) = if let Some(from) = from {
-        (Cow::Borrowed(target), Cow::Owned(from))
+    let target = Target::parse(target, from.as_deref())?;
+
+    // If the user passed, e.g., `ruff@latest`, refresh the cache.
+    let cache = if target.is_latest() {
+        cache.with_refresh(Refresh::All(Timestamp::now()))
     } else {
-        parse_target(target)?
+        cache
     };
 
     // Get or create a compatible environment in which to execute the tool.
     let result = get_or_create_environment(
-        &from,
+        &target,
         with,
         show_resolution,
         python.as_deref(),
@@ -112,7 +116,7 @@ pub(crate) async fn run(
         connectivity,
         concurrency,
         native_tls,
-        cache,
+        &cache,
         printer,
     )
     .await;
@@ -131,10 +135,10 @@ pub(crate) async fn run(
     };
 
     // TODO(zanieb): Determine the executable command via the package entry points
-    let executable = target;
+    let executable = target.executable();
 
     // Construct the command
-    let mut process = Command::new(executable.as_ref());
+    let mut process = Command::new(executable);
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -154,7 +158,7 @@ pub(crate) async fn run(
     let space = if args.is_empty() { "" } else { " " };
     debug!(
         "Running `{}{space}{}`",
-        executable.to_string_lossy(),
+        executable,
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
@@ -162,9 +166,8 @@ pub(crate) async fn run(
 
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
-
     warn_executable_not_provided_by_package(
-        &executable.to_string_lossy(),
+        executable,
         &from.name,
         &site_packages,
         invocation_source,
@@ -178,7 +181,7 @@ pub(crate) async fn run(
                     writeln!(
                         printer.stdout(),
                         "The executable `{}` was not found.",
-                        executable.to_string_lossy().cyan(),
+                        executable.cyan(),
                     )?;
                     if entrypoints.is_empty() {
                         warn_user!(
@@ -188,7 +191,7 @@ pub(crate) async fn run(
                     } else {
                         warn_user!(
                             "An executable named `{}` is not provided by package `{}`.",
-                            executable.to_string_lossy().cyan(),
+                            executable.cyan(),
                             from.name.red()
                         );
                         writeln!(
@@ -210,7 +213,7 @@ pub(crate) async fn run(
         }
         Err(err) => Err(err),
     }
-    .with_context(|| format!("Failed to spawn: `{}`", executable.to_string_lossy()))?;
+    .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
     // Ignore signals in the parent process, deferring them to the child. This is safe as long as
     // the command is the last thing that runs in this process; otherwise, we'd need to restore the
@@ -294,40 +297,76 @@ fn warn_executable_not_provided_by_package(
     }
 }
 
-/// Parse a target into a command name and a requirement.
-fn parse_target(target: &OsString) -> anyhow::Result<(Cow<OsString>, Cow<str>)> {
-    let Some(target_str) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
-    };
+#[derive(Debug, Clone)]
+enum Target<'a> {
+    /// e.g., `ruff`
+    Unspecified(&'a str),
+    /// e.g., `ruff@0.6.0`
+    Version(&'a str, Version),
+    /// e.g., `ruff@latest`
+    Latest(&'a str),
+    /// e.g., `--from ruff==0.6.0`
+    UserDefined(&'a str, &'a str),
+}
 
-    // e.g. uv, no special handling
-    let Some((name, version)) = target_str.split_once('@') else {
-        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
-    };
+impl<'a> Target<'a> {
+    /// Parse a target into a command name and a requirement.
+    fn parse(target: &'a OsString, from: Option<&'a str>) -> anyhow::Result<Self> {
+        let Some(target_str) = target.to_str() else {
+            return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+        };
 
-    // e.g. `uv@`, warn and treat the whole thing as the command
-    if version.is_empty() {
-        debug!("Ignoring empty version request in command");
-        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+        if let Some(from) = from {
+            return Ok(Self::UserDefined(target_str, from));
+        }
+
+        // e.g. `ruff`, no special handling
+        let Some((name, version)) = target_str.split_once('@') else {
+            return Ok(Self::Unspecified(target_str));
+        };
+
+        // e.g. `ruff@`, warn and treat the whole thing as the command
+        if version.is_empty() {
+            debug!("Ignoring empty version request in command");
+            return Ok(Self::Unspecified(target_str));
+        }
+
+        // e.g., ignore `git+https://github.com/astral-sh/ruff.git@main`
+        if PackageName::from_str(name).is_err() {
+            debug!("Ignoring non-package name `{name}` in command");
+            return Ok(Self::Unspecified(target_str));
+        }
+
+        match version {
+            // e.g., `ruff@latest`
+            "latest" => return Ok(Self::Latest(name)),
+            // e.g., `ruff@0.6.0`
+            version => {
+                if let Ok(version) = Version::from_str(version) {
+                    return Ok(Self::Version(name, version));
+                }
+            }
+        };
+
+        // e.g. `ruff@invalid`, warn and treat the whole thing as the command
+        debug!("Ignoring invalid version request `{version}` in command");
+        Ok(Self::Unspecified(target_str))
     }
 
-    // e.g. ignore `git+https://github.com/uv/uv.git@main`
-    if PackageName::from_str(name).is_err() {
-        debug!("Ignoring non-package name `{name}` in command");
-        return Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)));
+    /// Returns the name of the executable.
+    fn executable(&self) -> &str {
+        match self {
+            Self::Unspecified(name) => name,
+            Self::Version(name, _) => name,
+            Self::Latest(name) => name,
+            Self::UserDefined(name, _) => name,
+        }
     }
 
-    // e.g. `uv@0.1.0`, convert to `uv==0.1.0`
-    if let Ok(version) = Version::from_str(version) {
-        return Ok((
-            Cow::Owned(OsString::from(name)),
-            Cow::Owned(format!("{name}=={version}")),
-        ));
+    /// Returns `true` if the target is `latest`.
+    fn is_latest(&self) -> bool {
+        matches!(self, Self::Latest(_))
     }
-
-    // e.g. `uv@invalid`, warn and treat the whole thing as the command
-    debug!("Ignoring invalid version request `{version}` in command");
-    Ok((Cow::Borrowed(target), Cow::Borrowed(target_str)))
 }
 
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
@@ -335,7 +374,7 @@ fn parse_target(target: &OsString) -> anyhow::Result<(Cow<OsString>, Cow<str>)> 
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
 async fn get_or_create_environment(
-    from: &str,
+    target: &Target<'_>,
     with: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
@@ -374,9 +413,45 @@ async fn get_or_create_environment(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // Resolve the `from` requirement.
-    let from = {
-        resolve_names(
+    // Resolve the `--from` requirement.
+    let from = match target {
+        // Ex) `ruff`
+        Target::Unspecified(name) => Requirement {
+            name: PackageName::from_str(name)?,
+            extras: vec![],
+            marker: MarkerTree::default(),
+            source: RequirementSource::Registry {
+                specifier: VersionSpecifiers::empty(),
+                index: None,
+            },
+            origin: None,
+        },
+        // Ex) `ruff@0.6.0`
+        Target::Version(name, version) => Requirement {
+            name: PackageName::from_str(name)?,
+            extras: vec![],
+            marker: MarkerTree::default(),
+            source: RequirementSource::Registry {
+                specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                    version.clone(),
+                )),
+                index: None,
+            },
+            origin: None,
+        },
+        // Ex) `ruff@latest`
+        Target::Latest(name) => Requirement {
+            name: PackageName::from_str(name)?,
+            extras: vec![],
+            marker: MarkerTree::default(),
+            source: RequirementSource::Registry {
+                specifier: VersionSpecifiers::empty(),
+                index: None,
+            },
+            origin: None,
+        },
+        // Ex) `ruff>=0.6.0`
+        Target::UserDefined(_, from) => resolve_names(
             vec![RequirementsSpecification::parse_package(from)?],
             &interpreter,
             settings,
@@ -390,7 +465,7 @@ async fn get_or_create_environment(
         )
         .await?
         .pop()
-        .unwrap()
+        .unwrap(),
     };
 
     // Read the `--with` requirements.
@@ -424,7 +499,11 @@ async fn get_or_create_environment(
     };
 
     // Check if the tool is already installed in a compatible environment.
-    if !isolated && settings.reinstall.is_none() && settings.upgrade.is_none() {
+    if !isolated
+        && !target.is_latest()
+        && settings.reinstall.is_none()
+        && settings.upgrade.is_none()
+    {
         let installed_tools = InstalledTools::from_settings()?.init()?;
         let _lock = installed_tools.acquire_lock()?;
 

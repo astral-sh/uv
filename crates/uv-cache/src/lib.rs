@@ -1011,6 +1011,15 @@ impl Refresh {
         }
     }
 
+    /// Return the [`Timestamp`] associated with the refresh policy.
+    pub fn timestamp(&self) -> Timestamp {
+        match self {
+            Self::None(timestamp) => *timestamp,
+            Self::Packages(_, timestamp) => *timestamp,
+            Self::All(timestamp) => *timestamp,
+        }
+    }
+
     /// Returns `true` if no packages should be reinstalled.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None(_))
