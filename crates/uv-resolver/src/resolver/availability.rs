@@ -52,9 +52,7 @@ impl Display for UnavailableVersion {
             UnavailableVersion::InvalidMetadata => f.write_str("has invalid metadata"),
             UnavailableVersion::InconsistentMetadata => f.write_str("has inconsistent metadata"),
             UnavailableVersion::InvalidStructure => f.write_str("has an invalid package format"),
-            UnavailableVersion::Offline => f.write_str(
-                "network connectivity is disabled, but the metadata wasn't found in the cache",
-            ),
+            UnavailableVersion::Offline => f.write_str("needs to be downloaded from a registry"),
         }
     }
 }

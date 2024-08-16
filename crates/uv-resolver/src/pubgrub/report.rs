@@ -827,7 +827,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::Offline => {
                 write!(
                     f,
-                    "{}{} Packages were unavailable because the network was disabled",
+                    "{}{} Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.",
                     "hint".bold().cyan(),
                     ":".bold(),
                 )

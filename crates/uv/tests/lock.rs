@@ -8602,7 +8602,7 @@ fn lock_add_member() -> Result<()> {
       ╰─▶ Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###);
 
     // Re-run without `--locked`.
