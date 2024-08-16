@@ -8,6 +8,7 @@ use rustc_hash::FxHashMap;
 use distribution_types::{BuiltDist, IndexLocations, InstalledDist, SourceDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerTree;
+use tracing::trace;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
@@ -228,6 +229,13 @@ impl std::fmt::Display for NoSolutionError {
             drop_root_dependency_on_project(&mut tree, project);
         }
 
+        // Display the tree if enabled
+        if std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some()
+            || tracing::enabled!(tracing::Level::TRACE)
+        {
+            display_tree(&tree);
+        }
+
         let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
         write!(f, "{report}")?;
 
@@ -245,6 +253,56 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         Ok(())
+    }
+}
+
+#[allow(clippy::print_stderr)]
+fn display_tree(error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>) {
+    let mut lines = Vec::new();
+    display_tree_inner(error, &mut lines, 0);
+    lines.reverse();
+
+    if std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some() {
+        eprintln!("Resolver error derivation tree\n{}", lines.join("\n"));
+    } else {
+        trace!("Resolver error derivation tree\n{}", lines.join("\n"));
+    }
+}
+
+fn display_tree_inner(
+    error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    lines: &mut Vec<String>,
+    depth: usize,
+) {
+    match error {
+        DerivationTree::Derived(derived) => {
+            display_tree_inner(&derived.cause1, lines, depth + 1);
+            display_tree_inner(&derived.cause2, lines, depth + 1);
+        }
+        DerivationTree::External(external) => {
+            let prefix = "  ".repeat(depth).to_string();
+            match external {
+                External::FromDependencyOf(package, version, dependency, dependency_version) => {
+                    lines.push(format!(
+                        "{prefix}{package}{version} depends on {dependency}{dependency_version}"
+                    ));
+                }
+                External::Custom(package, versions, reason) => match reason {
+                    UnavailableReason::Package(_) => {
+                        lines.push(format!("{prefix}{package} {reason}"));
+                    }
+                    UnavailableReason::Version(_) => {
+                        lines.push(format!("{prefix}{package}{versions} {reason}"));
+                    }
+                },
+                External::NoVersions(package, versions) => {
+                    lines.push(format!("{prefix}no versions of {package}{versions}"));
+                }
+                External::NotRoot(package, versions) => {
+                    lines.push(format!("{prefix}not root {package}{versions}"));
+                }
+            }
+        }
     }
 }
 
