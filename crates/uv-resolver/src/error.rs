@@ -222,6 +222,13 @@ impl std::fmt::Display for NoSolutionError {
 
         // Transform the error tree for reporting
         let mut tree = self.error.clone();
+        let should_display_tree = std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some()
+            || tracing::enabled!(tracing::Level::TRACE);
+
+        if should_display_tree {
+            display_tree(&tree, "Resolver derivation tree before reduction");
+        }
+
         collapse_no_versions_of_workspace_members(&mut tree, &self.workspace_members);
 
         if self.workspace_members.len() == 1 {
@@ -229,11 +236,10 @@ impl std::fmt::Display for NoSolutionError {
             drop_root_dependency_on_project(&mut tree, project);
         }
 
-        // Display the tree if enabled
-        if std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some()
-            || tracing::enabled!(tracing::Level::TRACE)
-        {
-            display_tree(&tree);
+        collapse_unavailable_versions(&mut tree);
+
+        if should_display_tree {
+            display_tree(&tree, "Resolver derivation tree after reduction");
         }
 
         let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
@@ -257,15 +263,18 @@ impl std::fmt::Display for NoSolutionError {
 }
 
 #[allow(clippy::print_stderr)]
-fn display_tree(error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>) {
+fn display_tree(
+    error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    name: &str,
+) {
     let mut lines = Vec::new();
     display_tree_inner(error, &mut lines, 0);
     lines.reverse();
 
     if std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some() {
-        eprintln!("Resolver error derivation tree\n{}", lines.join("\n"));
+        eprintln!("{name}\n{}", lines.join("\n"));
     } else {
-        trace!("Resolver error derivation tree\n{}", lines.join("\n"));
+        trace!("{name}\n{}", lines.join("\n"));
     }
 }
 
@@ -349,6 +358,105 @@ fn collapse_no_versions_of_workspace_members(
                         Arc::make_mut(&mut derived.cause2),
                         workspace_members,
                     );
+                }
+            }
+        }
+    }
+}
+
+/// Given a [`DerivationTree`], collapse incompatibilities for versions of a package that are
+/// unavailable for the same reason to avoid repeating the same message for every unavailable
+/// version.
+fn collapse_unavailable_versions(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                // If we have a node for unavailable package versions
+                (
+                    DerivationTree::External(External::Custom(package, versions, reason)),
+                    ref mut other,
+                )
+                | (
+                    ref mut other,
+                    DerivationTree::External(External::Custom(package, versions, reason)),
+                ) => {
+                    // First, recursively collapse the other side of the tree
+                    collapse_unavailable_versions(other);
+
+                    // If it's not a derived tree, nothing to do.
+                    let DerivationTree::Derived(Derived {
+                        terms,
+                        shared_id,
+                        cause1,
+                        cause2,
+                    }) = other
+                    else {
+                        return;
+                    };
+
+                    // If the other tree has an unavailable package...
+                    match (&**cause1, &**cause2) {
+                        // Note the following cases are the same, but we need two matches to retain
+                        // the ordering of the causes
+                        (
+                            _,
+                            DerivationTree::External(External::Custom(
+                                other_package,
+                                other_versions,
+                                other_reason,
+                            )),
+                        ) => {
+                            // And the package and reason are the same...
+                            if package == other_package && reason == other_reason {
+                                // Collapse both into a new node, with a union of their ranges
+                                *tree = DerivationTree::Derived(Derived {
+                                    terms: terms.clone(),
+                                    shared_id: *shared_id,
+                                    cause1: cause1.clone(),
+                                    cause2: Arc::new(DerivationTree::External(External::Custom(
+                                        package.clone(),
+                                        versions.union(other_versions),
+                                        reason.clone(),
+                                    ))),
+                                });
+                            }
+                        }
+                        (
+                            DerivationTree::External(External::Custom(
+                                other_package,
+                                other_versions,
+                                other_reason,
+                            )),
+                            _,
+                        ) => {
+                            // And the package and reason are the same...
+                            if package == other_package && reason == other_reason {
+                                // Collapse both into a new node, with a union of their ranges
+                                *tree = DerivationTree::Derived(Derived {
+                                    terms: terms.clone(),
+                                    shared_id: *shared_id,
+                                    cause1: Arc::new(DerivationTree::External(External::Custom(
+                                        package.clone(),
+                                        versions.union(other_versions),
+                                        reason.clone(),
+                                    ))),
+                                    cause2: cause2.clone(),
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                // If not, just recurse
+                _ => {
+                    collapse_unavailable_versions(Arc::make_mut(&mut derived.cause1));
+                    collapse_unavailable_versions(Arc::make_mut(&mut derived.cause2));
                 }
             }
         }
