@@ -1810,7 +1810,7 @@ fn update() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "requests[security]==2.31.0",
-            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_version > '3.7'",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
 
         [tool.uv.sources]
@@ -1892,7 +1892,10 @@ fn update() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "requests", extras = ["security", "socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" }]
+        requires-dist = [
+            { name = "requests", extras = ["security"], git = "https://github.com/psf/requests?tag=v2.32.3" },
+            { name = "requests", extras = ["socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" },
+        ]
 
         [[package]]
         name = "pysocks"
@@ -2033,12 +2036,14 @@ fn update_marker() -> Result<()> {
 
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
-    Resolved 8 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved 7 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
+     - urllib3==2.2.1
+     + urllib3==1.26.18
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -2054,8 +2059,8 @@ fn update_marker() -> Result<()> {
         requires-python = ">=3.8"
         dependencies = [
             "requests>=2.30; python_version >= '3.11'",
-            "requests>=2.0,<2.29 ; python_version < '3.11'",
-            "requests>=2.31 ; python_version > '3.11' and sys_platform == 'win32'",
+            "requests>=2.0,<2.29 ; python_full_version < '3.11'",
+            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
         ]
         "###
         );
@@ -2078,7 +2083,7 @@ fn update_marker() -> Result<()> {
      - project==0.1.0 (from file://[TEMP_DIR]/)
      + project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
-     - urllib3==2.2.1
+     - urllib3==1.26.18
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
