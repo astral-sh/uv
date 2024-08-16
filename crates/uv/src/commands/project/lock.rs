@@ -404,23 +404,28 @@ async fn do_lock(
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        Some(
-            ValidatedLock::validate(
-                existing_lock,
-                workspace,
-                &members,
-                &constraints,
-                &overrides,
-                interpreter,
-                &requires_python,
-                index_locations,
-                upgrade,
-                &options,
-                &database,
-                printer,
-            )
-            .await?,
+        match ValidatedLock::validate(
+            existing_lock,
+            workspace,
+            &members,
+            &constraints,
+            &overrides,
+            interpreter,
+            &requires_python,
+            index_locations,
+            upgrade,
+            &options,
+            &database,
+            printer,
         )
+        .await
+        {
+            Ok(result) => Some(result),
+            Err(err) => {
+                warn_user!("Failed to validate existing lockfile: {err}");
+                None
+            }
+        }
     } else {
         None
     };
