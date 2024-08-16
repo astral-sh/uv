@@ -51,6 +51,7 @@ use std::sync::Mutex;
 use std::sync::MutexGuard;
 
 use itertools::Either;
+use pep440_rs::Operator;
 use pep440_rs::{Version, VersionSpecifier};
 use pubgrub::Range;
 use rustc_hash::FxHashMap;
@@ -156,10 +157,21 @@ impl InternerGuard<'_> {
     /// Returns a decision node for a single marker expression.
     pub(crate) fn expression(&mut self, expr: MarkerExpression) -> NodeId {
         let (var, children) = match expr {
+            // Normalize `python_version` markers to `python_full_version` nodes.
+            MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion,
+                specifier,
+            } => match python_version_to_full_version(normalize_specifier(specifier)) {
+                Ok(specifier) => (
+                    Variable::Version(MarkerValueVersion::PythonFullVersion),
+                    Edges::from_specifier(specifier),
+                ),
+                Err(node) => return node,
+            },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::Version { key, specifier } => {
-                (Variable::Version(key), Edges::from_specifier(&specifier))
+                (Variable::Version(key), Edges::from_specifier(specifier))
             }
             // The `in` and `contains` operators are a bit different than other operators.
             // In particular, they do not represent a particular value for the corresponding
@@ -532,18 +544,9 @@ impl Edges {
     }
 
     /// Returns the [`Edges`] for a version specifier.
-    fn from_specifier(specifier: &VersionSpecifier) -> Edges {
-        // The decision diagram relies on the assumption that the negation of a marker tree is
-        // the complement of the marker space. However, pre-release versions violate this assumption.
-        // For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
-        // does not match `python_full_version == 3.9.0a0`. However, it's negation,
-        // `python_full_version > '3.9' and python_full_version <= '3.9'` also does not include
-        // `3.9.0a0`, and is actually `false`.
-        //
-        // For this reason we ignore pre-release versions entirely when evaluating markers.
-        // Note that `python_version` cannot take on pre-release values so this is necessary for
-        // simplifying ranges, but for `python_full_version` this decision is a semantic change.
-        let specifier = PubGrubSpecifier::from_release_specifier(specifier).unwrap();
+    fn from_specifier(specifier: VersionSpecifier) -> Edges {
+        let specifier =
+            PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
         Edges::Version {
             edges: Edges::from_range(&specifier.into()),
         }
@@ -745,6 +748,110 @@ impl Edges {
                 low: low.not(),
             },
         }
+    }
+}
+
+// Normalize a [`VersionSpecifier`] before adding it to the tree.
+fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
+    let (operator, version) = specifier.into_parts();
+
+    // The decision diagram relies on the assumption that the negation of a marker tree is
+    // the complement of the marker space. However, pre-release versions violate this assumption.
+    // For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
+    // does not match `python_full_version == 3.9.0a0`. However, it's negation,
+    // `python_full_version > '3.9' and python_full_version <= '3.9'` also does not include
+    // `3.9.0a0`, and is actually `false`.
+    //
+    // For this reason we ignore pre-release versions entirely when evaluating markers.
+    // Note that `python_version` cannot take on pre-release values so this is necessary for
+    // simplifying ranges, but for `python_full_version` this decision is a semantic change.
+    let mut release = version.release();
+
+    // Strip any trailing `0`s.
+    //
+    // The [`Version`] type ignores trailing `0`s for equality, but still preserves them in it's
+    // [`Display`] output. We must normalize all versions by stripping trailing `0`s to remove the
+    // distinction between versions like `3.9` and `3.9.0`, whose output will depend on which form
+    // was added to the global marker interner first.
+    //
+    // Note that we cannot strip trailing `0`s for star equality, as `==3.0.*` is different from `==3.*`.
+    if !operator.is_star() {
+        if let Some(end) = release.iter().rposition(|segment| *segment != 0) {
+            if end > 0 {
+                release = &release[..=end];
+            }
+        }
+    }
+
+    VersionSpecifier::from_version(operator, Version::new(release)).unwrap()
+}
+
+/// Returns the equivalent `python_full_version` specifier for a `python_version` comparison.
+///
+/// Returns `Err` with a constant node if the equivalent comparison is always `true` or `false`.
+fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<VersionSpecifier, NodeId> {
+    let major_minor = match *specifier.version().release() {
+        // `python_version == 3.*` is equivalent to `python_full_version == 3.*`
+        // and adding a trailing `0` would be incorrect.
+        [_major] if specifier.operator().is_star() => return Ok(specifier),
+        // Note that `python_version == 3` matches `3.0.1`, `3.0.2`, etc.
+        [major] => Some((major, 0)),
+        [major, minor] => Some((major, minor)),
+        _ => None,
+    };
+
+    if let Some((major, minor)) = major_minor {
+        let version = Version::new([major, minor]);
+
+        Ok(match specifier.operator() {
+            // `python_version == 3.7` is equivalent to `python_full_version == 3.7.*`.
+            Operator::Equal | Operator::ExactEqual => {
+                VersionSpecifier::equals_star_version(version)
+            }
+            // `python_version != 3.7` is equivalent to `python_full_version != 3.7.*`.
+            Operator::NotEqual => VersionSpecifier::not_equals_star_version(version),
+
+            // `python_version > 3.7` is equivalent to `python_full_version >= 3.8`.
+            Operator::GreaterThan => {
+                VersionSpecifier::greater_than_equal_version(Version::new([major, minor + 1]))
+            }
+            // `python_version < 3.7` is equivalent to `python_full_version < 3.7`.
+            Operator::LessThan => specifier,
+            // `python_version >= 3.7` is equivalent to `python_full_version >= 3.7`.
+            Operator::GreaterThanEqual => specifier,
+            // `python_version <= 3.7` is equivalent to `python_full_version < 3.8`.
+            Operator::LessThanEqual => {
+                VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
+            }
+
+            // `==3.7.*`, `!=3.7.*`, `~=3.7` already represent the equivalent `python_full_version`
+            // comparison.
+            Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => specifier,
+        })
+    } else {
+        let &[major, minor, ..] = specifier.version().release() else {
+            unreachable!()
+        };
+
+        Ok(match specifier.operator() {
+            // `python_version` cannot have more than two release segments, so equality is impossible.
+            Operator::Equal | Operator::ExactEqual | Operator::EqualStar | Operator::TildeEqual => {
+                return Err(NodeId::FALSE)
+            }
+
+            // Similarly, inequalities are always `true`.
+            Operator::NotEqual | Operator::NotEqualStar => return Err(NodeId::TRUE),
+
+            // `python_version {<,<=} 3.7.8` is equivalent to `python_full_version < 3.8`.
+            Operator::LessThan | Operator::LessThanEqual => {
+                VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
+            }
+
+            // `python_version {>,>=} 3.7.8` is equivalent to `python_full_version >= 3.8`.
+            Operator::GreaterThan | Operator::GreaterThanEqual => {
+                VersionSpecifier::greater_than_equal_version(Version::new([major, minor + 1]))
+            }
+        })
     }
 }
 

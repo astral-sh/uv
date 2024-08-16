@@ -881,7 +881,7 @@ fn lock_wheel_url() -> Result<()> {
         requires-dist = [
             { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
             { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
-            { name = "exceptiongroup", marker = "python_version < '3.11'", specifier = ">=1.0.2" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'", specifier = ">=1.0.2" },
             { name = "exceptiongroup", marker = "extra == 'test'", specifier = ">=1.2.0" },
             { name = "hypothesis", marker = "extra == 'test'", specifier = ">=4.0" },
             { name = "idna", specifier = ">=2.8" },
@@ -895,7 +895,7 @@ fn lock_wheel_url() -> Result<()> {
             { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
             { name = "trustme", marker = "extra == 'test'" },
-            { name = "typing-extensions", marker = "python_version < '3.11'", specifier = ">=4.1" },
+            { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
             { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
         ]
 
@@ -1026,7 +1026,7 @@ fn lock_sdist_url() -> Result<()> {
         requires-dist = [
             { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
             { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
-            { name = "exceptiongroup", marker = "python_version < '3.11'", specifier = ">=1.0.2" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'", specifier = ">=1.0.2" },
             { name = "exceptiongroup", marker = "extra == 'test'", specifier = ">=1.2.0" },
             { name = "hypothesis", marker = "extra == 'test'", specifier = ">=4.0" },
             { name = "idna", specifier = ">=2.8" },
@@ -1040,7 +1040,7 @@ fn lock_sdist_url() -> Result<()> {
             { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
             { name = "trustme", marker = "extra == 'test'" },
-            { name = "typing-extensions", marker = "python_version < '3.11'", specifier = ">=4.1" },
+            { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
             { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
         ]
 
@@ -1611,8 +1611,8 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         version = 1
         requires-python = ">=3.7"
         environment-markers = [
-            "python_version < '3.10'",
-            "python_version >= '3.10'",
+            "python_full_version < '3.10'",
+            "python_full_version >= '3.10'",
         ]
 
         [options]
@@ -1739,13 +1739,13 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         source = { editable = "." }
         dependencies = [
             { name = "requests" },
-            { name = "requests", extra = ["socks"], marker = "python_version < '3.10'" },
+            { name = "requests", extra = ["socks"], marker = "python_full_version < '3.10'" },
         ]
 
         [package.metadata]
         requires-dist = [
             { name = "requests" },
-            { name = "requests", extras = ["socks"], marker = "python_version < '3.10'" },
+            { name = "requests", extras = ["socks"], marker = "python_full_version < '3.10'" },
         ]
 
         [[package]]
@@ -1774,7 +1774,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
         [package.optional-dependencies]
         socks = [
-            { name = "pysocks", marker = "python_version < '3.10'" },
+            { name = "pysocks", marker = "python_full_version < '3.10'" },
         ]
 
         [[package]]
@@ -2747,7 +2747,7 @@ fn lock_requires_python() -> Result<()> {
         version = "23.2.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "importlib-metadata", marker = "python_version < '3.8'" },
+            { name = "importlib-metadata", marker = "python_full_version < '3.8'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
         wheels = [
@@ -2760,8 +2760,8 @@ fn lock_requires_python() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "attrs" },
-            { name = "exceptiongroup", marker = "python_version < '3.11'" },
-            { name = "typing-extensions", marker = "python_version < '3.11'" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+            { name = "typing-extensions", marker = "python_full_version < '3.11'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/68/d4/27f9fd840e74d51b6d6a024d39ff495b56ffde71d28eb82758b7b85d0617/cattrs-23.1.2.tar.gz", hash = "sha256:db1c821b8c537382b2c7c66678c3790091ca0275ac486c76f3c8f3920e83c657", size = 39998 }
         wheels = [
@@ -2782,7 +2782,7 @@ fn lock_requires_python() -> Result<()> {
         version = "6.7.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", marker = "python_version < '3.8'" },
+            { name = "typing-extensions", marker = "python_full_version < '3.8'" },
             { name = "zipp" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
@@ -2899,7 +2899,7 @@ fn lock_requires_python() -> Result<()> {
         version = "23.2.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "importlib-metadata", marker = "python_version < '3.8'" },
+            { name = "importlib-metadata", marker = "python_full_version < '3.8'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/e3/fc/f800d51204003fa8ae392c4e8278f256206e7a919b708eef054f5f4b650d/attrs-23.2.0.tar.gz", hash = "sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30", size = 780820 }
         wheels = [
@@ -2912,8 +2912,8 @@ fn lock_requires_python() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "attrs" },
-            { name = "exceptiongroup", marker = "python_version < '3.11'" },
-            { name = "typing-extensions", marker = "python_version < '3.11'" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+            { name = "typing-extensions", marker = "python_full_version < '3.11'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/68/d4/27f9fd840e74d51b6d6a024d39ff495b56ffde71d28eb82758b7b85d0617/cattrs-23.1.2.tar.gz", hash = "sha256:db1c821b8c537382b2c7c66678c3790091ca0275ac486c76f3c8f3920e83c657", size = 39998 }
         wheels = [
@@ -2934,7 +2934,7 @@ fn lock_requires_python() -> Result<()> {
         version = "6.7.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", marker = "python_version < '3.8'" },
+            { name = "typing-extensions", marker = "python_full_version < '3.8'" },
             { name = "zipp" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569 }
@@ -3175,7 +3175,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        requires-python = ">=3.12, <3.13"
+        requires-python = "==3.12.*"
 
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -3260,7 +3260,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        requires-python = ">=3.11, <3.12"
+        requires-python = "==3.11.*"
 
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -3370,7 +3370,7 @@ fn lock_requires_python_star() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        requires-python = ">=3.11, <3.12"
+        requires-python = "==3.11.*"
 
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
@@ -3711,12 +3711,10 @@ fn lock_python_version_marker_complement() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "python_full_version <= '3.10' and python_version > '3.10'",
-            "python_full_version <= '3.10' and python_version == '3.10'",
-            "python_full_version <= '3.10' and python_version < '3.10'",
-            "python_full_version > '3.10' and python_version > '3.10'",
-            "python_full_version > '3.10' and python_version == '3.10'",
-            "python_full_version > '3.10' and python_version < '3.10'",
+            "python_full_version < '3.10'",
+            "python_full_version == '3.10'",
+            "python_full_version > '3.10' and python_full_version < '3.11'",
+            "python_full_version >= '3.11'",
         ]
 
         [options]
@@ -3752,10 +3750,10 @@ fn lock_python_version_marker_complement() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "attrs", marker = "python_version <= '3.10'" },
-            { name = "attrs", marker = "python_version > '3.10'" },
-            { name = "iniconfig", marker = "python_version < '3.10'" },
-            { name = "iniconfig", marker = "python_version >= '3.10'" },
+            { name = "attrs", marker = "python_full_version < '3.11'" },
+            { name = "attrs", marker = "python_full_version >= '3.11'" },
+            { name = "iniconfig", marker = "python_full_version < '3.10'" },
+            { name = "iniconfig", marker = "python_full_version >= '3.10'" },
             { name = "typing-extensions", marker = "python_full_version <= '3.10'" },
             { name = "typing-extensions", marker = "python_full_version > '3.10'" },
         ]
@@ -3966,7 +3964,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig" },
-            { name = "iniconfig", marker = "python_version < '3.12'" },
+            { name = "iniconfig", marker = "python_full_version < '3.12'" },
         ]
         "###
         );
@@ -4045,7 +4043,7 @@ fn lock_multiple_markers() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "iniconfig", marker = "implementation_name == 'cpython'" },
-            { name = "iniconfig", marker = "python_version < '3.12'" },
+            { name = "iniconfig", marker = "python_full_version < '3.12'" },
         ]
         "###
         );
@@ -9747,9 +9745,9 @@ fn lock_narrowed_python_version() -> Result<()> {
         version = 1
         requires-python = ">=3.7"
         environment-markers = [
-            "python_version < '3.9'",
-            "python_version >= '3.9' and python_version <= '3.10'",
-            "python_version > '3.10'",
+            "python_full_version < '3.9'",
+            "python_full_version >= '3.9' and python_full_version < '3.11'",
+            "python_full_version >= '3.11'",
         ]
 
         [options]
@@ -9760,7 +9758,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         version = "0.1.0"
         source = { directory = "dependency" }
         dependencies = [
-            { name = "iniconfig", marker = "python_version < '3.9' or python_version > '3.10'" },
+            { name = "iniconfig", marker = "python_full_version < '3.9' or python_full_version >= '3.11'" },
         ]
 
         [package.metadata]
@@ -9780,13 +9778,13 @@ fn lock_narrowed_python_version() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "dependency", marker = "python_version < '3.9' or python_version > '3.10'" },
+            { name = "dependency", marker = "python_full_version < '3.9' or python_full_version >= '3.11'" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "dependency", marker = "python_version < '3.9'", directory = "dependency" },
-            { name = "dependency", marker = "python_version > '3.10'", directory = "dependency" },
+            { name = "dependency", marker = "python_full_version < '3.9'", directory = "dependency" },
+            { name = "dependency", marker = "python_full_version >= '3.11'", directory = "dependency" },
         ]
         "###
         );
@@ -9883,7 +9881,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "anyio", marker = "sys_platform == 'darwin'" },
-            { name = "anyio", marker = "python_version > '3.10'" },
+            { name = "anyio", marker = "python_full_version >= '3.11'" },
         ]
 
         [[package]]

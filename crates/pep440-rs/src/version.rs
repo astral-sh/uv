@@ -119,6 +119,11 @@ impl Operator {
             _ => None,
         }
     }
+
+    /// Returns `true` if this operator represents a wildcard.
+    pub fn is_star(self) -> bool {
+        matches!(self, Self::EqualStar | Self::NotEqualStar)
+    }
 }
 
 impl FromStr for Operator {

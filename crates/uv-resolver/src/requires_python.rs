@@ -97,7 +97,7 @@ impl RequiresPython {
         // Convert back to PEP 440 specifiers.
         let specifiers = range
             .iter()
-            .flat_map(VersionSpecifier::from_bounds)
+            .flat_map(VersionSpecifier::from_release_only_bounds)
             .collect();
 
         Ok(Some(Self { specifiers, bound }))

@@ -3,7 +3,7 @@ use std::ops::Bound;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use pep440_rs::VersionSpecifier;
+use pep440_rs::{Version, VersionSpecifier};
 use pubgrub::Range;
 use rustc_hash::FxBuildHasher;
 
@@ -61,9 +61,21 @@ fn collect_dnf(
                     continue;
                 }
 
+                // Detect whether the range for this edge can be simplified as a star inequality.
+                if let Some(specifier) = star_range_inequality(&range) {
+                    path.push(MarkerExpression::Version {
+                        key: marker.key().clone(),
+                        specifier,
+                    });
+
+                    collect_dnf(&tree, dnf, path);
+                    path.pop();
+                    continue;
+                }
+
                 for bounds in range.iter() {
                     let current = path.len();
-                    for specifier in VersionSpecifier::from_bounds(bounds) {
+                    for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
                         path.push(MarkerExpression::Version {
                             key: marker.key().clone(),
                             specifier,
@@ -307,7 +319,7 @@ where
 /// Returns `Some` if the expression can be simplified as an inequality consisting
 /// of the given values.
 ///
-/// For example, `os_name < 'Linux'` and `os_name > 'Linux'` can be simplified to
+/// For example, `os_name < 'Linux' or os_name > 'Linux'` can be simplified to
 /// `os_name != 'Linux'`.
 fn range_inequality<T>(range: &Range<T>) -> Option<Vec<&T>>
 where
@@ -326,6 +338,25 @@ where
     }
 
     Some(excluded)
+}
+
+/// Returns `Some` if the version expression can be simplified as a star inequality with the given
+/// specifier.
+///
+/// For example, `python_full_version < '3.8' or python_full_version >= '3.9'` can be simplified to
+/// `python_full_version != '3.8.*'`.
+fn star_range_inequality(range: &Range<Version>) -> Option<VersionSpecifier> {
+    let (b1, b2) = range.iter().collect_tuple()?;
+
+    match (b1, b2) {
+        ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded))
+            if v1.release().len() == 2
+                && v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
+        {
+            Some(VersionSpecifier::not_equals_star_version(v1.clone()))
+        }
+        _ => None,
+    }
 }
 
 /// Returns `true` if the LHS is the negation of the RHS, or vice versa.
