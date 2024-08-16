@@ -231,7 +231,7 @@ fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
                 warn_user!("`{name}` is a production dependency");
             }
             DependencyType::Dev => {
-                warn_user!("`{name}` is a development dependency; try calling `uv remove --dev`",);
+                warn_user!("`{name}` is a development dependency; try calling `uv remove --dev`");
             }
             DependencyType::Optional(group) => {
                 warn_user!(
