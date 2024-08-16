@@ -1,18 +1,23 @@
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use std::{collections::HashMap, sync::RwLock};
+use std::sync::RwLock;
+
+use rustc_hash::{FxHashMap, FxHasher};
+use tracing::trace;
+use url::Url;
+
+use once_map::OnceMap;
 
 use crate::credentials::{Credentials, Username};
 use crate::Realm;
 
-use once_map::OnceMap;
-use tracing::trace;
-use url::Url;
+type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
 pub struct CredentialsCache {
     /// A cache per realm and username
-    realms: RwLock<HashMap<(Realm, Username), Arc<Credentials>>>,
+    realms: RwLock<FxHashMap<(Realm, Username), Arc<Credentials>>>,
     /// A cache tracking the result of fetches from external services
-    pub(crate) fetches: OnceMap<(Realm, Username), Option<Arc<Credentials>>>,
+    pub(crate) fetches: FxOnceMap<(Realm, Username), Option<Arc<Credentials>>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
     urls: RwLock<UrlTrie>,
 }
@@ -27,8 +32,8 @@ impl CredentialsCache {
     /// Create a new cache.
     pub fn new() -> Self {
         Self {
-            fetches: OnceMap::default(),
-            realms: RwLock::new(HashMap::new()),
+            fetches: FxOnceMap::default(),
+            realms: RwLock::new(FxHashMap::default()),
             urls: RwLock::new(UrlTrie::new()),
         }
     }
