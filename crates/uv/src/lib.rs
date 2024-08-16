@@ -738,7 +738,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             };
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolRunSettings::resolve(args, filesystem);
+            let args = settings::ToolRunSettings::resolve(args, filesystem, invocation_source);
             show_settings!(args);
 
             // Initialize the cache.

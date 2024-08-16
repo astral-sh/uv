@@ -36,6 +36,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::pip::operations::Modifications;
+use crate::commands::ToolRunCommand;
 
 /// The resolved global settings to use for any invocation of the CLI.
 #[allow(clippy::struct_excessive_bools)]
@@ -275,7 +276,11 @@ pub(crate) struct ToolRunSettings {
 impl ToolRunSettings {
     /// Resolve the [`ToolRunSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: ToolRunArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: ToolRunArgs,
+        filesystem: Option<FilesystemOptions>,
+        invocation_source: ToolRunCommand,
+    ) -> Self {
         let ToolRunArgs {
             command,
             from,
@@ -288,6 +293,16 @@ impl ToolRunSettings {
             refresh,
             python,
         } = args;
+
+        // If `--upgrade` was passed explicitly, warn.
+        if installer.upgrade || !installer.upgrade_package.is_empty() {
+            warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+        }
+
+        // If `--reinstall` was passed explicitly, warn.
+        if installer.reinstall || !installer.reinstall_package.is_empty() {
+            warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool");
+        }
 
         Self {
             command,
