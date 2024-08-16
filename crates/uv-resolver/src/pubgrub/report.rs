@@ -385,18 +385,21 @@ impl PubGrubReportFormatter<'_> {
     /// Return a display name for the package if it is a workspace member.
     fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<String> {
         match &**package {
-            PubGrubPackageInner::Package { name, .. }
-            | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Dev { name, .. } => {
-                if self.workspace_members.contains(name) {
-                    if self.is_single_project_workspace() {
-                        Some("your project".to_string())
-                    } else {
-                        Some(format!("{name}"))
-                    }
+            // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
+            PubGrubPackageInner::Package {
+                name, extra, dev, ..
+            } if self.workspace_members.contains(name) => {
+                if self.is_single_project_workspace() && extra.is_none() && dev.is_none() {
+                    Some("your project".to_string())
                 } else {
-                    None
+                    Some(format!("{package}"))
                 }
+            }
+            PubGrubPackageInner::Extra { name, .. } if self.workspace_members.contains(name) => {
+                Some(format!("{package}"))
+            }
+            PubGrubPackageInner::Dev { name, .. } if self.workspace_members.contains(name) => {
+                Some(format!("{package}"))
             }
             _ => None,
         }
@@ -615,7 +618,7 @@ impl PubGrubReportFormatter<'_> {
                     reason: reason.clone(),
                 });
             }
-            Some(UnavailablePackage::NotFound | UnavailablePackage::WorkspaceMember) => {}
+            Some(UnavailablePackage::NotFound) => {}
             None => {}
         }
 
