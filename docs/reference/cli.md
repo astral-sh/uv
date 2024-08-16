@@ -455,6 +455,8 @@ Add dependencies to the project (experimental).
 
 Dependencies are added to the project's `pyproject.toml` file.
 
+If a given dependency exists already, it will be updated to the new version specifier unless it includes markers that differ from the existing specifier in which case another entry for the depenedency will be added.
+
 If no constraint or URL is provided for a dependency, a lower bound is added equal to the latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in which case no resolution is performed.
 
 The lockfile and project environment will be updated to reflect the added dependencies. To skip updating the lockfile, use `--frozen`. To skip updating the environment, use `--no-sync`.
@@ -738,6 +740,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 Remove dependencies from the project (experimental).
 
 Dependencies are removed from the project's `pyproject.toml` file.
+
+If multiple entries exist for a given dependency, i.e., each with different markers, all of the entries will be removed.
 
 The lockfile and project environment will be updated to reflect the removed dependencies. To skip updating the lockfile, use `--frozen`. To skip updating the environment, use `--no-sync`.
 

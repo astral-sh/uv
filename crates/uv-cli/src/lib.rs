@@ -548,22 +548,24 @@ pub enum ProjectCommand {
     ///
     /// Dependencies are added to the project's `pyproject.toml` file.
     ///
-    /// If no constraint or URL is provided for a dependency, a lower bound is
-    /// added equal to the latest compatible version of the package, e.g.,
-    /// `>=1.2.3`, unless `--frozen` is provided, in which case no resolution is
-    /// performed.
+    /// If a given dependency exists already, it will be updated to the new version specifier unless
+    /// it includes markers that differ from the existing specifier in which case another entry for
+    /// the depenedency will be added.
     ///
-    /// The lockfile and project environment will be updated to reflect the
-    /// added dependencies. To skip updating the lockfile, use `--frozen`. To
-    /// skip updating the environment, use `--no-sync`.
+    /// If no constraint or URL is provided for a dependency, a lower bound is added equal to the
+    /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
+    /// which case no resolution is performed.
     ///
-    /// If any of the requested dependencies cannot be found, uv will exit with
-    /// an error, unless the `--frozen` flag is provided, in which case uv will
-    /// add the dependencies verbatim without checking that they exist or are
-    /// compatible with the project.
+    /// The lockfile and project environment will be updated to reflect the added dependencies. To
+    /// skip updating the lockfile, use `--frozen`. To skip updating the environment, use
+    /// `--no-sync`.
     ///
-    /// uv will search for a project in the current directory or any parent
-    /// directory. If a project cannot be found, uv will exit with an error.
+    /// If any of the requested dependencies cannot be found, uv will exit with an error, unless the
+    /// `--frozen` flag is provided, in which case uv will add the dependencies verbatim without
+    /// checking that they exist or are compatible with the project.
+    ///
+    /// uv will search for a project in the current directory or any parent directory. If a project
+    /// cannot be found, uv will exit with an error.
     #[command(
         after_help = "Use `uv help add` for more details.",
         after_long_help = ""
@@ -572,6 +574,9 @@ pub enum ProjectCommand {
     /// Remove dependencies from the project (experimental).
     ///
     /// Dependencies are removed from the project's `pyproject.toml` file.
+    ///
+    /// If multiple entries exist for a given dependency, i.e., each with different markers, all of
+    /// the entries will be removed.
     ///
     /// The lockfile and project environment will be updated to reflect the
     /// removed dependencies. To skip updating the lockfile, use `--frozen`. To
