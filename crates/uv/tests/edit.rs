@@ -1771,7 +1771,7 @@ fn update() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "requests[security]==2.31.0",
-            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_version > '3.7'",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
         "###
         );
@@ -2019,7 +2019,7 @@ fn update_marker() -> Result<()> {
         requires-python = ">=3.8"
         dependencies = [
             "requests>=2.30; python_version >= '3.11'",
-            "requests>=2.0,<2.29 ; python_version < '3.11'",
+            "requests>=2.0,<2.29 ; python_full_version < '3.11'",
         ]
         "###
         );
