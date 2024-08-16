@@ -1804,6 +1804,10 @@ mod test {
 
     #[test]
     fn test_marker_simplification() {
+        assert_false("python_version == '3.9.1'");
+        assert_false("python_version == '3.9.0.*'");
+        assert_true("python_version != '3.9.1'");
+
         assert_simplifies("python_version == '3.9'", "python_full_version == '3.9.*'");
         assert_simplifies(
             "python_version == '3.9.0'",
@@ -2208,6 +2212,26 @@ mod test {
             "python_full_version == '3.7.*'",
             "python_full_version == '3.7.1'"
         ));
+
+        assert!(is_disjoint(
+            "python_version == '3.7'",
+            "python_full_version == '3.8'"
+        ));
+
+        assert!(!is_disjoint(
+            "python_version == '3.7'",
+            "python_full_version == '3.7.2'"
+        ));
+
+        assert!(is_disjoint(
+            "python_version > '3.7'",
+            "python_full_version == '3.7.1'"
+        ));
+
+        assert!(!is_disjoint(
+            "python_version <= '3.7'",
+            "python_full_version == '3.7.1'"
+        ));
     }
 
     #[test]
@@ -2362,6 +2386,10 @@ mod test {
 
     fn assert_true(marker: &str) {
         assert!(m(marker).is_true(), "{marker} != true");
+    }
+
+    fn assert_false(marker: &str) {
+        assert!(m(marker).is_false(), "{marker} != false");
     }
 
     fn is_disjoint(left: impl AsRef<str>, right: impl AsRef<str>) -> bool {
