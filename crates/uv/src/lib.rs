@@ -1147,14 +1147,35 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
+            // Use raw sources if requirements files are provided as input.
+            let raw_sources = if args.requirements.is_empty() {
+                args.raw_sources
+            } else {
+                if args.raw_sources {
+                    warn_user!("`--raw-sources` is a no-op for `requirements.txt` files, which are always treated as raw sources");
+                }
+                true
+            };
+
+            let requirements = args
+                .packages
+                .into_iter()
+                .map(RequirementsSource::Package)
+                .chain(
+                    args.requirements
+                        .into_iter()
+                        .map(RequirementsSource::from_requirements_file),
+                )
+                .collect::<Vec<_>>();
+
             commands::add(
                 args.locked,
                 args.frozen,
                 args.no_sync,
-                args.requirements,
+                requirements,
                 args.editable,
                 args.dependency_type,
-                args.raw_sources,
+                raw_sources,
                 args.rev,
                 args.tag,
                 args.branch,

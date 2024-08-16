@@ -466,12 +466,12 @@ uv will search for a project in the current directory or any parent directory. I
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv add [OPTIONS] <REQUIREMENTS>...
+uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>REQUIREMENTS</code></dt><dd><p>The packages to add, as PEP 508 requirements (e.g., <code>ruff==0.5.0</code>)</p>
+<dl class="cli-reference"><dt><code>PACKAGES</code></dt><dd><p>The packages to add, as PEP 508 requirements (e.g., <code>ruff==0.5.0</code>)</p>
 
 </dd></dl>
 
@@ -695,6 +695,10 @@ uv add [OPTIONS] <REQUIREMENTS>...
 </dd><dt><code>--reinstall</code></dt><dd><p>Reinstall all packages, regardless of whether they&#8217;re already installed. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--reinstall-package</code> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it&#8217;s already installed. Implies <code>--refresh-package</code></p>
+
+</dd><dt><code>--requirements</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Add all packages listed in the given <code>requirements.txt</code> files.</p>
+
+<p>Implies <code>--raw-sources</code>.</p>
 
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 

@@ -28,7 +28,6 @@ use uv_configuration::{
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
-use uv_requirements::RequirementsSource;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, ResolverInstallerOptions, ResolverOptions,
@@ -694,7 +693,8 @@ pub(crate) struct AddSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) no_sync: bool,
-    pub(crate) requirements: Vec<RequirementsSource>,
+    pub(crate) packages: Vec<String>,
+    pub(crate) requirements: Vec<PathBuf>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
     pub(crate) extras: Vec<ExtraName>,
@@ -714,6 +714,7 @@ impl AddSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: AddArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let AddArgs {
+            packages,
             requirements,
             dev,
             optional,
@@ -735,11 +736,6 @@ impl AddSettings {
             python,
         } = args;
 
-        let requirements = requirements
-            .into_iter()
-            .map(RequirementsSource::Package)
-            .collect::<Vec<_>>();
-
         let dependency_type = if let Some(group) = optional {
             DependencyType::Optional(group)
         } else if dev {
@@ -752,6 +748,7 @@ impl AddSettings {
             locked,
             frozen,
             no_sync,
+            packages,
             requirements,
             dependency_type,
             raw_sources,

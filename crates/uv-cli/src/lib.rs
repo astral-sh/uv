@@ -1236,8 +1236,8 @@ pub struct PipSyncArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PipInstallArgs {
     /// Install all listed packages.
     #[arg(group = "sources")]
@@ -1517,8 +1517,8 @@ pub struct PipInstallArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PipUninstallArgs {
     /// Uninstall all listed packages.
     #[arg(group = "sources")]
@@ -2358,11 +2358,18 @@ pub struct LockArgs {
 }
 
 #[derive(Args)]
+#[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AddArgs {
     /// The packages to add, as PEP 508 requirements (e.g., `ruff==0.5.0`).
-    #[arg(required = true)]
-    pub requirements: Vec<String>,
+    #[arg(group = "sources")]
+    pub packages: Vec<String>,
+
+    /// Add all packages listed in the given `requirements.txt` files.
+    ///
+    /// Implies `--raw-sources`.
+    #[arg(long, short, group = "sources", value_parser = parse_file_path)]
+    pub requirements: Vec<PathBuf>,
 
     /// Add the requirements as development dependencies.
     #[arg(long, conflicts_with("optional"))]

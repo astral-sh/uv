@@ -1,7 +1,7 @@
 use std::collections::hash_map::Entry;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use cache_key::RepositoryUrl;
 use owo_colors::OwoColorize;
 use pep508_rs::{ExtraName, Requirement, VersionOrUrl};
@@ -69,6 +69,26 @@ pub(crate) async fn add(
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`uv add` is experimental and may change without warning");
+    }
+
+    for source in &requirements {
+        match source {
+            RequirementsSource::PyprojectToml(_) => {
+                bail!("Adding requirements from a `pyproject.toml` is not supported in `uv add`");
+            }
+            RequirementsSource::SetupPy(_) => {
+                bail!("Adding requirements from a `setup.py` is not supported in `uv add`");
+            }
+            RequirementsSource::SetupCfg(_) => {
+                bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");
+            }
+            RequirementsSource::RequirementsTxt(path) => {
+                if path == Path::new("-") {
+                    bail!("Reading requirements from stdin is not supported in `uv add`");
+                }
+            }
+            _ => {}
+        }
     }
 
     let reporter = PythonDownloadReporter::single(printer);
