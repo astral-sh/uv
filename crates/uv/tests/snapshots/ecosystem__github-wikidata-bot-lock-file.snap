@@ -5,8 +5,8 @@ expression: lock
 version = 1
 requires-python = ">=3.12"
 environment-markers = [
-    "python_version < '3.13'",
-    "python_version >= '3.13'",
+    "python_full_version < '3.13'",
+    "python_full_version >= '3.13'",
 ]
 
 [options]
@@ -123,6 +123,25 @@ dev = [
     { name = "ruff" },
     { name = "tqdm" },
     { name = "types-requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cachecontrol", extras = ["filecache"], specifier = ">=0.14,<0.15" },
+    { name = "mwparserfromhell", specifier = ">=0.6.4,<0.7" },
+    { name = "pydantic", specifier = ">=2.7.1" },
+    { name = "pywikibot", specifier = ">=9.1.2,<10" },
+    { name = "sentry-sdk", specifier = ">=2.0.1,<3" },
+    { name = "yarl", specifier = ">=1.9,<2" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.27.0,<0.28" },
+    { name = "pytest", specifier = ">=8.0.0,<9" },
+    { name = "ruff", specifier = ">=0.5.0,<0.6" },
+    { name = "tqdm", specifier = ">=4.66.4,<4.67" },
+    { name = "types-requests", specifier = ">=2.31.0.20240406,<3" },
 ]
 
 [[package]]

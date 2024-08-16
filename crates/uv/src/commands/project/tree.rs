@@ -79,7 +79,8 @@ pub(crate) async fn tree(
         cache,
         printer,
     )
-    .await?;
+    .await?
+    .into_lock();
 
     // Apply the platform tags to the markers.
     let markers = match (python_platform, python_version) {
@@ -93,7 +94,7 @@ pub(crate) async fn tree(
 
     // Render the tree.
     let tree = TreeDisplay::new(
-        &lock.lock,
+        &lock,
         (!universal).then(|| markers.as_ref()),
         depth.into(),
         prune,

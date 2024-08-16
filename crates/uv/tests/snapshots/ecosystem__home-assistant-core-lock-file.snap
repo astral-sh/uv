@@ -662,6 +662,49 @@ dependencies = [
     { name = "yarl" },
 ]
 
+[package.metadata]
+requires-dist = [
+    { name = "aiodns", specifier = "==3.2.0" },
+    { name = "aiohttp", specifier = "==3.9.5" },
+    { name = "aiohttp-cors", specifier = "==0.7.0" },
+    { name = "aiohttp-fast-url-dispatcher", specifier = "==0.3.0" },
+    { name = "aiohttp-fast-zlib", specifier = "==0.1.0" },
+    { name = "aiozoneinfo", specifier = "==0.2.0" },
+    { name = "astral", specifier = "==2.2" },
+    { name = "async-interrupt", specifier = "==1.1.1" },
+    { name = "atomicwrites-homeassistant", specifier = "==1.4.1" },
+    { name = "attrs", specifier = "==23.2.0" },
+    { name = "awesomeversion", specifier = "==24.2.0" },
+    { name = "bcrypt", specifier = "==4.1.2" },
+    { name = "certifi", specifier = ">=2021.5.30" },
+    { name = "ciso8601", specifier = "==2.3.1" },
+    { name = "cryptography", specifier = "==42.0.8" },
+    { name = "fnv-hash-fast", specifier = "==0.5.0" },
+    { name = "hass-nabucasa", specifier = "==0.81.1" },
+    { name = "home-assistant-bluetooth", specifier = "==1.12.1" },
+    { name = "httpx", specifier = "==0.27.0" },
+    { name = "ifaddr", specifier = "==0.2.0" },
+    { name = "jinja2", specifier = "==3.1.4" },
+    { name = "lru-dict", specifier = "==1.3.0" },
+    { name = "orjson", specifier = "==3.9.15" },
+    { name = "packaging", specifier = ">=23.1" },
+    { name = "pillow", specifier = "==10.3.0" },
+    { name = "pip", specifier = ">=21.3.1" },
+    { name = "psutil-home-assistant", specifier = "==0.0.1" },
+    { name = "pyjwt", specifier = "==2.8.0" },
+    { name = "pyopenssl", specifier = "==24.1.0" },
+    { name = "python-slugify", specifier = "==8.0.4" },
+    { name = "pyyaml", specifier = "==6.0.1" },
+    { name = "requests", specifier = "==2.32.3" },
+    { name = "sqlalchemy", specifier = "==2.0.31" },
+    { name = "typing-extensions", specifier = ">=4.12.2,<5.0" },
+    { name = "ulid-transform", specifier = "==0.9.0" },
+    { name = "urllib3", specifier = ">=1.26.5,<2" },
+    { name = "voluptuous", specifier = "==0.13.1" },
+    { name = "voluptuous-serialize", specifier = "==2.6.0" },
+    { name = "yarl", specifier = "==1.9.4" },
+]
+
 [[package]]
 name = "httpcore"
 version = "1.0.5"
@@ -1153,7 +1196,7 @@ name = "sqlalchemy"
 version = "2.0.31"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "greenlet", marker = "(python_version < '3.13' and platform_machine == 'AMD64') or (python_version < '3.13' and platform_machine == 'WIN32') or (python_version < '3.13' and platform_machine == 'aarch64') or (python_version < '3.13' and platform_machine == 'amd64') or (python_version < '3.13' and platform_machine == 'ppc64le') or (python_version < '3.13' and platform_machine == 'win32') or (python_version < '3.13' and platform_machine == 'x86_64')" },
+    { name = "greenlet", marker = "(python_full_version < '3.13' and platform_machine == 'AMD64') or (python_full_version < '3.13' and platform_machine == 'WIN32') or (python_full_version < '3.13' and platform_machine == 'aarch64') or (python_full_version < '3.13' and platform_machine == 'amd64') or (python_full_version < '3.13' and platform_machine == 'ppc64le') or (python_full_version < '3.13' and platform_machine == 'win32') or (python_full_version < '3.13' and platform_machine == 'x86_64')" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ba/7d/e3312ae374fe7a4af7e1494735125a714a0907317c829ab8d8a31d89ded4/SQLAlchemy-2.0.31.tar.gz", hash = "sha256:b607489dd4a54de56984a0c7656247504bd5523d9d0ba799aef59d4add009484", size = 9524110 }

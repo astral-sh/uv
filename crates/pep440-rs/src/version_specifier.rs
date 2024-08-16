@@ -37,7 +37,18 @@ use crate::{
 /// // VersionSpecifiers derefs into a list of specifiers
 /// assert_eq!(version_specifiers.iter().position(|specifier| *specifier.operator() == Operator::LessThan), Some(1));
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    Clone,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 #[cfg_attr(feature = "pyo3", pyclass(sequence))]
@@ -405,6 +416,23 @@ impl VersionSpecifier {
             version,
         }
     }
+
+    /// `==<version>.*`
+    pub fn equals_star_version(version: Version) -> Self {
+        Self {
+            operator: Operator::EqualStar,
+            version,
+        }
+    }
+
+    /// `!=<version>.*`
+    pub fn not_equals_star_version(version: Version) -> Self {
+        Self {
+            operator: Operator::NotEqualStar,
+            version,
+        }
+    }
+
     /// `!=<version>`
     pub fn not_equals_version(version: Version) -> Self {
         Self {
@@ -454,18 +482,35 @@ impl VersionSpecifier {
         &self.version
     }
 
+    /// Get the operator and version parts of this specifier.
+    pub fn into_parts(self) -> (Operator, Version) {
+        (self.operator, self.version)
+    }
+
     /// Whether the version marker includes a prerelease.
     pub fn any_prerelease(&self) -> bool {
         self.version.any_prerelease()
     }
 
     /// Returns the version specifiers whose union represents the given range.
-    pub fn from_bounds(
+    ///
+    /// This function is not applicable to ranges involving pre-release versions.
+    pub fn from_release_only_bounds(
         bounds: (&Bound<Version>, &Bound<Version>),
     ) -> impl Iterator<Item = VersionSpecifier> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some(VersionSpecifier::equals_version(v1.clone())), None)
+            }
+            // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
+            (Bound::Included(v1), Bound::Excluded(v2))
+                if v1.release().len() == 2
+                    && v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
+            {
+                (
+                    Some(VersionSpecifier::equals_star_version(v1.clone())),
+                    None,
+                )
             }
             (lower, upper) => (
                 VersionSpecifier::from_lower_bound(lower),

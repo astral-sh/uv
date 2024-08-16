@@ -13,7 +13,9 @@ use uv_normalize::PackageName;
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::{PubGrubPackage, PubGrubReportFormatter, PubGrubSpecifierError};
+use crate::pubgrub::{
+    PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
+};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
 
@@ -125,6 +127,7 @@ pub struct NoSolutionError {
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
     markers: ResolverMarkers,
+    workspace_members: BTreeSet<PackageName>,
 }
 
 impl NoSolutionError {
@@ -139,6 +142,7 @@ impl NoSolutionError {
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
+        workspace_members: BTreeSet<PackageName>,
     ) -> Self {
         Self {
             error,
@@ -150,6 +154,7 @@ impl NoSolutionError {
             incomplete_packages,
             fork_urls,
             markers,
+            workspace_members,
         }
     }
 
@@ -211,8 +216,19 @@ impl std::fmt::Display for NoSolutionError {
         let formatter = PubGrubReportFormatter {
             available_versions: &self.available_versions,
             python_requirement: &self.python_requirement,
+            workspace_members: &self.workspace_members,
         };
-        let report = DefaultStringReporter::report_with_formatter(&self.error, &formatter);
+
+        // Transform the error tree for reporting
+        let mut tree = self.error.clone();
+        collapse_no_versions_of_workspace_members(&mut tree, &self.workspace_members);
+
+        if self.workspace_members.len() == 1 {
+            let project = self.workspace_members.iter().next().unwrap();
+            drop_root_dependency_on_project(&mut tree, project);
+        }
+
+        let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
         write!(f, "{report}")?;
 
         // Include any additional hints.
@@ -229,6 +245,111 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         Ok(())
+    }
+}
+
+/// Given a [`DerivationTree`], collapse any `NoVersion` incompatibilities for workspace members
+/// to avoid saying things like "only <workspace-member>==0.1.0 is available".
+fn collapse_no_versions_of_workspace_members(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    workspace_members: &BTreeSet<PackageName>,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                // If we have a node for a package with no versions...
+                (DerivationTree::External(External::NoVersions(package, _)), ref mut other)
+                | (ref mut other, DerivationTree::External(External::NoVersions(package, _))) => {
+                    // First, always recursively visit the other side of the tree
+                    collapse_no_versions_of_workspace_members(other, workspace_members);
+
+                    // Then, if the package is a workspace member...
+                    let (PubGrubPackageInner::Package { name, .. }
+                    | PubGrubPackageInner::Extra { name, .. }
+                    | PubGrubPackageInner::Dev { name, .. }) = &**package
+                    else {
+                        return;
+                    };
+                    if !workspace_members.contains(name) {
+                        return;
+                    }
+
+                    // Replace this node with the other tree
+                    *tree = other.clone();
+                }
+                // If not, just recurse
+                _ => {
+                    collapse_no_versions_of_workspace_members(
+                        Arc::make_mut(&mut derived.cause1),
+                        workspace_members,
+                    );
+                    collapse_no_versions_of_workspace_members(
+                        Arc::make_mut(&mut derived.cause2),
+                        workspace_members,
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Given a [`DerivationTree`], drop dependency incompatibilities from the root
+/// to the project.
+///
+/// Intended to effectively change the root to a workspace member in single project
+/// workspaces, avoiding a level of indirection like "And because your project
+/// requires your project, we can conclude that your projects's requirements are
+/// unsatisfiable."
+fn drop_root_dependency_on_project(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    project: &PackageName,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                // If one node is a dependency incompatibility...
+                (
+                    DerivationTree::External(External::FromDependencyOf(package, _, dependency, _)),
+                    ref mut other,
+                )
+                | (
+                    ref mut other,
+                    DerivationTree::External(External::FromDependencyOf(package, _, dependency, _)),
+                ) => {
+                    // And the parent is the root package...
+                    if !matches!(&**package, PubGrubPackageInner::Root(_)) {
+                        return;
+                    }
+
+                    // And the dependency is the project...
+                    let PubGrubPackageInner::Package { name, .. } = &**dependency else {
+                        return;
+                    };
+                    if name != project {
+                        return;
+                    }
+
+                    // Recursively collapse the other side of the tree
+                    drop_root_dependency_on_project(other, project);
+
+                    // Then, replace this node with the other tree
+                    *tree = other.clone();
+                }
+                // If not, just recurse
+                _ => {
+                    drop_root_dependency_on_project(Arc::make_mut(&mut derived.cause1), project);
+                    drop_root_dependency_on_project(Arc::make_mut(&mut derived.cause2), project);
+                }
+            }
+        }
     }
 }
 

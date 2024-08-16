@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -171,11 +172,17 @@ impl UrlString {
     }
 
     /// Return the [`UrlString`] with any query parameters and fragments removed.
-    pub fn base(&self) -> &str {
+    pub fn base_str(&self) -> &str {
         self.as_ref()
             .split_once(['#', '?'])
             .map(|(path, _)| path)
             .unwrap_or(self.as_ref())
+    }
+
+    /// Return the [`UrlString`] with any query parameters and fragments removed.
+    #[must_use]
+    pub fn as_base_url(&self) -> Self {
+        Self(self.base_str().to_string())
     }
 }
 
@@ -193,6 +200,12 @@ impl From<Url> for UrlString {
 
 impl From<&Url> for UrlString {
     fn from(value: &Url) -> Self {
+        UrlString(value.to_string())
+    }
+}
+
+impl From<Cow<'_, Url>> for UrlString {
+    fn from(value: Cow<'_, Url>) -> Self {
         UrlString(value.to_string())
     }
 }

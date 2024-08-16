@@ -195,7 +195,7 @@ mod resolver {
         );
 
         let markers = if universal {
-            ResolverMarkers::universal(None)
+            ResolverMarkers::universal(vec![])
         } else {
             ResolverMarkers::specific_environment(MARKERS.clone())
         };

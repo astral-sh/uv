@@ -109,15 +109,30 @@ steps:
     run: uv python install ${{ matrix.python-version }}
 ```
 
-Alternatively, the official GitHub `setup-python` action can be used. This is generally faster, but
-will not respect the project's pinned Python version.
+Alternatively, the official GitHub `setup-python` action can be used. This can be faster, because
+GitHub caches the Python versions alongside the runner.
+
+Set the
+[`python-version-file`](https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-the-python-version-file-input)
+option to use the pinned version for the project:
 
 ```yaml title="example.yml"
 steps:
   - name: "Set up Python"
     uses: actions/setup-python@v5
     with:
-      python-version: 3.12
+      python-version-file: ".python-version"
+```
+
+Or, specify the `pyproject.toml` file to ignore the pin and use the latest version compatible with
+the project's `requires-python` constraint:
+
+```yaml title="example.yml"
+steps:
+  - name: "Set up Python"
+    uses: actions/setup-python@v5
+    with:
+      python-version-file: "pyproject.toml"
 ```
 
 ## Syncing and running

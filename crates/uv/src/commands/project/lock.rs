@@ -8,38 +8,61 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use distribution_types::{Diagnostic, UnresolvedRequirementSpecification};
+use distribution_types::{IndexLocations, UnresolvedRequirementSpecification};
 use pep440_rs::Version;
+use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy};
+use uv_configuration::{
+    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
+use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
+use uv_requirements::NamedRequirementsResolver;
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverMarkers,
+    FlatIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
+    ResolverMarkers, SatisfiesResult,
 };
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::{find_requires_python, FoundInterpreter, ProjectError, SharedState};
+use crate::commands::reporters::ResolverReporter;
 use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
-pub(crate) struct LockResult {
-    /// The previous lock, if any.
-    pub(crate) previous: Option<Lock>,
-    /// The updated lock.
-    pub(crate) lock: Lock,
+pub(crate) enum LockResult {
+    /// The lock was unchanged.
+    Unchanged(Lock),
+    /// The lock was changed.
+    Changed(Option<Lock>, Lock),
+}
+
+impl LockResult {
+    pub(crate) fn lock(&self) -> &Lock {
+        match self {
+            LockResult::Unchanged(lock) => lock,
+            LockResult::Changed(_, lock) => lock,
+        }
+    }
+
+    pub(crate) fn into_lock(self) -> Lock {
+        match self {
+            LockResult::Unchanged(lock) => lock,
+            LockResult::Changed(_, lock) => lock,
+        }
+    }
 }
 
 /// Resolve the project requirements into a lockfile.
@@ -96,8 +119,8 @@ pub(crate) async fn lock(
     .await
     {
         Ok(lock) => {
-            if let Some(previous) = lock.previous.as_ref() {
-                report_upgrades(previous, &lock.lock, printer)?;
+            if let LockResult::Changed(Some(previous), lock) = &lock {
+                report_upgrades(previous, lock, printer)?;
             }
             Ok(ExitStatus::Success)
         }
@@ -143,10 +166,7 @@ pub(super) async fn do_safe_lock(
         let existing = read(workspace)
             .await?
             .ok_or_else(|| ProjectError::MissingLockfile)?;
-        Ok(LockResult {
-            previous: None,
-            lock: existing,
-        })
+        Ok(LockResult::Unchanged(existing))
     } else if locked {
         // Read the existing lockfile.
         let existing = read(workspace)
@@ -154,10 +174,10 @@ pub(super) async fn do_safe_lock(
             .ok_or_else(|| ProjectError::MissingLockfile)?;
 
         // Perform the lock operation, but don't write the lockfile to disk.
-        let lock = do_lock(
+        let result = do_lock(
             workspace,
             interpreter,
-            Some(&existing),
+            Some(existing),
             settings,
             &state,
             logger,
@@ -170,24 +190,21 @@ pub(super) async fn do_safe_lock(
         )
         .await?;
 
-        // If the locks disagree, return an error.
-        if lock != existing {
+        // If the lockfile changed, return an error.
+        if matches!(result, LockResult::Changed(_, _)) {
             return Err(ProjectError::LockMismatch);
         }
 
-        Ok(LockResult {
-            previous: Some(existing),
-            lock,
-        })
+        Ok(result)
     } else {
         // Read the existing lockfile.
         let existing = read(workspace).await?;
 
         // Perform the lock operation.
-        let lock = do_lock(
+        let result = do_lock(
             workspace,
             interpreter,
-            existing.as_ref(),
+            existing,
             settings,
             &state,
             logger,
@@ -200,14 +217,12 @@ pub(super) async fn do_safe_lock(
         )
         .await?;
 
-        if !existing.as_ref().is_some_and(|existing| *existing == lock) {
-            commit(&lock, workspace).await?;
+        // If the lockfile changed, write it to disk.
+        if let LockResult::Changed(_, lock) = &result {
+            commit(lock, workspace).await?;
         }
 
-        Ok(LockResult {
-            previous: existing,
-            lock,
-        })
+        Ok(result)
     }
 }
 
@@ -215,7 +230,7 @@ pub(super) async fn do_safe_lock(
 async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
-    existing_lock: Option<&Lock>,
+    existing_lock: Option<Lock>,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
@@ -225,7 +240,9 @@ async fn do_lock(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Lock, ProjectError> {
+) -> Result<LockResult, ProjectError> {
+    let start = std::time::Instant::now();
+
     // Extract the project settings.
     let ResolverSettingsRef {
         index_locations,
@@ -257,6 +274,21 @@ async fn do_lock(
     let constraints = workspace.constraints();
     let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
+
+    // Collect the list of members.
+    let members = {
+        let mut members = workspace.packages().keys().cloned().collect::<Vec<_>>();
+        members.sort();
+
+        // If this is a non-virtual project with a single member, we can omit it from the lockfile.
+        // If any members are added or removed, it will inherently mismatch. If the member is
+        // renamed, it will also mismatch.
+        if members.len() == 1 && !workspace.is_virtual() {
+            members.clear();
+        }
+
+        members
+    };
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
@@ -333,223 +365,125 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &build_constraints,
+        interpreter,
+        index_locations,
+        &flat_index,
+        &state.index,
+        &state.git,
+        &state.in_flight,
+        index_strategy,
+        setup_py,
+        config_setting,
+        build_isolation,
+        link_mode,
+        build_options,
+        exclude_newer,
+        sources,
+        concurrency,
+        preview,
+    );
+
+    let database =
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview);
+
+    // Annoyingly, we have to resolve any unnamed overrides upfront.
+    let overrides = NamedRequirementsResolver::new(
+        overrides,
+        &hasher,
+        &state.index,
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+    )
+    .with_reporter(ResolverReporter::from(printer))
+    .resolve()
+    .await?;
+
     // If any of the resolution-determining settings changed, invalidate the lock.
-    let existing_lock = existing_lock.filter(|lock| {
-        if lock.resolution_mode() != options.resolution_mode {
-            let _ = writeln!(
-                printer.stderr(),
-                "Ignoring existing lockfile due to change in resolution mode: `{}` vs. `{}`",
-                lock.resolution_mode().cyan(),
-                options.resolution_mode.cyan()
-            );
-            return false;
-        }
-        if lock.prerelease_mode() != options.prerelease_mode {
-            let _ = writeln!(
-                printer.stderr(),
-                "Ignoring existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
-                lock.prerelease_mode().cyan(),
-                options.prerelease_mode.cyan()
-            );
-            return false;
-        }
-        match (lock.exclude_newer(), options.exclude_newer) {
-            (None, None) => (),
-            (Some(existing), Some(provided)) if existing == provided => (),
-            (Some(existing), Some(provided)) => {
-                let _ = writeln!(
-                    printer.stderr(),
-                    "Ignoring existing lockfile due to change in timestamp cutoff: `{}` vs. `{}`",
-                    existing.cyan(),
-                    provided.cyan()
-                );
-                return false;
-            }
-            (Some(existing), None) => {
-                let _ = writeln!(
-                    printer.stderr(),
-                    "Ignoring existing lockfile due to removal of timestamp cutoff: `{}`",
-                    existing.cyan(),
-                );
-                return false;
-            }
-            (None, Some(provided)) => {
-                let _ = writeln!(
-                    printer.stderr(),
-                    "Ignoring existing lockfile due to addition of timestamp cutoff: `{}`",
-                    provided.cyan()
-                );
-                return false;
-            }
-        }
-        true
-    });
-
-    // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = existing_lock
-        .as_ref()
-        .map(|lock| read_lock_requirements(lock, upgrade))
-        .unwrap_or_default();
-
-    // Populate the Git resolver.
-    for ResolvedRepositoryReference { reference, sha } in git {
-        debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-        state.git.insert(reference, sha);
-    }
-
-    let start = std::time::Instant::now();
-
-    let requires_python = find_requires_python(workspace)?;
-    let existing_lock = existing_lock.filter(|lock| {
-        match (lock.requires_python(), requires_python.as_ref()) {
-            // If the Requires-Python bound in the lockfile is weaker or equivalent to the
-            // Requires-Python bound in the workspace, we should have the necessary wheels to perform
-            // a locked resolution.
-            (None, Some(_)) => true,
-            (Some(locked), Some(specified)) if locked.bound() == specified.bound() => true,
-
-            // On the other hand, if the bound in the lockfile is stricter, meaning the
-            // bound has since been weakened, we have to perform a clean resolution to ensure
-            // we fetch the necessary wheels.
-            _ => false,
-        }
-    });
-
-    // When we run the same resolution from the lockfile again, we could get a different result the
-    // second time due to the preferences causing us to skip a fork point (see
-    // "preferences-dependent-forking" packse scenario). To avoid this, we store the forks in the
-    // lockfile. We read those after all the lockfile filters, to allow the forks to change when
-    // the environment changed, e.g. the python bound check above can lead to different forking.
-    let resolver_markers = ResolverMarkers::universal(if upgrade.is_all() {
-        // We're discarding all preferences, so we're also discarding the existing forks.
-        None
-    } else {
-        existing_lock.and_then(|lock| lock.fork_markers().clone())
-    });
-
-    let resolution = match existing_lock.filter(|_| upgrade.is_none()) {
-        None => None,
-
-        // Try to resolve using metadata in the lockfile.
-        //
-        // When resolving from the lockfile we can still download and install new distributions,
-        // but we rely on the lockfile for the metadata of any existing distributions. If we have
-        // any outdated metadata we fall back to a clean resolve.
-        Some(lock) => {
-            debug!("Resolving with existing `uv.lock`");
-
-            // Prefill the index with the lockfile metadata.
-            let index = lock.to_index(workspace.install_path(), upgrade)?;
-
-            // Create a build dispatch.
-            let build_dispatch = BuildDispatch::new(
-                &client,
-                cache,
-                &build_constraints,
+    let existing_lock = if let Some(existing_lock) = existing_lock {
+        Some(
+            ValidatedLock::validate(
+                existing_lock,
+                workspace,
+                &members,
+                &constraints,
+                &overrides,
                 interpreter,
+                &requires_python,
                 index_locations,
-                &flat_index,
-                &index,
-                &state.git,
-                &state.in_flight,
-                index_strategy,
-                setup_py,
-                config_setting,
-                build_isolation,
-                link_mode,
-                build_options,
-                exclude_newer,
-                sources,
-                concurrency,
-                preview,
-            );
-
-            // Resolve the requirements.
-            pip::operations::resolve(
-                requirements.clone(),
-                constraints.clone(),
-                overrides.clone(),
-                dev.clone(),
-                source_trees.clone(),
-                None,
-                &extras,
-                preferences.clone(),
-                EmptyInstalledPackages,
-                &hasher,
-                &Reinstall::default(),
                 upgrade,
-                None,
-                resolver_markers.clone(),
-                python_requirement.clone(),
-                &client,
-                &flat_index,
-                &index,
-                &build_dispatch,
-                concurrency,
-                options,
-                Box::new(SummaryResolveLogger),
+                &options,
+                &database,
                 printer,
-                preview,
             )
-            .await
-            .inspect_err(|err| debug!("Resolution with `uv.lock` failed: {err}"))
-            .ok()
-            .filter(|resolution| {
-                // Ensure no diagnostics were emitted that may be caused by stale metadata in the lockfile.
-                if resolution.diagnostics().is_empty() {
-                    return true;
-                }
-
-                debug!("Resolution with `uv.lock` failed due to diagnostics:");
-                for diagnostic in resolution.diagnostics() {
-                    debug!("- {}", diagnostic.message());
-                }
-
-                false
-            })
-        }
+            .await?,
+        )
+    } else {
+        None
     };
 
-    let resolution = match resolution {
+    match existing_lock {
         // Resolution from the lockfile succeeded.
-        Some(resolution) => resolution,
+        Some(ValidatedLock::Satisfies(lock)) => {
+            // Print the success message after completing resolution.
+            logger.on_complete(lock.len(), start, printer)?;
+
+            Ok(LockResult::Unchanged(lock))
+        }
 
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
-        None => {
+        _ => {
             debug!("Starting clean resolution");
 
-            // Create a build dispatch.
-            let build_dispatch = BuildDispatch::new(
-                &client,
-                cache,
-                &build_constraints,
-                interpreter,
-                index_locations,
-                &flat_index,
-                &state.index,
-                &state.git,
-                &state.in_flight,
-                index_strategy,
-                setup_py,
-                config_setting,
-                build_isolation,
-                link_mode,
-                build_options,
-                exclude_newer,
-                sources,
-                concurrency,
-                preview,
-            );
+            // If an existing lockfile exists, build up a set of preferences.
+            let LockedRequirements { preferences, git } = existing_lock
+                .as_ref()
+                .and_then(|lock| match &lock {
+                    ValidatedLock::Preferable(lock) => Some(lock),
+                    ValidatedLock::Satisfies(lock) => Some(lock),
+                    ValidatedLock::Unusable(_) => None,
+                })
+                .map(|lock| read_lock_requirements(lock, upgrade))
+                .unwrap_or_default();
+
+            // Populate the Git resolver.
+            for ResolvedRepositoryReference { reference, sha } in git {
+                debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
+                state.git.insert(reference, sha);
+            }
+
+            // When we run the same resolution from the lockfile again, we could get a different result the
+            // second time due to the preferences causing us to skip a fork point (see
+            // "preferences-dependent-forking" packse scenario). To avoid this, we store the forks in the
+            // lockfile. We read those after all the lockfile filters, to allow the forks to change when
+            // the environment changed, e.g. the python bound check above can lead to different forking.
+            let resolver_markers = ResolverMarkers::universal(if upgrade.is_all() {
+                // We're discarding all preferences, so we're also discarding the existing forks.
+                vec![]
+            } else {
+                existing_lock
+                    .as_ref()
+                    .map(|existing_lock| existing_lock.lock().fork_markers().to_vec())
+                    .unwrap_or_default()
+            });
 
             // Resolve the requirements.
-            pip::operations::resolve(
+            let resolution = pip::operations::resolve(
                 requirements,
-                constraints,
-                overrides,
+                constraints.clone(),
+                overrides
+                    .iter()
+                    .cloned()
+                    .map(UnresolvedRequirementSpecification::from)
+                    .collect(),
                 dev,
                 source_trees,
                 None,
+                Some(workspace.packages().keys().cloned().collect()),
                 &extras,
                 preferences,
                 EmptyInstalledPackages,
@@ -569,21 +503,227 @@ async fn do_lock(
                 printer,
                 preview,
             )
-            .await?
+            .await?;
+
+            // Print the success message after completing resolution.
+            logger.on_complete(resolution.len(), start, printer)?;
+
+            // Notify the user of any resolution diagnostics.
+            pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+
+            let previous = existing_lock.map(ValidatedLock::into_lock);
+            let lock = Lock::from_resolution_graph(&resolution)?
+                .with_manifest(ResolverManifest::new(members, constraints, overrides));
+
+            Ok(LockResult::Changed(previous, lock))
         }
-    };
+    }
+}
 
-    // Print the success message after completing resolution.
-    logger.on_complete(resolution.len(), start, printer)?;
+#[derive(Debug)]
+enum ValidatedLock {
+    /// An existing lockfile was provided, but its contents should be ignored.
+    Unusable(Lock),
+    /// An existing lockfile was provided, and it satisfies the workspace requirements.
+    Satisfies(Lock),
+    /// An existing lockfile was provided, and the locked versions should be preferred if possible,
+    /// even though the lockfile does not satisfy the workspace requirements.
+    Preferable(Lock),
+}
 
-    // Notify the user of any resolution diagnostics.
-    pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
+impl ValidatedLock {
+    /// Validate a [`Lock`] against the workspace requirements.
+    async fn validate<Context: BuildContext>(
+        lock: Lock,
+        workspace: &Workspace,
+        members: &[PackageName],
+        constraints: &[Requirement],
+        overrides: &[Requirement],
+        interpreter: &Interpreter,
+        requires_python: &RequiresPython,
+        index_locations: &IndexLocations,
+        upgrade: &Upgrade,
+        options: &Options,
+        database: &DistributionDatabase<'_, Context>,
+        printer: Printer,
+    ) -> Result<Self, ProjectError> {
+        // Start with the most severe condition: a fundamental option changed between resolutions.
+        if lock.resolution_mode() != options.resolution_mode {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in resolution mode: `{}` vs. `{}`",
+                lock.resolution_mode().cyan(),
+                options.resolution_mode.cyan()
+            );
+            return Ok(Self::Unusable(lock));
+        }
+        if lock.prerelease_mode() != options.prerelease_mode {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
+                lock.prerelease_mode().cyan(),
+                options.prerelease_mode.cyan()
+            );
+            return Ok(Self::Unusable(lock));
+        }
+        match (lock.exclude_newer(), options.exclude_newer) {
+            (None, None) => (),
+            (Some(existing), Some(provided)) if existing == provided => (),
+            (Some(existing), Some(provided)) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to change in timestamp cutoff: `{}` vs. `{}`",
+                    existing.cyan(),
+                    provided.cyan()
+                );
+                return Ok(Self::Unusable(lock));
+            }
+            (Some(existing), None) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to removal of timestamp cutoff: `{}`",
+                    existing.cyan(),
+                );
+                return Ok(Self::Unusable(lock));
+            }
+            (None, Some(provided)) => {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Ignoring existing lockfile due to addition of timestamp cutoff: `{}`",
+                    provided.cyan()
+                );
+                return Ok(Self::Unusable(lock));
+            }
+        }
 
-    Ok(Lock::from_resolution_graph(&resolution)?)
+        // If the user specified `--upgrade`, then at best we can prefer some of the existing
+        // versions.
+        if !upgrade.is_none() {
+            debug!("Ignoring existing lockfile due to `--upgrade`");
+            return Ok(Self::Preferable(lock));
+        }
+
+        // If the Requires-Python bound in the lockfile is weaker or equivalent to the
+        // Requires-Python bound in the workspace, we should have the necessary wheels to perform
+        // a locked resolution.
+        if let Some(locked) = lock.requires_python() {
+            if locked.bound() != requires_python.bound() {
+                // On the other hand, if the bound in the lockfile is stricter, meaning the
+                // bound has since been weakened, we have to perform a clean resolution to ensure
+                // we fetch the necessary wheels.
+                debug!("Ignoring existing lockfile due to change in `requires-python`");
+
+                // It's fine to prefer the existing versions, though.
+                return Ok(Self::Preferable(lock));
+            }
+        }
+
+        // If the user provided at least one index URL (from the command line, or from a configuration
+        // file), don't use the existing lockfile if it references any registries that are no longer
+        // included in the current configuration.
+        //
+        // However, iIf _no_ indexes were provided, we assume that the user wants to reuse the existing
+        // distributions, even though a failure to reuse the lockfile will result in re-resolving
+        // against PyPI by default.
+        let indexes = if index_locations.is_none() {
+            None
+        } else {
+            Some(index_locations)
+        };
+
+        // Determine whether the lockfile satisfies the workspace requirements.
+        match lock
+            .satisfies(
+                workspace,
+                members,
+                constraints,
+                overrides,
+                indexes,
+                interpreter.tags()?,
+                database,
+            )
+            .await?
+        {
+            SatisfiesResult::Satisfied => {
+                debug!("Existing `uv.lock` satisfies workspace requirements");
+                Ok(Self::Satisfies(lock))
+            }
+            SatisfiesResult::MismatchedMembers(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched members:\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedConstraints(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched constraints:\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedOverrides(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched overrides:\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingRoot(name) => {
+                debug!("Ignoring existing lockfile due to missing root package: `{name}`");
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingIndex(name, version, index) => {
+                debug!(
+                    "Ignoring existing lockfile due to missing index: `{name}` `{version}` from `{index}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingMetadata(name, version) => {
+                debug!(
+                    "Ignoring existing lockfile due to missing metadata for: `{name}=={version}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedRequiresDist(name, version, expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched `requires-dist` for: `{name}=={version}`\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedDevDependencies(name, version, expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Expected: {:?}\n  Actual: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+        }
+    }
+
+    /// Return the inner [`Lock`].
+    fn lock(&self) -> &Lock {
+        match self {
+            ValidatedLock::Unusable(lock) => lock,
+            ValidatedLock::Satisfies(lock) => lock,
+            ValidatedLock::Preferable(lock) => lock,
+        }
+    }
+
+    /// Convert the [`ValidatedLock`] into a [`Lock`].
+    #[must_use]
+    fn into_lock(self) -> Lock {
+        match self {
+            ValidatedLock::Unusable(lock) => lock,
+            ValidatedLock::Satisfies(lock) => lock,
+            ValidatedLock::Preferable(lock) => lock,
+        }
+    }
 }
 
 /// Write the lockfile to disk.
-pub(crate) async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> {
+async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> {
     let encoded = lock.to_toml()?;
     fs_err::tokio::write(workspace.install_path().join("uv.lock"), encoded).await?;
     Ok(())
@@ -592,9 +732,9 @@ pub(crate) async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), Pro
 /// Read the lockfile from the workspace.
 ///
 /// Returns `Ok(None)` if the lockfile does not exist.
-pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
+async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
     match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
-        Ok(encoded) => match Lock::from_toml(&encoded) {
+        Ok(encoded) => match toml::from_str(&encoded) {
             Ok(lock) => Ok(Some(lock)),
             Err(err) => {
                 eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");

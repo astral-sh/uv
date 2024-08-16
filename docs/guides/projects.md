@@ -92,7 +92,7 @@ reproducible installations across machines.
 
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually.
 
-See the [lockfile](../concepts/projects.md#lock-file) documentation for more details.
+See the [lockfile](../concepts/projects.md#lockfile) documentation for more details.
 
 ## Managing dependencies
 

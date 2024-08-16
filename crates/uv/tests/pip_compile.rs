@@ -1132,7 +1132,7 @@ fn compile_python_37() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the requested Python version (3.7.0) does not satisfy Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude that black==23.10.1 cannot be used.
-          And because you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
+          And because you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -1759,7 +1759,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of werkzeug==3.0.0 and you require werkzeug==3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of werkzeug==3.0.0 and you require werkzeug==3.0.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -1886,7 +1886,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only werkzeug<3.0.0 is available and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude that flask==3.0.0 cannot be used.
-          And because you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
+          And because you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -2237,7 +2237,7 @@ fn requirement_constraint_override_url() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==3.7.0 and you require anyio==3.7.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of anyio==3.7.0 and you require anyio==3.7.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -2459,7 +2459,7 @@ dependencies = ["anyio==3.7.0", "anyio==4.0.0"]
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because my-project depends on anyio==3.7.0 and anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because my-project depends on anyio==3.7.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -2491,7 +2491,7 @@ dependencies = ["anyio==300.1.4"]
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==300.1.4 and my-project depends on anyio==300.1.4, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of anyio==300.1.4 and my-project depends on anyio==300.1.4, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -2934,11 +2934,11 @@ fn compile_yanked_version_indirect() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of attrs are available:
-              attrs<=20.3.0
+              attrs<20.3.0
               attrs==21.1.0
-              attrs>=21.2.0
+              attrs>21.2.0
           and attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
-          And because you require attrs>20.3.0,<21.2.0, we can conclude that the requirements are unsatisfiable.
+          And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -5402,7 +5402,7 @@ fn no_index_requirements_txt() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the provided package locations and you require tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the provided package locations and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -5511,7 +5511,7 @@ fn offline_registry() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -5642,7 +5642,7 @@ fn offline_find_links() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -5661,7 +5661,7 @@ fn offline_find_links() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -5747,7 +5747,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Metadata for validation==2.0.0 could not be parsed:
             Failed to parse version: Unexpected end of version specifier, expected operator:
@@ -5779,7 +5779,7 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because validation==3.0.0 has an invalid package format and you require validation==3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because validation==3.0.0 has an invalid package format and you require validation==3.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: The structure of validation==3.0.0 was invalid:
             Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
@@ -6048,7 +6048,7 @@ fn compile_constraints_incompatible_url() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only anyio>=4 is available and you require anyio<4, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only anyio>=4 is available and you require anyio<4, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -6071,7 +6071,7 @@ fn index_url_in_requirements() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and you require anyio<4, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the package registry and you require anyio<4, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -6443,11 +6443,11 @@ fn no_strip_markers() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --no-strip-markers --python-platform linux
-    anyio==4.3.0 ; python_version > '3.11'
+    anyio==4.3.0 ; python_full_version >= '3.12'
         # via -r requirements.in
-    idna==3.6 ; python_version > '3.11'
+    idna==3.6 ; python_full_version >= '3.12'
         # via anyio
-    sniffio==1.3.1 ; python_version > '3.11'
+    sniffio==1.3.1 ; python_full_version >= '3.12'
         # via anyio
 
     ----- stderr -----
@@ -6479,23 +6479,23 @@ fn no_strip_markers_multiple_markers() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --no-strip-markers --python-platform windows
-    attrs==23.2.0 ; sys_platform == 'win32' or python_version > '3.11'
+    attrs==23.2.0 ; sys_platform == 'win32' or python_full_version >= '3.12'
         # via
         #   outcome
         #   trio
-    cffi==1.16.0 ; (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') or (python_version > '3.11' and implementation_name != 'pypy' and os_name == 'nt')
+    cffi==1.16.0 ; (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') or (python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt')
         # via trio
-    idna==3.6 ; sys_platform == 'win32' or python_version > '3.11'
+    idna==3.6 ; sys_platform == 'win32' or python_full_version >= '3.12'
         # via trio
-    outcome==1.3.0.post0 ; sys_platform == 'win32' or python_version > '3.11'
+    outcome==1.3.0.post0 ; sys_platform == 'win32' or python_full_version >= '3.12'
         # via trio
-    pycparser==2.21 ; (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') or (python_version > '3.11' and implementation_name != 'pypy' and os_name == 'nt')
+    pycparser==2.21 ; (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') or (python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt')
         # via cffi
-    sniffio==1.3.1 ; sys_platform == 'win32' or python_version > '3.11'
+    sniffio==1.3.1 ; sys_platform == 'win32' or python_full_version >= '3.12'
         # via trio
-    sortedcontainers==2.4.0 ; sys_platform == 'win32' or python_version > '3.11'
+    sortedcontainers==2.4.0 ; sys_platform == 'win32' or python_full_version >= '3.12'
         # via trio
-    trio==0.25.0 ; sys_platform == 'win32' or python_version > '3.11'
+    trio==0.25.0 ; sys_platform == 'win32' or python_full_version >= '3.12'
         # via -r requirements.in
 
     ----- stderr -----
@@ -6524,23 +6524,23 @@ fn no_strip_markers_transitive_marker() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --no-strip-markers --python-platform windows
-    attrs==23.2.0 ; python_version > '3.11'
+    attrs==23.2.0 ; python_full_version >= '3.12'
         # via
         #   outcome
         #   trio
-    cffi==1.16.0 ; python_version > '3.11' and implementation_name != 'pypy' and os_name == 'nt'
+    cffi==1.16.0 ; python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt'
         # via trio
-    idna==3.6 ; python_version > '3.11'
+    idna==3.6 ; python_full_version >= '3.12'
         # via trio
-    outcome==1.3.0.post0 ; python_version > '3.11'
+    outcome==1.3.0.post0 ; python_full_version >= '3.12'
         # via trio
-    pycparser==2.21 ; python_version > '3.11' and implementation_name != 'pypy' and os_name == 'nt'
+    pycparser==2.21 ; python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt'
         # via cffi
-    sniffio==1.3.1 ; python_version > '3.11'
+    sniffio==1.3.1 ; python_full_version >= '3.12'
         # via trio
-    sortedcontainers==2.4.0 ; python_version > '3.11'
+    sortedcontainers==2.4.0 ; python_full_version >= '3.12'
         # via trio
-    trio==0.25.0 ; python_version > '3.11'
+    trio==0.25.0 ; python_full_version >= '3.12'
         # via -r requirements.in
 
     ----- stderr -----
@@ -6816,9 +6816,9 @@ fn universal_multi_version() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -c constraints.txt --universal
-    iniconfig==1.0.0 ; python_version == '3.12'
+    iniconfig==1.0.0 ; python_full_version < '3.13'
         # via -r requirements.in
-    iniconfig==2.0.0 ; python_version > '3.12'
+    iniconfig==2.0.0 ; python_full_version >= '3.13'
         # via -r requirements.in
 
     ----- stderr -----
@@ -7222,7 +7222,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
-    cmake==3.28.4 ; python_version >= '3.11' and python_version <= '3.12' and platform_machine == 'x86_64' and platform_system == 'Linux'
+    cmake==3.28.4 ; python_full_version >= '3.11' and python_full_version < '3.13' and platform_machine == 'x86_64' and platform_system == 'Linux'
         # via triton
     .
         # via -r requirements.in
@@ -7232,7 +7232,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         #   triton
     jinja2==3.1.3
         # via torch
-    lit==18.1.2 ; python_version >= '3.11' and python_version <= '3.12' and platform_machine == 'x86_64' and platform_system == 'Linux'
+    lit==18.1.2 ; python_full_version >= '3.11' and python_full_version < '3.13' and platform_machine == 'x86_64' and platform_system == 'Linux'
         # via triton
     markupsafe==2.1.5
         # via jinja2
@@ -7242,20 +7242,20 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via torch
     sympy==1.12
         # via torch
-    torch==2.0.0 ; python_version < '3.11'
+    torch==2.0.0 ; python_full_version < '3.11'
         # via
         #   -r requirements.in
         #   example
-    torch==2.0.0+cpu ; python_version > '3.12'
+    torch==2.0.0+cpu ; python_full_version >= '3.13'
         # via
         #   -r requirements.in
         #   example
-    torch==2.0.0+cu118 ; python_version >= '3.11' and python_version <= '3.12'
+    torch==2.0.0+cu118 ; python_full_version >= '3.11' and python_full_version < '3.13'
         # via
         #   -r requirements.in
         #   example
         #   triton
-    triton==2.0.0 ; python_version >= '3.11' and python_version <= '3.12' and platform_machine == 'x86_64' and platform_system == 'Linux'
+    triton==2.0.0 ; python_full_version >= '3.11' and python_full_version < '3.13' and platform_machine == 'x86_64' and platform_system == 'Linux'
         # via torch
     typing-extensions==4.10.0
         # via torch
@@ -7521,11 +7521,11 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via torch
     tbb==2021.11.0 ; os_name != 'Linux' and platform_system == 'Windows'
         # via mkl
-    torch==2.0.0+cpu ; os_name == 'Linux'
+    torch==2.0.0+cpu ; os_name == 'Linux' and platform_machine != 'x86_64'
         # via
         #   -r requirements.in
         #   example
-    torch==2.0.0+cu118 ; os_name == 'Linux'
+    torch==2.0.0+cu118 ; os_name == 'Linux' and platform_machine == 'x86_64'
         # via
         #   -r requirements.in
         #   example
@@ -7768,11 +7768,11 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
-    cffi==1.16.0 ; platform_python_implementation != 'PyPy' or os_name == 'linux'
+    cffi==1.16.0 ; os_name == 'linux'
         # via
         #   -r requirements.in
         #   cryptography
-    cffi==1.17.0rc1 ; os_name != 'linux' or platform_python_implementation != 'PyPy'
+    cffi==1.17.0rc1 ; os_name != 'linux'
         # via
         #   -r requirements.in
         #   cryptography
@@ -7954,9 +7954,9 @@ fn universal_requires_python() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -p 3.8 --universal
-    numpy==1.24.4 ; python_version < '3.9'
+    numpy==1.24.4 ; python_full_version < '3.9'
         # via -r requirements.in
-    numpy==1.26.4 ; python_version >= '3.9'
+    numpy==1.26.4 ; python_full_version >= '3.9'
         # via -r requirements.in
 
     ----- stderr -----
@@ -7993,35 +7993,35 @@ fn universal_requires_python_incomplete() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.7 is not available; 3.12.[X] will be used to build dependencies instead.
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of uv{python_version >= '3.8'} are available:
-              uv{python_version >= '3.8'}==0.0.5
-              uv{python_version >= '3.8'}==0.1.0
-              uv{python_version >= '3.8'}==0.1.1
-              uv{python_version >= '3.8'}==0.1.2
-              uv{python_version >= '3.8'}==0.1.3
-              uv{python_version >= '3.8'}==0.1.4
-              uv{python_version >= '3.8'}==0.1.5
-              uv{python_version >= '3.8'}==0.1.6
-              uv{python_version >= '3.8'}==0.1.7
-              uv{python_version >= '3.8'}==0.1.8
-              uv{python_version >= '3.8'}==0.1.9
-              uv{python_version >= '3.8'}==0.1.10
-              uv{python_version >= '3.8'}==0.1.11
-              uv{python_version >= '3.8'}==0.1.12
-              uv{python_version >= '3.8'}==0.1.13
-              uv{python_version >= '3.8'}==0.1.14
-              uv{python_version >= '3.8'}==0.1.15
-              uv{python_version >= '3.8'}==0.1.16
-              uv{python_version >= '3.8'}==0.1.17
-              uv{python_version >= '3.8'}==0.1.18
-              uv{python_version >= '3.8'}==0.1.19
-              uv{python_version >= '3.8'}==0.1.20
-              uv{python_version >= '3.8'}==0.1.21
-              uv{python_version >= '3.8'}==0.1.22
-              uv{python_version >= '3.8'}==0.1.23
-              uv{python_version >= '3.8'}==0.1.24
-          and the requested Python version (>=3.7) does not satisfy Python>=3.8, we can conclude that all versions of uv{python_version >= '3.8'} are incompatible.
-          And because you require uv{python_version >= '3.8'}, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only the following versions of uv{python_full_version >= '3.8'} are available:
+              uv{python_full_version >= '3.8'}==0.0.5
+              uv{python_full_version >= '3.8'}==0.1.0
+              uv{python_full_version >= '3.8'}==0.1.1
+              uv{python_full_version >= '3.8'}==0.1.2
+              uv{python_full_version >= '3.8'}==0.1.3
+              uv{python_full_version >= '3.8'}==0.1.4
+              uv{python_full_version >= '3.8'}==0.1.5
+              uv{python_full_version >= '3.8'}==0.1.6
+              uv{python_full_version >= '3.8'}==0.1.7
+              uv{python_full_version >= '3.8'}==0.1.8
+              uv{python_full_version >= '3.8'}==0.1.9
+              uv{python_full_version >= '3.8'}==0.1.10
+              uv{python_full_version >= '3.8'}==0.1.11
+              uv{python_full_version >= '3.8'}==0.1.12
+              uv{python_full_version >= '3.8'}==0.1.13
+              uv{python_full_version >= '3.8'}==0.1.14
+              uv{python_full_version >= '3.8'}==0.1.15
+              uv{python_full_version >= '3.8'}==0.1.16
+              uv{python_full_version >= '3.8'}==0.1.17
+              uv{python_full_version >= '3.8'}==0.1.18
+              uv{python_full_version >= '3.8'}==0.1.19
+              uv{python_full_version >= '3.8'}==0.1.20
+              uv{python_full_version >= '3.8'}==0.1.21
+              uv{python_full_version >= '3.8'}==0.1.22
+              uv{python_full_version >= '3.8'}==0.1.23
+              uv{python_full_version >= '3.8'}==0.1.24
+          and the requested Python version (>=3.7) does not satisfy Python>=3.8, we can conclude that all versions of uv{python_full_version >= '3.8'} are incompatible.
+          And because you require uv{python_full_version >= '3.8'}, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -8035,7 +8035,7 @@ fn universal_requires_python_incomplete() -> Result<()> {
 /// [2]: https://github.com/astral-sh/uv/pull/4707
 /// [3]: https://github.com/astral-sh/uv/pull/5597
 #[test]
-fn universal_no_repeated_unconditional_distributions() -> Result<()> {
+fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc::indoc! {r"
@@ -8075,7 +8075,7 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via requests
     imagesize==1.4.1
         # via sphinx
-    importlib-metadata==7.1.0 ; python_version < '3.10'
+    importlib-metadata==7.1.0 ; python_full_version < '3.10'
         # via sphinx
     isort==5.13.2
         # via pylint
@@ -8093,7 +8093,7 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via sphinx
     pylint==3.1.0
         # via -r requirements.in
-    pytz==2024.1 ; python_version < '3.9'
+    pytz==2024.1 ; python_full_version < '3.9'
         # via babel
     requests==2.31.0
         # via sphinx
@@ -8113,22 +8113,76 @@ fn universal_no_repeated_unconditional_distributions() -> Result<()> {
         # via sphinx
     sphinxcontrib-serializinghtml==1.1.5
         # via sphinx
-    tomli==2.0.1 ; python_version < '3.11'
+    tomli==2.0.1 ; python_full_version < '3.11'
         # via pylint
     tomlkit==0.12.4
         # via pylint
-    typing-extensions==4.10.0 ; python_version < '3.11'
+    typing-extensions==4.10.0 ; python_full_version < '3.11'
         # via
         #   astroid
         #   pylint
     urllib3==2.2.1
         # via requests
-    zipp==3.18.1 ; python_version < '3.10'
+    zipp==3.18.1 ; python_full_version < '3.10'
         # via importlib-metadata
 
     ----- stderr -----
     warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 34 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// This test captures a case[1] that was broken by marker normalization.
+///
+/// [1]: https://github.com/astral-sh/uv/issues/6064
+#[test]
+fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc::indoc! {r"
+        pylint
+        dill==0.3.1.1
+    "})?;
+
+    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
+            .arg("requirements.in")
+            .arg("-p")
+            .arg("3.11")
+            .arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in -p 3.11 --universal
+    astroid==2.13.5
+        # via pylint
+    colorama==0.4.6 ; sys_platform == 'win32'
+        # via pylint
+    dill==0.3.1.1
+        # via
+        #   -r requirements.in
+        #   pylint
+    isort==5.13.2
+        # via pylint
+    lazy-object-proxy==1.10.0
+        # via astroid
+    mccabe==0.7.0
+        # via pylint
+    platformdirs==4.2.0
+        # via pylint
+    pylint==2.15.8
+        # via -r requirements.in
+    tomlkit==0.12.4
+        # via pylint
+    wrapt==1.16.0
+        # via astroid
+
+    ----- stderr -----
+    warning: The requested Python version 3.11 is not available; 3.12.[X] will be used to build dependencies instead.
+    Resolved 10 packages in [TIME]
     "###
     );
 
@@ -8172,11 +8226,11 @@ fn universal_prefer_upper_bounds() -> Result<()> {
         # via pylint
     pylint==2.17.7
         # via -r requirements.in
-    tomli==2.0.1 ; python_version < '3.11'
+    tomli==2.0.1 ; python_full_version < '3.11'
         # via pylint
     tomlkit==0.12.4
         # via pylint
-    typing-extensions==4.10.0 ; python_version < '3.11'
+    typing-extensions==4.10.0 ; python_full_version < '3.11'
         # via
         #   astroid
         #   pylint
@@ -8368,7 +8422,7 @@ fn compile_constraints_incompatible_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -8396,7 +8450,7 @@ fn conflicting_url_markers() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -8550,7 +8604,7 @@ fn override_with_incompatible_constraint() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require anyio>=3.0.0 and anyio<3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require anyio>=3.0.0 and anyio<3.0.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -9078,7 +9132,7 @@ requires-python = "<=3.8"
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -9130,7 +9184,7 @@ requires-python = "<=3.8"
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the requested Python version (3.11.0) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -9358,7 +9412,7 @@ requires-python = "<=3.8"
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -9976,7 +10030,7 @@ fn emit_marker_expression_exciting_linux() -> Result<()> {
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --emit-marker-expression
     # Pinned dependencies known to be valid for:
-    #    python_version == '3.12' and platform_python_implementation == 'CPython' and platform_system == 'Linux'
+    #    python_full_version == '3.12.1' and platform_python_implementation == 'CPython' and platform_system == 'Linux'
     anyio==4.3.0
         # via -r requirements.in
     idna==3.6
@@ -10013,7 +10067,7 @@ fn emit_marker_expression_direct() -> Result<()> {
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --emit-marker-expression
     # Pinned dependencies known to be valid for:
-    #    python_version == '3.12' and platform_python_implementation == 'CPython' and platform_system == 'Linux' and sys_platform == 'linux'
+    #    python_full_version == '3.12.1' and platform_python_implementation == 'CPython' and platform_system == 'Linux' and sys_platform == 'linux'
     anyio==4.3.0
         # via -r requirements.in
     idna==3.6
@@ -10093,7 +10147,7 @@ fn emit_marker_expression_pypy() -> Result<()> {
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --emit-marker-expression
     # Pinned dependencies known to be valid for:
-    #    python_version == '3.12' and implementation_name == 'cpython'
+    #    python_full_version == '3.12.1' and implementation_name == 'cpython'
     pendulum==3.0.0
         # via -r requirements.in
     python-dateutil==2.9.0.post0
@@ -10494,7 +10548,7 @@ requires-python = ">3.8"
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of anyio==0.0.0 and lib==0.0.0 depends on anyio==0.0.0, we can conclude that lib==0.0.0 cannot be used.
           And because only lib==0.0.0 is available and example==0.0.0 depends on lib, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -10665,7 +10719,7 @@ fn compile_index_url_first_match() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -11693,7 +11747,7 @@ fn no_binary_only_binary() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only source-distribution==0.0.1 is available and source-distribution==0.0.1 has no usable wheels and building from source is disabled, we can conclude that all versions of source-distribution cannot be used.
-          And because you require source-distribution, we can conclude that the requirements are unsatisfiable.
+          And because you require source-distribution, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -11776,10 +11830,9 @@ fn incompatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to build: `requests==1.2.0`
       Caused by: Failed to install requirements from setup.py build (resolve)
       Caused by: No solution found when resolving: setuptools>=40.8.0
-      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that the requirements are unsatisfiable.
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 

@@ -10,7 +10,7 @@ use std::io::Write;
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Credentials {
+pub struct Credentials {
     /// The name of the user for authentication.
     username: Username,
     /// The password to use for authentication.
@@ -114,7 +114,7 @@ impl Credentials {
     /// Parse [`Credentials`] from a URL, if any.
     ///
     /// Returns [`None`] if both [`Url::username`] and [`Url::password`] are not populated.
-    pub(crate) fn from_url(url: &Url) -> Option<Self> {
+    pub fn from_url(url: &Url) -> Option<Self> {
         if url.username().is_empty() && url.password().is_none() {
             return None;
         }
@@ -201,6 +201,20 @@ impl Credentials {
         let mut header = HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
         header.set_sensitive(true);
         header
+    }
+
+    /// Apply the credentials to the given URL.
+    ///
+    /// Any existing credentials will be overridden.
+    #[must_use]
+    pub fn apply(&self, mut url: Url) -> Url {
+        if let Some(username) = self.username() {
+            let _ = url.set_username(username);
+        }
+        if let Some(password) = self.password() {
+            let _ = url.set_password(Some(password));
+        }
+        url
     }
 
     /// Attach the credentials to the given request.

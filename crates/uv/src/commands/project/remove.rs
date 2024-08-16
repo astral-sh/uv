@@ -174,7 +174,8 @@ pub(crate) async fn remove(
         cache,
         printer,
     )
-    .await?;
+    .await?
+    .into_lock();
 
     if no_sync {
         return Ok(ExitStatus::Success);
@@ -191,7 +192,7 @@ pub(crate) async fn remove(
     project::sync::do_sync(
         &project,
         &venv,
-        &lock.lock,
+        &lock,
         &extras,
         dev,
         Modifications::Exact,

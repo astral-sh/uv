@@ -710,7 +710,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Project(project) => {
-            run_project(project, script, globals, filesystem, cache, printer).await
+            Box::pin(run_project(
+                project, script, globals, filesystem, cache, printer,
+            ))
+            .await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {

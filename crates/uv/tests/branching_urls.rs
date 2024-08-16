@@ -67,7 +67,7 @@ fn branching_urls_overlapping() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_version >= '3.11' and python_version < '3.12'`:
+    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version < '3.12'`:
     - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
     - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
     "###
@@ -133,7 +133,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_version < '3.12'`:
+    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version < '3.12'`:
     - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
     - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
     "###
@@ -209,8 +209,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = 1
     requires-python = ">=3.11, <3.13"
     environment-markers = [
-        "python_version < '3.12'",
-        "python_version >= '3.12'",
+        "python_full_version < '3.12'",
+        "python_full_version >= '3.12'",
     ]
 
     [options]
@@ -221,9 +221,16 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "0.1.0"
     source = { editable = "." }
     dependencies = [
-        { name = "anyio", version = "4.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
-        { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.12'" },
+        { name = "anyio", version = "4.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+        { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
         { name = "b" },
+    ]
+
+    [package.metadata]
+    requires-dist = [
+        { name = "anyio", marker = "python_full_version < '3.12'", specifier = "==4.2.0" },
+        { name = "anyio", marker = "python_full_version >= '3.12'", specifier = "==4.3.0" },
+        { name = "b", directory = "b" },
     ]
 
     [[package]]
@@ -231,11 +238,11 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "4.2.0"
     source = { registry = "https://pypi.org/simple" }
     environment-markers = [
-        "python_version < '3.12'",
+        "python_full_version < '3.12'",
     ]
     dependencies = [
-        { name = "idna", marker = "python_version < '3.12'" },
-        { name = "sniffio", marker = "python_version < '3.12'" },
+        { name = "idna", marker = "python_full_version < '3.12'" },
+        { name = "sniffio", marker = "python_full_version < '3.12'" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770 }
     wheels = [
@@ -247,11 +254,11 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "4.3.0"
     source = { registry = "https://pypi.org/simple" }
     environment-markers = [
-        "python_version >= '3.12'",
+        "python_full_version >= '3.12'",
     ]
     dependencies = [
-        { name = "idna", marker = "python_version >= '3.12'" },
-        { name = "sniffio", marker = "python_version >= '3.12'" },
+        { name = "idna", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", marker = "python_full_version >= '3.12'" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
     wheels = [
@@ -263,8 +270,14 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "b" }
     dependencies = [
-        { name = "b1", marker = "python_version < '3.12'" },
-        { name = "b2", marker = "python_version >= '3.12'" },
+        { name = "b1", marker = "python_full_version < '3.12'" },
+        { name = "b2", marker = "python_full_version >= '3.12'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [
+        { name = "b1", marker = "python_full_version < '3.12'", directory = "../b1" },
+        { name = "b2", marker = "python_full_version >= '3.12'", directory = "../b2" },
     ]
 
     [[package]]
@@ -272,16 +285,22 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "../b1" }
     dependencies = [
-        { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_version < '3.12'" },
+        { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_full_version < '3.12'" },
     ]
+
+    [package.metadata]
+    requires-dist = [{ name = "iniconfig", url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }]
 
     [[package]]
     name = "b2"
     version = "0.1.0"
     source = { directory = "../b2" }
     dependencies = [
-        { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_version >= '3.12'" },
+        { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_full_version >= '3.12'" },
     ]
+
+    [package.metadata]
+    requires-dist = [{ name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
 
     [[package]]
     name = "idna"
@@ -297,7 +316,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "1.1.1"
     source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }
     environment-markers = [
-        "python_version < '3.12'",
+        "python_full_version < '3.12'",
     ]
     wheels = [
         { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3" },
@@ -308,7 +327,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "2.0.0"
     source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
     environment-markers = [
-        "python_version >= '3.12'",
+        "python_full_version >= '3.12'",
     ]
     wheels = [
         { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
@@ -385,8 +404,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = 1
     requires-python = ">=3.11, <3.13"
     environment-markers = [
-        "python_version < '3.12'",
-        "python_version >= '3.12'",
+        "python_full_version < '3.12'",
+        "python_full_version >= '3.12'",
     ]
 
     [options]
@@ -397,10 +416,18 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "0.1.0"
     source = { editable = "." }
     dependencies = [
-        { name = "anyio", version = "4.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
-        { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.12'" },
-        { name = "b1", marker = "python_version < '3.12'" },
-        { name = "b2", marker = "python_version >= '3.12'" },
+        { name = "anyio", version = "4.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+        { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+        { name = "b1", marker = "python_full_version < '3.12'" },
+        { name = "b2", marker = "python_full_version >= '3.12'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [
+        { name = "anyio", marker = "python_full_version < '3.12'", specifier = "==4.2.0" },
+        { name = "anyio", marker = "python_full_version >= '3.12'", specifier = "==4.3.0" },
+        { name = "b1", marker = "python_full_version < '3.12'", directory = "b1" },
+        { name = "b2", marker = "python_full_version >= '3.12'", directory = "b2" },
     ]
 
     [[package]]
@@ -408,11 +435,11 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "4.2.0"
     source = { registry = "https://pypi.org/simple" }
     environment-markers = [
-        "python_version < '3.12'",
+        "python_full_version < '3.12'",
     ]
     dependencies = [
-        { name = "idna", marker = "python_version < '3.12'" },
-        { name = "sniffio", marker = "python_version < '3.12'" },
+        { name = "idna", marker = "python_full_version < '3.12'" },
+        { name = "sniffio", marker = "python_full_version < '3.12'" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770 }
     wheels = [
@@ -424,11 +451,11 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "4.3.0"
     source = { registry = "https://pypi.org/simple" }
     environment-markers = [
-        "python_version >= '3.12'",
+        "python_full_version >= '3.12'",
     ]
     dependencies = [
-        { name = "idna", marker = "python_version >= '3.12'" },
-        { name = "sniffio", marker = "python_version >= '3.12'" },
+        { name = "idna", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", marker = "python_full_version >= '3.12'" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
     wheels = [
@@ -440,16 +467,22 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "b1" }
     dependencies = [
-        { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
+        { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     ]
+
+    [package.metadata]
+    requires-dist = [{ name = "iniconfig", specifier = "==1.1.1" }]
 
     [[package]]
     name = "b2"
     version = "0.1.0"
     source = { directory = "b2" }
     dependencies = [
-        { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version >= '3.12'" },
+        { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     ]
+
+    [package.metadata]
+    requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
 
     [[package]]
     name = "idna"
@@ -465,7 +498,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "1.1.1"
     source = { registry = "https://pypi.org/simple" }
     environment-markers = [
-        "python_version < '3.12'",
+        "python_full_version < '3.12'",
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
     wheels = [
@@ -477,7 +510,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "2.0.0"
     source = { registry = "https://pypi.org/simple" }
     environment-markers = [
-        "python_version >= '3.12'",
+        "python_full_version >= '3.12'",
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
     wheels = [
@@ -532,8 +565,8 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     version = 1
     requires-python = ">=3.11, <3.13"
     environment-markers = [
-        "python_version < '3.12'",
-        "python_version >= '3.12'",
+        "python_full_version < '3.12'",
+        "python_full_version >= '3.12'",
     ]
 
     [options]
@@ -544,8 +577,14 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     version = "0.1.0"
     source = { editable = "." }
     dependencies = [
-        { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '3.12'" },
-        { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_version >= '3.12'" },
+        { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+        { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_full_version >= '3.12'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [
+        { name = "iniconfig", marker = "python_full_version < '3.12'", specifier = "==1.1.1" },
+        { name = "iniconfig", marker = "python_full_version >= '3.12'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
     ]
 
     [[package]]
@@ -553,7 +592,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     version = "1.1.1"
     source = { registry = "https://pypi.org/simple" }
     environment-markers = [
-        "python_version < '3.12'",
+        "python_full_version < '3.12'",
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
     wheels = [
@@ -565,7 +604,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     version = "2.0.0"
     source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
     environment-markers = [
-        "python_version >= '3.12'",
+        "python_full_version >= '3.12'",
     ]
     wheels = [
         { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
@@ -611,8 +650,8 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     version = 1
     requires-python = ">=3.11, <3.13"
     environment-markers = [
-        "python_version < '3.12'",
-        "python_version >= '3.12'",
+        "python_full_version < '3.12'",
+        "python_full_version >= '3.12'",
     ]
 
     [options]
@@ -623,8 +662,14 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     version = "0.1.0"
     source = { editable = "." }
     dependencies = [
-        { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_version < '3.12'" },
-        { name = "iniconfig", version = "2.0.0", source = { git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" }, marker = "python_version >= '3.12'" },
+        { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_full_version < '3.12'" },
+        { name = "iniconfig", version = "2.0.0", source = { git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" }, marker = "python_full_version >= '3.12'" },
+    ]
+
+    [package.metadata]
+    requires-dist = [
+        { name = "iniconfig", marker = "python_full_version < '3.12'", url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" },
+        { name = "iniconfig", marker = "python_full_version >= '3.12'", git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" },
     ]
 
     [[package]]
@@ -632,7 +677,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     version = "1.1.1"
     source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }
     environment-markers = [
-        "python_version < '3.12'",
+        "python_full_version < '3.12'",
     ]
     wheels = [
         { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3" },
@@ -643,7 +688,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     version = "2.0.0"
     source = { git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" }
     environment-markers = [
-        "python_version >= '3.12'",
+        "python_full_version >= '3.12'",
     ]
     "###);
 
@@ -678,7 +723,7 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_version >= '3.11' and python_version < '3.12'`:
+    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version < '3.12'`:
     - git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a
     - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
     "###
@@ -744,6 +789,12 @@ fn dont_pre_visit_url_packages() -> Result<()> {
         { name = "c" },
     ]
 
+    [package.metadata]
+    requires-dist = [
+        { name = "b", directory = "b" },
+        { name = "c", specifier = "==0.1.0" },
+    ]
+
     [[package]]
     name = "b"
     version = "0.1.0"
@@ -751,6 +802,9 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     dependencies = [
         { name = "c" },
     ]
+
+    [package.metadata]
+    requires-dist = [{ name = "c", directory = "../c" }]
 
     [[package]]
     name = "c"
