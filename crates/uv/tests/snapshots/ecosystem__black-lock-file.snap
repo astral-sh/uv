@@ -5,8 +5,30 @@ expression: lock
 version = 1
 requires-python = ">=3.8"
 environment-markers = [
-    "implementation_name == 'pypy' and sys_platform == 'win32'",
-    "implementation_name != 'pypy' or sys_platform != 'win32'",
+    "python_full_version < '3.10' and implementation_name == 'pypy' and platform_system == 'Windows' and sys_platform == 'win32'",
+    "python_full_version < '3.11' and implementation_name == 'pypy' and platform_system == 'Windows' and sys_platform == 'win32'",
+    "python_full_version < '3.10' and implementation_name == 'pypy' and platform_system != 'Windows' and sys_platform == 'win32'",
+    "python_full_version < '3.11' and implementation_name == 'pypy' and platform_system != 'Windows' and sys_platform == 'win32'",
+    "python_full_version < '3.10' and platform_system == 'Windows' and sys_platform == 'darwin'",
+    "python_full_version < '3.10' and implementation_name != 'pypy' and platform_system == 'Windows' and sys_platform == 'win32'",
+    "python_full_version < '3.10' and platform_system == 'Windows' and sys_platform != 'darwin' and sys_platform != 'win32'",
+    "python_full_version < '3.11' and platform_system == 'Windows' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and implementation_name != 'pypy' and platform_system == 'Windows' and sys_platform == 'win32'",
+    "python_full_version < '3.11' and platform_system == 'Windows' and sys_platform != 'darwin' and sys_platform != 'win32'",
+    "python_full_version < '3.10' and platform_system != 'Windows' and sys_platform == 'darwin'",
+    "python_full_version < '3.10' and implementation_name != 'pypy' and platform_system != 'Windows' and sys_platform == 'win32'",
+    "python_full_version < '3.10' and platform_system != 'Windows' and sys_platform != 'darwin' and sys_platform != 'win32'",
+    "python_full_version < '3.11' and platform_system != 'Windows' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and implementation_name != 'pypy' and platform_system != 'Windows' and sys_platform == 'win32'",
+    "python_full_version < '3.11' and platform_system != 'Windows' and sys_platform != 'darwin' and sys_platform != 'win32'",
+    "python_full_version >= '3.11' and implementation_name == 'pypy' and platform_system == 'Windows' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and implementation_name == 'pypy' and platform_system != 'Windows' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and platform_system == 'Windows' and sys_platform == 'darwin'",
+    "python_full_version >= '3.11' and implementation_name != 'pypy' and platform_system == 'Windows' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and platform_system == 'Windows' and sys_platform != 'darwin' and sys_platform != 'win32'",
+    "python_full_version >= '3.11' and platform_system != 'Windows' and sys_platform == 'darwin'",
+    "python_full_version >= '3.11' and implementation_name != 'pypy' and platform_system != 'Windows' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and platform_system != 'Windows' and sys_platform != 'darwin' and sys_platform != 'win32'",
 ]
 
 [options]
@@ -536,7 +558,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "implementation_name != 'pypy' or sys_platform != 'win32'" },
+    { name = "ptyprocess", marker = "sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450 }
 wheels = [

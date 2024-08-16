@@ -4,6 +4,24 @@ expression: lock
 ---
 version = 1
 requires-python = ">=3.12.[X]"
+environment-markers = [
+    "(python_full_version < '3.13' and platform_machine == 'AMD64' and platform_python_implementation != 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'WIN32' and platform_python_implementation != 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation != 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'amd64' and platform_python_implementation != 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'ppc64le' and platform_python_implementation != 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'win32' and platform_python_implementation != 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'x86_64' and platform_python_implementation != 'PyPy' and platform_system == 'Windows')",
+    "(python_full_version < '3.13' and platform_machine == 'AMD64' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'WIN32' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'amd64' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'ppc64le' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'win32' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'x86_64' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin')",
+    "(python_full_version < '3.13' and platform_machine == 'AMD64' and platform_python_implementation != 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'WIN32' and platform_python_implementation != 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation != 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'amd64' and platform_python_implementation != 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'ppc64le' and platform_python_implementation != 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'win32' and platform_python_implementation != 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'x86_64' and platform_python_implementation != 'PyPy' and platform_system == 'Linux')",
+    "(python_full_version < '3.13' and platform_machine == 'AMD64' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'WIN32' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'amd64' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'ppc64le' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'win32' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'x86_64' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows')",
+    "(platform_machine != 'AMD64' and platform_machine != 'WIN32' and platform_machine != 'aarch64' and platform_machine != 'amd64' and platform_machine != 'ppc64le' and platform_machine != 'win32' and platform_machine != 'x86_64' and platform_python_implementation != 'PyPy' and platform_system == 'Windows') or (python_full_version >= '3.13' and platform_python_implementation != 'PyPy' and platform_system == 'Windows')",
+    "(platform_machine != 'AMD64' and platform_machine != 'WIN32' and platform_machine != 'aarch64' and platform_machine != 'amd64' and platform_machine != 'ppc64le' and platform_machine != 'win32' and platform_machine != 'x86_64' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin') or (python_full_version >= '3.13' and platform_python_implementation != 'PyPy' and platform_system == 'Darwin')",
+    "(platform_machine != 'AMD64' and platform_machine != 'WIN32' and platform_machine != 'aarch64' and platform_machine != 'amd64' and platform_machine != 'ppc64le' and platform_machine != 'win32' and platform_machine != 'x86_64' and platform_python_implementation != 'PyPy' and platform_system == 'Linux') or (python_full_version >= '3.13' and platform_python_implementation != 'PyPy' and platform_system == 'Linux')",
+    "(platform_machine != 'AMD64' and platform_machine != 'WIN32' and platform_machine != 'aarch64' and platform_machine != 'amd64' and platform_machine != 'ppc64le' and platform_machine != 'win32' and platform_machine != 'x86_64' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version >= '3.13' and platform_python_implementation != 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows')",
+    "(python_full_version < '3.13' and platform_machine == 'AMD64' and platform_python_implementation == 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'WIN32' and platform_python_implementation == 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'amd64' and platform_python_implementation == 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'ppc64le' and platform_python_implementation == 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'win32' and platform_python_implementation == 'PyPy' and platform_system == 'Windows') or (python_full_version < '3.13' and platform_machine == 'x86_64' and platform_python_implementation == 'PyPy' and platform_system == 'Windows')",
+    "(python_full_version < '3.13' and platform_machine == 'AMD64' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'WIN32' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'amd64' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'ppc64le' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'win32' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin') or (python_full_version < '3.13' and platform_machine == 'x86_64' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin')",
+    "(python_full_version < '3.13' and platform_machine == 'AMD64' and platform_python_implementation == 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'WIN32' and platform_python_implementation == 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'amd64' and platform_python_implementation == 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'ppc64le' and platform_python_implementation == 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'win32' and platform_python_implementation == 'PyPy' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_machine == 'x86_64' and platform_python_implementation == 'PyPy' and platform_system == 'Linux')",
+    "(python_full_version < '3.13' and platform_machine == 'AMD64' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'WIN32' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'amd64' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'ppc64le' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'win32' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version < '3.13' and platform_machine == 'x86_64' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows')",
+    "(platform_machine != 'AMD64' and platform_machine != 'WIN32' and platform_machine != 'aarch64' and platform_machine != 'amd64' and platform_machine != 'ppc64le' and platform_machine != 'win32' and platform_machine != 'x86_64' and platform_python_implementation == 'PyPy' and platform_system == 'Windows') or (python_full_version >= '3.13' and platform_python_implementation == 'PyPy' and platform_system == 'Windows')",
+    "(platform_machine != 'AMD64' and platform_machine != 'WIN32' and platform_machine != 'aarch64' and platform_machine != 'amd64' and platform_machine != 'ppc64le' and platform_machine != 'win32' and platform_machine != 'x86_64' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin') or (python_full_version >= '3.13' and platform_python_implementation == 'PyPy' and platform_system == 'Darwin')",
+    "(platform_machine != 'AMD64' and platform_machine != 'WIN32' and platform_machine != 'aarch64' and platform_machine != 'amd64' and platform_machine != 'ppc64le' and platform_machine != 'win32' and platform_machine != 'x86_64' and platform_python_implementation == 'PyPy' and platform_system == 'Linux') or (python_full_version >= '3.13' and platform_python_implementation == 'PyPy' and platform_system == 'Linux')",
+    "(platform_machine != 'AMD64' and platform_machine != 'WIN32' and platform_machine != 'aarch64' and platform_machine != 'amd64' and platform_machine != 'ppc64le' and platform_machine != 'win32' and platform_machine != 'x86_64' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows') or (python_full_version >= '3.13' and platform_python_implementation == 'PyPy' and platform_system != 'Darwin' and platform_system != 'Linux' and platform_system != 'Windows')",
+]
 
 [options]
 exclude-newer = "2024-08-08 00:00:00 UTC"
@@ -1006,7 +1024,7 @@ name = "pyobjc-framework-cocoa"
 version = "10.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
+    { name = "pyobjc-core", marker = "platform_system == 'Darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/6c/b62e31e6e00f24e70b62f680e35a0d663ba14ff7601ae591b5d20e251161/pyobjc_framework_cocoa-10.3.1.tar.gz", hash = "sha256:1cf20714daaa986b488fb62d69713049f635c9d41a60c8da97d835710445281a", size = 4941542 }
 wheels = [
@@ -1019,8 +1037,8 @@ name = "pyobjc-framework-corebluetooth"
 version = "10.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-core", marker = "platform_system == 'Darwin'" },
+    { name = "pyobjc-framework-cocoa", marker = "platform_system == 'Darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f7/69/89afd7747f42d2eb1e8f4b7f2ba2739d98ccf36f6b5c72474802962494de/pyobjc_framework_corebluetooth-10.3.1.tar.gz", hash = "sha256:dc5d326ab5541b8b68e7e920aa8363851e779cb8c33842f6cfeef4674cc62f94", size = 50210 }
 wheels = [
@@ -1035,8 +1053,8 @@ name = "pyobjc-framework-libdispatch"
 version = "10.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-core", marker = "platform_system == 'Darwin'" },
+    { name = "pyobjc-framework-cocoa", marker = "platform_system == 'Darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b7/37/1a7d9e5a04ab42aa8186f3493478c055601503ac7f8d58b8501d23db8b21/pyobjc_framework_libdispatch-10.3.1.tar.gz", hash = "sha256:f5c3475498cb32f54d75e21952670e4a32c8517fb2db2e90869f634edc942446", size = 44771 }
 wheels = [
@@ -1318,7 +1336,7 @@ name = "winrt-windows-devices-bluetooth"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "winrt-runtime" },
+    { name = "winrt-runtime", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b4/7c/e57f7b5afba8f83e4399551edc42367d92cb0630bdaa9a3ff2e848698489/winrt_windows_devices_bluetooth-2.1.0.tar.gz", hash = "sha256:dcd31148f7775377ab5efa52c4f454e02214db87bd6fbf22e07f110413c0d3d4", size = 19899 }
 wheels = [
@@ -1332,7 +1350,7 @@ name = "winrt-windows-devices-bluetooth-advertisement"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "winrt-runtime" },
+    { name = "winrt-runtime", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/04/63/986a94445d1853bff9bebbc86f500fb78314ccb64345a008d8227afc82b0/winrt_windows_devices_bluetooth_advertisement-2.1.0.tar.gz", hash = "sha256:d0eff0e0830b806b1351a78a397575c72e1ffa3a1cd9a1df3ef961094be61d36", size = 12690 }
 wheels = [
@@ -1346,7 +1364,7 @@ name = "winrt-windows-devices-bluetooth-genericattributeprofile"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "winrt-runtime" },
+    { name = "winrt-runtime", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e1/81/8fb2e983b759a0584624d65ceecdc24be00ac20c12aef833951692c01838/winrt_windows_devices_bluetooth_genericattributeprofile-2.1.0.tar.gz", hash = "sha256:9b8cea33cf5ee8b864365ceafc49f4d732b0e9a738721f3ccd3438dce928a93f", size = 31442 }
 wheels = [
@@ -1360,7 +1378,7 @@ name = "winrt-windows-devices-enumeration"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "winrt-runtime" },
+    { name = "winrt-runtime", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/47/f6/9586ad0ce1153b0fb68feaca7064fbcb6b27280b7f7aff3d8102d1690e36/winrt_windows_devices_enumeration-2.1.0.tar.gz", hash = "sha256:caca7a4098468e1cf481b80b7437ebcbc28e83cfd81a229034a13eb727fd7f0c", size = 17914 }
 wheels = [
@@ -1374,7 +1392,7 @@ name = "winrt-windows-foundation"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "winrt-runtime" },
+    { name = "winrt-runtime", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f8/9d/2e2c3c96396a96055068d60d835b5215281132e2ba151058d437f8f40299/winrt_windows_foundation-2.1.0.tar.gz", hash = "sha256:6d57f35a5d744c3bc1a897c9b539322887a87765bebce47fddcfb942de587d5a", size = 21559 }
 wheels = [
@@ -1388,7 +1406,7 @@ name = "winrt-windows-foundation-collections"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "winrt-runtime" },
+    { name = "winrt-runtime", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/57/11/4eb203f05f6356745258bc4f9174cea103b3fd2d1699ed7c992219b63754/winrt_windows_foundation_collections-2.1.0.tar.gz", hash = "sha256:b54709d5b906befe957cce4648e6fe404586b5d9cc4ea0b91fab0fde54ef0455", size = 12315 }
 wheels = [
@@ -1402,7 +1420,7 @@ name = "winrt-windows-storage-streams"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "winrt-runtime" },
+    { name = "winrt-runtime", marker = "platform_system == 'Windows'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/25/9a/a8b030ace83c21b7b32c91791de0509439e01052480093b9e67011a37a37/winrt_windows_storage_streams-2.1.0.tar.gz", hash = "sha256:d0e68b0ae9bb53b2d423332771a4679f5862ddc01fe57dfef89fe25b982dd6d1", size = 20837 }
 wheels = [
