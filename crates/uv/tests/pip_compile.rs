@@ -7993,34 +7993,7 @@ fn universal_requires_python_incomplete() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.7 is not available; 3.12.[X] will be used to build dependencies instead.
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of uv{python_full_version >= '3.8'} are available:
-              uv{python_full_version >= '3.8'}==0.0.5
-              uv{python_full_version >= '3.8'}==0.1.0
-              uv{python_full_version >= '3.8'}==0.1.1
-              uv{python_full_version >= '3.8'}==0.1.2
-              uv{python_full_version >= '3.8'}==0.1.3
-              uv{python_full_version >= '3.8'}==0.1.4
-              uv{python_full_version >= '3.8'}==0.1.5
-              uv{python_full_version >= '3.8'}==0.1.6
-              uv{python_full_version >= '3.8'}==0.1.7
-              uv{python_full_version >= '3.8'}==0.1.8
-              uv{python_full_version >= '3.8'}==0.1.9
-              uv{python_full_version >= '3.8'}==0.1.10
-              uv{python_full_version >= '3.8'}==0.1.11
-              uv{python_full_version >= '3.8'}==0.1.12
-              uv{python_full_version >= '3.8'}==0.1.13
-              uv{python_full_version >= '3.8'}==0.1.14
-              uv{python_full_version >= '3.8'}==0.1.15
-              uv{python_full_version >= '3.8'}==0.1.16
-              uv{python_full_version >= '3.8'}==0.1.17
-              uv{python_full_version >= '3.8'}==0.1.18
-              uv{python_full_version >= '3.8'}==0.1.19
-              uv{python_full_version >= '3.8'}==0.1.20
-              uv{python_full_version >= '3.8'}==0.1.21
-              uv{python_full_version >= '3.8'}==0.1.22
-              uv{python_full_version >= '3.8'}==0.1.23
-              uv{python_full_version >= '3.8'}==0.1.24
-          and the requested Python version (>=3.7) does not satisfy Python>=3.8, we can conclude that all versions of uv{python_full_version >= '3.8'} are incompatible.
+      ╰─▶ Because only uv{python_full_version >= '3.8'}<=0.1.24 is available and the requested Python version (>=3.7) does not satisfy Python>=3.8, we can conclude that all versions of uv{python_full_version >= '3.8'} are incompatible.
           And because you require uv{python_full_version >= '3.8'}, we can conclude that your requirements are unsatisfiable.
     "###
     );

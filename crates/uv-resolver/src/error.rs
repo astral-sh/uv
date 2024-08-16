@@ -120,7 +120,7 @@ pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, Unava
 #[derive(Debug)]
 pub struct NoSolutionError {
     error: pubgrub::NoSolutionError<UvDependencyProvider>,
-    available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
+    available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
     index_locations: IndexLocations,
@@ -135,7 +135,7 @@ impl NoSolutionError {
     /// Create a new [`NoSolutionError`] from a [`pubgrub::NoSolutionError`].
     pub(crate) fn new(
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
-        available_versions: FxHashMap<PubGrubPackage, BTreeSet<Version>>,
+        available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
         index_locations: IndexLocations,
