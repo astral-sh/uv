@@ -225,7 +225,7 @@ enum Target {
 /// This is useful when a dependency of the user-specified type was not found, but it may be present
 /// elsewhere.
 fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
-    for dep_ty in pyproject.find_dependency(name) {
+    for dep_ty in pyproject.find_dependency(name, None) {
         match dep_ty {
             DependencyType::Production => {
                 warn_user!("`{name}` is a production dependency");
@@ -235,7 +235,7 @@ fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
             }
             DependencyType::Optional(group) => {
                 warn_user!(
-                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`"
+                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
                 );
             }
         }

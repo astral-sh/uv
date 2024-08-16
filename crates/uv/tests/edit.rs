@@ -1770,7 +1770,8 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_full_version >= '3.8'",
+            "requests[security]==2.31.0",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
         "###
         );
@@ -1808,7 +1809,8 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_full_version >= '3.8'",
+            "requests[security]==2.31.0",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
 
         [tool.uv.sources]
@@ -1890,7 +1892,10 @@ fn update() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "requests", extras = ["security", "socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" }]
+        requires-dist = [
+            { name = "requests", extras = ["security"], git = "https://github.com/psf/requests?tag=v2.32.3" },
+            { name = "requests", extras = ["socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" },
+        ]
 
         [[package]]
         name = "pysocks"
@@ -1942,6 +1947,241 @@ fn update() -> Result<()> {
     warning: `uv sync` is experimental and may change without warning
     Audited 8 packages in [TIME]
     "###);
+
+    Ok(())
+}
+
+/// Add and update a requirement, with different markers
+#[test]
+fn add_update_marker() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'"
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###);
+
+    // Restrict the `requests` version for Python <3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.29; python_version < '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not match an existing one
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.29 ; python_full_version < '3.11'",
+        ]
+        "###
+        );
+    });
+
+    // Change the restricted `requests` version for Python <3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.20; python_version < '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should mutate the existing dependency since the marker matches
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+        ]
+        "###
+        );
+    });
+
+    // Restrict the `requests` version on Windows and Python >3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     - idna==3.6
+     + idna==2.7
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - urllib3==2.2.1
+     + urllib3==1.23
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not match an existing one
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+        ]
+        "###
+        );
+    });
+
+    // Restrict the `requests` version on Windows
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.10 ; sys_platform == 'win32'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not exactly match an existing
+    // one — although it is a subset of the existing marker.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+            "requests>=2.10 ; sys_platform == 'win32'",
+        ]
+        "###
+        );
+    });
+
+    // Remove `requests`
+    uv_snapshot!(context.filters(), context.remove(&["requests"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv remove` is experimental and may change without warning
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==2.7
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - requests==2.31.0
+     - urllib3==1.23
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should remove all variants of `requests`
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
+        );
+    });
 
     Ok(())
 }
