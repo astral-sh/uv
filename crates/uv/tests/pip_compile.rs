@@ -5513,7 +5513,7 @@ fn offline_registry() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###
     );
 
@@ -5644,7 +5644,7 @@ fn offline_find_links() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###
     );
 
@@ -5663,7 +5663,7 @@ fn offline_find_links() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###
     );
 
