@@ -473,7 +473,7 @@ uv add [OPTIONS] [PACKAGES]...
 
 <dl class="cli-reference"><dt><code>PACKAGES</code></dt><dd><p>The packages to add.</p>
 
-<p>As PEP 508 requirements (e.g., <code>ruff==0.5.0</code>).</p>
+<p>Expects a PEP 508-compatible requirement (e.g., <code>ruff==0.5.0</code>) or a direct URL.</p>
 
 </dd></dl>
 
@@ -700,9 +700,7 @@ uv add [OPTIONS] [PACKAGES]...
 
 </dd><dt><code>--requirements</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Add all packages listed in the given <code>requirements.txt</code> files.</p>
 
-<p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
-
-<p>If <code>-</code> is provided, then requirements will be read from stdin.</p>
+<p>Implies <code>--raw-sources</code>.</p>
 
 </dd><dt><code>--resolution</code> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
