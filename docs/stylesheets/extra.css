@@ -126,9 +126,13 @@ See https://github.com/astral-sh/uv/issues/5130 */
   }
 }
 
+
 /* Reducing spacing between nav items to fit more content */
 .md-nav__link {
   margin-top: 0.25em;
+}
+.md-nav__item--section {
+  margin: 0.75em 0;
 }
 /* Retain larger spacing for each top-level section in the nav */
 .md-nav__item--nested {
@@ -141,6 +145,22 @@ See https://github.com/astral-sh/uv/issues/5130 */
 /* See: https://mkdocstrings.github.io/recipes/#prevent-selection-of-prompts-and-output-in-python-code-blocks */
 .highlight .gp, .highlight .go { /* Generic.Prompt, Generic.Output */
     user-select: none;
+}
+
+/* Increase the size of the sections headings, remove the bold */
+.md-nav__item--section>.md-nav__link {
+  font-size: 16px;
+  font-weight: normal;
+}
+/* Increase the size of the index nav item to match the sections */
+.md-nav__item:first-child {
+  font-size: 16px;
+  font-weight: normal;
+}
+/* But do not increase the size of other nav items */
+.md-nav__item--section > .md-nav > .md-nav__list > .md-nav__item {
+  font-size: 14px;
+  font-weight: normal;
 }
 
 /* Bold the active nav link for accessibility */
