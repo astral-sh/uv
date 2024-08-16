@@ -4553,6 +4553,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",
+ "rustc-hash 2.0.0",
  "tempfile",
  "test-log",
  "tokio",

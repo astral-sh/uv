@@ -233,22 +233,20 @@ impl InternerGuard<'_> {
 
     // Returns a decision node representing the conjunction of two nodes.
     pub(crate) fn and(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
-        if xi == NodeId::TRUE {
+        if xi.is_true() {
             return yi;
         }
-        if yi == NodeId::TRUE {
+        if yi.is_true() {
             return xi;
         }
         if xi == yi {
             return xi;
         }
-        if xi == NodeId::FALSE || yi == NodeId::FALSE {
+        if xi.is_false() || yi.is_false() {
             return NodeId::FALSE;
         }
-
-        // X and Y are not equal but refer to the same node.
-        // Thus one is complement but not the other (X and not X).
-        if xi.index() == yi.index() {
+        // `X and not X` is `false` by definition.
+        if xi.not() == yi {
             return NodeId::FALSE;
         }
 
@@ -288,6 +286,43 @@ impl InternerGuard<'_> {
         self.state.cache.insert((xi, yi), node);
 
         node
+    }
+
+    /// Returns `true` if there is no environment in which both marker trees can apply,
+    /// i.e. their conjunction is always `false`.
+    pub(crate) fn is_disjoint(&mut self, xi: NodeId, yi: NodeId) -> bool {
+        // `false` is disjoint with any marker.
+        if xi.is_false() || yi.is_false() {
+            return true;
+        }
+        // `true` is not disjoint with any marker except `false`.
+        if xi.is_true() || yi.is_true() {
+            return false;
+        }
+        // `X` and `X` are not disjoint.
+        if xi == yi {
+            return false;
+        }
+        // `X` and `not X` are disjoint by definition.
+        if xi.not() == yi {
+            return true;
+        }
+
+        let (x, y) = (self.shared.node(xi), self.shared.node(yi));
+        match x.var.cmp(&y.var) {
+            // X is higher order than Y, Y must be disjoint with every child of X.
+            Ordering::Less => x
+                .children
+                .nodes()
+                .all(|x| self.is_disjoint(x.negate(xi), yi)),
+            // Y is higher order than X, X must be disjoint with every child of Y.
+            Ordering::Greater => y
+                .children
+                .nodes()
+                .all(|y| self.is_disjoint(y.negate(yi), xi)),
+            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
+        }
     }
 
     // Restrict the output of a given boolean variable in the tree.
@@ -619,7 +654,7 @@ impl Edges {
                 high: apply(high.negate(parent), right_high.negate(parent)),
                 low: apply(low.negate(parent), right_low.negate(parent)),
             },
-            _ => unreachable!("cannot apply two `Edges` of different types"),
+            _ => unreachable!("cannot merge two `Edges` of different types"),
         }
     }
 
@@ -689,6 +724,70 @@ impl Edges {
         }
 
         combined
+    }
+
+    // Returns `true` if two [`Edges`] are disjoint.
+    fn is_disjoint(
+        &self,
+        parent: NodeId,
+        right_edges: &Edges,
+        right_parent: NodeId,
+        interner: &mut InternerGuard<'_>,
+    ) -> bool {
+        match (self, right_edges) {
+            // For version or string variables, we have to split and check the overlapping ranges.
+            (Edges::Version { edges }, Edges::Version { edges: right_edges }) => {
+                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            }
+            (Edges::String { edges }, Edges::String { edges: right_edges }) => {
+                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            }
+            // For boolean variables, we simply check the low and high edges.
+            (
+                Edges::Boolean { high, low },
+                Edges::Boolean {
+                    high: right_high,
+                    low: right_low,
+                },
+            ) => {
+                interner.is_disjoint(high.negate(parent), right_high.negate(parent))
+                    && interner.is_disjoint(low.negate(parent), right_low.negate(parent))
+            }
+            _ => unreachable!("cannot merge two `Edges` of different types"),
+        }
+    }
+
+    // Returns `true` if all intersecting ranges in two range maps are disjoint.
+    fn is_disjoint_ranges<T>(
+        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_parent: NodeId,
+        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_parent: NodeId,
+        interner: &mut InternerGuard<'_>,
+    ) -> bool
+    where
+        T: Clone + Ord,
+    {
+        // This is similar to the routine in `apply_ranges` except we only care about disjointness,
+        // not the resulting edges.
+        for (left_range, left_child) in left_edges {
+            for (right_range, right_child) in right_edges {
+                let intersection = right_range.intersection(left_range);
+                if intersection.is_empty() {
+                    continue;
+                }
+
+                // Ensure the intersection is disjoint.
+                if !interner.is_disjoint(
+                    left_child.negate(left_parent),
+                    right_child.negate(right_parent),
+                ) {
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     // Apply the given function to all direct children of this node.
@@ -896,11 +995,11 @@ where
 
 impl fmt::Debug for NodeId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if *self == NodeId::FALSE {
+        if self.is_false() {
             return write!(f, "false");
         }
 
-        if *self == NodeId::TRUE {
+        if self.is_true() {
             return write!(f, "true");
         }
 

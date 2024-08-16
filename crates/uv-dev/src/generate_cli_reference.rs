@@ -22,6 +22,8 @@ const REPLACEMENTS: &[(&str, &str)] = &[
     ),
 ];
 
+const SHOW_HIDDEN_COMMANDS: &[&str] = &["generate-shell-completion"];
+
 #[derive(clap::Args)]
 pub(crate) struct Args {
     /// Write the generated output to stdout (rather than to `settings.md`).
@@ -101,7 +103,7 @@ fn generate() -> String {
 }
 
 fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut Vec<&'a Command>) {
-    if command.is_hide_set() {
+    if command.is_hide_set() && !SHOW_HIDDEN_COMMANDS.contains(&command.get_name()) {
         return;
     }
 

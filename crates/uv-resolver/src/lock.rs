@@ -657,14 +657,14 @@ impl Lock {
                 .iter()
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, workspace))
-                .collect();
+                .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .constraints
                 .iter()
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, workspace))
-                .collect();
+                .collect::<Result<_, _>>()?;
             if expected != actual {
                 debug!(
                     "Mismatched constraints:\n  expected: {:?}\n  found: {:?}",
@@ -680,14 +680,14 @@ impl Lock {
                 .iter()
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, workspace))
-                .collect();
+                .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .overrides
                 .iter()
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, workspace))
-                .collect();
+                .collect::<Result<_, _>>()?;
             if expected != actual {
                 debug!(
                     "Mismatched overrides:\n  expected: {:?}\n  found: {:?}",
@@ -764,14 +764,14 @@ impl Lock {
                     .requires_dist
                     .into_iter()
                     .map(|requirement| normalize_requirement(requirement, workspace))
-                    .collect();
+                    .collect::<Result<_, _>>()?;
                 let actual: BTreeSet<_> = package
                     .metadata
                     .requires_dist
                     .iter()
                     .cloned()
                     .map(|requirement| normalize_requirement(requirement, workspace))
-                    .collect();
+                    .collect::<Result<_, _>>()?;
 
                 if expected != actual {
                     debug!(
@@ -794,30 +794,30 @@ impl Lock {
                     .dev_dependencies
                     .into_iter()
                     .map(|(group, requirements)| {
-                        (
+                        Ok::<_, LockError>((
                             group,
                             requirements
                                 .into_iter()
                                 .map(|requirement| normalize_requirement(requirement, workspace))
-                                .collect(),
-                        )
+                                .collect::<Result<_, _>>()?,
+                        ))
                     })
-                    .collect();
+                    .collect::<Result<_, _>>()?;
                 let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
                     .metadata
                     .requires_dev
                     .iter()
                     .map(|(group, requirements)| {
-                        (
+                        Ok::<_, LockError>((
                             group.clone(),
                             requirements
                                 .iter()
                                 .cloned()
                                 .map(|requirement| normalize_requirement(requirement, workspace))
-                                .collect(),
-                        )
+                                .collect::<Result<_, _>>()?,
+                        ))
                     })
-                    .collect();
+                    .collect::<Result<_, _>>()?;
 
                 if expected != actual {
                     debug!(
@@ -2735,7 +2735,10 @@ fn normalize_url(mut url: Url) -> UrlString {
 /// 2. Ensures that the lock and install paths are appropriately framed with respect to the
 ///    current [`Workspace`].
 /// 3. Removes the `origin` field, which is only used in `requirements.txt`.
-fn normalize_requirement(requirement: Requirement, workspace: &Workspace) -> Requirement {
+fn normalize_requirement(
+    requirement: Requirement,
+    workspace: &Workspace,
+) -> Result<Requirement, LockError> {
     match requirement.source {
         RequirementSource::Git {
             mut repository,
@@ -2754,7 +2757,7 @@ fn normalize_requirement(requirement: Requirement, workspace: &Workspace) -> Req
             let _ = url.set_username("");
             let url = VerbatimUrl::from_url(url);
 
-            Requirement {
+            Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
                 marker: requirement.marker,
@@ -2766,18 +2769,26 @@ fn normalize_requirement(requirement: Requirement, workspace: &Workspace) -> Req
                     url,
                 },
                 origin: None,
-            }
+            })
         }
         RequirementSource::Path {
-            install_path,
+            install_path: _,
             lock_path,
             ext,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path(&workspace.install_path().join(install_path));
-            let lock_path = relative_to(workspace.lock_path(), &lock_path).unwrap();
-            let url = VerbatimUrl::from_path(&install_path).unwrap();
-            Requirement {
+            // When a path requirement comes from the lockfile, `install_path` and `lock_path` are
+            // both relative to the lockfile.
+            //
+            // When a path requirement is deserialized from package metadata, `install_path` is
+            // absolute, and `lock_path` is relative to the lockfile.
+            let install_path = uv_fs::normalize_path(&workspace.install_path().join(&lock_path));
+            let lock_path = relative_to(workspace.install_path(), &lock_path)
+                .map_err(LockErrorKind::RequirementRelativePath)?;
+            let url = VerbatimUrl::from_path(&install_path)
+                .map_err(LockErrorKind::RequirementVerbatimUrl)?;
+
+            Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
                 marker: requirement.marker,
@@ -2788,18 +2799,21 @@ fn normalize_requirement(requirement: Requirement, workspace: &Workspace) -> Req
                     url,
                 },
                 origin: None,
-            }
+            })
         }
         RequirementSource::Directory {
-            install_path,
+            install_path: _,
             lock_path,
             editable,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path(&workspace.install_path().join(install_path));
-            let lock_path = relative_to(workspace.lock_path(), &lock_path).unwrap();
-            let url = VerbatimUrl::from_path(&install_path).unwrap();
-            Requirement {
+            let install_path = uv_fs::normalize_path(&workspace.install_path().join(&lock_path));
+            let lock_path = relative_to(workspace.install_path(), &lock_path)
+                .map_err(LockErrorKind::RequirementRelativePath)?;
+            let url = VerbatimUrl::from_path(&install_path)
+                .map_err(LockErrorKind::RequirementVerbatimUrl)?;
+
+            Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
                 marker: requirement.marker,
@@ -2810,15 +2824,15 @@ fn normalize_requirement(requirement: Requirement, workspace: &Workspace) -> Req
                     url,
                 },
                 origin: None,
-            }
+            })
         }
-        _ => Requirement {
+        _ => Ok(Requirement {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
             source: requirement.source,
             origin: None,
-        },
+        }),
     }
 }
 
@@ -3012,6 +3026,20 @@ enum LockErrorKind {
         /// The name of the dependency that is missing a `source` field.
         name: PackageName,
     },
+    /// An error that occurs when parsing an existing requirement.
+    #[error("could not compute relative path between workspace and requirement")]
+    RequirementRelativePath(
+        /// The inner error we forward.
+        #[source]
+        std::io::Error,
+    ),
+    /// An error that occurs when parsing an existing requirement.
+    #[error("could not convert between URL and path")]
+    RequirementVerbatimUrl(
+        /// The inner error we forward.
+        #[source]
+        VerbatimUrlError,
+    ),
 }
 
 /// An error that occurs when a source string could not be parsed.
