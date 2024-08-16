@@ -1151,6 +1151,9 @@ async fn run_project(
             let raw_sources = if args.requirements.is_empty() {
                 args.raw_sources
             } else {
+                if args.raw_sources {
+                    warn_user!("`--raw-sources` is a no-op for `requirements.txt` files, which are always treated as raw sources");
+                }
                 true
             };
 

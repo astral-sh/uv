@@ -3471,6 +3471,30 @@ fn add_requirements_file() -> Result<()> {
         );
     });
 
+    // Using `--raw-sources` with `-r` should warn.
+    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("requirements.txt").arg("--raw-sources"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--raw-sources` is a no-op for `requirements.txt` files, which are always treated as raw sources
+    warning: `uv add` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
+    "###);
+
+    // Passing a `setup.py` should fail.
+    uv_snapshot!(context.filters(), context.add(&[]).arg("-r").arg("setup.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    error: Adding requirements from a `setup.py` is not supported in `uv add`
+    "###);
+
     Ok(())
 }
 

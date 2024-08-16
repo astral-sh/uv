@@ -2362,16 +2362,13 @@ pub struct LockArgs {
 pub struct AddArgs {
     /// The packages to add.
     ///
-    /// As PEP 508 requirements (e.g., `ruff==0.5.0`).
+    /// Expects a PEP 508-compatible requirement (e.g., `ruff==0.5.0`) or a direct URL.
     #[arg(group = "sources")]
     pub packages: Vec<String>,
 
     /// Add all packages listed in the given `requirements.txt` files.
     ///
-    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will
-    /// extract the requirements for the relevant project.
-    ///
-    /// If `-` is provided, then requirements will be read from stdin.
+    /// Implies `--raw-sources`.
     #[arg(long, short, group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
