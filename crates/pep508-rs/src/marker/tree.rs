@@ -652,15 +652,15 @@ impl MarkerTree {
         self.0 = INTERNER.lock().or(self.0, tree.0);
     }
 
-    /// Returns `true` if there is no environment in which both marker trees can both apply,
-    /// i.e. the expression `first and second` is always false.
+    /// Returns `true` if there is no environment in which both marker trees can apply,
+    /// i.e. their conjunction is always `false`.
     ///
     /// If this method returns `true`, it is definitively known that the two markers can
     /// never both evaluate to `true` in a given environment. However, this method may return
     /// false negatives, i.e. it may not be able to detect that two markers are disjoint for
     /// complex expressions.
-    pub fn is_disjoint(&self, tree: &MarkerTree) -> bool {
-        INTERNER.lock().and(self.0, tree.0).is_false()
+    pub fn is_disjoint(&self, other: &MarkerTree) -> bool {
+        INTERNER.lock().is_disjoint(self.0, other.0)
     }
 
     /// Returns the contents of this marker tree, if it contains at least one expression.
@@ -2285,6 +2285,19 @@ mod test {
             "sys_platform == 'bar' or implementation_name == 'foo'",
             "sys_platform == 'darwin' and implementation_name == 'pypy'",
         ));
+
+        assert!(is_disjoint(
+            "python_version >= '3.7' and implementation_name == 'pypy'",
+            "python_version < '3.7'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'pypy' and python_version >= '3.7'",
+            "implementation_name != 'pypy'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name != 'pypy' and python_version >= '3.7'",
+            "implementation_name == 'pypy'"
+        ));
     }
 
     #[test]
@@ -2364,6 +2377,7 @@ mod test {
     }
 
     fn is_disjoint(left: impl AsRef<str>, right: impl AsRef<str>) -> bool {
-        m(left.as_ref()).is_disjoint(&m(right.as_ref()))
+        let (left, right) = (m(left.as_ref()), m(right.as_ref()));
+        left.is_disjoint(&right) && right.is_disjoint(&left)
     }
 }
