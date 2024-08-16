@@ -237,6 +237,7 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         collapse_unavailable_versions(&mut tree);
+        collapse_redundant_depends_on_no_versions(&mut tree);
 
         if should_display_tree {
             display_tree(&tree, "Resolver derivation tree after reduction");
@@ -358,6 +359,107 @@ fn collapse_no_versions_of_workspace_members(
                         Arc::make_mut(&mut derived.cause2),
                         workspace_members,
                     );
+                }
+            }
+        }
+    }
+}
+
+/// Given a [`DerivationTree`], collapse `NoVersions` incompatibilities that are redundant children
+/// of a dependency. For example, if we have a tree like:
+///     
+///     A>=1,<2 depends on B
+///         A has no versions >1,<2
+///         C depends on A>=1,<2
+///
+/// We can simplify this to `C depends A>=1 and A>=1 depends on B so C depends on B` without
+/// explaining that there are no other versions of A. This is dependent on range of A in "A depends
+/// on" being a subset of range of A in "depends on A". For example, in a tree like:
+///
+///     A>=1,<3 depends on B
+///         A has no versions >2,<3
+///         C depends on A>=2,<3
+///
+/// We cannot say `C depends on A>=2 and A>=1 depends on B so C depends on B` because there is a
+/// hole in the range — `A>=1,<3` is not a subset of `A>=2,<3`.
+fn collapse_redundant_depends_on_no_versions(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            // If one node is a dependency incompatibility...
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                (
+                    DerivationTree::External(External::FromDependencyOf(package, versions, _, _)),
+                    ref mut other,
+                )
+                | (
+                    ref mut other,
+                    DerivationTree::External(External::FromDependencyOf(package, versions, _, _)),
+                ) => {
+                    // Check if the other node is the relevant form of subtree...
+                    collapse_redundant_depends_on_no_versions_inner(other, package, versions);
+                }
+                // If not, just recurse
+                _ => {
+                    collapse_redundant_depends_on_no_versions(Arc::make_mut(&mut derived.cause1));
+                    collapse_redundant_depends_on_no_versions(Arc::make_mut(&mut derived.cause2));
+                }
+            }
+        }
+    }
+}
+
+/// Helper for [`collapse_redundant_depends_on_no_versions`].
+fn collapse_redundant_depends_on_no_versions_inner(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    package: &PubGrubPackage,
+    versions: &Range<Version>,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            // If we're a subtree with dependency and no versions incompatibilities...
+            match (&*derived.cause1, &*derived.cause2) {
+                (
+                    DerivationTree::External(External::NoVersions(no_versions_package, _)),
+                    dependency_clause @ DerivationTree::External(External::FromDependencyOf(
+                        _,
+                        _,
+                        dependency_package,
+                        dependency_versions,
+                    )),
+                )
+                | (
+                    dependency_clause @ DerivationTree::External(External::FromDependencyOf(
+                        _,
+                        _,
+                        dependency_package,
+                        dependency_versions,
+                    )),
+                    DerivationTree::External(External::NoVersions(no_versions_package, _)),
+                )
+                // And these incompatibilities (and the parent incompatibility) all are referring to
+                // the same package... 
+                if no_versions_package == dependency_package
+                    && package == no_versions_package
+                // And parent dependency versions are a subset of the versions in this tree...
+                    && versions.subset_of(dependency_versions) =>
+                {
+                    // Enumerating the available versions will be redundant and we can drop the no
+                    // versions clause entirely in favor of the dependency clause.
+                    *tree = dependency_clause.clone();
+
+                    // Note we are at a leaf of the tree so there's no further recursion to do
+                }
+                // If not, just recurse
+                _ => {
+                    collapse_redundant_depends_on_no_versions(Arc::make_mut(&mut derived.cause1));
+                    collapse_redundant_depends_on_no_versions(Arc::make_mut(&mut derived.cause2));
                 }
             }
         }
