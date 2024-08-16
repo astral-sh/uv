@@ -433,7 +433,7 @@ fn conflict_in_fork() -> Result<()> {
           And because package-a{sys_platform == 'darwin'}==1.0.0 depends on package-b and package-c, we can conclude that package-a{sys_platform == 'darwin'}==1.0.0 cannot be used.
           And because only the following versions of package-a{sys_platform == 'darwin'} are available:
               package-a{sys_platform == 'darwin'}==1.0.0
-              package-a{sys_platform == 'darwin'}>=2
+              package-a{sys_platform == 'darwin'}>2
           and your project depends on package-a{sys_platform == 'darwin'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
@@ -2875,7 +2875,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
       ╰─▶ Because package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0 and only package-c{sys_platform == 'darwin'}<=2.0.0 is available, we can conclude that package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}==2.0.0.
           And because only the following versions of package-c{sys_platform == 'linux'} are available:
               package-c{sys_platform == 'linux'}==1.0.0
-              package-c{sys_platform == 'linux'}>=2.0.0
+              package-c{sys_platform == 'linux'}>2.0.0
           and package-a==1.0.0 depends on package-c{sys_platform == 'linux'}<2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
           And because your project depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "###

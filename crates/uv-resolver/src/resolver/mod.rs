@@ -1963,9 +1963,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let mut available_versions = FxHashMap::default();
         for package in err.packages() {
-            let PubGrubPackageInner::Package { name, .. } = &**package else {
-                continue;
-            };
+            let Some(name) = package.name() else { continue };
             if !visited.contains(name) {
                 // Avoid including available versions for packages that exist in the derivation
                 // tree, but were never visited during resolution. We _may_ have metadata for
@@ -1977,7 +1975,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let VersionsResponse::Found(ref version_maps) = *response {
                     for version_map in version_maps {
                         available_versions
-                            .entry(package.clone())
+                            .entry(name.clone())
                             .or_insert_with(BTreeSet::new)
                             .extend(version_map.iter().map(|(version, _)| version.clone()));
                     }
