@@ -120,9 +120,10 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                             format!("{}{reason}", Padded::new("", &package, " "))
                         }
                         UnavailableReason::Version(reason) => {
+                            let set = self.simplify_set(set, package);
                             format!(
                                 "{}{reason}",
-                                Padded::new("", &self.compatible_range(package, set), " ")
+                                Padded::new("", &self.compatible_range(package, &set), " ")
                             )
                         }
                     }

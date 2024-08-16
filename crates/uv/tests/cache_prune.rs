@@ -242,12 +242,8 @@ fn prune_unzipped() -> Result<()> {
               iniconfig<=0.1
               iniconfig>=1.0.0
           and any of:
-              iniconfig==0.1
-              iniconfig==1.0.0
-              iniconfig==1.0.1
-              iniconfig==1.1.0
-              iniconfig==1.1.1
-              iniconfig==2.0.0
+              iniconfig<=0.1
+              iniconfig>=1.0.0
           needs to be downloaded from a registry, we can conclude that iniconfig<1.0.0 cannot be used.
           And because you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
