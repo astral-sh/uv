@@ -757,22 +757,26 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
 
     // The decision diagram relies on the assumption that the negation of a marker tree is
     // the complement of the marker space. However, pre-release versions violate this assumption.
-    // For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
-    // does not match `python_full_version == 3.9.0a0`. However, it's negation,
-    // `python_full_version > '3.9' and python_full_version <= '3.9'` also does not include
-    // `3.9.0a0`, and is actually `false`.
     //
-    // For this reason we ignore pre-release versions entirely when evaluating markers.
-    // Note that `python_version` cannot take on pre-release values so this is necessary for
-    // simplifying ranges, but for `python_full_version` this decision is a semantic change.
+    // For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
+    // does not match `python_full_version == 3.9.0a0` and so cannot simplify to `true`. However,
+    // its negation, `python_full_version > '3.9' and python_full_version <= '3.9'`, also does not
+    // match `3.9.0a0` and simplifies to `false`, which violates the algebra decision diagrams
+    // rely on. For this reason we ignore pre-release versions entirely when evaluating markers.
+    //
+    // Note that `python_version` cannot take on pre-release values as it is truncated to just the
+    // major and minor version segments. Thus using release-only specifiers is definitely necessary
+    // for `python_version` to fully simplify any ranges, such as `python_version > '3.9' or python_version <= '3.9'`,
+    // which is always `true` for `python_version`. For `python_full_version` however, this decision
+    // is a semantic change.
     let mut release = version.release();
 
     // Strip any trailing `0`s.
     //
-    // The [`Version`] type ignores trailing `0`s for equality, but still preserves them in it's
+    // The [`Version`] type ignores trailing `0`s for equality, but still preserves them in its
     // [`Display`] output. We must normalize all versions by stripping trailing `0`s to remove the
-    // distinction between versions like `3.9` and `3.9.0`, whose output will depend on which form
-    // was added to the global marker interner first.
+    // distinction between versions like `3.9` and `3.9.0`. Otherwise, their output would depend on
+    // which form was added to the global marker interner first.
     //
     // Note that we cannot strip trailing `0`s for star equality, as `==3.0.*` is different from `==3.*`.
     if !operator.is_star() {
@@ -786,20 +790,31 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     VersionSpecifier::from_version(operator, Version::new(release)).unwrap()
 }
 
-/// Returns the equivalent `python_full_version` specifier for a `python_version` comparison.
+/// Returns the equivalent `python_full_version` specifier for a `python_version` specifier.
 ///
 /// Returns `Err` with a constant node if the equivalent comparison is always `true` or `false`.
 fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<VersionSpecifier, NodeId> {
+    // Extract the major and minor version segments if the specifier contains exactly
+    // those segments, or if it contains a major segment with an implied minor segment of `0`.
     let major_minor = match *specifier.version().release() {
-        // `python_version == 3.*` is equivalent to `python_full_version == 3.*`
-        // and adding a trailing `0` would be incorrect.
+        // For star operators, we cannot add a trailing `0`.
+        //
+        // `python_version == 3.*` is equivalent to `python_full_version == 3.*`. Adding a
+        // trailing `0` would result in `python_version == 3.0.*`, which is incorrect.
         [_major] if specifier.operator().is_star() => return Ok(specifier),
-        // Note that `python_version == 3` matches `3.0.1`, `3.0.2`, etc.
+        // Add a trailing `0` for the minor version, which is implied.
+        // For example, `python_version == 3` matches `3.0.1`, `3.0.2`, etc.
         [major] => Some((major, 0)),
         [major, minor] => Some((major, minor)),
+        // Specifiers including segments beyond the minor version require separate handling.
         _ => None,
     };
 
+    // Note that the values taken on by `python_version` are truncated to their major and minor
+    // version segments. For example, a python version of `3.7.0`, `3.7.1`, and so on, would all
+    // result in a `python_version` marker of `3.7`. For this reason, we must consider the range
+    // of values that would satisfy a `python_version` specifier when truncated in order to transform
+    // the the specifier into its `python_full_version` equivalent.
     if let Some((major, minor)) = major_minor {
         let version = Version::new([major, minor]);
 

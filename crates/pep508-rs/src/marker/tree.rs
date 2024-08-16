@@ -1069,7 +1069,8 @@ impl MarkerTree {
     #[allow(clippy::needless_pass_by_value)]
     pub fn simplify_python_versions(self, python_version: Range<Version>) -> MarkerTree {
         MarkerTree(INTERNER.lock().restrict_versions(self.0, &|var| match var {
-            // Note that `python_version` is normalized to `python_full_version`.
+            // Note that `python_version` is normalized to `python_full_version` internally by the
+            // decision diagram.
             Variable::Version(MarkerValueVersion::PythonFullVersion) => {
                 Some(python_version.clone())
             }
