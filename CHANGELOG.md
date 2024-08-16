@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.37
+
+### Performance
+
+- Avoid cloning requirement for unchanged markers ([#6116](https://github.com/astral-sh/uv/pull/6116))
+
+### Bug fixes
+
+- Fix loading of cached metadata for Git distributions with subdirectories ([#6094](https://github.com/astral-sh/uv/pull/6094))
+
+### Error messages
+
+- Add env var to `--link-mode=copy` warning ([#6103](https://github.com/astral-sh/uv/pull/6103))
+- Avoid displaying "failed to download" on build failures for local source distributions ([#6075](https://github.com/astral-sh/uv/pull/6075))
+- Improve display of available package ranges ([#6118](https://github.com/astral-sh/uv/pull/6118))
+- Use "your requirements" consistently in resolver error messages ([#6113](https://github.com/astral-sh/uv/pull/6113))
+
 ## 0.2.36
 
 ### Bug fixes

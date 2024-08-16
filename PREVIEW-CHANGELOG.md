@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.37
+
+### Preview features
+
+- Add `python-version-file` to GitHub integration documentation ([#6086](https://github.com/astral-sh/uv/pull/6086))
+- Always narrow markers by Python version ([#6076](https://github.com/astral-sh/uv/pull/6076))
+- Avoid warning for redundant `--no-project` ([#6111](https://github.com/astral-sh/uv/pull/6111))
+- Change the definition of `--locked` to require satisfaction check ([#6102](https://github.com/astral-sh/uv/pull/6102))
+- Improve debug log for interpreter requests during project commands ([#6120](https://github.com/astral-sh/uv/pull/6120))
+- Improve display of resolution errors for workspace member conflicts with optional dependencies ([#6123](https://github.com/astral-sh/uv/pull/6123))
+- Improve resolver error messages for single-project workspaces ([#6095](https://github.com/astral-sh/uv/pull/6095))
+- Improve resolver error messages referencing workspace members ([#6092](https://github.com/astral-sh/uv/pull/6092))
+- Invalidate `uv.lock` if registry sources are removed ([#6026](https://github.com/astral-sh/uv/pull/6026))
+- Propagate fork markers to extras ([#6065](https://github.com/astral-sh/uv/pull/6065))
+- Redact Git credentials from `pyproject.toml` ([#6074](https://github.com/astral-sh/uv/pull/6074))
+- Redact Git credentials in lockfile ([#6070](https://github.com/astral-sh/uv/pull/6070))
+- Remove 'tool' reference on `uv run` CLI ([#6110](https://github.com/astral-sh/uv/pull/6110))
+- Remove `same-graph` merging in resolver ([#6077](https://github.com/astral-sh/uv/pull/6077))
+- Strip SHA when constructing package source ([#6097](https://github.com/astral-sh/uv/pull/6097))
+- Treat Git sources as immutable in lockfile ([#6109](https://github.com/astral-sh/uv/pull/6109))
+- Use the proper singular form for workspace member dependencies in resolver errors ([#6128](https://github.com/astral-sh/uv/pull/6128))
+- Use sets rather than vectors for lockfile requirements ([#6107](https://github.com/astral-sh/uv/pull/6107))
+- Normalize `python_version` markers to `python_full_version` ([#6126](https://github.com/astral-sh/uv/pull/6126))
+- Update Pythons to include Python 3.12.5 ([#6087](https://github.com/astral-sh/uv/pull/6087))
+
 ## 0.2.36
 
 ### Preview features
