@@ -2753,7 +2753,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--rev <REV>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###
@@ -2774,7 +2774,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used multiple times
 
-    Usage: uv add [OPTIONS] [PACKAGES]...
+    Usage: uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###
