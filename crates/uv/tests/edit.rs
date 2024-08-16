@@ -5,7 +5,7 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 
-use crate::common::packse_index_url;
+use crate::common::{decode_token, packse_index_url};
 use common::{uv_snapshot, TestContext};
 
 mod common;
@@ -102,6 +102,9 @@ fn add_registry() -> Result<()> {
         dependencies = [
             { name = "anyio" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
         name = "sniffio"
@@ -260,6 +263,12 @@ fn add_git() -> Result<()> {
             { name = "uv-public-pypackage" },
         ]
 
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio", specifier = "==3.7.0" },
+            { name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" },
+        ]
+
         [[package]]
         name = "sniffio"
         version = "1.3.1"
@@ -286,6 +295,202 @@ fn add_git() -> Result<()> {
     ----- stderr -----
     warning: `uv sync` is experimental and may change without warning
     Audited 5 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Add a Git requirement from a private repository, with credentials. The resolution should
+/// succeed, but the `pyproject.toml` should omit the credentials.
+#[test]
+#[cfg(feature = "git")]
+fn add_git_private_source() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "uv-private-pypackage",
+        ]
+
+        [tool.uv.sources]
+        uv-private-pypackage = { git = "https://github.com/astral-test/uv-private-pypackage" }
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-private-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
+
+        [[package]]
+        name = "uv-private-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
+        "###
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Audited 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Add a Git requirement from a private repository, with credentials. Since `--raw-sources` is
+/// specified, the `pyproject.toml` should retain the credentials.
+#[test]
+#[cfg(feature = "git")]
+fn add_git_private_raw() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add(&[&format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")]).arg("--raw-sources").arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    let filters: Vec<_> = [(token.as_str(), "***")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    insta::with_settings!({
+        filters => filters
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "uv-private-pypackage @ git+https://***@github.com/astral-test/uv-private-pypackage",
+        ]
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv-private-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-private-pypackage", git = "https://github.com/astral-test/uv-private-pypackage" }]
+
+        [[package]]
+        name = "uv-private-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
+        "###
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Audited 2 packages in [TIME]
     "###);
 
     Ok(())
@@ -467,6 +672,12 @@ fn add_git_raw() -> Result<()> {
         dependencies = [
             { name = "anyio" },
             { name = "uv-public-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio", specifier = "==3.7.0" },
+            { name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1" },
         ]
 
         [[package]]
@@ -663,6 +874,9 @@ fn add_unnamed() -> Result<()> {
             { name = "uv-public-pypackage" },
         ]
 
+        [package.metadata]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
+
         [[package]]
         name = "uv-public-pypackage"
         version = "0.1.0"
@@ -781,6 +995,11 @@ fn add_remove_dev() -> Result<()> {
         dev = [
             { name = "anyio" },
         ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
         name = "sniffio"
@@ -986,6 +1205,9 @@ fn add_remove_optional() -> Result<()> {
         io = [
             { name = "anyio" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", marker = "extra == 'io'", specifier = "==3.7.0" }]
 
         [[package]]
         name = "sniffio"
@@ -1200,6 +1422,12 @@ fn add_remove_workspace() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
+        [manifest]
+        members = [
+            "child1",
+            "child2",
+        ]
+
         [[package]]
         name = "child1"
         version = "0.1.0"
@@ -1207,6 +1435,9 @@ fn add_remove_workspace() -> Result<()> {
         dependencies = [
             { name = "child2" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child2", editable = "child2" }]
 
         [[package]]
         name = "child2"
@@ -1274,6 +1505,12 @@ fn add_remove_workspace() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
+        members = [
+            "child1",
+            "child2",
+        ]
 
         [[package]]
         name = "child1"
@@ -1386,6 +1623,12 @@ fn add_workspace_editable() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25 00:00:00 UTC"
 
+        [manifest]
+        members = [
+            "child1",
+            "child2",
+        ]
+
         [[package]]
         name = "child1"
         version = "0.1.0"
@@ -1393,6 +1636,9 @@ fn add_workspace_editable() -> Result<()> {
         dependencies = [
             { name = "child2" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child2", editable = "child2" }]
 
         [[package]]
         name = "child2"
@@ -1524,7 +1770,8 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_version > '3.7'",
+            "requests[security]==2.31.0",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
         "###
         );
@@ -1562,7 +1809,8 @@ fn update() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "requests[security,socks,use-chardet-on-py3]==2.31.0 ; python_version > '3.7'",
+            "requests[security]==2.31.0",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
         ]
 
         [tool.uv.sources]
@@ -1643,6 +1891,12 @@ fn update() -> Result<()> {
             { name = "requests", extra = ["socks", "use-chardet-on-py3"] },
         ]
 
+        [package.metadata]
+        requires-dist = [
+            { name = "requests", extras = ["security"], git = "https://github.com/psf/requests?tag=v2.32.3" },
+            { name = "requests", extras = ["socks", "use-chardet-on-py3"], marker = "python_full_version >= '3.8'", git = "https://github.com/psf/requests?tag=v2.32.3" },
+        ]
+
         [[package]]
         name = "pysocks"
         version = "1.7.1"
@@ -1693,6 +1947,241 @@ fn update() -> Result<()> {
     warning: `uv sync` is experimental and may change without warning
     Audited 8 packages in [TIME]
     "###);
+
+    Ok(())
+}
+
+/// Add and update a requirement, with different markers
+#[test]
+fn add_update_marker() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'"
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv lock` is experimental and may change without warning
+    Resolved 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv sync` is experimental and may change without warning
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###);
+
+    // Restrict the `requests` version for Python <3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.29; python_version < '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not match an existing one
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.29 ; python_full_version < '3.11'",
+        ]
+        "###
+        );
+    });
+
+    // Change the restricted `requests` version for Python <3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.0,<2.20; python_version < '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should mutate the existing dependency since the marker matches
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+        ]
+        "###
+        );
+    });
+
+    // Restrict the `requests` version on Windows and Python >3.11
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.31 ; sys_platform == 'win32' and python_version > '3.11'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     - idna==3.6
+     + idna==2.7
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - urllib3==2.2.1
+     + urllib3==1.23
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not match an existing one
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+        ]
+        "###
+        );
+    });
+
+    // Restrict the `requests` version on Windows
+    uv_snapshot!(context.filters(), context.add(&["requests>=2.10 ; sys_platform == 'win32'"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv add` is experimental and may change without warning
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should add a new line for the dependency since the marker does not exactly match an existing
+    // one — although it is a subset of the existing marker.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "requests>=2.30; python_version >= '3.11'",
+            "requests>=2.0,<2.20 ; python_full_version < '3.11'",
+            "requests>=2.31 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+            "requests>=2.10 ; sys_platform == 'win32'",
+        ]
+        "###
+        );
+    });
+
+    // Remove `requests`
+    uv_snapshot!(context.filters(), context.remove(&["requests"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv remove` is experimental and may change without warning
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==2.7
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     - requests==2.31.0
+     - urllib3==1.23
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    // Should remove all variants of `requests`
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -1870,6 +2359,9 @@ fn add_no_clean() -> Result<()> {
         dependencies = [
             { name = "iniconfig" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "###
         );
     });
@@ -2312,8 +2804,7 @@ fn add_error() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of xyz and project==0.1.0 depends on xyz, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
     "###);
 
@@ -2641,6 +3132,9 @@ fn add_lower_bound_optional() -> Result<()> {
             { name = "anyio" },
         ]
 
+        [package.metadata]
+        requires-dist = [{ name = "anyio", marker = "extra == 'io'" }]
+
         [[package]]
         name = "sniffio"
         version = "1.3.1"
@@ -2729,6 +3223,9 @@ fn add_lower_bound_local() -> Result<()> {
         dependencies = [
             { name = "local-simple-a" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "local-simple-a" }]
         "###
         );
     });

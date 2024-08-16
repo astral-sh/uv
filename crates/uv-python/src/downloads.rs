@@ -14,7 +14,6 @@ use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, instrument};
 use url::Url;
-use uv_cache::Cache;
 use uv_client::WrappedReqwestError;
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
@@ -408,16 +407,16 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract
-    #[instrument(skip(client, parent_path, cache, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, installation_dir, cache_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
-        parent_path: &Path,
-        cache: &Cache,
+        installation_dir: &Path,
+        cache_dir: &Path,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let url = self.download_url()?;
-        let path = parent_path.join(self.key().to_string());
+        let path = installation_dir.join(self.key().to_string());
 
         // If it already exists, return it
         if path.is_dir() {
@@ -438,7 +437,7 @@ impl ManagedPythonDownload {
             .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
 
         // Download and extract into a temporary directory.
-        let temp_dir = tempfile::tempdir_in(cache.root()).map_err(Error::DownloadDirError)?;
+        let temp_dir = tempfile::tempdir_in(cache_dir).map_err(Error::DownloadDirError)?;
 
         debug!(
             "Downloading {url} to temporary location: {}",

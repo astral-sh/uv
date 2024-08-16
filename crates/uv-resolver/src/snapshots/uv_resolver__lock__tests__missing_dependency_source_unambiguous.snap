@@ -5,7 +5,7 @@ expression: result
 Ok(
     Lock {
         version: 1,
-        fork_markers: None,
+        fork_markers: [],
         requires_python: None,
         options: ResolverOptions {
             resolution_mode: Highest,
@@ -46,10 +46,14 @@ Ok(
                     },
                 ),
                 wheels: [],
-                fork_markers: None,
+                fork_markers: [],
                 dependencies: [],
                 optional_dependencies: {},
                 dev_dependencies: {},
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    requires_dev: {},
+                },
             },
             Package {
                 id: PackageId {
@@ -84,7 +88,7 @@ Ok(
                     },
                 ),
                 wheels: [],
-                fork_markers: None,
+                fork_markers: [],
                 dependencies: [
                     Dependency {
                         package_id: PackageId {
@@ -104,6 +108,10 @@ Ok(
                 ],
                 optional_dependencies: {},
                 dev_dependencies: {},
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    requires_dev: {},
+                },
             },
         ],
         by_id: {
@@ -129,6 +137,11 @@ Ok(
                     ),
                 ),
             }: 1,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            constraints: {},
+            overrides: {},
         },
     },
 )

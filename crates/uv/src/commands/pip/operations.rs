@@ -3,6 +3,7 @@
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::PathBuf;
 use tracing::debug;
@@ -91,6 +92,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     dev: Vec<GroupName>,
     source_trees: Vec<PathBuf>,
     mut project: Option<PackageName>,
+    workspace_members: Option<BTreeSet<PackageName>>,
     extras: &ExtrasSpecification,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
@@ -230,6 +232,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         dev,
         preferences,
         project,
+        workspace_members,
         exclusions,
         lookaheads,
     );

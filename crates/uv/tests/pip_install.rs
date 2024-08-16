@@ -5,50 +5,17 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use fs_err as fs;
 use indoc::indoc;
-use itertools::Itertools;
 use predicates::prelude::predicate;
 use url::Url;
 
 use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
-use crate::common::{build_vendor_links_url, get_bin, venv_bin_path};
+use crate::common::{build_vendor_links_url, decode_token, get_bin, venv_bin_path};
 
 mod common;
-
-// This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
-const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
-    "Z2l0aHViX3BhdA==",
-    "MTFCR0laQTdRMGdXeGsweHV6ekR2Mg==",
-    "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
-];
-
-// This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
-#[cfg(not(windows))]
-const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
-    "Z2l0aHViX3BhdA==",
-    "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
-    "cnNmNXJwMHk2WWpteVZvb2ZFc0c5WUs5b2NPcFY1aVpYTnNmdE05eEhaM0lGSExSSktDWTcxeVBVZXkK",
-];
-
-/// Decode a split, base64 encoded authentication token.
-/// We split and encode the token to bypass revoke by GitHub's secret scanning
-fn decode_token(content: &[&str]) -> String {
-    let token = content
-        .iter()
-        .map(|part| base64.decode(part).unwrap())
-        .map(|decoded| {
-            std::str::from_utf8(decoded.as_slice())
-                .unwrap()
-                .trim_end()
-                .to_string()
-        })
-        .join("_");
-    token
-}
 
 #[test]
 fn missing_requirements_txt() {
@@ -125,7 +92,13 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery; skipping...
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 1, column 5
+        |
+      1 | 123 - 456
+        |     ^
+      expected `.`, `=`
+
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
@@ -202,8 +175,7 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `project @ file://[TEMP_DIR]/path_dep`
-      Caused by: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
+    error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
     --- stdout:
     configuration error: `project.dependencies[0]` must be pep508
@@ -294,7 +266,7 @@ fn no_solution() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only flask<=3.0.2 is available and flask==3.0.2 depends on werkzeug>=3.0.0, we can conclude that flask>=3.0.2 depends on werkzeug>=3.0.0.
-          And because you require flask>=3.0.2 and werkzeug<1.0.0, we can conclude that the requirements are unsatisfiable.
+          And because you require flask>=3.0.2 and werkzeug<1.0.0, we can conclude that your requirements are unsatisfiable.
     "###);
 }
 
@@ -416,7 +388,7 @@ werkzeug==3.0.1
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because flask==3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask==3.0.2 are incompatible.
-          And because you require flask==3.0.2, we can conclude that the requirements are unsatisfiable.
+          And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -978,7 +950,7 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -1250,7 +1222,7 @@ fn install_no_index() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -1274,7 +1246,7 @@ fn install_no_index_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -1501,7 +1473,7 @@ fn install_git_public_https_missing_commit() {
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -1534,7 +1506,7 @@ fn install_git_private_https_pat() {
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat_mixed_with_public() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -1567,8 +1539,8 @@ fn install_git_private_https_pat_mixed_with_public() {
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_multiple_pat() {
     let context = TestContext::new("3.8");
-    let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
-    let token_2 = decode_token(READ_ONLY_GITHUB_TOKEN_2);
+    let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
 
     let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
         .into_iter()
@@ -1604,7 +1576,7 @@ fn install_git_private_https_multiple_pat() {
 #[cfg(feature = "git")]
 fn install_git_private_https_pat_at_ref() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let mut filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -1648,7 +1620,7 @@ fn install_git_private_https_pat_at_ref() {
 #[ignore]
 fn install_git_private_https_pat_and_username() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
     let filters: Vec<_> = [(token.as_str(), "***")]
@@ -1713,7 +1685,7 @@ fn install_git_private_https_pat_not_authorized() {
 #[cfg(not(windows))]
 fn install_github_artifact_private_https_pat_mixed_with_public() {
     let context = TestContext::new("3.8");
-    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let filters: Vec<_> = [(token.as_str(), "***")]
         .into_iter()
@@ -1748,8 +1720,8 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
 #[cfg(not(windows))]
 fn install_github_artifact_private_https_multiple_pat() {
     let context = TestContext::new("3.8");
-    let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
-    let token_2 = decode_token(READ_ONLY_GITHUB_TOKEN_2);
+    let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
 
     let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
         .into_iter()
@@ -1953,95 +1925,20 @@ fn install_only_binary_all_and_no_binary_all() {
               anyio>=3.0.0,<=3.6.2
               anyio>=3.7.0,<=3.7.1
               anyio>=4.0.0
-          and anyio==1.0.0 has no usable wheels and building from source is disabled, we can conclude that any of:
+          and any of:
+              anyio>=1.0.0,<=1.4.0
+              anyio>=2.0.0,<=2.2.0
+              anyio>=3.0.0,<=3.6.2
+              anyio>=3.7.0,<=3.7.1
+              anyio>=4.0.0
+          has no usable wheels and building from source is disabled, we can conclude that any of:
               anyio<1.1.0
               anyio>1.4.0,<2.0.0
               anyio>2.2.0,<3.0.0
               anyio>3.6.2,<3.7.0
               anyio>3.7.1,<4.0.0
            cannot be used.
-          And because anyio==1.1.0 has no usable wheels and building from source is disabled and anyio==1.2.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<1.2.1
-              anyio>1.4.0,<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==1.2.1 has no usable wheels and building from source is disabled and anyio==1.2.2 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<1.2.3
-              anyio>1.4.0,<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==1.2.3 has no usable wheels and building from source is disabled and anyio==1.3.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<1.3.1
-              anyio>1.4.0,<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==1.3.1 has no usable wheels and building from source is disabled and anyio==1.4.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<2.0.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==2.0.0 has no usable wheels and building from source is disabled and anyio==2.0.1 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<2.0.2
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==2.0.2 has no usable wheels and building from source is disabled and anyio==2.1.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<2.2.0
-              anyio>2.2.0,<3.0.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==2.2.0 has no usable wheels and building from source is disabled and anyio==3.0.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.0.1
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.0.1 has no usable wheels and building from source is disabled and anyio==3.1.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.2.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.2.0 has no usable wheels and building from source is disabled and anyio==3.2.1 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.3.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.3.0 has no usable wheels and building from source is disabled and anyio==3.3.1 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.3.2
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.3.2 has no usable wheels and building from source is disabled and anyio==3.3.3 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.3.4
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.3.4 has no usable wheels and building from source is disabled and anyio==3.4.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.5.0
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.5.0 has no usable wheels and building from source is disabled and anyio==3.6.0 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.6.1
-              anyio>3.6.2,<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.6.1 has no usable wheels and building from source is disabled and anyio==3.6.2 has no usable wheels and building from source is disabled, we can conclude that any of:
-              anyio<3.7.0
-              anyio>3.7.1,<4.0.0
-           cannot be used.
-          And because anyio==3.7.0 has no usable wheels and building from source is disabled and anyio==3.7.1 has no usable wheels and building from source is disabled, we can conclude that anyio<4.0.0 cannot be used.
-          And because anyio==4.0.0 has no usable wheels and building from source is disabled and anyio==4.1.0 has no usable wheels and building from source is disabled, we can conclude that anyio<4.2.0 cannot be used.
-          And because anyio==4.2.0 has no usable wheels and building from source is disabled and anyio==4.3.0 has no usable wheels and building from source is disabled, we can conclude that anyio<4.4.0 cannot be used.
-          And because anyio==4.4.0 has no usable wheels and building from source is disabled and you require anyio, we can conclude that the requirements are unsatisfiable.
+          And because you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for anyio in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###
@@ -2074,7 +1971,7 @@ fn only_binary_requirements_txt() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because django-allauth==0.51.0 has no usable wheels and building from source is disabled and you require django-allauth==0.51.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because django-allauth==0.51.0 has no usable wheels and building from source is disabled and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 }
@@ -3412,7 +3309,7 @@ requires-python = "<=3.8"
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -3440,7 +3337,6 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Failed to build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
 
@@ -3511,7 +3407,6 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Failed to build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
 
@@ -3927,7 +3822,7 @@ requires-python = "<=3.8"
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -4378,7 +4273,7 @@ fn reinstall_no_index() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -4501,7 +4396,7 @@ fn already_installed_dependent_editable() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that the requirements are unsatisfiable.
+          And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -4600,7 +4495,7 @@ fn already_installed_local_path_dependent() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that the requirements are unsatisfiable.
+          And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -4642,7 +4537,7 @@ fn already_installed_local_path_dependent() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because first-local was not found in the provided package locations and second-local==0.1.0 depends on first-local, we can conclude that second-local==0.1.0 cannot be used.
-          And because only second-local==0.1.0 is available and you require second-local, we can conclude that the requirements are unsatisfiable.
+          And because only second-local==0.1.0 is available and you require second-local, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -4714,7 +4609,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
@@ -4731,7 +4626,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==4.3.0+foo and you require anyio==4.3.0+foo, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of anyio==4.3.0+foo and you require anyio==4.3.0+foo, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -4974,7 +4869,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###);
@@ -5021,7 +4916,7 @@ fn already_installed_remote_url() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###);
@@ -6288,10 +6183,9 @@ fn incompatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to build: `requests==1.2.0`
       Caused by: Failed to install requirements from setup.py build (resolve)
       Caused by: No solution found when resolving: setuptools>=40.8.0
-      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that the requirements are unsatisfiable.
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -6365,7 +6259,6 @@ fn install_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Failed to build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
 

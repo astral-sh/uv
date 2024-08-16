@@ -20,6 +20,14 @@ use uv_workspace::Workspace;
 #[derive(Debug, Clone)]
 pub struct LoweredRequirement(Requirement);
 
+#[derive(Debug, Clone, Copy)]
+enum Origin {
+    /// The `tool.uv.sources` were read from the project.
+    Project,
+    /// The `tool.uv.sources` were read from the workspace root.
+    Workspace,
+}
+
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
     pub(crate) fn from_requirement(
@@ -30,10 +38,14 @@ impl LoweredRequirement {
         workspace: &Workspace,
         preview: PreviewMode,
     ) -> Result<Self, LoweringError> {
-        let source = project_sources
-            .get(&requirement.name)
-            .or(workspace.sources().get(&requirement.name))
-            .cloned();
+        let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
+            (Some(source), Origin::Project)
+        } else if let Some(source) = workspace.sources().get(&requirement.name) {
+            (Some(source), Origin::Workspace)
+        } else {
+            (None, Origin::Project)
+        };
+        let source = source.cloned();
 
         let workspace_package_declared =
             // We require that when you use a package that's part of the workspace, ...
@@ -97,6 +109,7 @@ impl LoweredRequirement {
                 }
                 path_source(
                     path,
+                    origin,
                     project_dir,
                     workspace.install_path(),
                     editable.unwrap_or(false),
@@ -202,7 +215,7 @@ impl LoweredRequirement {
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     return Err(LoweringError::ConflictingUrls);
                 }
-                path_source(path, dir, dir, editable.unwrap_or(false))?
+                path_source(path, Origin::Project, dir, dir, editable.unwrap_or(false))?
             }
             Source::Registry { index } => registry_source(&requirement, index)?,
             Source::Workspace { .. } => {
@@ -355,15 +368,20 @@ fn registry_source(
 /// Convert a path string to a file or directory source.
 fn path_source(
     path: impl AsRef<Path>,
+    origin: Origin,
     project_dir: &Path,
     workspace_root: &Path,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let path = path.as_ref();
-    let url = VerbatimUrl::parse_path(path, project_dir)?.with_given(path.to_string_lossy());
+    let base = match origin {
+        Origin::Project => project_dir,
+        Origin::Workspace => workspace_root,
+    };
+    let url = VerbatimUrl::parse_path(path, base)?.with_given(path.to_string_lossy());
     let absolute_path = path
         .to_path_buf()
-        .absolutize_from(project_dir)
+        .absolutize_from(base)
         .map_err(|err| LoweringError::Absolutize(path.to_path_buf(), err))?
         .to_path_buf();
     let relative_to_workspace = if path.is_relative() {

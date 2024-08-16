@@ -14,7 +14,7 @@ use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolutionGraph, ResolverMarkers};
 
 static UNIVERSAL_MARKERS: ResolverMarkers = ResolverMarkers::Universal {
-    fork_preferences: None,
+    fork_preferences: vec![],
 };
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
@@ -307,13 +307,13 @@ pub enum AnnotationStyle {
 }
 
 type ResolutionPetGraph =
-    petgraph::graph::Graph<ResolutionGraphNode, Option<MarkerTree>, petgraph::Directed>;
+    petgraph::graph::Graph<ResolutionGraphNode, MarkerTree, petgraph::Directed>;
 
 type IntermediatePetGraph =
-    petgraph::graph::Graph<DisplayResolutionGraphNode, Option<MarkerTree>, petgraph::Directed>;
+    petgraph::graph::Graph<DisplayResolutionGraphNode, MarkerTree, petgraph::Directed>;
 
 type RequirementsTxtGraph =
-    petgraph::graph::Graph<RequirementsTxtDist, Option<MarkerTree>, petgraph::Directed>;
+    petgraph::graph::Graph<RequirementsTxtDist, MarkerTree, petgraph::Directed>;
 
 /// Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
 /// [`DisplayResolutionGraphNode`].
@@ -384,10 +384,10 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
             let mut edges = graph.edges_directed(index, Direction::Incoming);
             edges
                 .next()
-                .and_then(|edge| graph.edge_weight(edge.id()).cloned().flatten())
+                .and_then(|edge| graph.edge_weight(edge.id()).cloned())
                 .and_then(|initial| {
                     edges.try_fold(initial, |mut acc, edge| {
-                        acc.or(graph.edge_weight(edge.id())?.clone()?);
+                        acc.or(graph.edge_weight(edge.id())?.clone());
                         Some(acc)
                     })
                 })
@@ -400,11 +400,7 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
                 .detach();
             while let Some((outgoing, _)) = walker.next(&graph) {
                 if let Some(weight) = graph.edge_weight_mut(outgoing) {
-                    if let Some(weight) = weight {
-                        weight.and(marker_tree.clone());
-                    } else {
-                        *weight = Some(marker_tree.clone());
-                    }
+                    weight.and(marker_tree.clone());
                 }
             }
         }
@@ -417,7 +413,7 @@ fn propagate_markers(mut graph: IntermediatePetGraph) -> IntermediatePetGraph {
     // Re-add the removed edges. We no longer care about the edge _weights_, but we do want the
     // edges to be present, to power the `# via` annotations.
     for (source, target) in edges {
-        graph.add_edge(source, target, None);
+        graph.add_edge(source, target, MarkerTree::TRUE);
     }
 
     graph
@@ -464,16 +460,16 @@ fn combine_extras(graph: &IntermediatePetGraph) -> RequirementsTxtGraph {
         let source = inverse[&source_node.version_id()];
         let target = inverse[&target_node.version_id()];
 
-        // If either the existing marker or new marker is `None`, then the dependency is
-        // included unconditionally, and so the combined marker should be `None`.
+        // If either the existing marker or new marker is `true`, then the dependency is
+        // included unconditionally, and so the combined marker should be `true`.
         if let Some(edge) = next
             .find_edge(source, target)
             .and_then(|edge| next.edge_weight_mut(edge))
         {
-            if let (Some(marker), Some(ref version_marker)) = (edge.as_mut(), weight) {
-                marker.and(version_marker.clone());
+            if edge.is_true() || weight.is_true() {
+                *edge = MarkerTree::TRUE;
             } else {
-                *edge = None;
+                edge.and(weight.clone());
             }
         } else {
             next.update_edge(source, target, weight);

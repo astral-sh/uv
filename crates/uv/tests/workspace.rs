@@ -6,8 +6,9 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::prelude::FileTouch;
 use indoc::indoc;
-use insta::assert_json_snapshot;
+use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
 use crate::common::{copy_dir_ignore, make_project, uv_snapshot, TestContext};
@@ -952,6 +953,556 @@ fn workspace_hidden_member() -> Result<()> {
       }
     }
     "###);
+
+    Ok(())
+}
+
+/// Ensure workspace members inherit sources from the root, if not specified in the member.
+///
+/// In such cases, relative paths should be resolved relative to the workspace root, rather than
+/// relative to the member.
+#[test]
+fn workspace_inherit_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create a package.
+    let leaf = workspace.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+    "#})?;
+    leaf.child("src/__init__.py").touch()?;
+
+    // Create a peripheral library.
+    let library = context.temp_dir.child("library");
+    library.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "library"
+        version = "0.1.0"
+        dependencies = []
+    "#})?;
+    library.child("src/__init__.py").touch()?;
+
+    // As-is, resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
+          And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    "###
+    );
+
+    // Update the leaf to include the source.
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+
+        [tool.uv.sources]
+        library = { path = "../../../library", editable = true }
+    "#})?;
+    leaf.child("src/__init__.py").touch()?;
+
+    // Resolving should succeed.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    // Revert that change.
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+    "#})?;
+
+    // Update the root to include the source.
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.sources]
+        library = { path = "../library", editable = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // Resolving should succeed.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
+
+    // The lockfile should use a path relative to the workspace root.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25 00:00:00 UTC"
+
+        [manifest]
+        members = [
+            "leaf",
+            "workspace",
+        ]
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { editable = "packages/leaf" }
+        dependencies = [
+            { name = "library" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "library", editable = "../library" }]
+
+        [[package]]
+        name = "library"
+        version = "0.1.0"
+        source = { editable = "../library" }
+
+        [[package]]
+        name = "workspace"
+        version = "0.1.0"
+        source = { editable = "." }
+        "###
+        );
+    });
+
+    // Update the root to include the source again.
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.sources]
+        library = { path = "../library", editable = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // Update the member to include a _different_ source.
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["library"]
+
+        [tool.uv.sources]
+        application = { path = "../application", editable = true }
+
+    "#})?;
+
+    // Resolving should succeed; the member should still use the root's source, despite defining
+    // some of its own
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").arg("--offline").current_dir(&workspace), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests error messages when a workspace member's dependencies cannot be resolved.
+#[test]
+#[cfg(feature = "pypi")]
+fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create a package that requires a dependency that does not exist.
+    let leaf = workspace.child("packages").child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        dependencies = ["httpx>9999"]
+    "#})?;
+    leaf.child("src/__init__.py").touch()?;
+
+    // Resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only httpx<=1.0.0b0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
+          And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests error messages when a workspace member's dependencies conflict with
+/// another member's.
+#[test]
+#[cfg(feature = "pypi")]
+fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create two workspace members with incompatible pins
+    let foo = workspace.child("packages").child("foo");
+    foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        dependencies = ["anyio==4.1.0"]
+    "#})?;
+    foo.child("src/__init__.py").touch()?;
+    let bar = workspace.child("packages").child("bar");
+    bar.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        dependencies = ["anyio==4.2.0"]
+    "#})?;
+    bar.child("src/__init__.py").touch()?;
+
+    // Resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because bar depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
+          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests error messages when a workspace member's dependencies conflict with
+/// two other member's.
+#[test]
+#[cfg(feature = "pypi")]
+fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create three workspace members with incompatible pins.
+    let red = workspace.child("packages").child("red");
+    red.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "red"
+        version = "0.1.0"
+        dependencies = ["anyio==4.1.0"]
+    "#})?;
+    red.child("src/__init__.py").touch()?;
+    let knot = workspace.child("packages").child("knot");
+    knot.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "knot"
+        version = "0.1.0"
+        dependencies = ["anyio==4.2.0"]
+    "#})?;
+    knot.child("src/__init__.py").touch()?;
+
+    // We'll raise the first conflict in the resolver, so `bird` shouldn't be
+    // present in the error even though it also incompatible
+    let bird = workspace.child("packages").child("bird");
+    bird.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bird"
+        version = "0.1.0"
+        dependencies = ["anyio==4.3.0"]
+    "#})?;
+    bird.child("src/__init__.py").touch()?;
+
+    // Resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because bird depends on anyio==4.3.0 and knot depends on anyio==4.2.0, we can conclude that bird and knot are incompatible.
+          And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests error messages when a workspace member's dependencies conflict with
+/// another member's optional dependencies.
+#[test]
+#[cfg(feature = "pypi")]
+fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create two workspace members with incompatible pins
+    let foo = workspace.child("packages").child("foo");
+    foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        dependencies = ["anyio==4.1.0"]
+    "#})?;
+    foo.child("src/__init__.py").touch()?;
+    let bar = workspace.child("packages").child("bar");
+    bar.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+
+        [project.optional-dependencies]
+        some_extra = ["anyio==4.2.0"]
+    "#})?;
+    bar.child("src/__init__.py").touch()?;
+
+    // Resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because bar[some-extra] depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar[some-extra] are incompatible.
+          And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests error messages when a workspace member's dependencies conflict with
+/// another member's development dependencies.
+#[test]
+#[cfg(feature = "pypi")]
+fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create two workspace members with incompatible pins
+    let foo = workspace.child("packages").child("foo");
+    foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        dependencies = ["anyio==4.1.0"]
+    "#})?;
+    foo.child("src/__init__.py").touch()?;
+    let bar = workspace.child("packages").child("bar");
+    bar.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+
+        [tool.uv]
+        dev-dependencies = ["anyio==4.2.0"]
+    "#})?;
+    bar.child("src/__init__.py").touch()?;
+
+    // Resolving should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because bar depends on bar:dev and bar:dev depends on anyio==4.2.0, we can conclude that bar depends on anyio==4.2.0.
+          And because foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
+          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests error messages when a workspace member's name shadows a dependency of
+/// another member.
+#[test]
+#[cfg(feature = "pypi")]
+fn workspace_member_name_shadows_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the workspace root.
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        dependencies = []
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    workspace.child("src/__init__.py").touch()?;
+
+    // Create a workspace member that depends on `anyio`
+    let foo = workspace.child("packages").child("foo");
+    foo.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        dependencies = ["anyio==4.1.0"]
+    "#})?;
+    foo.child("src/__init__.py").touch()?;
+
+    // Then create an `anyio` workspace member
+    let anyio = workspace.child("packages").child("anyio");
+    anyio.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "anyio"
+        version = "0.1.0"
+        dependencies = []
+    "#})?;
+    anyio.child("src/__init__.py").touch()?;
+
+    // We should fail
+    // TODO(zanieb): This error message is bad?
+    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&workspace), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: Failed to build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
+      Caused by: Failed to parse entry for: `anyio`
+      Caused by: Package is not included as workspace package in `tool.uv.workspace`
+    "###
+    );
 
     Ok(())
 }

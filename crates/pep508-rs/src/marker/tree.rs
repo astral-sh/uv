@@ -652,15 +652,15 @@ impl MarkerTree {
         self.0 = INTERNER.lock().or(self.0, tree.0);
     }
 
-    /// Returns `true` if there is no environment in which both marker trees can both apply,
-    /// i.e. the expression `first and second` is always false.
+    /// Returns `true` if there is no environment in which both marker trees can apply,
+    /// i.e. their conjunction is always `false`.
     ///
     /// If this method returns `true`, it is definitively known that the two markers can
     /// never both evaluate to `true` in a given environment. However, this method may return
     /// false negatives, i.e. it may not be able to detect that two markers are disjoint for
     /// complex expressions.
-    pub fn is_disjoint(&self, tree: &MarkerTree) -> bool {
-        INTERNER.lock().and(self.0, tree.0).is_false()
+    pub fn is_disjoint(&self, other: &MarkerTree) -> bool {
+        INTERNER.lock().is_disjoint(self.0, other.0)
     }
 
     /// Returns the contents of this marker tree, if it contains at least one expression.
@@ -1067,15 +1067,11 @@ impl MarkerTree {
     /// the marker will be simplified to `sys_platform == 'linux'`.
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn simplify_python_versions(
-        self,
-        python_version: Range<Version>,
-        full_python_version: Range<Version>,
-    ) -> MarkerTree {
+    pub fn simplify_python_versions(self, python_version: Range<Version>) -> MarkerTree {
         MarkerTree(INTERNER.lock().restrict_versions(self.0, &|var| match var {
-            Variable::Version(MarkerValueVersion::PythonVersion) => Some(python_version.clone()),
+            // Note that `python_version` is normalized to `python_full_version`.
             Variable::Version(MarkerValueVersion::PythonFullVersion) => {
-                Some(full_python_version.clone())
+                Some(python_version.clone())
             }
             _ => None,
         }))
@@ -1308,8 +1304,14 @@ impl ExtraMarkerTree<'_> {
 pub struct MarkerTreeContents(MarkerTree);
 
 impl From<MarkerTreeContents> for MarkerTree {
-    fn from(value: MarkerTreeContents) -> Self {
-        value.0
+    fn from(contents: MarkerTreeContents) -> Self {
+        contents.0
+    }
+}
+
+impl From<Option<MarkerTreeContents>> for MarkerTree {
+    fn from(marker: Option<MarkerTreeContents>) -> Self {
+        marker.map(|contents| contents.0).unwrap_or_default()
     }
 }
 
@@ -1446,62 +1448,49 @@ mod test {
 
         assert_eq!(
             m("(python_version <= '3.11' and sys_platform == 'win32') or python_version > '3.11'")
-                .simplify_python_versions(
-                    Range::from_range_bounds((
-                        Bound::Excluded(Version::new([3, 12])),
-                        Bound::Unbounded,
-                    )),
-                    Range::from_range_bounds((
-                        Bound::Excluded(Version::new([3, 12])),
-                        Bound::Unbounded,
-                    )),
-                ),
+                .simplify_python_versions(Range::from_range_bounds((
+                    Bound::Excluded(Version::new([3, 12])),
+                    Bound::Unbounded,
+                ))),
             MarkerTree::TRUE
         );
 
         assert_eq!(
             m("python_version < '3.10'")
-                .simplify_python_versions(
-                    Range::from_range_bounds((
-                        Bound::Excluded(Version::new([3, 7])),
-                        Bound::Unbounded,
-                    )),
-                    Range::from_range_bounds((
-                        Bound::Excluded(Version::new([3, 7])),
-                        Bound::Unbounded,
-                    )),
-                )
+                .simplify_python_versions(Range::from_range_bounds((
+                    Bound::Excluded(Version::new([3, 7])),
+                    Bound::Unbounded,
+                )))
                 .try_to_string()
                 .unwrap(),
-            "python_version < '3.10'"
+            "python_full_version < '3.10'"
+        );
+
+        // Note that `3.12.1` will still match.
+        assert_eq!(
+            m("python_version <= '3.12'")
+                .simplify_python_versions(Range::from_range_bounds((
+                    Bound::Excluded(Version::new([3, 12])),
+                    Bound::Unbounded,
+                )))
+                .try_to_string()
+                .unwrap(),
+            "python_full_version < '3.13'"
         );
 
         assert_eq!(
-            m("python_version <= '3.12'").simplify_python_versions(
-                Range::from_range_bounds((
-                    Bound::Excluded(Version::new([3, 12])),
-                    Bound::Unbounded,
-                )),
-                Range::from_range_bounds((
-                    Bound::Excluded(Version::new([3, 12])),
-                    Bound::Unbounded,
-                )),
-            ),
+            m("python_full_version <= '3.12'").simplify_python_versions(Range::from_range_bounds(
+                (Bound::Excluded(Version::new([3, 12])), Bound::Unbounded,)
+            )),
             MarkerTree::FALSE
         );
 
         assert_eq!(
             m("python_full_version <= '3.12.1'")
-                .simplify_python_versions(
-                    Range::from_range_bounds((
-                        Bound::Excluded(Version::new([3, 12])),
-                        Bound::Unbounded,
-                    )),
-                    Range::from_range_bounds((
-                        Bound::Excluded(Version::new([3, 12])),
-                        Bound::Unbounded,
-                    )),
-                )
+                .simplify_python_versions(Range::from_range_bounds((
+                    Bound::Excluded(Version::new([3, 12])),
+                    Bound::Unbounded,
+                )))
                 .try_to_string()
                 .unwrap(),
             "python_full_version <= '3.12.1'"
@@ -1721,7 +1710,7 @@ mod test {
             .contents()
             .unwrap()
             .to_string(),
-            "python_full_version >= '3.7' and python_version <= '3.7' and 'nt' in os_name",
+            "python_full_version == '3.7.*' and 'nt' in os_name",
         );
     }
 
@@ -1814,60 +1803,75 @@ mod test {
 
     #[test]
     fn test_marker_simplification() {
+        assert_simplifies("python_version == '3.9'", "python_full_version == '3.9.*'");
         assert_simplifies(
-            "python_version == '3.9' or python_version == '3.9'",
-            "python_version == '3.9'",
+            "python_version == '3.9.0'",
+            "python_full_version == '3.9.*'",
+        );
+
+        assert_simplifies("python_version != '3.9'", "python_full_version != '3.9.*'");
+
+        assert_simplifies("python_version >= '3.9.0'", "python_full_version >= '3.9'");
+        assert_simplifies("python_version <= '3.9.0'", "python_full_version < '3.10'");
+
+        assert_simplifies(
+            "python_version == '3.*'",
+            "python_full_version >= '3' and python_full_version < '4'",
+        );
+        assert_simplifies(
+            "python_version == '3.0.*'",
+            "python_full_version == '3.0.*'",
         );
 
         assert_simplifies(
             "python_version < '3.17' or python_version < '3.18'",
-            "python_version < '3.18'",
+            "python_full_version < '3.18'",
         );
 
         assert_simplifies(
             "python_version > '3.17' or python_version > '3.18' or python_version > '3.12'",
-            "python_version > '3.12'",
+            "python_full_version >= '3.13'",
         );
 
         // a quirk of how pubgrub works, but this is considered part of normalization
         assert_simplifies(
             "python_version > '3.17.post4' or python_version > '3.18.post4'",
-            "python_version > '3.17'",
+            "python_full_version >= '3.18'",
         );
 
         assert_simplifies(
             "python_version < '3.17' and python_version < '3.18'",
-            "python_version < '3.17'",
+            "python_full_version < '3.17'",
         );
 
         assert_simplifies(
             "python_version <= '3.18' and python_version == '3.18'",
-            "python_version == '3.18'",
+            "python_full_version == '3.18.*'",
         );
 
         assert_simplifies(
             "python_version <= '3.18' or python_version == '3.18'",
-            "python_version <= '3.18'",
+            "python_full_version < '3.19'",
         );
 
         assert_simplifies(
             "python_version <= '3.15' or (python_version <= '3.17' and python_version < '3.16')",
-            "python_version < '3.16'",
+            "python_full_version < '3.16'",
         );
 
         assert_simplifies(
             "(python_version > '3.17' or python_version > '3.16') and python_version > '3.15'",
-            "python_version > '3.16'",
+            "python_full_version >= '3.17'",
         );
 
         assert_simplifies(
              "(python_version > '3.17' or python_version > '3.16') and python_version > '3.15' and implementation_version == '1'",
-             "implementation_version == '1' and python_version > '3.16'",
+             "implementation_version == '1' and python_full_version >= '3.17'",
          );
 
         assert_simplifies(
              "('3.17' < python_version or '3.16' < python_version) and '3.15' < python_version and implementation_version == '1'",
-             "implementation_version == '1' and python_version > '3.16'",
+             "implementation_version == '1' and python_full_version >= '3.17'",
          );
 
         assert_simplifies("extra == 'a' or extra == 'a'", "extra == 'a'");
@@ -1923,7 +1927,7 @@ mod test {
         // post-normalization filtering
         assert_simplifies(
              "(python_version < '3.1' or python_version < '3.2') and (python_version < '3.2' or python_version == '3.3')",
-             "python_version < '3.2'",
+             "python_full_version < '3.2'",
          );
 
         // normalize out redundant ranges
@@ -1943,17 +1947,17 @@ mod test {
 
         assert_simplifies(
             "python_version != '3.10' or python_version > '3.12'",
-            "python_version != '3.10'",
+            "python_full_version != '3.10.*'",
         );
 
         assert_simplifies(
             "python_version != '3.8' and python_version < '3.10'",
-            "python_version < '3.8' or (python_version > '3.8' and python_version < '3.10')",
+            "python_full_version < '3.8' or python_full_version == '3.9.*'",
         );
 
         assert_simplifies(
             "python_version != '3.8' and python_version != '3.9'",
-            "python_version != '3.8' and python_version != '3.9'",
+            "python_full_version < '3.8' or python_full_version >= '3.10'",
         );
 
         // normalize out redundant expressions
@@ -2083,20 +2087,22 @@ mod test {
             "(os_name != 'Linux' and sys_platform == 'x') or (platform_system != 'win32' and sys_platform == 'x') or (os_name == 'Linux' and platform_system == 'win32')"
         );
 
-        assert_simplifies("python_version > '3.7'", "python_version > '3.7'");
+        assert_simplifies("python_version > '3.7'", "python_full_version >= '3.8'");
 
         assert_simplifies(
             "(python_version <= '3.7' and os_name == 'Linux') or python_version > '3.7'",
-            "os_name == 'Linux' or python_version > '3.7'",
+            "os_name == 'Linux' or python_full_version >= '3.8'",
         );
 
+        // Again, the extra `<3.7` and `>=3.9` expressions cannot be seen as redundant due to them being interdependent.
+        // TODO(ibraheem): We might be able to simplify these by checking for the negation of the combined ranges before we split them.
         assert_simplifies(
             "(os_name == 'Linux' and sys_platform == 'win32') \
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.7') \
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.8')",
-            "(os_name == 'Linux' and sys_platform == 'win32') \
-                or (python_version == '3.7' and sys_platform == 'win32') \
-                or (python_version == '3.8' and sys_platform == 'win32')",
+            "(python_full_version < '3.7' and os_name == 'Linux' and sys_platform == 'win32') \
+                or (python_full_version >= '3.9' and os_name == 'Linux' and sys_platform == 'win32') \
+                or (python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32')"
         );
 
         assert_simplifies(
@@ -2133,10 +2139,10 @@ mod test {
     #[test]
     fn test_requires_python() {
         fn simplified(marker: &str) -> MarkerTree {
-            m(marker).simplify_python_versions(
-                Range::from_range_bounds((Bound::Included(Version::new([3, 8])), Bound::Unbounded)),
-                Range::from_range_bounds((Bound::Included(Version::new([3, 8])), Bound::Unbounded)),
-            )
+            m(marker).simplify_python_versions(Range::from_range_bounds((
+                Bound::Included(Version::new([3, 8])),
+                Bound::Unbounded,
+            )))
         }
 
         assert_eq!(simplified("python_version >= '3.8'"), MarkerTree::TRUE);
@@ -2154,14 +2160,14 @@ mod test {
             simplified("python_version == '3.8'")
                 .try_to_string()
                 .unwrap(),
-            "python_version == '3.8'"
+            "python_full_version < '3.9'"
         );
 
         assert_eq!(
             simplified("python_version <= '3.10'")
                 .try_to_string()
                 .unwrap(),
-            "python_version <= '3.10'"
+            "python_full_version < '3.11'"
         );
     }
 
@@ -2184,7 +2190,7 @@ mod test {
         // is always `true` and not disjoint.
         assert!(!is_disjoint(
             "python_version == 'Linux'",
-            "python_version == '3.7.1'"
+            "python_full_version == '3.7.1'"
         ));
     }
 
@@ -2192,14 +2198,14 @@ mod test {
     fn test_version_disjointness() {
         assert!(!is_disjoint(
             "os_name == 'Linux'",
-            "python_version == '3.7.1'"
+            "python_full_version == '3.7.1'"
         ));
 
-        test_version_bounds_disjointness("python_version");
+        test_version_bounds_disjointness("python_full_version");
 
         assert!(!is_disjoint(
-            "python_version == '3.7.*'",
-            "python_version == '3.7.1'"
+            "python_full_version == '3.7.*'",
+            "python_full_version == '3.7.1'"
         ));
     }
 
@@ -2211,7 +2217,7 @@ mod test {
         ));
         assert!(!is_disjoint(
             "implementation_version == '3.7.0'",
-            "python_version == '3.7.1'"
+            "python_full_version == '3.7.1'"
         ));
 
         // basic version bounds checking should still work with lexicographical comparisons
@@ -2278,6 +2284,19 @@ mod test {
         assert!(is_disjoint(
             "sys_platform == 'bar' or implementation_name == 'foo'",
             "sys_platform == 'darwin' and implementation_name == 'pypy'",
+        ));
+
+        assert!(is_disjoint(
+            "python_version >= '3.7' and implementation_name == 'pypy'",
+            "python_version < '3.7'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name == 'pypy' and python_version >= '3.7'",
+            "implementation_name != 'pypy'"
+        ));
+        assert!(is_disjoint(
+            "implementation_name != 'pypy' and python_version >= '3.7'",
+            "implementation_name == 'pypy'"
         ));
     }
 
@@ -2349,8 +2368,8 @@ mod test {
     }
 
     fn assert_simplifies(left: &str, right: &str) {
-        assert_eq!(m(left), m(right));
-        assert_eq!(m(left).try_to_string().unwrap(), right);
+        assert_eq!(m(left), m(right), "{left} != {right}");
+        assert_eq!(m(left).try_to_string().unwrap(), right, "{left} != {right}");
     }
 
     fn assert_true(marker: &str) {
@@ -2358,6 +2377,7 @@ mod test {
     }
 
     fn is_disjoint(left: impl AsRef<str>, right: impl AsRef<str>) -> bool {
-        m(left.as_ref()).is_disjoint(&m(right.as_ref()))
+        let (left, right) = (m(left.as_ref()), m(right.as_ref()));
+        left.is_disjoint(&right) && right.is_disjoint(&left)
     }
 }

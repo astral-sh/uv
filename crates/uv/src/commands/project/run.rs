@@ -36,7 +36,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{ProjectError, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{pip, project, ExitStatus, SharedState};
+use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -224,16 +224,16 @@ pub(crate) async fn run(
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
+        if no_project {
+            debug!(
+                "`--no-project` is a no-op for Python scripts with inline metadata; ignoring..."
+            );
+        }
         if !extras.is_empty() {
             warn_user_once!("Extras are not supported for Python scripts with inline metadata");
         }
         if !dev {
             warn_user_once!("`--no-dev` is not supported for Python scripts with inline metadata");
-        }
-        if no_project {
-            warn_user_once!(
-                "`--no-project` is a no-op for Python scripts with inline metadata, which always run in isolation"
-            );
         }
         if package.is_some() {
             warn_user_once!(
@@ -279,7 +279,7 @@ pub(crate) async fn run(
         let project = if no_project {
             // If the user runs with `--no-project` and we can't find a project, warn.
             if project.is_none() {
-                warn_user_once!("`--no-project` was provided, but no project was found");
+                debug!("`--no-project` was provided, but no project was found; ignoring...");
             }
 
             // If the user ran with `--no-project` and provided a project-only setting, warn.
@@ -387,7 +387,7 @@ pub(crate) async fn run(
                 .await?
             };
 
-            let lock = match project::lock::do_safe_lock(
+            let result = match project::lock::do_safe_lock(
                 locked,
                 frozen,
                 project.workspace(),
@@ -407,8 +407,8 @@ pub(crate) async fn run(
             )
             .await
             {
-                Ok(lock) => lock,
-                Err(ProjectError::Operation(pip::operations::Error::Resolve(
+                Ok(result) => result,
+                Err(ProjectError::Operation(operations::Error::Resolve(
                     uv_resolver::ResolveError::NoSolution(err),
                 ))) => {
                     let report = miette::Report::msg(format!("{err}")).context(err.header());
@@ -421,7 +421,7 @@ pub(crate) async fn run(
             project::sync::do_sync(
                 &project,
                 &venv,
-                &lock.lock,
+                result.lock(),
                 &extras,
                 dev,
                 Modifications::Sufficient,

@@ -245,7 +245,7 @@ pub(crate) async fn pip_compile(
 
     // Determine the environment for the resolution.
     let (tags, markers) = if universal {
-        (None, ResolverMarkers::universal(None))
+        (None, ResolverMarkers::universal(vec![]))
     } else {
         let (tags, markers) =
             resolution_environment(python_version, python_platform, &interpreter)?;
@@ -350,6 +350,7 @@ pub(crate) async fn pip_compile(
         dev,
         source_trees,
         project,
+        None,
         &extras,
         preferences,
         EmptyInstalledPackages,

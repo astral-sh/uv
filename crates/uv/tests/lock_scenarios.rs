@@ -87,8 +87,8 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -108,20 +108,25 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         dependencies = [
             { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -216,20 +221,25 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         dependencies = [
             { name = "package-a" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", specifier = "<2" },
+            { name = "package-a", specifier = ">=1" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -295,8 +305,8 @@ fn fork_basic() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -332,20 +342,25 @@ fn fork_basic() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -418,9 +433,8 @@ fn conflict_in_fork() -> Result<()> {
           And because package-a{sys_platform == 'darwin'}==1.0.0 depends on package-b and package-c, we can conclude that package-a{sys_platform == 'darwin'}==1.0.0 cannot be used.
           And because only the following versions of package-a{sys_platform == 'darwin'} are available:
               package-a{sys_platform == 'darwin'}==1.0.0
-              package-a{sys_platform == 'darwin'}>=2
-          and project==0.1.0 depends on package-a{sys_platform == 'darwin'}<2, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+              package-a{sys_platform == 'darwin'}>2
+          and your project depends on package-a{sys_platform == 'darwin'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
 
@@ -483,8 +497,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
-      ╰─▶ Because project==0.1.0 depends on package-a>=2 and package-a<2, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because your project depends on package-a>=2 and package-a<2, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
 
@@ -667,20 +680,27 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
             { name = "package-b", marker = "sys_platform == 'linux'" },
             { name = "package-c", marker = "sys_platform == 'darwin'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = "==4.4.0" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "==4.3.0" },
+            { name = "package-b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
+            { name = "package-c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -780,20 +800,22 @@ fn fork_upgrade() -> Result<()> {
         dependencies = [
             { name = "package-foo" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "package-foo" }]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -871,9 +893,9 @@ fn fork_incomplete_markers() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "python_version < '3.10'",
-            "python_version >= '3.11'",
-            "python_version >= '3.10' and python_version < '3.11'",
+            "python_full_version < '3.10'",
+            "python_full_version == '3.10.*'",
+            "python_full_version >= '3.11'",
         ]
 
         [[package]]
@@ -881,7 +903,7 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         environment-markers = [
-            "python_version < '3.10'",
+            "python_full_version < '3.10'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-1.0.0.tar.gz", hash = "sha256:dd56de2e560b3f95c529c44cbdae55d9b1ada826ddd3e19d3ea45438224ad603" }
         wheels = [
@@ -893,7 +915,7 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         environment-markers = [
-            "python_version >= '3.11'",
+            "python_full_version >= '3.11'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_a-2.0.0.tar.gz", hash = "sha256:580f1454a172036c89f5cfbefe52f175b011806a61f243eb476526bcc186e0be" }
         wheels = [
@@ -905,7 +927,7 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-c", marker = "python_version == '3.10'" },
+            { name = "package-c", marker = "python_full_version < '3.11'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_incomplete_markers_b-1.0.0.tar.gz", hash = "sha256:c4deba44768923473d077bdc0e177033fcb6e6fd406d56830d7ee6f4ffad68c1" }
         wheels = [
@@ -926,24 +948,30 @@ fn fork_incomplete_markers() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version < '3.10'" },
-            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_version >= '3.11'" },
+            { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_full_version < '3.10'" },
+            { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "python_full_version >= '3.11'" },
+            { name = "package-b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "python_full_version < '3.10'", specifier = "==1" },
+            { name = "package-a", marker = "python_full_version >= '3.11'", specifier = "==2" },
             { name = "package-b" },
         ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1060,20 +1088,25 @@ fn fork_marker_accrue() -> Result<()> {
             { name = "package-a", marker = "implementation_name == 'cpython'" },
             { name = "package-b", marker = "implementation_name == 'pypy'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "implementation_name == 'cpython'", specifier = "==1.0.0" },
+            { name = "package-b", marker = "implementation_name == 'pypy'", specifier = "==1.0.0" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1135,9 +1168,8 @@ fn fork_marker_disjoint() -> Result<()> {
 
     ----- stderr -----
     warning: `uv lock` is experimental and may change without warning
-      × No solution found when resolving dependencies:
-      ╰─▶ Because project==0.1.0 depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+      × No solution found when resolving dependencies for split (sys_platform == 'linux'):
+      ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
 
@@ -1220,11 +1252,11 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
         [[package]]
@@ -1237,8 +1269,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_a-1.0.0.tar.gz", hash = "sha256:c7232306e8597d46c3fe53a3b1472f99b8ff36b3169f335ba0a5b625e193f7d4" }
         wheels = [
@@ -1265,7 +1297,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-c", marker = "sys_platform == 'linux' or implementation_name == 'pypy'" },
+            { name = "package-c", marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-1.0.0.tar.gz", hash = "sha256:d6bd196a0a152c1b32e09f08e554d22ae6a6b3b916e39ad4552572afae5f5492" }
         wheels = [
@@ -1301,20 +1333,25 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1396,11 +1433,11 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
         [[package]]
@@ -1413,8 +1450,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_a-1.0.0.tar.gz", hash = "sha256:92081d91570582f3a94ed156f203de53baca5b3fdc350aa1c831c7c42723e798" }
         wheels = [
@@ -1465,20 +1502,25 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1561,11 +1603,11 @@ fn fork_marker_inherit_combined() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
         [[package]]
@@ -1578,8 +1620,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_a-1.0.0.tar.gz", hash = "sha256:2ec4c9dbb7078227d996c344b9e0c1b365ed0000de9527b2ba5b616233636f07" }
         wheels = [
@@ -1630,20 +1672,25 @@ fn fork_marker_inherit_combined() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1719,8 +1766,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -1768,20 +1815,25 @@ fn fork_marker_inherit_isolated() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -1863,8 +1915,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -1924,20 +1976,25 @@ fn fork_marker_inherit_transitive() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2015,8 +2072,8 @@ fn fork_marker_inherit() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2052,20 +2109,25 @@ fn fork_marker_inherit() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2149,8 +2211,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2208,20 +2270,26 @@ fn fork_marker_limited_inherit() -> Result<()> {
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-b" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
+            { name = "package-b" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2299,8 +2367,8 @@ fn fork_marker_selection() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2346,20 +2414,26 @@ fn fork_marker_selection() -> Result<()> {
             { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a" },
+            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2449,8 +2523,8 @@ fn fork_marker_track() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
 
@@ -2508,20 +2582,26 @@ fn fork_marker_track() -> Result<()> {
             { name = "package-b", version = "2.7", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin'" },
             { name = "package-b", version = "2.8", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a" },
+            { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
+            { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2.8" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2637,20 +2717,25 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
             { name = "package-a" },
             { name = "package-b" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", specifier = "==1.0.0" },
+            { name = "package-b", specifier = "==1.0.0" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -2715,8 +2800,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     warning: `uv lock` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0 and package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
-          And because project==0.1.0 depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+          And because your project depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
 
@@ -2791,10 +2875,9 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
       ╰─▶ Because package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0 and only package-c{sys_platform == 'darwin'}<=2.0.0 is available, we can conclude that package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}==2.0.0.
           And because only the following versions of package-c{sys_platform == 'linux'} are available:
               package-c{sys_platform == 'linux'}==1.0.0
-              package-c{sys_platform == 'linux'}>=2.0.0
+              package-c{sys_platform == 'linux'}>2.0.0
           and package-a==1.0.0 depends on package-c{sys_platform == 'linux'}<2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
-          And because project==0.1.0 depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that project==0.1.0 cannot be used.
-          And because only project==0.1.0 is available and you require project, we can conclude that the requirements are unsatisfiable.
+          And because your project depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
 
@@ -2895,8 +2978,9 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "python_version < '3.10'",
-            "python_version >= '3.10'",
+            "python_full_version < '3.10'",
+            "python_full_version == '3.10.*'",
+            "python_full_version >= '3.11'",
         ]
 
         [[package]]
@@ -2915,20 +2999,26 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         dependencies = [
             { name = "package-a" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "python_full_version < '3.10'", specifier = ">=1.0.0" },
+            { name = "package-a", marker = "python_full_version >= '3.10'", specifier = ">=1.1.0" },
+            { name = "package-a", marker = "python_full_version >= '3.11'", specifier = ">=1.2.0" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3056,8 +3146,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform != 'linux'",
             "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
         ]
 
         [[package]]
@@ -3154,20 +3244,22 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         dependencies = [
             { name = "package-cleaver" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "package-cleaver" }]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3434,22 +3526,36 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform != 'linux'",
             "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
         ]
 
         [[package]]
         name = "package-bar"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
         dependencies = [
-            { name = "package-c", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
             { name = "package-d", marker = "sys_platform != 'linux'" },
-            { name = "package-reject-cleaver-1" },
+            { name = "package-reject-cleaver-1", marker = "sys_platform != 'linux'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-1.0.0.tar.gz", hash = "sha256:5d7142b60729bd25206dde836b8f629c72a29593156dee4c4551ad23b7096e8c" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-1.0.0-py3-none-any.whl", hash = "sha256:a590cb59852676a12e3537efe2c812c0640a32408a2ea7f6e5611c7190683865" },
+        ]
+
+        [[package]]
+        name = "package-bar"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-2.0.0.tar.gz", hash = "sha256:cc856e6aca342176e6ba518a298198258b7be3ee7a6b86319c1d8b731e54991e" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_bar-2.0.0-py3-none-any.whl", hash = "sha256:80195408d22da78f3d6ac3cc955840b5fcb2a76d774120e2aa007c7e7cbc2b4e" },
         ]
 
         [[package]]
@@ -3481,8 +3587,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-bar", marker = "sys_platform != 'linux'" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-bar", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-foo", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_cleaver-1.0.0.tar.gz", hash = "sha256:49ec5779d0722586652e3ceb4ca2bf053a79dc3fa2d7ccd428a359bcc885a248" }
         wheels = [
@@ -3505,28 +3611,14 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "package-foo"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
-            "sys_platform == 'linux'",
-        ]
         dependencies = [
             { name = "package-c", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
-            { name = "package-reject-cleaver-1", marker = "sys_platform == 'linux'" },
+            { name = "package-c", version = "3.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-reject-cleaver-1" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-1.0.0.tar.gz", hash = "sha256:7c1a2ca51dd2156cf36c3400e38595e11b09442052f4bd1d6b3d53eb5b2acf32" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-1.0.0-py3-none-any.whl", hash = "sha256:524dfd846c31a55bb6d6a0d0cec80d42c0a87c78aabbe0f1d5426c60493bd41b" },
-        ]
-
-        [[package]]
-        name = "package-foo"
-        version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
-            "sys_platform != 'linux'",
-        ]
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-2.0.0.tar.gz", hash = "sha256:1607aa970fac2e237de28636bf53b022b0c391ecc9039e34438638c8743cc83b" }
-        wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_tristable_foo-2.0.0-py3-none-any.whl", hash = "sha256:8a757092c63519d20d312dacf83ed3c9cc8156495279305a2249175e0407e4df" },
         ]
 
         [[package]]
@@ -3571,25 +3663,31 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
+            { name = "package-bar", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-bar", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-cleaver" },
+            { name = "package-foo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
             { name = "package-bar" },
             { name = "package-cleaver" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
-            { name = "package-foo", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-foo" },
         ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3712,17 +3810,32 @@ fn preferences_dependent_forking() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform != 'linux'",
             "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
         ]
 
         [[package]]
         name = "package-bar"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform != 'linux'",
+        ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0.tar.gz", hash = "sha256:7eef4e0c910b9e4cadf6c707e60a2151f7dc6407d815112ec93a467d76226f5e" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-1.0.0-py3-none-any.whl", hash = "sha256:3cdaac4b0ba330f902d0628c0b1d6e62692f52255d02718d04f46ade7c8ad6a6" },
+        ]
+
+        [[package]]
+        name = "package-bar"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        environment-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-2.0.0.tar.gz", hash = "sha256:f440dbb8c3b848be467c9d3cd4970963fae3144de12454fd48fe9077eb76e9ea" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_bar-2.0.0-py3-none-any.whl", hash = "sha256:24fd0534fec4053f4cac960244943ef13d1bad26bbb5fffe6944a8cf898f26f0" },
         ]
 
         [[package]]
@@ -3730,8 +3843,8 @@ fn preferences_dependent_forking() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         dependencies = [
-            { name = "package-bar", marker = "sys_platform != 'linux'" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-bar", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-foo", marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_cleaver-1.0.0.tar.gz", hash = "sha256:0347b927fdf7731758ea53e1594309fc6311ca6983f36553bc11654a264062b2" }
         wheels = [
@@ -3742,24 +3855,9 @@ fn preferences_dependent_forking() -> Result<()> {
         name = "package-foo"
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
-            "sys_platform == 'linux'",
-        ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-1.0.0.tar.gz", hash = "sha256:abf1c0ac825ee5961e683067634916f98c6651a6d4473ff87d8b57c17af8fed2" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-1.0.0-py3-none-any.whl", hash = "sha256:85348e8df4892b9f297560c16abcf231828f538dc07339ed121197a00a0626a5" },
-        ]
-
-        [[package]]
-        name = "package-foo"
-        version = "2.0.0"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
-        environment-markers = [
-            "sys_platform != 'linux'",
-        ]
-        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-2.0.0.tar.gz", hash = "sha256:ad54d14a4fd931b8ccb6412edef71fe223c36362d0ccfe3fa251c17d4f07e4a9" }
-        wheels = [
-            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/preferences_dependent_forking_foo-2.0.0-py3-none-any.whl", hash = "sha256:bae278cf259c0e031e52b6cbb537d945e0e606d045e980b90d406d0f1e06aae9" },
         ]
 
         [[package]]
@@ -3767,25 +3865,31 @@ fn preferences_dependent_forking() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
+            { name = "package-bar", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-bar", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
+            { name = "package-cleaver" },
+            { name = "package-foo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
             { name = "package-bar" },
             { name = "package-cleaver" },
-            { name = "package-foo", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'linux'" },
-            { name = "package-foo", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform != 'linux'" },
+            { name = "package-foo" },
         ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -3881,11 +3985,11 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         environment-markers = [
-            "sys_platform == 'windows'",
-            "sys_platform != 'illumos' and sys_platform != 'windows'",
             "os_name == 'darwin' and sys_platform == 'illumos'",
             "os_name == 'linux' and sys_platform == 'illumos'",
             "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
+            "sys_platform == 'windows'",
+            "sys_platform != 'illumos' and sys_platform != 'windows'",
         ]
 
         [[package]]
@@ -3898,8 +4002,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
             "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
         ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "os_name == 'darwin'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "os_name == 'linux'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "os_name == 'darwin' and sys_platform == 'illumos'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "os_name == 'linux' and sys_platform == 'illumos'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_remaining_universe_partitioning_a-1.0.0.tar.gz", hash = "sha256:d5be0af9a1958ec08ca2827b47bfd507efc26cab03ecf7ddf204e18e8a3a18ae" }
         wheels = [
@@ -3950,20 +4054,25 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
             { name = "package-a", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'illumos'" },
             { name = "package-a", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'windows'" },
         ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "sys_platform == 'windows'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'illumos'", specifier = "<2" },
+        ]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4033,20 +4142,22 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4116,20 +4227,22 @@ fn fork_requires_python_full() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4213,22 +4326,24 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "package-a", marker = "python_version == '3.10'" },
+            { name = "package-a", marker = "python_full_version < '3.11'" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "package-a", marker = "python_full_version == '3.10.*'", specifier = "==1.0.0" }]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }
@@ -4295,20 +4410,22 @@ fn fork_requires_python() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9.*'", specifier = "==1.0.0" }]
         "###
         );
     });
 
-    // Assert the idempotence of `uv lock`
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
     context
         .lock()
+        .arg("--locked")
         .env_remove("UV_EXCLUDE_NEWER")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.31/simple-html/")
+        .arg(packse_index_url())
         .assert()
         .success();
-    let lock2 = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    assert_eq!(lock2, lock);
 
     Ok(())
 }

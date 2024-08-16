@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.37
+
+### Performance
+
+- Avoid cloning requirement for unchanged markers ([#6116](https://github.com/astral-sh/uv/pull/6116))
+
+### Bug fixes
+
+- Fix loading of cached metadata for Git distributions with subdirectories ([#6094](https://github.com/astral-sh/uv/pull/6094))
+
+### Error messages
+
+- Add env var to `--link-mode=copy` warning ([#6103](https://github.com/astral-sh/uv/pull/6103))
+- Avoid displaying "failed to download" on build failures for local source distributions ([#6075](https://github.com/astral-sh/uv/pull/6075))
+- Improve display of available package ranges ([#6118](https://github.com/astral-sh/uv/pull/6118))
+- Use "your requirements" consistently in resolver error messages ([#6113](https://github.com/astral-sh/uv/pull/6113))
+
+## 0.2.36
+
+### Bug fixes
+
+- Use consistent canonicalization for URLs ([#5980](https://github.com/astral-sh/uv/pull/5980))
+- Improve warning message when parsing `pyproject.toml` fails ([#6009](https://github.com/astral-sh/uv/pull/6009))
+- Improve handling of overlapping markers in universal resolver ([#5887](https://github.com/astral-sh/uv/pull/5887))
+
 ## 0.2.35
 
 ### CLI
@@ -1805,4 +1830,5 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Fix diagram alignment ([#1354](https://github.com/astral-sh/uv/pull/1354))
 - Grammar nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
 <!-- prettier-ignore-end -->
+
 

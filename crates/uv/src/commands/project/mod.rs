@@ -103,6 +103,9 @@ pub(crate) enum ProjectError {
     Tool(#[from] uv_tool::Error),
 
     #[error(transparent)]
+    NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
+
+    #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
@@ -134,24 +137,6 @@ fn find_environment(
     cache: &Cache,
 ) -> Result<PythonEnvironment, uv_python::Error> {
     PythonEnvironment::from_root(workspace.venv(), cache)
-}
-
-/// Check if the given interpreter satisfies the project's requirements.
-fn interpreter_meets_requirements(
-    interpreter: &Interpreter,
-    requested_python: Option<&PythonRequest>,
-    cache: &Cache,
-) -> bool {
-    let Some(request) = requested_python else {
-        return true;
-    };
-    if request.satisfied(interpreter, cache) {
-        debug!("Interpreter meets the requested Python: `{request}`");
-        true
-    } else {
-        debug!("Interpreter does not meet the request: `{request}`");
-        false
-    }
 }
 
 #[derive(Debug)]
@@ -223,17 +208,23 @@ impl FoundInterpreter {
         // Read from the virtual environment first.
         match find_environment(workspace, cache) {
             Ok(venv) => {
-                if interpreter_meets_requirements(
-                    venv.interpreter(),
-                    python_request.as_ref(),
-                    cache,
-                ) {
+                if python_request.as_ref().map_or(true, |request| {
+                    if request.satisfied(venv.interpreter(), cache) {
+                        debug!("The virtual environment's Python version satisfies `{request}`");
+                        true
+                    } else {
+                        debug!(
+                            "The virtual environment's Python version does not satisfy `{request}`"
+                        );
+                        false
+                    }
+                }) {
                     if let Some(requires_python) = requires_python.as_ref() {
                         if requires_python.contains(venv.interpreter().python_version()) {
                             return Ok(Self::Environment(venv));
                         }
                         debug!(
-                            "Interpreter does not meet the project's Python requirement: `{requires_python}`"
+                            "The virtual environment's Python version does not meet the project's Python requirement: `{requires_python}`"
                         );
                     } else {
                         return Ok(Self::Environment(venv));
@@ -627,6 +618,7 @@ pub(crate) async fn resolve_environment<'a>(
         dev,
         source_trees,
         project,
+        None,
         &extras,
         preferences,
         EmptyInstalledPackages,
@@ -949,6 +941,7 @@ pub(crate) async fn update_environment(
         dev,
         source_trees,
         project,
+        None,
         &extras,
         preferences,
         site_packages.clone(),

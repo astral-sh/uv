@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::{fmt, mem};
 
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use pep508_rs::{ExtraName, PackageName, Requirement, VersionOrUrl};
+use pep508_rs::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
 use uv_fs::PortablePath;
@@ -343,7 +343,7 @@ impl PyProjectTomlMut {
     }
 
     /// Removes all occurrences of dependencies with the given name.
-    pub fn remove_dependency(&mut self, req: &PackageName) -> Result<Vec<Requirement>, Error> {
+    pub fn remove_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.dependencies`.
         let Some(dependencies) = self
             .doc_mut()?
@@ -354,14 +354,14 @@ impl PyProjectTomlMut {
             return Ok(Vec::new());
         };
 
-        let requirements = remove_dependency(req, dependencies);
-        self.remove_source(req)?;
+        let requirements = remove_dependency(name, dependencies);
+        self.remove_source(name)?;
 
         Ok(requirements)
     }
 
     /// Removes all occurrences of development dependencies with the given name.
-    pub fn remove_dev_dependency(&mut self, req: &PackageName) -> Result<Vec<Requirement>, Error> {
+    pub fn remove_dev_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
         // Try to get `tool.uv.dev-dependencies`.
         let Some(dev_dependencies) = self
             .doc
@@ -378,8 +378,8 @@ impl PyProjectTomlMut {
             return Ok(Vec::new());
         };
 
-        let requirements = remove_dependency(req, dev_dependencies);
-        self.remove_source(req)?;
+        let requirements = remove_dependency(name, dev_dependencies);
+        self.remove_source(name)?;
 
         Ok(requirements)
     }
@@ -387,7 +387,7 @@ impl PyProjectTomlMut {
     /// Removes all occurrences of optional dependencies in the group with the given name.
     pub fn remove_optional_dependency(
         &mut self,
-        req: &PackageName,
+        name: &PackageName,
         group: &ExtraName,
     ) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.optional-dependencies.<group>`.
@@ -403,8 +403,8 @@ impl PyProjectTomlMut {
             return Ok(Vec::new());
         };
 
-        let requirements = remove_dependency(req, optional_dependencies);
-        self.remove_source(req)?;
+        let requirements = remove_dependency(name, optional_dependencies);
+        self.remove_source(name)?;
 
         Ok(requirements)
     }
@@ -434,13 +434,17 @@ impl PyProjectTomlMut {
     ///
     /// This method searches `project.dependencies`, `tool.uv.dev-dependencies`, and
     /// `tool.uv.optional-dependencies`.
-    pub fn find_dependency(&self, name: &PackageName) -> Vec<DependencyType> {
+    pub fn find_dependency(
+        &self,
+        name: &PackageName,
+        marker: Option<&MarkerTree>,
+    ) -> Vec<DependencyType> {
         let mut types = Vec::new();
 
         if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
             // Check `project.dependencies`.
             if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
-                if !find_dependencies(name, dependencies).is_empty() {
+                if !find_dependencies(name, marker, dependencies).is_empty() {
                     types.push(DependencyType::Production);
                 }
             }
@@ -458,7 +462,7 @@ impl PyProjectTomlMut {
                         continue;
                     };
 
-                    if !find_dependencies(name, dependencies).is_empty() {
+                    if !find_dependencies(name, marker, dependencies).is_empty() {
                         types.push(DependencyType::Optional(extra));
                     }
                 }
@@ -475,7 +479,7 @@ impl PyProjectTomlMut {
             .and_then(|tool| tool.get("dev-dependencies"))
             .and_then(Item::as_array)
         {
-            if !find_dependencies(name, dev_dependencies).is_empty() {
+            if !find_dependencies(name, marker, dev_dependencies).is_empty() {
                 types.push(DependencyType::Dev);
             }
         }
@@ -500,7 +504,7 @@ pub fn add_dependency(
     has_source: bool,
 ) -> Result<ArrayEdit, Error> {
     // Find matching dependencies.
-    let mut to_replace = find_dependencies(&req.name, deps);
+    let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
     match to_replace.as_slice() {
         [] => {
             deps.push(req.to_string());
@@ -545,9 +549,9 @@ fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool
 }
 
 /// Removes all occurrences of dependencies with the given name from the given `deps` array.
-fn remove_dependency(req: &PackageName, deps: &mut Array) -> Vec<Requirement> {
+fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     // Remove matching dependencies.
-    let removed = find_dependencies(req, deps)
+    let removed = find_dependencies(name, None, deps)
         .into_iter()
         .rev() // Reverse to preserve indices as we remove them.
         .filter_map(|(i, _)| {
@@ -566,11 +570,15 @@ fn remove_dependency(req: &PackageName, deps: &mut Array) -> Vec<Requirement> {
 
 /// Returns a `Vec` containing the all dependencies with the given name, along with their positions
 /// in the array.
-fn find_dependencies(name: &PackageName, deps: &Array) -> Vec<(usize, Requirement)> {
+fn find_dependencies(
+    name: &PackageName,
+    marker: Option<&MarkerTree>,
+    deps: &Array,
+) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
         if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if req.name == *name {
+            if marker.map_or(true, |m| *m == req.marker) && *name == req.name {
                 to_replace.push((i, req));
             }
         }

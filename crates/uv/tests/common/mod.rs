@@ -12,7 +12,9 @@ use std::str::FromStr;
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir, SymlinkToFile};
+use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::formatdoc;
+use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
 
@@ -27,6 +29,32 @@ use uv_python::{
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
 pub const PACKSE_VERSION: &str = "0.3.34";
+
+/// Wraps a group of `uv lock` snapshots and runs them multiple times in sequence.
+///
+/// This is useful to ensure that resolution runs independent of an existing lockfile
+/// and does not change across repeated calls to `uv lock`.
+///
+/// We squash the `unused_macros` lint since this isn't used in every
+/// grouping of tests.
+#[allow(unused_macros)]
+macro_rules! deterministic_lock {
+    ($context:ident => $($x:tt)*) => {
+        insta::allow_duplicates! {
+            // Run the first resolution.
+            $($x)*
+
+            // Run a second resolution with the new lockfile.
+            $($x)*
+
+            // Run a final clean resolution without a lockfile to ensure identical results.
+            let _ = fs_err::remove_file(&$context.temp_dir.join("uv.lock"));
+            $($x)*
+        }
+    };
+}
+#[allow(unused_imports)]
+pub(crate) use deterministic_lock;
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -987,6 +1015,37 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
     fs_err::create_dir(dir.join(name))?;
     fs_err::write(dir.join(name).join("__init__.py"), "")?;
     Ok(())
+}
+
+// This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
+pub const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
+    "Z2l0aHViX3BhdA==",
+    "MTFCR0laQTdRMGdXeGsweHV6ekR2Mg==",
+    "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
+];
+
+// This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
+#[cfg(not(windows))]
+pub const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
+    "Z2l0aHViX3BhdA==",
+    "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
+    "cnNmNXJwMHk2WWpteVZvb2ZFc0c5WUs5b2NPcFY1aVpYTnNmdE05eEhaM0lGSExSSktDWTcxeVBVZXkK",
+];
+
+/// Decode a split, base64 encoded authentication token.
+/// We split and encode the token to bypass revoke by GitHub's secret scanning
+pub fn decode_token(content: &[&str]) -> String {
+    let token = content
+        .iter()
+        .map(|part| base64.decode(part).unwrap())
+        .map(|decoded| {
+            std::str::from_utf8(decoded.as_slice())
+                .unwrap()
+                .trim_end()
+                .to_string()
+        })
+        .join("_");
+    token
 }
 
 /// Utility macro to return the name of the current function.

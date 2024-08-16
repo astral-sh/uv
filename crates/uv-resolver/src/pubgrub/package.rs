@@ -196,13 +196,13 @@ impl std::fmt::Display for PubGrubPackageInner {
                 name,
                 extra: None,
                 marker: None,
-                ..
+                dev: None,
             } => write!(f, "{name}"),
             Self::Package {
                 name,
                 extra: Some(extra),
                 marker: None,
-                ..
+                dev: None,
             } => {
                 write!(f, "{name}[{extra}]")
             }
@@ -210,19 +210,40 @@ impl std::fmt::Display for PubGrubPackageInner {
                 name,
                 extra: None,
                 marker: Some(marker),
-                ..
+                dev: None,
             } => write!(f, "{name}{{{marker}}}"),
             Self::Package {
                 name,
                 extra: Some(extra),
                 marker: Some(marker),
-                ..
+                dev: None,
             } => {
                 write!(f, "{name}[{extra}]{{{marker}}}")
+            }
+            Self::Package {
+                name,
+                extra: None,
+                marker: None,
+                dev: Some(dev),
+            } => write!(f, "{name}:{dev}"),
+            Self::Package {
+                name,
+                extra: None,
+                marker: Some(marker),
+                dev: Some(dev),
+            } => {
+                write!(f, "{name}[{dev}]{{{marker}}}")
             }
             Self::Marker { name, marker, .. } => write!(f, "{name}{{{marker}}}"),
             Self::Extra { name, extra, .. } => write!(f, "{name}[{extra}]"),
             Self::Dev { name, dev, .. } => write!(f, "{name}:{dev}"),
+            // It is guaranteed that `extra` and `dev` are never set at the same time.
+            Self::Package {
+                name: _,
+                extra: Some(_),
+                marker: _,
+                dev: Some(_),
+            } => unreachable!(),
         }
     }
 }

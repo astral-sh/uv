@@ -1,0 +1,268 @@
+# Example configuration for Black.
+
+# NOTE: you have to use single-quoted strings in TOML for regular expressions.
+# It's the equivalent of r-strings in Python.  Multiline strings are treated as
+# verbose regular expressions by Black.  Use [ ] to denote a significant space
+# character.
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # The following are specific to Black, you probably don't want those.
+  tests/data/
+  | profiling/
+  | scripts/generate_schema.py  # Uses match syntax
+)
+'''
+# We use the unstable style for formatting Black itself. If you
+# want bug-free formatting, you should keep this off. If you want
+# stable formatting across releases, you should also keep `preview = true`
+# (which is implied by this flag) off.
+unstable = true
+
+# Build system information and other project-specific configuration below.
+# NOTE: You don't need this in your own Black configuration.
+
+[build-system]
+requires = ["hatchling>=1.20.0", "hatch-vcs", "hatch-fancy-pypi-readme"]
+build-backend = "hatchling.build"
+
+[project]
+name = "black"
+description = "The uncompromising code formatter."
+license = { text = "MIT" }
+requires-python = ">=3.8"
+authors = [
+  { name = "Łukasz Langa", email = "lukasz@langa.pl" },
+]
+keywords = [
+  "automation",
+  "autopep8",
+  "formatter",
+  "gofmt",
+  "pyfmt",
+  "rustfmt",
+  "yapf",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+  "click>=8.0.0",
+  "mypy_extensions>=0.4.3",
+  "packaging>=22.0",
+  "pathspec>=0.9.0",
+  "platformdirs>=2",
+  "tomli>=1.1.0; python_version < '3.11'",
+  "typing_extensions>=4.0.1; python_version < '3.11'",
+]
+dynamic = ["readme", "version"]
+
+[project.optional-dependencies]
+colorama = ["colorama>=0.4.3"]
+uvloop = ["uvloop>=0.15.2"]
+d = [
+  "aiohttp>=3.7.4; sys_platform != 'win32' or implementation_name != 'pypy'",
+  "aiohttp>=3.7.4, !=3.9.0; sys_platform == 'win32' and implementation_name == 'pypy'",
+]
+jupyter = [
+  "ipython>=7.8.0",
+  "tokenize-rt>=3.2.0",
+]
+
+[project.scripts]
+black = "black:patched_main"
+blackd = "blackd:patched_main [d]"
+
+[project.entry-points."validate_pyproject.tool_schema"]
+black = "black.schema:get_schema"
+
+[project.urls]
+Documentation = "https://black.readthedocs.io/"
+Changelog = "https://github.com/psf/black/blob/main/CHANGES.md"
+Repository = "https://github.com/psf/black"
+Issues = "https://github.com/psf/black/issues"
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+fragments = [
+  { path = "README.md" },
+  { path = "CHANGES.md" },
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/_black_version.py"
+template = '''
+version = "{version}"
+'''
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/profiling"]
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+# Note that we change the behaviour of this flag below
+macos-max-compat = true
+
+[tool.hatch.build.targets.wheel.hooks.mypyc]
+enable-by-default = false
+dependencies = [
+  "hatch-mypyc>=0.16.0",
+  "mypy==1.7.1",
+  "click==8.1.3",  # avoid https://github.com/pallets/click/issues/2558
+]
+require-runtime-dependencies = true
+exclude = [
+  # There's no good reason for blackd to be compiled.
+  "/src/blackd",
+  # Not performance sensitive, so save bytes + compilation time:
+  "/src/blib2to3/__init__.py",
+  "/src/blib2to3/pgen2/__init__.py",
+  "/src/black/output.py",
+  "/src/black/concurrency.py",
+  "/src/black/files.py",
+  "/src/black/report.py",
+  # Breaks the test suite when compiled (and is also useless):
+  "/src/black/debug.py",
+  # Compiled modules can't be run directly and that's a problem here:
+  "/src/black/__main__.py",
+]
+mypy-args = ["--ignore-missing-imports"]
+options = { debug_level = "0" }
+
+[tool.cibuildwheel]
+build-verbosity = 1
+
+# So these are the environments we target:
+# - Python: CPython 3.8+ only
+# - Architecture (64-bit only): amd64 / x86_64, universal2, and arm64
+# - OS: Linux (no musl), Windows, and macOS
+build = "cp3*"
+skip = ["*-manylinux_i686", "*-musllinux_*", "*-win32", "pp*"]
+
+# This is the bare minimum needed to run the test suite. Pulling in the full
+# test_requirements.txt would download a bunch of other packages not necessary
+# here and would slow down the testing step a fair bit.
+test-requires = ["pytest>=6.1.1"]
+test-command = 'pytest {project} -k "not incompatible_with_mypyc"'
+test-extras = ["d"," jupyter"]
+# Skip trying to test arm64 builds on Intel Macs. (so cross-compilation doesn't
+# straight up crash)
+test-skip = ["*-macosx_arm64", "*-macosx_universal2:arm64"]
+
+[tool.cibuildwheel.environment]
+HATCH_BUILD_HOOKS_ENABLE = "1"
+MYPYC_OPT_LEVEL = "3"
+MYPYC_DEBUG_LEVEL = "0"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"
+before-build = [
+    "yum install -y clang gcc",
+]
+
+[tool.cibuildwheel.linux.environment]
+HATCH_BUILD_HOOKS_ENABLE = "1"
+MYPYC_OPT_LEVEL = "3"
+MYPYC_DEBUG_LEVEL = "0"
+
+# Black needs Clang to compile successfully on Linux.
+CC = "clang"
+
+[tool.cibuildwheel.macos]
+build-frontend = { name = "build", args = ["--no-isolation"] }
+# Unfortunately, hatch doesn't respect MACOSX_DEPLOYMENT_TARGET
+before-build = [
+    "python -m pip install 'hatchling==1.20.0' hatch-vcs hatch-fancy-pypi-readme 'hatch-mypyc>=0.16.0' 'mypy==1.7.1' 'click==8.1.3'",
+    """sed -i '' -e "600,700s/'10_16'/os.environ['MACOSX_DEPLOYMENT_TARGET'].replace('.', '_')/" $(python -c 'import hatchling.builders.wheel as h; print(h.__file__)') """,
+]
+
+[tool.isort]
+atomic = true
+profile = "black"
+line_length = 88
+skip_gitignore = true
+skip_glob = ["tests/data", "profiling"]
+known_first_party = ["black", "blib2to3", "blackd", "_black_version"]
+
+[tool.pytest.ini_options]
+# Option below requires `tests/optional.py`
+addopts = "--strict-config --strict-markers"
+optional-tests = [
+  "no_blackd: run when `d` extra NOT installed",
+  "no_jupyter: run when `jupyter` extra NOT installed",
+]
+markers = [
+  "incompatible_with_mypyc: run when testing mypyc compiled black"
+]
+xfail_strict = true
+filterwarnings = [
+    "error",
+    # this is mitigated by a try/catch in https://github.com/psf/black/pull/2974/
+    # this ignore can be removed when support for aiohttp 3.7 is dropped.
+    '''ignore:Decorator `@unittest_run_loop` is no longer needed in aiohttp 3\.8\+:DeprecationWarning''',
+    # this is mitigated by a try/catch in https://github.com/psf/black/pull/3198/
+    # this ignore can be removed when support for aiohttp 3.x is dropped.
+    '''ignore:Middleware decorator is deprecated since 4\.0 and its behaviour is default, you can simply remove this decorator:DeprecationWarning''',
+    # aiohttp is using deprecated cgi modules - Safe to remove when fixed:
+    # https://github.com/aio-libs/aiohttp/issues/6905
+    '''ignore:'cgi' is deprecated and slated for removal in Python 3.13:DeprecationWarning''',
+    # Work around https://github.com/pytest-dev/pytest/issues/10977 for Python 3.12
+    '''ignore:(Attribute s|Attribute n|ast.Str|ast.Bytes|ast.NameConstant|ast.Num) is deprecated and will be removed in Python 3.14:DeprecationWarning''',
+    # Will be fixed with aiohttp 3.9.0
+    # https://github.com/aio-libs/aiohttp/pull/7302
+    "ignore:datetime.*utcfromtimestamp\\(\\) is deprecated and scheduled for removal:DeprecationWarning",
+]
+[tool.coverage.report]
+omit = [
+  "src/blib2to3/*",
+  "tests/data/*",
+  "*/site-packages/*",
+  ".tox/*"
+]
+[tool.coverage.run]
+relative_files = true
+branch = true
+
+[tool.mypy]
+# Specify the target platform details in config, so your developers are
+# free to run mypy on Windows, Linux, or macOS and get consistent
+# results.
+python_version = "3.8"
+mypy_path = "src"
+strict = true
+# Unreachable blocks have been an issue when compiling mypyc, let's try to avoid 'em in the first place.
+warn_unreachable = true
+implicit_reexport = true
+show_error_codes = true
+show_column_numbers = true
+
+[[tool.mypy.overrides]]
+module = ["pathspec.*", "IPython.*", "colorama.*", "tokenize_rt.*", "uvloop.*", "_black_version.*"]
+ignore_missing_imports = true
+
+# CI only checks src/, but in case users are running LSP or similar we explicitly ignore
+# errors in test data files.
+[[tool.mypy.overrides]]
+module = ["tests.data.*"]
+ignore_errors = true

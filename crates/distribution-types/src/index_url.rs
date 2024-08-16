@@ -348,6 +348,15 @@ impl IndexLocations {
             no_index: self.no_index || no_index,
         }
     }
+
+    /// Returns `true` if no index configuration is set, i.e., the [`IndexLocations`] matches the
+    /// default configuration.
+    pub fn is_none(&self) -> bool {
+        self.index.is_none()
+            && self.extra_index.is_empty()
+            && self.flat_index.is_empty()
+            && !self.no_index
+    }
 }
 
 impl<'a> IndexLocations {

@@ -17,6 +17,34 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
   the local `.whl` or `.tar.gz` file). For directories, uv caches based on the last-modified time of
   the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
 
+If you're running into caching issues, uv includes a few escape hatches:
+
+- To force uv to revalidate cached data for all dependencies, pass `--refresh` to any command (e.g.,
+  `uv sync --refresh` or `uv pip install --refresh ...`).
+- To force uv to revalidate cached data for a specific dependency pass `--refresh-dependency` to any
+  command (e.g., `uv sync --refresh-package flask` or `uv pip install --refresh-package flask ...`).
+- To force uv to ignore existing installed versions, pass `--reinstall` to any installation command
+  (e.g., `uv sync --reinstall` or `uv pip install --reinstall ...`).
+
+## Dynamic metadata
+
+Note that for local directory dependencies in particular (e.g., editables), uv will _only_ reinstall
+the package if its `pyproject.toml`, `setup.py`, or `setup.cfg` file has changed. This is a
+heuristic and, in some cases, may lead to fewer re-installs than desired.
+
+For example, if a local dependency uses `dynamic` metadata, you can instruct uv to _always_
+reinstall the package by adding `reinstall-package` to the `uv` section of your `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+reinstall-package = ["my-package"]
+```
+
+This will force uv to rebuild and reinstall `my-package` on every run, regardless of whether the
+package's `pyproject.toml`, `setup.py`, or `setup.cfg` file has changed.
+
+## Cache safety
+
 It's safe to run multiple uv commands concurrently, even against the same virtual environment. uv's
 cache is designed to be thread-safe and append-only, and thus robust to multiple concurrent readers
 and writers. uv applies a file-based lock to the target virtual environment when installing, to
@@ -24,13 +52,6 @@ avoid concurrent modifications across processes.
 
 Note that it's _not_ safe to modify the uv cache (e.g., `uv cache clean`) while other uv commands
 are running, and _never_ safe to modify the cache directly (e.g., by removing a file or directory).
-
-If you're running into caching issues, uv includes a few escape hatches:
-
-- To force uv to revalidate cached data for all dependencies, run `uv pip install --refresh ...`.
-- To force uv to revalidate cached data for a specific dependency, run, e.g.,
-  `uv pip install --refresh-package flask ...`.
-- To force uv to ignore existing installed versions, run `uv pip install --reinstall ...`.
 
 ## Clearing the cache
 

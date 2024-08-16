@@ -134,20 +134,6 @@ To exclude downloads and only show installed Python versions:
 $ uv python list --only-installed
 ```
 
-## Discovery of virtual environments
-
-Some uv commands may use a Python interpreter from a virtual environment. When searching for virtual
-environments, uv prioritizes (in order):
-
-- The `VIRTUAL_ENV` environment variable.
-- The `CONDA_PREFIX` environment variable.
-- A `.venv` directory in the working directory.
-- A `.venv` directory in any parent directory.
-
-After exhausting these possibilities, uv will either
-[search for a Python installation](#discovery-of-python-versions) or exit with an error if the
-command requires a virtual environment.
-
 ## Discovery of Python versions
 
 When searching for a Python version, the following locations are checked:
@@ -157,6 +143,12 @@ When searching for a Python version, the following locations are checked:
   `python.exe` on Windows.
 - On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
   version.
+
+In some cases, uv allows using a Python version from a virtual environment. In this case, the
+virtual environment's interpreter will be checked for compatibility with the request before
+searching for an installation as described above. See the
+[pip-compatible virtual environment discovery](../pip/environments.md#discovery-of-python-environments)
+documentation for details.
 
 When performing discovery, non-executable files will be ignored. Each discovered executable is
 queried for metadata to ensure it meets the [requested Python version](#requesting-a-version). If

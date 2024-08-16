@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.2.37
+
+### Preview features
+
+- Add `python-version-file` to GitHub integration documentation ([#6086](https://github.com/astral-sh/uv/pull/6086))
+- Always narrow markers by Python version ([#6076](https://github.com/astral-sh/uv/pull/6076))
+- Avoid warning for redundant `--no-project` ([#6111](https://github.com/astral-sh/uv/pull/6111))
+- Change the definition of `--locked` to require satisfaction check ([#6102](https://github.com/astral-sh/uv/pull/6102))
+- Improve debug log for interpreter requests during project commands ([#6120](https://github.com/astral-sh/uv/pull/6120))
+- Improve display of resolution errors for workspace member conflicts with optional dependencies ([#6123](https://github.com/astral-sh/uv/pull/6123))
+- Improve resolver error messages for single-project workspaces ([#6095](https://github.com/astral-sh/uv/pull/6095))
+- Improve resolver error messages referencing workspace members ([#6092](https://github.com/astral-sh/uv/pull/6092))
+- Invalidate `uv.lock` if registry sources are removed ([#6026](https://github.com/astral-sh/uv/pull/6026))
+- Propagate fork markers to extras ([#6065](https://github.com/astral-sh/uv/pull/6065))
+- Redact Git credentials from `pyproject.toml` ([#6074](https://github.com/astral-sh/uv/pull/6074))
+- Redact Git credentials in lockfile ([#6070](https://github.com/astral-sh/uv/pull/6070))
+- Remove 'tool' reference on `uv run` CLI ([#6110](https://github.com/astral-sh/uv/pull/6110))
+- Remove `same-graph` merging in resolver ([#6077](https://github.com/astral-sh/uv/pull/6077))
+- Strip SHA when constructing package source ([#6097](https://github.com/astral-sh/uv/pull/6097))
+- Treat Git sources as immutable in lockfile ([#6109](https://github.com/astral-sh/uv/pull/6109))
+- Use the proper singular form for workspace member dependencies in resolver errors ([#6128](https://github.com/astral-sh/uv/pull/6128))
+- Use sets rather than vectors for lockfile requirements ([#6107](https://github.com/astral-sh/uv/pull/6107))
+- Normalize `python_version` markers to `python_full_version` ([#6126](https://github.com/astral-sh/uv/pull/6126))
+- Update Pythons to include Python 3.12.5 ([#6087](https://github.com/astral-sh/uv/pull/6087))
+
+## 0.2.36
+
+### Preview features
+
+- Add resolver error context to `run` and `tool run` ([#5991](https://github.com/astral-sh/uv/pull/5991))
+- Avoid replacing executables on no-op upgrades ([#5998](https://github.com/astral-sh/uv/pull/5998))
+- Colocate Python install cache with destination directory ([#6043](https://github.com/astral-sh/uv/pull/6043))
+- Filter mixed sources from `--find-links` entries in lockfile ([#6025](https://github.com/astral-sh/uv/pull/6025))
+- Fix some outdated documentation discussing Python environments ([#6058](https://github.com/astral-sh/uv/pull/6058))
+- Fix projects guide typo ([#6033](https://github.com/astral-sh/uv/pull/6033))
+- Fix tools guide typo ([#6027](https://github.com/astral-sh/uv/pull/6027))
+- Hide python options in `uv tool list` help ([#6003](https://github.com/astral-sh/uv/pull/6003))
+- Improve top-level help for `uv tool` commands ([#5983](https://github.com/astral-sh/uv/pull/5983))
+- Move help documentation into dedicated page ([#6057](https://github.com/astral-sh/uv/pull/6057))
+- Remove `editable: false` support ([#5987](https://github.com/astral-sh/uv/pull/5987))
+- Remove uses of `Option<MarkerTree>` in `ResolutionGraph` ([#6035](https://github.com/astral-sh/uv/pull/6035))
+- Resolve relative `tool.uv.sources` relative to containing project ([#6045](https://github.com/astral-sh/uv/pull/6045))
+- Support PEP 723 scripts in `uv add` and `uv remove` ([#5995](https://github.com/astral-sh/uv/pull/5995))
+- Support `tool.uv` in PEP 723 scripts ([#5990](https://github.com/astral-sh/uv/pull/5990))
+- Treat local indexes as registry sources in lockfile ([#6016](https://github.com/astral-sh/uv/pull/6016))
+- Use simplified paths in lockfile ([#6049](https://github.com/astral-sh/uv/pull/6049))
+- Use upgrade-specific output for tool upgrade ([#5997](https://github.com/astral-sh/uv/pull/5997))
+
 ## 0.2.35
 
 ### Preview features

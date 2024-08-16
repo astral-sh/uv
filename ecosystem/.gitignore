@@ -1,0 +1,5 @@
+# We don't want to commit these to source
+# control, but it's sometimes useful to
+# manually run `uv` in these ecosystem
+# directories for experimentation.
+*/uv.lock

@@ -1172,7 +1172,7 @@ mod tests {
 
     #[test]
     fn basic_examples() {
-        let input = r"requests[security,tests]>=2.8.1,==2.8.* ; python_version < '2.7'";
+        let input = r"requests[security,tests]>=2.8.1,==2.8.* ; python_full_version < '2.7'";
         let requests = Requirement::<Url>::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
@@ -1198,7 +1198,7 @@ mod tests {
                 .collect(),
             )),
             marker: MarkerTree::expression(MarkerExpression::Version {
-                key: MarkerValueVersion::PythonVersion,
+                key: MarkerValueVersion::PythonFullVersion,
                 specifier: VersionSpecifier::from_pattern(
                     pep440_rs::Operator::LessThan,
                     "2.7".parse().unwrap(),
@@ -1788,10 +1788,16 @@ mod tests {
     #[test]
     fn no_space_after_operator() {
         let requirement = Requirement::<Url>::from_str("pytest;python_version<='4.0'").unwrap();
-        assert_eq!(requirement.to_string(), "pytest ; python_version <= '4.0'");
+        assert_eq!(
+            requirement.to_string(),
+            "pytest ; python_full_version < '4.1'"
+        );
 
         let requirement = Requirement::<Url>::from_str("pytest;'4.0'>=python_version").unwrap();
-        assert_eq!(requirement.to_string(), "pytest ; python_version <= '4.0'");
+        assert_eq!(
+            requirement.to_string(),
+            "pytest ; python_full_version < '4.1'"
+        );
     }
 
     #[test]

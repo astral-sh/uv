@@ -241,14 +241,15 @@ fn prune_unzipped() -> Result<()> {
       ╰─▶ Because only the following versions of iniconfig are available:
               iniconfig<=0.1
               iniconfig>=1.0.0
-          and iniconfig==0.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<1.0.0 cannot be used.
-          And because iniconfig==1.0.0 network connectivity is disabled, but the metadata wasn't found in the cache and iniconfig==1.0.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<1.1.0 cannot be used.
-          And because iniconfig==1.1.0 network connectivity is disabled, but the metadata wasn't found in the cache and iniconfig==1.1.1 network connectivity is disabled, but the metadata wasn't found in the cache, we can conclude that iniconfig<2.0.0 cannot be used.
-          And because iniconfig==2.0.0 network connectivity is disabled, but the metadata wasn't found in the cache and you require iniconfig, we can conclude that the requirements are unsatisfiable.
+          and any of:
+              iniconfig<=0.1
+              iniconfig>=1.0.0
+          needs to be downloaded from a registry, we can conclude that iniconfig<1.0.0 cannot be used.
+          And because you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for iniconfig in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
-          hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "###);
 
     Ok(())

@@ -1,0 +1,55 @@
+[project]
+name = "packse"
+version = "0.0.0"
+description = ""
+authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
+readme = "README.md"
+keywords = [
+  "uv", "packse", "requirements", "packaging", "testing"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Software Development :: Libraries",
+]
+requires-python = ">=3.12"
+dependencies = [
+  "msgspec>=0.18.4",
+  "twine>=4.0.2",
+  "hatchling>=1.20.0",
+  "chevron-blue>=0.2.1",
+  "setuptools>=69.1.1",
+  "pyyaml>=6.0.1"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+packse = "packse.cli:entrypoint"
+
+[project.optional-dependencies]
+index = ["pypiserver>=2.0.1"]
+serve = ["packse[index]", "watchfiles>=0.21.0"]
+
+[tool.uv]
+dev-dependencies = [
+  "syrupy>=4.6.0",
+  "pytest>=7.4.3",
+  "psutil>=5.9.7",
+]
+
+[tool.ruff.lint]
+extend-select = ["I", "W292"]
+preview = true
+exclude = ["src/packse/templates/**/*", "build/**/*", "dist/**/*"]

@@ -710,7 +710,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Project(project) => {
-            run_project(project, script, globals, filesystem, cache, printer).await
+            Box::pin(run_project(
+                project, script, globals, filesystem, cache, printer,
+            ))
+            .await
         }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
@@ -910,9 +913,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonInstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            // Initialize the cache.
-            let cache = cache.init()?;
-
             commands::python_install(
                 args.targets,
                 args.reinstall,
@@ -921,7 +921,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.preview,
                 cli.no_config,
-                &cache,
                 printer,
             )
             .await

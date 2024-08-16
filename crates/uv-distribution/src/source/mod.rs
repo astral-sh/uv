@@ -1226,12 +1226,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .is_fresh()
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
+                let path = if let Some(subdirectory) = resource.subdirectory {
+                    Cow::Owned(fetch.path().join(subdirectory))
+                } else {
+                    Cow::Borrowed(fetch.path())
+                };
+
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
-                        fetch.path(),
-                        fetch.path(),
+                        &path,
+                        &path,
                         self.build_context.sources(),
                         self.preview_mode,
                     )
@@ -1458,10 +1464,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 },
             )
             .await
-            .map_err(|err| Error::Build(source.to_string(), err))?
+            .map_err(Error::Build)?
             .wheel(cache_shard)
             .await
-            .map_err(|err| Error::Build(source.to_string(), err))?;
+            .map_err(Error::Build)?;
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
@@ -1549,13 +1555,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 },
             )
             .await
-            .map_err(|err| Error::Build(source.to_string(), err))?;
+            .map_err(Error::Build)?;
 
         // Build the metadata.
-        let dist_info = builder
-            .metadata()
-            .await
-            .map_err(|err| Error::Build(source.to_string(), err))?;
+        let dist_info = builder.metadata().await.map_err(Error::Build)?;
         let Some(dist_info) = dist_info else {
             return Ok(None);
         };

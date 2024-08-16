@@ -107,18 +107,9 @@ will search for a virtual environment in the following order:
 If no virtual environment is found, uv will prompt the user to create one in the current directory
 via `uv venv`.
 
-If the `--system` flag is included, uv will skip virtual environments and search for:
-
-- The Python interpreter available as `python3` on macOS and Linux, or `python.exe` on Windows.
-- On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
-  version.
-
-If a specific Python version is requested, e.g., `--python 3.7`, additional executable names are
-included:
-
-- The Python interpreter available as, e.g., `python3.7` on macOS and Linux.
-
-When running a command that does not mutate the environment such as `uv pip compile`, uv does not
-_require_ a virtual environment. Instead, it needs a Python toolchain to create ephemeral
-environments. See the documentation on
-[toolchain discovery](../concepts/python-versions.md#discovery-order) for details on discovery.
+If the `--system` flag is included, uv will skip virtual environments search for an installed Python
+version. Similarly, when running a command that does not mutate the environment such as
+`uv pip compile`, uv does not _require_ a virtual environment — however, a Python interpreter is
+still required. See the documentation on
+[Python discovery](../concepts/python-versions.md#discovery-of-python-versions) for details on the
+discovery of installed Python versions.

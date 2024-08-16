@@ -1,5 +1,6 @@
 use either::Either;
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 
 use pep508_rs::MarkerEnvironment;
 use pypi_types::Requirement;
@@ -36,6 +37,9 @@ pub struct Manifest {
     /// The name of the project.
     pub(crate) project: Option<PackageName>,
 
+    /// Members of the project's workspace.
+    pub(crate) workspace_members: BTreeSet<PackageName>,
+
     /// The installed packages to exclude from consideration during resolution.
     ///
     /// These typically represent packages that are being upgraded or reinstalled
@@ -58,6 +62,7 @@ impl Manifest {
         dev: Vec<GroupName>,
         preferences: Preferences,
         project: Option<PackageName>,
+        workspace_members: Option<BTreeSet<PackageName>>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -68,6 +73,7 @@ impl Manifest {
             dev,
             preferences,
             project,
+            workspace_members: workspace_members.unwrap_or_default(),
             exclusions,
             lookaheads,
         }
@@ -82,6 +88,7 @@ impl Manifest {
             preferences: Preferences::default(),
             project: None,
             exclusions: Exclusions::default(),
+            workspace_members: BTreeSet::new(),
             lookaheads: Vec::new(),
         }
     }

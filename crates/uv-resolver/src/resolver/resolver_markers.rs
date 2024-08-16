@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 
 use pep508_rs::{MarkerEnvironment, MarkerTree};
@@ -12,7 +11,7 @@ pub enum ResolverMarkers {
     /// constraint is expressed separately).
     Universal {
         /// Start the resolution with these forks.
-        fork_preferences: Option<BTreeSet<MarkerTree>>,
+        fork_preferences: Vec<MarkerTree>,
     },
     /// We're in a fork of the universal resolution solving only for specific markers.
     Fork(MarkerTree),
@@ -25,7 +24,7 @@ impl ResolverMarkers {
     }
 
     /// Set the resolver to perform a universal resolution.
-    pub fn universal(fork_preferences: Option<BTreeSet<MarkerTree>>) -> Self {
+    pub fn universal(fork_preferences: Vec<MarkerTree>) -> Self {
         Self::Universal { fork_preferences }
     }
 
