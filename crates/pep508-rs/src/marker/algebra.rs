@@ -308,12 +308,6 @@ impl InternerGuard<'_> {
             return true;
         }
 
-        // The operation `X and Y` was memoized.
-        // `X` and `Y` are disjoint IFF their conjunction is unsatisfiable.
-        if let Some(result) = self.state.cache.get(&(xi, yi)) {
-            return result.is_false();
-        }
-
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
         match x.var.cmp(&y.var) {
             // X is higher order than Y, Y must be disjoint with every child of X.
@@ -327,18 +321,7 @@ impl InternerGuard<'_> {
                 .nodes()
                 .all(|y| self.is_disjoint(y.negate(yi), xi)),
             // X and Y represent the same variable, their merged edges must be unsatisifiable.
-            Ordering::Equal => x
-                .children
-                .apply(xi, &y.children, yi, |x, y| {
-                    if self.is_disjoint(x, y) {
-                        NodeId::FALSE
-                    } else {
-                        NodeId::TRUE
-                    }
-                })
-                .nodes()
-                // Make sure all edges are unsatisfiable.
-                .all(NodeId::is_false),
+            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
     }
 
@@ -671,7 +654,7 @@ impl Edges {
                 high: apply(high.negate(parent), right_high.negate(parent)),
                 low: apply(low.negate(parent), right_low.negate(parent)),
             },
-            _ => unreachable!("cannot apply two `Edges` of different types"),
+            _ => unreachable!("cannot merge two `Edges` of different types"),
         }
     }
 
@@ -741,6 +724,70 @@ impl Edges {
         }
 
         combined
+    }
+
+    // Returns `true` if two [`Edges`] are disjoint.
+    fn is_disjoint(
+        &self,
+        parent: NodeId,
+        right_edges: &Edges,
+        right_parent: NodeId,
+        interner: &mut InternerGuard<'_>,
+    ) -> bool {
+        match (self, right_edges) {
+            // For version or string variables, we have to split and check the overlapping ranges.
+            (Edges::Version { edges }, Edges::Version { edges: right_edges }) => {
+                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            }
+            (Edges::String { edges }, Edges::String { edges: right_edges }) => {
+                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            }
+            // For boolean variables, we simply check the low and high edges.
+            (
+                Edges::Boolean { high, low },
+                Edges::Boolean {
+                    high: right_high,
+                    low: right_low,
+                },
+            ) => {
+                interner.is_disjoint(high.negate(parent), right_high.negate(parent))
+                    && interner.is_disjoint(low.negate(parent), right_low.negate(parent))
+            }
+            _ => unreachable!("cannot merge two `Edges` of different types"),
+        }
+    }
+
+    // Returns `true` if all intersecting ranges in two range maps are disjoint.
+    fn is_disjoint_ranges<T>(
+        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_parent: NodeId,
+        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_parent: NodeId,
+        interner: &mut InternerGuard<'_>,
+    ) -> bool
+    where
+        T: Clone + Ord,
+    {
+        // This is similar to the routine in `apply_ranges` except we only care about disjointness,
+        // not the resulting edges.
+        for (left_range, left_child) in left_edges {
+            for (right_range, right_child) in right_edges {
+                let intersection = right_range.intersection(left_range);
+                if intersection.is_empty() {
+                    continue;
+                }
+
+                // Ensure the intersection is disjoint.
+                if !interner.is_disjoint(
+                    left_child.negate(left_parent),
+                    right_child.negate(right_parent),
+                ) {
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     // Apply the given function to all direct children of this node.
