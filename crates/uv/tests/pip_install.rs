@@ -1926,42 +1926,11 @@ fn install_only_binary_all_and_no_binary_all() {
               anyio>=3.7.0,<=3.7.1
               anyio>=4.0.0
           and any of:
-              anyio==1.0.0
-              anyio==1.1.0
-              anyio==1.2.0
-              anyio==1.2.1
-              anyio==1.2.2
-              anyio==1.2.3
-              anyio==1.3.0
-              anyio==1.3.1
-              anyio==1.4.0
-              anyio==2.0.0
-              anyio==2.0.1
-              anyio==2.0.2
-              anyio==2.1.0
-              anyio==2.2.0
-              anyio==3.0.0
-              anyio==3.0.1
-              anyio==3.1.0
-              anyio==3.2.0
-              anyio==3.2.1
-              anyio==3.3.0
-              anyio==3.3.1
-              anyio==3.3.2
-              anyio==3.3.3
-              anyio==3.3.4
-              anyio==3.4.0
-              anyio==3.5.0
-              anyio==3.6.0
-              anyio==3.6.1
-              anyio==3.6.2
-              anyio==3.7.0
-              anyio==3.7.1
-              anyio==4.0.0
-              anyio==4.1.0
-              anyio==4.2.0
-              anyio==4.3.0
-              anyio==4.4.0
+              anyio>=1.0.0,<=1.4.0
+              anyio>=2.0.0,<=2.2.0
+              anyio>=3.0.0,<=3.6.2
+              anyio>=3.7.0,<=3.7.1
+              anyio>=4.0.0
           has no usable wheels and building from source is disabled, we can conclude that any of:
               anyio<1.1.0
               anyio>1.4.0,<2.0.0
