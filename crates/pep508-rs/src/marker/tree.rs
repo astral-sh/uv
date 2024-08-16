@@ -1069,7 +1069,8 @@ impl MarkerTree {
     #[allow(clippy::needless_pass_by_value)]
     pub fn simplify_python_versions(self, python_version: Range<Version>) -> MarkerTree {
         MarkerTree(INTERNER.lock().restrict_versions(self.0, &|var| match var {
-            // Note that `python_version` is normalized to `python_full_version`.
+            // Note that `python_version` is normalized to `python_full_version` internally by the
+            // decision diagram.
             Variable::Version(MarkerValueVersion::PythonFullVersion) => {
                 Some(python_version.clone())
             }
@@ -1803,6 +1804,10 @@ mod test {
 
     #[test]
     fn test_marker_simplification() {
+        assert_false("python_version == '3.9.1'");
+        assert_false("python_version == '3.9.0.*'");
+        assert_true("python_version != '3.9.1'");
+
         assert_simplifies("python_version == '3.9'", "python_full_version == '3.9.*'");
         assert_simplifies(
             "python_version == '3.9.0'",
@@ -2207,6 +2212,26 @@ mod test {
             "python_full_version == '3.7.*'",
             "python_full_version == '3.7.1'"
         ));
+
+        assert!(is_disjoint(
+            "python_version == '3.7'",
+            "python_full_version == '3.8'"
+        ));
+
+        assert!(!is_disjoint(
+            "python_version == '3.7'",
+            "python_full_version == '3.7.2'"
+        ));
+
+        assert!(is_disjoint(
+            "python_version > '3.7'",
+            "python_full_version == '3.7.1'"
+        ));
+
+        assert!(!is_disjoint(
+            "python_version <= '3.7'",
+            "python_full_version == '3.7.1'"
+        ));
     }
 
     #[test]
@@ -2374,6 +2399,10 @@ mod test {
 
     fn assert_true(marker: &str) {
         assert!(m(marker).is_true(), "{marker} != true");
+    }
+
+    fn assert_false(marker: &str) {
+        assert!(m(marker).is_false(), "{marker} != false");
     }
 
     fn is_disjoint(left: impl AsRef<str>, right: impl AsRef<str>) -> bool {
