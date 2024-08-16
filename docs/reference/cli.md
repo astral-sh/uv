@@ -466,14 +466,12 @@ uv will search for a project in the current directory or any parent directory. I
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv add [OPTIONS] [PACKAGES]...
+uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>PACKAGES</code></dt><dd><p>The packages to add.</p>
-
-<p>Expects a PEP 508-compatible requirement (e.g., <code>ruff==0.5.0</code>) or a direct URL.</p>
+<dl class="cli-reference"><dt><code>PACKAGES</code></dt><dd><p>The packages to add, as PEP 508 requirements (e.g., <code>ruff==0.5.0</code>)</p>
 
 </dd></dl>
 

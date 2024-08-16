@@ -794,7 +794,7 @@ fn add_raw_error() -> Result<()> {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###);
@@ -2732,7 +2732,7 @@ fn add_reject_multiple_git_ref_flags() {
     ----- stderr -----
     error: the argument '--tag <TAG>' cannot be used with '--branch <BRANCH>'
 
-    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES>...
+    Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###
@@ -3493,6 +3493,21 @@ fn add_requirements_file() -> Result<()> {
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
     error: Adding requirements from a `setup.py` is not supported in `uv add`
+    "###);
+
+    // Passing nothing should fail.
+    uv_snapshot!(context.filters(), context.add(&[]), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      <PACKAGES|--requirements <REQUIREMENTS>>
+
+    Usage: uv add --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+
+    For more information, try '--help'.
     "###);
 
     Ok(())

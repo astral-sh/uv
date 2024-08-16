@@ -1236,8 +1236,8 @@ pub struct PipSyncArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PipInstallArgs {
     /// Install all listed packages.
     #[arg(group = "sources")]
@@ -1517,8 +1517,8 @@ pub struct PipInstallArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PipUninstallArgs {
     /// Uninstall all listed packages.
     #[arg(group = "sources")]
@@ -2358,11 +2358,10 @@ pub struct LockArgs {
 }
 
 #[derive(Args)]
+#[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AddArgs {
-    /// The packages to add.
-    ///
-    /// Expects a PEP 508-compatible requirement (e.g., `ruff==0.5.0`) or a direct URL.
+    /// The packages to add, as PEP 508 requirements (e.g., `ruff==0.5.0`).
     #[arg(group = "sources")]
     pub packages: Vec<String>,
 
