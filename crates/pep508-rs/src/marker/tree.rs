@@ -380,6 +380,15 @@ pub struct StringVersion {
     pub version: Version,
 }
 
+impl From<Version> for StringVersion {
+    fn from(version: Version) -> Self {
+        Self {
+            string: version.to_string(),
+            version,
+        }
+    }
+}
+
 impl FromStr for StringVersion {
     type Err = VersionParseError;
 

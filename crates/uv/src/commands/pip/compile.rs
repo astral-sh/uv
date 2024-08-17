@@ -251,7 +251,7 @@ pub(crate) async fn pip_compile(
             resolution_environment(python_version, python_platform, &interpreter)?;
         (
             Some(tags),
-            ResolverMarkers::SpecificEnvironment((*markers).clone()),
+            ResolverMarkers::specific_environment((*markers).clone()),
         )
     };
 

@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use tracing::debug;
 
 use pep508_rs::{MarkerEnvironment, MarkerTree};
 
@@ -6,7 +7,7 @@ use pep508_rs::{MarkerEnvironment, MarkerTree};
 /// Whether we're solving for a specific environment, universally or for a specific fork.
 pub enum ResolverMarkers {
     /// We're solving for this specific environment only.
-    SpecificEnvironment(MarkerEnvironment),
+    SpecificEnvironment(ResolverMarkerEnvironment),
     /// We're doing a universal resolution for all environments (a python version
     /// constraint is expressed separately).
     Universal {
@@ -20,7 +21,7 @@ pub enum ResolverMarkers {
 impl ResolverMarkers {
     /// Set the resolver to perform a resolution for a specific environment.
     pub fn specific_environment(markers: MarkerEnvironment) -> Self {
-        Self::SpecificEnvironment(markers)
+        Self::SpecificEnvironment(ResolverMarkerEnvironment::from(markers))
     }
 
     /// Set the resolver to perform a universal resolution.
@@ -68,5 +69,48 @@ impl Display for ResolverMarkers {
                 write!(f, "({markers:?})")
             }
         }
+    }
+}
+
+/// A wrapper type around [`MarkerEnvironment`] that ensures the Python version markers are
+/// release-only, to match the resolver's semantics.
+#[derive(Debug, Clone)]
+pub struct ResolverMarkerEnvironment(MarkerEnvironment);
+
+impl From<MarkerEnvironment> for ResolverMarkerEnvironment {
+    fn from(value: MarkerEnvironment) -> Self {
+        // Strip `python_version`.
+        let python_version = value.python_version().only_release();
+        let value = if python_version == **value.python_version() {
+            value
+        } else {
+            debug!(
+                "Stripping pre-release from `python_version`: {}",
+                value.python_version()
+            );
+            value.with_python_version(python_version)
+        };
+
+        // Strip `python_full_version`.
+        let python_full_version = value.python_full_version().only_release();
+        let value = if python_full_version == **value.python_full_version() {
+            value
+        } else {
+            debug!(
+                "Stripping pre-release from `python_full_version`: {}",
+                value.python_full_version()
+            );
+            value.with_python_full_version(python_full_version)
+        };
+
+        Self(value)
+    }
+}
+
+impl std::ops::Deref for ResolverMarkerEnvironment {
+    type Target = MarkerEnvironment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

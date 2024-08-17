@@ -155,7 +155,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .index_strategy(self.index_strategy)
                 .build(),
             &python_requirement,
-            ResolverMarkers::SpecificEnvironment(markers.clone()),
+            ResolverMarkers::specific_environment(markers.clone()),
             Some(tags),
             self.flat_index,
             self.index,
