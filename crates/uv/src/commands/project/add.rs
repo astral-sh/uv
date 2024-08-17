@@ -22,7 +22,9 @@ use uv_python::{
     request_from_version_file, EnvironmentPreference, Interpreter, PythonDownloads,
     PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, VersionRequest,
 };
-use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
+use uv_requirements::{
+    NamedRequirementsResolver, RequirementsSource, RequirementsSpecification, SourceTreeResolver,
+};
 use uv_resolver::{FlatIndex, RequiresPython};
 use uv_scripts::Pep723Script;
 use uv_types::{BuildIsolation, HashStrategy};
@@ -69,26 +71,6 @@ pub(crate) async fn add(
 ) -> Result<ExitStatus> {
     if preview.is_disabled() {
         warn_user_once!("`uv add` is experimental and may change without warning");
-    }
-
-    for source in &requirements {
-        match source {
-            RequirementsSource::PyprojectToml(_) => {
-                bail!("Adding requirements from a `pyproject.toml` is not supported in `uv add`");
-            }
-            RequirementsSource::SetupPy(_) => {
-                bail!("Adding requirements from a `setup.py` is not supported in `uv add`");
-            }
-            RequirementsSource::SetupCfg(_) => {
-                bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");
-            }
-            RequirementsSource::RequirementsTxt(path) => {
-                if path == Path::new("-") {
-                    bail!("Reading requirements from stdin is not supported in `uv add`");
-                }
-            }
-            _ => {}
-        }
     }
 
     let reporter = PythonDownloadReporter::single(printer);
@@ -231,8 +213,11 @@ pub(crate) async fn add(
         .keyring(settings.keyring_provider);
 
     // Read the requirements.
-    let RequirementsSpecification { requirements, .. } =
-        RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+    let RequirementsSpecification {
+        requirements,
+        source_trees,
+        ..
+    } = RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -305,6 +290,29 @@ pub(crate) async fn add(
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
     .await?;
+
+    // Resolve any source trees.
+    let resolutions = SourceTreeResolver::new(
+        source_trees,
+        &ExtrasSpecification::All,
+        &HashStrategy::None,
+        &state.index,
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+    )
+    .with_reporter(ResolverReporter::from(printer))
+    .resolve()
+    .await?;
+
+    let requirements = requirements
+        .into_iter()
+        .chain(
+            resolutions
+                .into_iter()
+                .flat_map(|resolution| resolution.requirements),
+        )
+        .collect::<Vec<_>>();
+
+    println!("{:?}", requirements);
 
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
