@@ -626,7 +626,6 @@ pub(crate) async fn resolve_environment<'a>(
         &reinstall,
         &upgrade,
         Some(tags),
-        // STOPSHIP(charlie): This is slightly problematic, doesn't go through `resolution_environment`.
         ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,
@@ -950,7 +949,6 @@ pub(crate) async fn update_environment(
         reinstall,
         upgrade,
         Some(tags),
-        // STOPSHIP(charlie): This is slightly problematic, doesn't go through `resolution_environment`.
         ResolverMarkers::specific_environment(markers.clone()),
         python_requirement,
         &client,

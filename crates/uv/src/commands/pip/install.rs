@@ -348,7 +348,6 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         Some(&tags),
-        // STOPSHIP(charlie): This is slightly problematic, doesn't go through `resolution_environment`.
         ResolverMarkers::specific_environment((*markers).clone()),
         python_requirement,
         &client,

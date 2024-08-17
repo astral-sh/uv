@@ -155,7 +155,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .index_strategy(self.index_strategy)
                 .build(),
             &python_requirement,
-            // STOPSHIP(charlie): This is slightly problematic, doesn't go through `resolution_environment`.
             ResolverMarkers::specific_environment(markers.clone()),
             Some(tags),
             self.flat_index,

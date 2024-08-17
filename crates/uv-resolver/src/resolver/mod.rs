@@ -1504,7 +1504,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     );
 
                     if marker.is_false() {
-                        debug!("skipping {requirement} because of Requires-Python: {requires_python}");
+                        trace!("skipping {requirement} because of Requires-Python: {requires_python}");
                         return None;
                     }
 
@@ -1527,7 +1527,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // this fork (but will be part of another fork).
                 if let ResolverMarkers::Fork(markers) = markers {
                     if markers.is_disjoint(&requirement.marker) {
-                        debug!("skipping {requirement} because of context resolver markers {markers:?}");
+                        trace!("skipping {requirement} because of context resolver markers {markers:?}");
                         return None;
                     }
                 }
@@ -1574,7 +1574,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 // and the constraint is `requests ; python_version == '3.6'`, the
                                 // constraint should only apply when _both_ markers are true.
                                 if marker.is_false() {
-                                    debug!("skipping {constraint} because of Requires-Python: {requires_python}");
+                                    trace!("skipping {constraint} because of Requires-Python: {requires_python}");
                                     return None;
                                 }
 
@@ -1613,7 +1613,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             // this fork (but will be part of another fork).
                             if let ResolverMarkers::Fork(markers) = markers {
                                 if markers.is_disjoint(&constraint.marker) {
-                                    debug!("skipping {constraint} because of context resolver markers {markers:?}");
+                                    trace!("skipping {constraint} because of context resolver markers {markers:?}");
                                     return None;
                                 }
                             }
@@ -1657,13 +1657,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         while let Some(response) = response_stream.next().await {
             match response? {
                 Some(Response::Package(package_name, version_map)) => {
-                    debug!("Received package metadata for: {package_name}");
+                    trace!("Received package metadata for: {package_name}");
                     self.index
                         .packages()
                         .done(package_name, Arc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
-                    debug!("Received installed distribution metadata for: {dist}");
+                    trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions().done(
                         dist.version_id(),
                         Arc::new(MetadataResponse::Found(ArchiveMetadata::from_metadata23(
@@ -1675,7 +1675,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dist: Dist::Built(dist),
                     metadata,
                 }) => {
-                    debug!("Received built distribution metadata for: {dist}");
+                    trace!("Received built distribution metadata for: {dist}");
                     match &metadata {
                         MetadataResponse::InvalidMetadata(err) => {
                             warn!("Unable to extract metadata for {dist}: {err}");
