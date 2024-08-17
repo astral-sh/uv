@@ -723,8 +723,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)
         }
-        Commands::GenerateShellCompletion { shell } => {
-            shell.generate(&mut Cli::command(), &mut stdout());
+        Commands::GenerateShellCompletion(args) => {
+            args.shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
