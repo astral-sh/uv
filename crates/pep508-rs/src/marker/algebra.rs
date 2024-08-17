@@ -168,11 +168,32 @@ impl InternerGuard<'_> {
                 ),
                 Err(node) => return node,
             },
+            MarkerExpression::VersionIn {
+                key: MarkerValueVersion::PythonVersion,
+                versions,
+                negated,
+            } => match Edges::from_python_versions(versions, negated) {
+                Ok(edges) => (
+                    Variable::Version(MarkerValueVersion::PythonFullVersion),
+                    edges,
+                ),
+                Err(node) => return node,
+            },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::Version { key, specifier } => {
                 (Variable::Version(key), Edges::from_specifier(specifier))
             }
+            // A variable representing the output of a version key. Edges correspond
+            // to disjoint version ranges.
+            MarkerExpression::VersionIn {
+                key,
+                versions,
+                negated,
+            } => (
+                Variable::Version(key),
+                Edges::from_versions(&versions, negated),
+            ),
             // The `in` and `contains` operators are a bit different than other operators.
             // In particular, they do not represent a particular value for the corresponding
             // variable, and can overlap. For example, `'nux' in os_name` and `os_name == 'Linux'`
@@ -584,6 +605,50 @@ impl Edges {
             PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
         Edges::Version {
             edges: Edges::from_range(&specifier.into()),
+        }
+    }
+
+    /// Returns an [`Edges`] where values in the given range are `true`.
+    ///
+    /// Only for use when the `key` is a `PythonVersion`. Normalizes to `PythonFullVersion`.
+    fn from_python_versions(versions: Vec<Version>, negated: bool) -> Result<Edges, NodeId> {
+        let mut range = Range::empty();
+
+        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
+        // seem efficient.
+        for version in versions {
+            let specifier = VersionSpecifier::equals_version(version.clone());
+            let specifier = python_version_to_full_version(specifier)?;
+            let pubgrub_specifier =
+                PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
+            range = range.union(&pubgrub_specifier.into());
+        }
+
+        if negated {
+            range = range.complement();
+        }
+
+        Ok(Edges::Version {
+            edges: Edges::from_range(&range),
+        })
+    }
+
+    /// Returns an [`Edges`] where values in the given range are `true`.
+    fn from_versions(versions: &Vec<Version>, negated: bool) -> Edges {
+        let mut range = Range::empty();
+
+        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
+        // seem efficient.
+        for version in versions {
+            range = range.union(&Range::singleton(version.clone()));
+        }
+
+        if negated {
+            range = range.complement();
+        }
+
+        Edges::Version {
+            edges: Edges::from_range(&range),
         }
     }
 

@@ -378,6 +378,22 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
                     .negate()
                     .is_some_and(|negated| negated == *specifier2.operator())
         }
+        MarkerExpression::VersionIn {
+            key,
+            versions,
+            negated,
+        } => {
+            let MarkerExpression::VersionIn {
+                key: key2,
+                versions: versions2,
+                negated: negated2,
+            } = right
+            else {
+                return false;
+            };
+
+            key == key2 && versions == versions2 && negated != negated2
+        }
         MarkerExpression::String {
             key,
             operator,
