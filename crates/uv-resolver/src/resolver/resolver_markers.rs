@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
-
-use pep508_rs::{MarkerEnvironment, MarkerTree};
+use tracing::debug;
+use pep508_rs::{MarkerEnvironment, MarkerTree, StringVersion};
 
 #[derive(Debug, Clone)]
 /// Whether we're solving for a specific environment, universally or for a specific fork.
@@ -20,6 +20,16 @@ pub enum ResolverMarkers {
 impl ResolverMarkers {
     /// Set the resolver to perform a resolution for a specific environment.
     pub fn specific_environment(markers: MarkerEnvironment) -> Self {
+        // The resolver operates with release-only semantics for Python versions. So if the user's
+        // environment specifies a pre-release version, we need to strip it.
+        let python_full_version = markers.python_full_version().only_release();
+        let markers = if python_full_version != markers.python_full_version().version {
+            debug!("Stripping pre-release from `python_full_version`: {}", markers.python_full_version());
+            markers.with_python_full_version(python_full_version)
+        } else {
+            markers
+        };
+
         Self::SpecificEnvironment(markers)
     }
 

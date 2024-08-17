@@ -296,7 +296,8 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::SpecificEnvironment((*markers).clone()),
+        // STOPSHIP(charlie): This is slightly problematic, doesn't go through `resolution_environment`.
+        ResolverMarkers::specific_environment((*markers).clone()),
         python_requirement,
         &client,
         &flat_index,

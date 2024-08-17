@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use distribution_filename::DistExtension;
 use thiserror::Error;
+use tracing::debug;
 use url::Url;
 
 use pep440_rs::VersionSpecifiers;
@@ -61,7 +62,9 @@ impl Requirement {
     /// expressions based on the environment to `true`. That is, this provides
     /// environment independent marker evaluation.
     pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
-        self.marker.evaluate_optional_environment(env, extras)
+        let x = self.marker.evaluate_optional_environment(env, extras);
+        debug!("Marker evaluation for {:?} with env {:?}: {}", self, env, x);
+        return x;
     }
 
     /// Returns `true` if the requirement is editable.
