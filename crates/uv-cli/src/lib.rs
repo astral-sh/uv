@@ -349,7 +349,7 @@ pub enum Commands {
     },
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
-    GenerateShellCompletion { shell: clap_complete_command::Shell },
+    GenerateShellCompletion(GenerateShellCompletionArgs),
     /// Display documentation for a command.
     // To avoid showing the global options when displaying help for the help command, we are
     // responsible for maintaining the options using the `after_help`.
@@ -3035,6 +3035,45 @@ pub struct PythonPinArgs {
     /// the workspace's `requires-python` constraint.
     #[arg(long)]
     pub no_workspace: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct GenerateShellCompletionArgs {
+    /// The shell to generate the completion script for
+    pub shell: clap_complete_command::Shell,
+
+    // Hide unused global options.
+    #[arg(long, short, hide = true)]
+    pub no_cache: bool,
+    #[arg(long, hide = true)]
+    pub cache_dir: Option<PathBuf>,
+
+    #[arg(long, hide = true)]
+    pub python_preference: Option<PythonPreference>,
+    #[arg(long, hide = true)]
+    pub no_python_downloads: bool,
+
+    #[arg(long, short, conflicts_with = "verbose", hide = true)]
+    pub quiet: bool,
+    #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "quiet", hide = true)]
+    pub verbose: u8,
+    #[arg(long, default_value = "auto", conflicts_with = "no_color", hide = true)]
+    pub color: ColorChoice,
+    #[arg(long, hide = true)]
+    pub native_tls: bool,
+    #[arg(long, hide = true)]
+    pub offline: bool,
+    #[arg(long, hide = true)]
+    pub no_progress: bool,
+    #[arg(long, hide = true)]
+    pub config_file: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    pub no_config: bool,
+    #[arg(long, short, action = clap::ArgAction::HelpShort, hide = true)]
+    pub help: Option<bool>,
+    #[arg(short = 'V', long, hide = true)]
+    pub version: bool,
 }
 
 #[derive(Args)]
