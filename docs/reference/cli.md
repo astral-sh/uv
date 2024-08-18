@@ -172,6 +172,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -575,6 +576,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -853,6 +855,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -1107,6 +1110,7 @@ uv sync [OPTIONS]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -1353,6 +1357,7 @@ uv lock [OPTIONS]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -1584,6 +1589,7 @@ uv tree [OPTIONS]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -1909,6 +1915,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -2149,6 +2156,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -2387,6 +2395,7 @@ uv tool upgrade [OPTIONS] <NAME>
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -3661,6 +3670,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -4000,6 +4010,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -4295,6 +4306,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
@@ -5258,6 +5270,7 @@ uv venv [OPTIONS] [NAME]
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
 
+<p>[default: clone]</p>
 <p>Possible values:</p>
 
 <ul>
