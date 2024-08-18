@@ -271,7 +271,9 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             .name("uv-resolver".into())
             .spawn(move || {
                 let result = solver.solve(index_locations, request_sink);
-                tx.send(result).unwrap();
+
+                // This may fail if the main thread returned early due to an error.
+                let _ = tx.send(result);
             })
             .unwrap();
 
@@ -279,6 +281,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 
         // Wait for both to complete.
         let ((), resolution) = tokio::try_join!(requests_fut, resolve_fut)?;
+
         state.on_complete();
         resolution
     }
