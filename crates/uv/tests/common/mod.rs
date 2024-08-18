@@ -307,9 +307,13 @@ impl TestContext {
                 .map(|pattern| (pattern, "[WORKSPACE]/".to_string())),
         );
 
-        // Make virtual environment activation cross-platform
+        // Make virtual environment activation cross-platform and shell-agnostic
         filters.push((
             r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
+            "Activate with: source .venv/bin/activate".to_string(),
+        ));
+        filters.push((
+            r"Activate with: source .venv/bin/activate(?:\.\w+)".to_string(),
             "Activate with: source .venv/bin/activate".to_string(),
         ));
 

@@ -159,9 +159,13 @@ async fn venv_impl(
     if preview.is_enabled() && interpreter_request.is_none() {
         let project = match VirtualProject::discover(&CWD, &DiscoveryOptions::default()).await {
             Ok(project) => Some(project),
+            Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
             Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(err) => return Err(err).into_diagnostic(),
+            Err(err) => {
+                warn_user_once!("{err}");
+                None
+            }
         };
 
         if let Some(project) = project {
