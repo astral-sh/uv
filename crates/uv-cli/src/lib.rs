@@ -8,6 +8,7 @@ use clap::builder::styling::Style;
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
+use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_cache::CacheArgs;
@@ -1999,8 +2000,8 @@ pub struct VenvArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, env = "UV_LINK_MODE")]
-    pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    #[arg(long, value_enum, env = "UV_LINK_MODE", default_value_t=LinkMode::default())]
+    pub link_mode: LinkMode,
 
     #[command(flatten)]
     pub compat_args: compat::VenvCompatArgs,
@@ -3288,9 +3289,10 @@ pub struct InstallerArgs {
         long,
         value_enum,
         env = "UV_LINK_MODE",
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        default_value_t=LinkMode::default()
     )]
-    pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    pub link_mode: LinkMode,
 
     /// Compile Python files to bytecode after installation.
     ///
@@ -3464,9 +3466,10 @@ pub struct ResolverArgs {
         long,
         value_enum,
         env = "UV_LINK_MODE",
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        default_value_t=LinkMode::default()
     )]
-    pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    pub link_mode: LinkMode,
 
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any local or Git
@@ -3634,9 +3637,10 @@ pub struct ResolverInstallerArgs {
         long,
         value_enum,
         env = "UV_LINK_MODE",
-        help_heading = "Installer options"
+        help_heading = "Installer options",
+        default_value_t=LinkMode::default()
     )]
-    pub link_mode: Option<install_wheel_rs::linker::LinkMode>,
+    pub link_mode: LinkMode,
 
     /// Compile Python files to bytecode after installation.
     ///

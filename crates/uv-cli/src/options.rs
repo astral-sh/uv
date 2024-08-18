@@ -66,7 +66,7 @@ impl From<ResolverArgs> for PipOptions {
             no_build_isolation: flag(no_build_isolation, build_isolation),
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
-            link_mode,
+            link_mode: Some(link_mode),
             no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
         }
@@ -101,7 +101,7 @@ impl From<InstallerArgs> for PipOptions {
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             no_build_isolation: flag(no_build_isolation, build_isolation),
             exclude_newer,
-            link_mode,
+            link_mode: Some(link_mode),
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
             no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
@@ -153,7 +153,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             no_build_isolation: flag(no_build_isolation, build_isolation),
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
-            link_mode,
+            link_mode: Some(link_mode),
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
             no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
@@ -244,7 +244,7 @@ pub fn resolver_options(resolver_args: ResolverArgs, build_args: BuildArgs) -> R
         no_build_isolation: flag(no_build_isolation, build_isolation),
         no_build_isolation_package: Some(no_build_isolation_package),
         exclude_newer,
-        link_mode,
+        link_mode: Some(link_mode),
         no_build: flag(no_build, build),
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary),
@@ -334,7 +334,7 @@ pub fn resolver_installer_options(
             Some(no_build_isolation_package)
         },
         exclude_newer,
-        link_mode,
+        link_mode: Some(link_mode),
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
         no_build: flag(no_build, build),
         no_build_package: if no_build_package.is_empty() {

@@ -1546,7 +1546,7 @@ impl VenvSettings {
                     index_strategy,
                     keyring_provider,
                     exclude_newer,
-                    link_mode,
+                    link_mode: Some(link_mode),
                     ..PipOptions::from(index_args)
                 },
                 filesystem,
