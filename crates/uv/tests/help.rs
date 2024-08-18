@@ -16,20 +16,21 @@ fn help() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      run      Run a command or script (experimental)
-      init     Create a new project (experimental)
-      add      Add dependencies to the project (experimental)
-      remove   Remove dependencies from the project (experimental)
-      sync     Update the project's environment (experimental)
-      lock     Update the project's lockfile (experimental)
-      tree     Display the project's dependency tree (experimental)
-      tool     Run and install commands provided by Python packages (experimental)
-      python   Manage Python versions and installations (experimental)
-      pip      Manage Python packages with a pip-compatible interface
-      venv     Create a virtual environment
-      cache    Manage uv's cache
-      version  Display uv's version
-      help     Display documentation for a command
+      run                        Run a command or script (experimental)
+      init                       Create a new project (experimental)
+      add                        Add dependencies to the project (experimental)
+      remove                     Remove dependencies from the project (experimental)
+      sync                       Update the project's environment (experimental)
+      lock                       Update the project's lockfile (experimental)
+      tree                       Display the project's dependency tree (experimental)
+      tool                       Run and install commands provided by Python packages (experimental)
+      python                     Manage Python versions and installations (experimental)
+      pip                        Manage Python packages with a pip-compatible interface
+      venv                       Create a virtual environment
+      cache                      Manage uv's cache
+      version                    Display uv's version
+      generate-shell-completion  Generate shell completion
+      help                       Display documentation for a command
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -632,6 +633,7 @@ fn help_unknown_subcommand() {
         venv
         cache
         version
+        generate-shell-completion
     "###);
 
     uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r###"
@@ -654,6 +656,7 @@ fn help_unknown_subcommand() {
         venv
         cache
         version
+        generate-shell-completion
     "###);
 }
 
@@ -690,20 +693,21 @@ fn help_with_global_option() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      run      Run a command or script (experimental)
-      init     Create a new project (experimental)
-      add      Add dependencies to the project (experimental)
-      remove   Remove dependencies from the project (experimental)
-      sync     Update the project's environment (experimental)
-      lock     Update the project's lockfile (experimental)
-      tree     Display the project's dependency tree (experimental)
-      tool     Run and install commands provided by Python packages (experimental)
-      python   Manage Python versions and installations (experimental)
-      pip      Manage Python packages with a pip-compatible interface
-      venv     Create a virtual environment
-      cache    Manage uv's cache
-      version  Display uv's version
-      help     Display documentation for a command
+      run                        Run a command or script (experimental)
+      init                       Create a new project (experimental)
+      add                        Add dependencies to the project (experimental)
+      remove                     Remove dependencies from the project (experimental)
+      sync                       Update the project's environment (experimental)
+      lock                       Update the project's lockfile (experimental)
+      tree                       Display the project's dependency tree (experimental)
+      tool                       Run and install commands provided by Python packages (experimental)
+      python                     Manage Python versions and installations (experimental)
+      pip                        Manage Python packages with a pip-compatible interface
+      venv                       Create a virtual environment
+      cache                      Manage uv's cache
+      version                    Display uv's version
+      generate-shell-completion  Generate shell completion
+      help                       Display documentation for a command
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -788,20 +792,21 @@ fn help_with_no_pager() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
-      run      Run a command or script (experimental)
-      init     Create a new project (experimental)
-      add      Add dependencies to the project (experimental)
-      remove   Remove dependencies from the project (experimental)
-      sync     Update the project's environment (experimental)
-      lock     Update the project's lockfile (experimental)
-      tree     Display the project's dependency tree (experimental)
-      tool     Run and install commands provided by Python packages (experimental)
-      python   Manage Python versions and installations (experimental)
-      pip      Manage Python packages with a pip-compatible interface
-      venv     Create a virtual environment
-      cache    Manage uv's cache
-      version  Display uv's version
-      help     Display documentation for a command
+      run                        Run a command or script (experimental)
+      init                       Create a new project (experimental)
+      add                        Add dependencies to the project (experimental)
+      remove                     Remove dependencies from the project (experimental)
+      sync                       Update the project's environment (experimental)
+      lock                       Update the project's lockfile (experimental)
+      tree                       Display the project's dependency tree (experimental)
+      tool                       Run and install commands provided by Python packages (experimental)
+      python                     Manage Python versions and installations (experimental)
+      pip                        Manage Python packages with a pip-compatible interface
+      venv                       Create a virtual environment
+      cache                      Manage uv's cache
+      version                    Display uv's version
+      generate-shell-completion  Generate shell completion
+      help                       Display documentation for a command
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
