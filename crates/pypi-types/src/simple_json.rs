@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
@@ -51,7 +51,7 @@ pub struct File {
     #[serde(default, deserialize_with = "deserialize_version_specifiers_lenient")]
     pub requires_python: Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>,
     pub size: Option<u64>,
-    pub upload_time: Option<DateTime<Utc>>,
+    pub upload_time: Option<Timestamp>,
     pub url: String,
     pub yanked: Option<Yanked>,
 }

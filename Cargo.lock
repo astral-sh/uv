@@ -388,12 +388,12 @@ name = "bench"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "chrono",
  "codspeed-criterion-compat",
  "criterion",
  "distribution-filename",
  "distribution-types",
  "install-wheel-rs",
+ "jiff",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",
@@ -656,10 +656,8 @@ checksum = "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
- "js-sys",
  "num-traits",
  "serde",
- "wasm-bindgen",
  "windows-targets 0.52.6",
 ]
 
@@ -1105,6 +1103,7 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "itertools 0.13.0",
+ "jiff",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",
@@ -1925,6 +1924,32 @@ name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
+
+[[package]]
+name = "jiff"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94fda28c0e0f7e5ac1e40c34a06393ae6ecf4c9ce6b6421a2217a32680bb8038"
+dependencies = [
+ "jiff-tzdb-platform",
+ "serde",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "jiff-tzdb"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05fac328b3df1c0f18a3c2ab6cb7e06e4e549f366017d796e3e66b6d6889abe6"
+
+[[package]]
+name = "jiff-tzdb-platform"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8da387d5feaf355954c2c122c194d6df9c57d865125a67984bb453db5336940"
+dependencies = [
+ "jiff-tzdb",
+]
 
 [[package]]
 name = "jobserver"
@@ -2829,10 +2854,10 @@ name = "pypi-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "chrono",
  "distribution-filename",
  "indexmap",
  "itertools 0.13.0",
+ "jiff",
  "mailparse",
  "pep440_rs",
  "pep508_rs",
@@ -4472,7 +4497,6 @@ dependencies = [
  "base64 0.22.1",
  "byteorder",
  "cache-key",
- "chrono",
  "clap",
  "distribution-types",
  "filetime",
@@ -4486,6 +4510,7 @@ dependencies = [
  "insta",
  "install-wheel-rs",
  "itertools 0.13.0",
+ "jiff",
  "miette",
  "mimalloc",
  "owo-colors",
@@ -4648,7 +4673,6 @@ dependencies = [
  "async_http_range_reader",
  "async_zip",
  "cache-key",
- "chrono",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -4661,6 +4685,7 @@ dependencies = [
  "insta",
  "install-wheel-rs",
  "itertools 0.13.0",
+ "jiff",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",
@@ -5052,7 +5077,6 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
- "chrono",
  "clap",
  "dashmap",
  "derivative",
@@ -5064,6 +5088,7 @@ dependencies = [
  "insta",
  "install-wheel-rs",
  "itertools 0.13.0",
+ "jiff",
  "once-map",
  "owo-colors",
  "pep440_rs",

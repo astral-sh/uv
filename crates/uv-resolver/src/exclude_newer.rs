@@ -1,21 +1,21 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
+use jiff::{tz::TimeZone, Timestamp, ToSpan};
 
 /// A timestamp that excludes files newer than it.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-pub struct ExcludeNewer(DateTime<Utc>);
+pub struct ExcludeNewer(Timestamp);
 
 impl ExcludeNewer {
     /// Returns the timestamp in milliseconds.
     pub fn timestamp_millis(&self) -> i64 {
-        self.0.timestamp_millis()
+        self.0.as_millisecond()
     }
 }
 
-impl From<DateTime<Utc>> for ExcludeNewer {
-    fn from(datetime: DateTime<Utc>) -> Self {
-        Self(datetime)
+impl From<Timestamp> for ExcludeNewer {
+    fn from(timestamp: Timestamp) -> Self {
+        Self(timestamp)
     }
 }
 
@@ -24,25 +24,38 @@ impl FromStr for ExcludeNewer {
 
     /// Parse an [`ExcludeNewer`] from a string.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`).
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let date_err = match NaiveDate::from_str(input) {
-            Ok(date) => {
-                // Midnight that day is 00:00:00 the next day
-                return Ok(Self(
-                    (date + Days::new(1)).and_time(NaiveTime::MIN).and_utc(),
-                ));
-            }
-            Err(err) => err,
-        };
-        let datetime_err = match DateTime::parse_from_rfc3339(input) {
-            Ok(datetime) => return Ok(Self(datetime.with_timezone(&Utc))),
-            Err(err) => err,
-        };
-        Err(format!(
-            "`{input}` is neither a valid date ({date_err}) nor a valid datetime ({datetime_err})"
-        ))
+        // NOTE(burntsushi): Previously, when using Chrono, we tried
+        // to parse as a date first, then a timestamp, and if both
+        // failed, we combined both of the errors into one message.
+        // But in Jiff, if an RFC 3339 timestamp could be parsed, then
+        // it must necessarily be the case that a date can also be
+        // parsed. So we can collapse the error cases here. That is,
+        // if we fail to parse a timestamp and a date, then it should
+        // be sufficient to just report the error from parsing the date.
+        // If someone tried to write a timestamp but committed an error
+        // in the non-date portion, the date parsing below will still
+        // report a holistic error that will make sense to the user.
+        // (I added a snapshot test for that case.)
+        if let Ok(timestamp) = input.parse::<Timestamp>() {
+            return Ok(Self(timestamp));
+        }
+        let date = input
+            .parse::<jiff::civil::Date>()
+            .map_err(|err| format!("`{input}` could not be parsed as a valid date: {err}"))?;
+        let timestamp = date
+            .checked_add(1.day())
+            .and_then(|date| date.to_zoned(TimeZone::system()))
+            .map(|zdt| zdt.timestamp())
+            .map_err(|err| {
+                format!(
+                    "`{input}` parsed to date `{date}`, but could not \
+                     be converted to a timestamp: {err}",
+                )
+            })?;
+        Ok(Self(timestamp))
     }
 }
 
@@ -68,7 +81,7 @@ impl schemars::JsonSchema for ExcludeNewer {
                 ..schemars::schema::StringValidation::default()
             })),
             metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).".to_string()),
+                description: Some("Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).".to_string()),
               ..schemars::schema::Metadata::default()
             })),
             ..schemars::schema::SchemaObject::default()

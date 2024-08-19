@@ -71,7 +71,7 @@ fn add_registry() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -230,7 +230,7 @@ fn add_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -362,7 +362,7 @@ fn add_git_private_source() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -461,7 +461,7 @@ fn add_git_private_raw() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -641,7 +641,7 @@ fn add_git_raw() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -864,7 +864,7 @@ fn add_unnamed() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -962,7 +962,7 @@ fn add_remove_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1085,7 +1085,7 @@ fn add_remove_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -1172,7 +1172,7 @@ fn add_remove_optional() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1294,7 +1294,7 @@ fn add_remove_optional() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -1420,7 +1420,7 @@ fn add_remove_workspace() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -1504,7 +1504,7 @@ fn add_remove_workspace() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -1621,7 +1621,7 @@ fn add_workspace_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -1830,7 +1830,7 @@ fn update() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "certifi"
@@ -2341,7 +2341,7 @@ fn add_no_clean() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2478,7 +2478,7 @@ fn remove_registry() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -3098,7 +3098,7 @@ fn add_lower_bound_optional() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -3310,7 +3310,7 @@ fn add_virtual() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
