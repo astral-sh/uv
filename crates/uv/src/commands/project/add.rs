@@ -10,7 +10,7 @@ use tracing::debug;
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, SetupPyStrategy, SourceStrategy};
+use uv_configuration::{Concurrency, ExtrasSpecification, SourceStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -233,7 +233,6 @@ pub(crate) async fn add(
     let python_version = None;
     let python_platform = None;
     let hasher = HashStrategy::default();
-    let setup_py = SetupPyStrategy::default();
     let build_isolation = BuildIsolation::default();
 
     // Determine the environment for the resolution.
@@ -278,7 +277,6 @@ pub(crate) async fn add(
         &state.git,
         &state.in_flight,
         settings.index_strategy,
-        setup_py,
         &settings.config_setting,
         build_isolation,
         settings.link_mode,
