@@ -125,8 +125,19 @@ impl RequiresPython {
         }
     }
 
-    /// Returns the [`RequiresPython`] as a [`MarkerTree`].
-    pub fn markers(&self) -> MarkerTree {
+    /// Returns this `Requires-Python` specifier as an equivalent
+    /// [`MarkerTree`] utilizing the `python_full_version` marker field.
+    ///
+    /// This is useful for comparing a `Requires-Python` specifier with
+    /// arbitrary marker expressions. For example, one can ask whether the
+    /// returned marker expression is disjoint with another marker expression.
+    /// If it is, then one can conclude that the `Requires-Python` specifier
+    /// excludes the dependency with that other marker expression.
+    ///
+    /// If this `Requires-Python` specifier has no constraints, then this
+    /// returns a marker tree that evaluates to `true` for all possible marker
+    /// environments.
+    pub fn to_marker_tree(&self) -> MarkerTree {
         match (self.range.0.as_ref(), self.range.1.as_ref()) {
             (Bound::Included(lower), Bound::Included(upper)) => {
                 let mut lower = MarkerTree::expression(MarkerExpression::Version {
@@ -281,6 +292,69 @@ impl RequiresPython {
     /// Returns the [`Range`] bounding the `Requires-Python` specifier.
     pub fn range(&self) -> &RequiresPythonRange {
         &self.range
+    }
+
+    /// Simplifies the given markers in such a way as to assume that
+    /// the Python version is constrained by this Python version bound.
+    ///
+    /// For example, with `requires-python = '>=3.8'`, a marker like this:
+    ///
+    /// ```text
+    /// python_full_version >= '3.8' and python_full_version < '3.12'
+    /// ```
+    ///
+    /// Will be simplified to:
+    ///
+    /// ```text
+    /// python_full_version < '3.12'
+    /// ```
+    ///
+    /// That is, `python_full_version >= '3.8'` is assumed to be true by virtue
+    /// of `requires-python`, and is thus not needed in the marker.
+    ///
+    /// This should be used in contexts in which this assumption is valid to
+    /// make. Generally, this means it should not be used inside the resolver,
+    /// but instead near the boundaries of the system (like formatting error
+    /// messages and writing the lock file). The reason for this is that
+    /// this simplification fundamentally changes the meaning of the marker,
+    /// and the *only* correct way to interpret it is in a context in which
+    /// `requires-python` is known to be true. For example, when markers from
+    /// a lock file are deserialized and turned into a `ResolutionGraph`, the
+    /// markers are "complexified" to put the `requires-python` assumption back
+    /// into the marker explicitly.
+    pub(crate) fn simplify_markers(&self, marker: MarkerTree) -> MarkerTree {
+        let simplified = marker.simplify_python_versions(Range::from(self.range().clone()));
+        // FIXME: This is a hack to avoid the hidden state created by
+        // ADD's `restrict_versions`. I believe this is sound, but it's
+        // wasteful and silly.
+        simplified
+            .try_to_string()
+            .map(|s| s.parse().unwrap())
+            .unwrap_or(MarkerTree::TRUE)
+    }
+
+    /// The inverse of `simplify_markers`.
+    ///
+    /// This should be applied near the boundaries of uv when markers are
+    /// deserialized from a context where `requires-python` is assumed. For
+    /// example, with `requires-python = '>=3.8'` and a marker like:
+    ///
+    /// ```text
+    /// python_full_version < '3.12'
+    /// ```
+    ///
+    /// It will be "complexified" to:
+    ///
+    /// ```text
+    /// python_full_version >= '3.8' and python_full_version < '3.12'
+    /// ```
+    pub(crate) fn complexify_markers(&self, mut marker: MarkerTree) -> MarkerTree {
+        // PERF: There's likely a way to amortize this, particularly
+        // the construction of `to_marker_tree`. But at time of
+        // writing, it wasn't clear if this was an actual perf problem
+        // or not. If it is, try a `std::sync::OnceLock`.
+        marker.and(self.to_marker_tree());
+        marker
     }
 
     /// Returns `false` if the wheel's tags state it can't be used in the given Python version
@@ -474,6 +548,46 @@ impl Ord for RequiresPythonBound {
             (Bound::Unbounded, _) => Ordering::Less,
             (_, Bound::Unbounded) => Ordering::Greater,
         }
+    }
+}
+
+/// A simplified marker is just like a normal marker, except it has possibly
+/// been simplified by `requires-python`.
+///
+/// A simplified marker should only exist in contexts where a `requires-python`
+/// setting can be assumed. In order to get a "normal" marker out of
+/// a simplified marker, one must re-contextualize it by adding the
+/// `requires-python` constraint back to the marker.
+#[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+pub(crate) struct SimplifiedMarkerTree(MarkerTree);
+
+impl SimplifiedMarkerTree {
+    /// Simplifies the given markers by assuming the given `requires-python`
+    /// bound is true.
+    pub(crate) fn new(
+        requires_python: &RequiresPython,
+        marker: MarkerTree,
+    ) -> SimplifiedMarkerTree {
+        SimplifiedMarkerTree(requires_python.simplify_markers(marker))
+    }
+
+    /// Complexifies the given markers by adding the given `requires-python` as
+    /// a constraint to these simplified markers.
+    pub(crate) fn into_marker(self, requires_python: &RequiresPython) -> MarkerTree {
+        requires_python.complexify_markers(self.0)
+    }
+
+    /// Attempts to convert this simplified marker to a string.
+    ///
+    /// This only returns `None` when the underlying marker is always true,
+    /// i.e., it matches all possible marker environments.
+    pub(crate) fn try_to_string(&self) -> Option<String> {
+        self.0.try_to_string()
+    }
+
+    /// Returns the underlying marker tree without re-complexifying them.
+    pub(crate) fn as_simplified_marker_tree(&self) -> &MarkerTree {
+        &self.0
     }
 }
 

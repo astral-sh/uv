@@ -331,7 +331,7 @@ async fn do_lock(
         .into_iter()
         .flatten()
     {
-        if requires_python.markers().is_disjoint(environment) {
+        if requires_python.to_marker_tree().is_disjoint(environment) {
             return if let Some(contents) = environment.contents() {
                 Err(ProjectError::DisjointEnvironment(
                     contents,
@@ -637,7 +637,7 @@ impl ValidatedLock {
         }
 
         // If the set of supported environments has changed, we have to perform a clean resolution.
-        if lock.supported_environments()
+        if lock.simplified_supported_environments()
             != environments
                 .map(SupportedEnvironments::as_markers)
                 .unwrap_or_default()

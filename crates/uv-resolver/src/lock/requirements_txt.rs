@@ -102,7 +102,11 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Add the edge.
                 let dep_index = inverse[&dep.package_id];
-                petgraph.add_edge(index, dep_index, dep.marker.clone());
+                petgraph.add_edge(
+                    index,
+                    dep_index,
+                    dep.simplified_marker.as_simplified_marker_tree().clone(),
+                );
 
                 // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {

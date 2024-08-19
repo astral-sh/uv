@@ -187,7 +187,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         for (index, node) in nodes {
             // Display the node itself.
             let mut line = node
-                .to_requirements_txt(self.include_extras, self.include_markers)
+                .to_requirements_txt(
+                    &self.resolution.requires_python,
+                    self.include_extras,
+                    self.include_markers,
+                )
                 .to_string();
 
             // Display the distribution hashes, if any.

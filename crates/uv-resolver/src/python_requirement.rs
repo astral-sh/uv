@@ -1,4 +1,5 @@
 use pep440_rs::Version;
+use pep508_rs::MarkerTree;
 use uv_python::{Interpreter, PythonVersion};
 
 use crate::{RequiresPython, RequiresPythonRange};
@@ -88,6 +89,22 @@ impl PythonRequirement {
     /// Return the source of the [`PythonRequirement`].
     pub fn source(&self) -> PythonRequirementSource {
         self.source
+    }
+
+    /// A wrapper around `RequiresPython::simplify_markers`. See its docs for
+    /// more info.
+    ///
+    /// When this `PythonRequirement` isn't `RequiresPython`, the given markers
+    /// are returned unchanged.
+    pub(crate) fn simplify_markers(&self, marker: MarkerTree) -> MarkerTree {
+        self.target.simplify_markers(marker)
+    }
+
+    /// Return a [`MarkerTree`] representing the Python requirement.
+    ///
+    /// See: [`RequiresPython::to_marker_tree`]
+    pub fn to_marker_tree(&self) -> MarkerTree {
+        self.target.to_marker_tree()
     }
 }
 
