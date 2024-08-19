@@ -87,6 +87,63 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
+#### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
+
+The project's development dependencies. Development dependencies will be installed by
+default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    dev_dependencies = ["ruff==0.5.0"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    dev_dependencies = ["ruff==0.5.0"]
+    ```
+
+---
+
+#### [`environments`](#environments) {: #environments }
+
+A list of supported environments against which to resolve dependencies.
+
+By default, uv will resolve for all possible environments during a `uv lock` operation.
+However, you can restrict the set of supported environments to improve performance and avoid
+unsatisfiable branches in the solution space.
+
+**Default value**: `[]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    # Resolve for macOS, but not for Linux or Windows.
+    environments = ["sys_platform == 'darwin'"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    # Resolve for macOS, but not for Linux or Windows.
+    environments = ["sys_platform == 'darwin'"]
+    ```
+
+---
+
 #### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
 
 Limit candidate packages to those that were uploaded prior to the given date.

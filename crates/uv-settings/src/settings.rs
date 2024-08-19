@@ -66,6 +66,10 @@ pub struct Options {
 
     #[serde(default, skip_serializing)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
+    environments: serde::de::IgnoredAny,
+
+    #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     managed: serde::de::IgnoredAny,
 }
 
