@@ -241,7 +241,7 @@ fn prune_unzipped() -> Result<()> {
       ╰─▶ Because only the following versions of iniconfig are available:
               iniconfig<=0.1
               iniconfig>=1.0.0
-          and any of:
+          and all of:
               iniconfig<=0.1
               iniconfig>=1.0.0
           needs to be downloaded from a registry, we can conclude that iniconfig<1.0.0 cannot be used.
