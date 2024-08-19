@@ -43,7 +43,7 @@ pub enum MetadataError {
     #[error(transparent)]
     MailParse(#[from] MailParseError),
     #[error(transparent)]
-    Toml(#[from] toml::de::Error),
+    Toml(#[from] basic_toml::Error),
     #[error("metadata field {0} not found")]
     FieldNotFound(&'static str),
     #[error("invalid version: {0}")]
@@ -192,7 +192,7 @@ impl Metadata23 {
 
     /// Extract the metadata from a `pyproject.toml` file, as specified in PEP 621.
     pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+        let pyproject_toml: PyProjectToml = basic_toml::from_str(contents)?;
 
         let project = pyproject_toml
             .project
@@ -431,7 +431,7 @@ pub struct RequiresDist {
 impl RequiresDist {
     /// Extract the [`RequiresDist`] from a `pyproject.toml` file, as specified in PEP 621.
     pub fn parse_pyproject_toml(contents: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+        let pyproject_toml: PyProjectToml = basic_toml::from_str(contents)?;
 
         let project = pyproject_toml
             .project

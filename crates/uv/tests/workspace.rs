@@ -771,7 +771,7 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     );
 
     let lock: SourceLock =
-        toml::from_str(&fs_err::read_to_string(main_workspace.join("uv.lock"))?)?;
+        basic_toml::from_str(&fs_err::read_to_string(main_workspace.join("uv.lock"))?)?;
 
     assert_json_snapshot!(lock.sources(), @r###"
     {
@@ -875,7 +875,7 @@ fn workspace_hidden_files() -> Result<()> {
     "###
     );
 
-    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+    let lock: SourceLock = basic_toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
 
     assert_json_snapshot!(lock.sources(), @r###"
     {
@@ -938,7 +938,7 @@ fn workspace_hidden_member() -> Result<()> {
     "###
     );
 
-    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+    let lock: SourceLock = basic_toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
 
     assert_json_snapshot!(lock.sources(), @r###"
     {

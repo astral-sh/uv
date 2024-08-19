@@ -441,7 +441,7 @@ pub(crate) async fn add(
     // Update the `pypackage.toml` in-memory.
     let project = project
         .clone()
-        .with_pyproject_toml(toml::from_str(&content)?)
+        .with_pyproject_toml(basic_toml::from_str(&content)?)
         .context("Failed to update `pyproject.toml`")?;
 
     // Lock and sync the environment, if necessary.

@@ -3493,7 +3493,7 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 name = "a"
 version = "0.1.0"
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3518,7 +3518,7 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 name = "a"
 source =  { registry = "https://pypi.org/simple" }
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3542,7 +3542,7 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 [[package.dependencies]]
 name = "a"
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3573,7 +3573,7 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 name = "a"
 version = "0.1.0"
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3604,7 +3604,7 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 name = "a"
 source =  { registry = "https://pypi.org/simple" }
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3634,7 +3634,7 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 [[package.dependencies]]
 name = "a"
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3649,7 +3649,7 @@ version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
 wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3664,7 +3664,7 @@ version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
 wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3679,7 +3679,7 @@ version = "4.3.0"
 source = { path = "file:///foo/bar" }
 wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3693,7 +3693,7 @@ name = "anyio"
 version = "4.3.0"
 source = { url = "https://burntsushi.net" }
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3707,7 +3707,7 @@ name = "anyio"
 version = "4.3.0"
 source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3721,7 +3721,7 @@ name = "anyio"
 version = "4.3.0"
 source = { directory = "path/to/dir" }
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 
@@ -3735,7 +3735,7 @@ name = "anyio"
 version = "4.3.0"
 source = { editable = "path/to/dir" }
 "#;
-        let result: Result<Lock, _> = toml::from_str(data);
+        let result: Result<Lock, _> = basic_toml::from_str(data);
         insta::assert_debug_snapshot!(result);
     }
 }

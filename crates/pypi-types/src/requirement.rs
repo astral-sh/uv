@@ -786,8 +786,8 @@ mod tests {
             origin: None,
         };
 
-        let raw = toml::to_string(&requirement).unwrap();
-        let deserialized: Requirement = toml::from_str(&raw).unwrap();
+        let raw = basic_toml::to_string(&requirement).unwrap();
+        let deserialized: Requirement = basic_toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
 
         let path = if cfg!(windows) {
@@ -808,8 +808,8 @@ mod tests {
             origin: None,
         };
 
-        let raw = toml::to_string(&requirement).unwrap();
-        let deserialized: Requirement = toml::from_str(&raw).unwrap();
+        let raw = basic_toml::to_string(&requirement).unwrap();
+        let deserialized: Requirement = basic_toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
     }
 }

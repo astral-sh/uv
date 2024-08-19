@@ -126,7 +126,7 @@ impl FromStr for Pep723Metadata {
 
     /// Parse `Pep723Metadata` from a raw TOML string.
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        let metadata = toml::from_str(raw)?;
+        let metadata = basic_toml::from_str(raw)?;
         Ok(Self {
             raw: raw.to_string(),
             ..metadata
@@ -157,7 +157,7 @@ pub enum Pep723Error {
     #[error(transparent)]
     Utf8(#[from] std::str::Utf8Error),
     #[error(transparent)]
-    Toml(#[from] toml::de::Error),
+    Toml(#[from] basic_toml::Error),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

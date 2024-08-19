@@ -24,9 +24,9 @@ pub enum Error {
     #[error("Failed to parse `pyproject.toml`")]
     Parse(#[from] Box<TomlError>),
     #[error("Failed to serialize `pyproject.toml`")]
-    Serialize(#[from] Box<toml::ser::Error>),
+    Serialize(#[from] Box<toml_edit::ser::Error>),
     #[error("Failed to deserialize `pyproject.toml`")]
-    Deserialize(#[from] Box<toml::de::Error>),
+    Deserialize(#[from] Box<basic_toml::Error>),
     #[error("Dependencies in `pyproject.toml` are malformed")]
     MalformedDependencies,
     #[error("Sources in `pyproject.toml` are malformed")]
@@ -589,7 +589,7 @@ fn find_dependencies(
 // Add a source to `tool.uv.sources`.
 fn add_source(req: &PackageName, source: &Source, sources: &mut Table) -> Result<(), Error> {
     // Serialize as an inline table.
-    let mut doc = toml::to_string(&source)
+    let mut doc = basic_toml::to_string(&source)
         .map_err(Box::new)?
         .parse::<DocumentMut>()
         .unwrap();

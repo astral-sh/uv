@@ -384,6 +384,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "basic-toml"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "823388e228f614e9558c6804262db37960ec8821856535f5c3f59913140558f8"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bench"
 version = "0.0.0"
 dependencies = [
@@ -2760,7 +2769,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.3",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -2829,6 +2838,7 @@ name = "pypi-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "basic-toml",
  "chrono",
  "distribution-filename",
  "indexmap",
@@ -2840,7 +2850,6 @@ dependencies = [
  "rkyv",
  "serde",
  "thiserror",
- "toml",
  "tracing",
  "url",
  "uv-fs",
@@ -4121,18 +4130,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.8.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1ed1f98e3fdc28d6d910e6737ae6ab1a93bf1985935a1193e68f93eeb68d24e"
-dependencies = [
- "serde",
- "serde_spanned",
- "toml_datetime",
- "toml_edit",
-]
-
-[[package]]
 name = "toml_datetime"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4470,6 +4467,7 @@ dependencies = [
  "assert_fs",
  "axoupdater",
  "base64 0.22.1",
+ "basic-toml",
  "byteorder",
  "cache-key",
  "chrono",
@@ -4505,7 +4503,6 @@ dependencies = [
  "thiserror",
  "tikv-jemallocator",
  "tokio",
- "toml",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",
@@ -4567,6 +4564,7 @@ name = "uv-build"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "basic-toml",
  "distribution-types",
  "fs-err",
  "indoc",
@@ -4582,7 +4580,6 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "toml",
  "tracing",
  "uv-configuration",
  "uv-fs",
@@ -5017,6 +5014,7 @@ name = "uv-requirements"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "basic-toml",
  "cache-key",
  "configparser",
  "console",
@@ -5031,7 +5029,6 @@ dependencies = [
  "rustc-hash 2.0.0",
  "serde",
  "thiserror",
- "toml",
  "tracing",
  "url",
  "uv-client",
@@ -5051,6 +5048,7 @@ name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "basic-toml",
  "cache-key",
  "chrono",
  "clap",
@@ -5082,7 +5080,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
- "toml",
  "toml_edit",
  "tracing",
  "url",
@@ -5103,6 +5100,7 @@ dependencies = [
 name = "uv-scripts"
 version = "0.0.1"
 dependencies = [
+ "basic-toml",
  "fs-err",
  "indoc",
  "memchr",
@@ -5111,7 +5109,6 @@ dependencies = [
  "pypi-types",
  "serde",
  "thiserror",
- "toml",
  "uv-settings",
  "uv-workspace",
 ]
@@ -5120,6 +5117,7 @@ dependencies = [
 name = "uv-settings"
 version = "0.0.1"
 dependencies = [
+ "basic-toml",
  "clap",
  "dirs-sys",
  "distribution-types",
@@ -5131,7 +5129,6 @@ dependencies = [
  "serde",
  "textwrap",
  "thiserror",
- "toml",
  "tracing",
  "uv-configuration",
  "uv-fs",
@@ -5168,6 +5165,7 @@ dependencies = [
 name = "uv-tool"
 version = "0.0.1"
 dependencies = [
+ "basic-toml",
  "dirs-sys",
  "fs-err",
  "install-wheel-rs",
@@ -5177,7 +5175,6 @@ dependencies = [
  "pypi-types",
  "serde",
  "thiserror",
- "toml",
  "toml_edit",
  "tracing",
  "uv-cache",
@@ -5242,6 +5239,7 @@ dependencies = [
 name = "uv-workspace"
 version = "0.0.1"
 dependencies = [
+ "basic-toml",
  "either",
  "fs-err",
  "glob",
@@ -5255,7 +5253,6 @@ dependencies = [
  "serde",
  "thiserror",
  "tokio",
- "toml",
  "toml_edit",
  "tracing",
  "url",

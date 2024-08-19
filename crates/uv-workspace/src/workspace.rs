@@ -39,7 +39,7 @@ pub enum WorkspaceError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Failed to parse: `{}`", _0.user_display())]
-    Toml(PathBuf, #[source] Box<toml::de::Error>),
+    Toml(PathBuf, #[source] Box<basic_toml::Error>),
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
 }
@@ -1106,7 +1106,7 @@ pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryO
                 return;
             }
         };
-        let pyproject_toml: PyProjectToml = match toml::from_str(&contents) {
+        let pyproject_toml: PyProjectToml = match basic_toml::from_str(&contents) {
             Ok(contents) => contents,
             Err(err) => {
                 warn!(

@@ -739,7 +739,7 @@ async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> 
 /// Returns `Ok(None)` if the lockfile does not exist.
 async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
     match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
-        Ok(encoded) => match toml::from_str(&encoded) {
+        Ok(encoded) => match basic_toml::from_str(&encoded) {
             Ok(lock) => Ok(Some(lock)),
             Err(err) => {
                 eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");

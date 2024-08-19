@@ -90,7 +90,7 @@ pub enum Error {
     #[error("Invalid source distribution: {0}")]
     InvalidSourceDist(String),
     #[error("Invalid `pyproject.toml`")]
-    InvalidPyprojectToml(#[from] toml::de::Error),
+    InvalidPyprojectToml(#[from] basic_toml::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
     EditableSetupPy,
     #[error("Failed to install requirements from {0}")]
@@ -591,7 +591,7 @@ impl SourceBuild {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
                 let pyproject_toml: PyProjectToml =
-                    toml::from_str(&toml).map_err(Error::InvalidPyprojectToml)?;
+                    basic_toml::from_str(&toml).map_err(Error::InvalidPyprojectToml)?;
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     Pep517Backend {
                         // If `build-backend` is missing, inject the legacy setuptools backend, but

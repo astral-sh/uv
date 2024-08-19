@@ -28,7 +28,7 @@ regex = { workspace = true }
 rkyv = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-toml = { workspace = true }
+basic-toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 

@@ -161,7 +161,7 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let _ = toml::from_str::<PyProjectToml>(&contents)
+                let _ = basic_toml::from_str::<PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {

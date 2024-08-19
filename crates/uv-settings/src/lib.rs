@@ -96,7 +96,7 @@ impl FilesystemOptions {
         let path = dir.as_ref().join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
-                let options: Options = toml::from_str(&content)
+                let options: Options = basic_toml::from_str(&content)
                     .map_err(|err| Error::UvToml(path.user_display().to_string(), err))?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
@@ -104,7 +104,7 @@ impl FilesystemOptions {
                 let pyproject = dir.as_ref().join("pyproject.toml");
                 if let Some(pyproject) = fs_err::read_to_string(pyproject)
                     .ok()
-                    .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
+                    .and_then(|content| basic_toml::from_str::<PyProjectToml>(&content).ok())
                 {
                     if pyproject.tool.is_some_and(|tool| tool.uv.is_some()) {
                         warn_user!(
@@ -125,7 +125,7 @@ impl FilesystemOptions {
         match fs_err::read_to_string(&path) {
             Ok(content) => {
                 // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
-                let pyproject: PyProjectToml = toml::from_str(&content)
+                let pyproject: PyProjectToml = basic_toml::from_str(&content)
                     .map_err(|err| Error::PyprojectToml(path.user_display().to_string(), err))?;
                 let Some(tool) = pyproject.tool else {
                     debug!(
@@ -188,7 +188,7 @@ fn config_dir() -> Option<PathBuf> {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options: Options = toml::from_str(&content)
+    let options: Options = basic_toml::from_str(&content)
         .map_err(|err| Error::UvToml(path.user_display().to_string(), err))?;
     Ok(options)
 }
@@ -199,8 +199,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Failed to parse: `{0}`")]
-    PyprojectToml(String, #[source] toml::de::Error),
+    PyprojectToml(String, #[source] basic_toml::Error),
 
     #[error("Failed to parse: `{0}`")]
-    UvToml(String, #[source] toml::de::Error),
+    UvToml(String, #[source] basic_toml::Error),
 }
