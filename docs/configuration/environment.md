@@ -68,6 +68,7 @@ In addition, uv respects the following environment variables:
 - `UV_CONCURRENT_INSTALLS`: Used to control the number of threads used when installing and unzipping
   packages.
 - `UV_TOOL_DIR`: Used to specify the directory where uv will store managed tools.
+- `UV_TOOL_BIN_DIR`: Used to specify the "bin" directory where uv will install tool executables.
 - `UV_PYTHON_INSTALL_DIR`: Used to specify the directory where uv will store managed Python
   installations.
 - `UV_PYTHON_INSTALL_MIRROR`: Managed Python installations are downloaded from

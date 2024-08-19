@@ -2842,7 +2842,15 @@ pub struct ToolDirArgs {
     ///
     /// By default, `uv tool dir` shows the directory into which the tool Python environments
     /// themselves are installed, rather than the directory containing the linked executables.
-    #[arg(long)]
+    ///
+    /// The tool executable directory is determined according to the XDG standard and is derived
+    /// from the following environment variables, in order of preference:
+    ///
+    /// - `$UV_TOOL_BIN_DIR`
+    /// - `$XDG_BIN_HOME`
+    /// - `$XDG_DATA_HOME/../bin`
+    /// - `$HOME/.local/bin`
+    #[arg(long, verbatim_doc_comment)]
     pub bin: bool,
 }
 

@@ -2769,6 +2769,18 @@ uv tool dir [OPTIONS]
 
 <p>By default, <code>uv tool dir</code> shows the directory into which the tool Python environments themselves are installed, rather than the directory containing the linked executables.</p>
 
+<p>The tool executable directory is determined according to the XDG standard and is derived from the following environment variables, in order of preference:</p>
+
+<ul>
+<li><code>$UV_TOOL_BIN_DIR</code></li>
+
+<li><code>$XDG_BIN_HOME</code></li>
+
+<li><code>$XDG_DATA_HOME/../bin</code></li>
+
+<li><code>$HOME/.local/bin</code></li>
+</ul>
+
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>{FOLDERID_LocalAppData}\uv\cache</code> on Windows.</p>
