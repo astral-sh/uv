@@ -18,18 +18,37 @@ FROM python:3.12-slim-bullseye
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 ```
 
-Or with the standalone installer:
+Or, with the installer:
 
 ```dockerfile title="Dockerfile"
 FROM python:3.12-slim-bullseye
+
+# The installer requires curl (and certificates) to download the release archive
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
-RUN curl -LsSf https://astral.sh/uv/install.sh > /tmp/uv-installer.sh && sh /tmp/uv-installer.sh && rm /tmp/uv-installer.sh
+
+# Download the latest installer
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+
+# Run the installer then remove it
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+# Ensure the installed binary is on the `PATH`
 ENV PATH="/root/.cargo/bin/:$PATH"
 ```
 
 Note this requires `curl` to be available.
 
-In either case, it is best practice to pin to a specific uv version.
+In either case, it is best practice to pin to a specific uv version, e.g., with:
+
+```dockerfile
+COPY --from=ghcr.io/astral-sh/uv:0.2.37 /uv /bin/uv
+```
+
+Or, with the installer:
+
+```dockerfile
+ADD https://astral.sh/uv/0.2.37/install.sh /uv-installer.sh
+```
 
 ## Installing a package
 
