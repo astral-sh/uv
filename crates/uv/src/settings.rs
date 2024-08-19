@@ -23,8 +23,8 @@ use uv_cli::{
 use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SetupPyStrategy,
-    SourceStrategy, TargetTriple, Upgrade,
+    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy,
+    TargetTriple, Upgrade,
 };
 use uv_normalize::PackageName;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -937,8 +937,6 @@ impl PipCompileSettings {
             no_system,
             generate_hashes,
             no_generate_hashes,
-            legacy_setup_py,
-            no_legacy_setup_py,
             no_build,
             build,
             no_binary,
@@ -1023,7 +1021,6 @@ impl PipCompileSettings {
                     no_header: flag(no_header, header),
                     custom_compile_command,
                     generate_hashes: flag(generate_hashes, no_generate_hashes),
-                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     python_version,
                     python_platform,
                     universal: flag(universal, no_universal),
@@ -1076,8 +1073,6 @@ impl PipSyncSettings {
             prefix,
             allow_empty_requirements,
             no_allow_empty_requirements,
-            legacy_setup_py,
-            no_legacy_setup_py,
             no_build,
             build,
             no_binary,
@@ -1118,7 +1113,6 @@ impl PipSyncSettings {
                         allow_empty_requirements,
                         no_allow_empty_requirements,
                     ),
-                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     python_version,
                     python_platform,
                     strict: flag(strict, no_strict),
@@ -1175,8 +1169,6 @@ impl PipInstallSettings {
             no_break_system_packages,
             target,
             prefix,
-            legacy_setup_py,
-            no_legacy_setup_py,
             no_build,
             build,
             no_binary,
@@ -1251,7 +1243,6 @@ impl PipInstallSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
                     no_deps: flag(no_deps, deps),
-                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     python_version,
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
@@ -1839,7 +1830,6 @@ pub(crate) struct PipSettings {
     pub(crate) no_header: bool,
     pub(crate) custom_compile_command: Option<String>,
     pub(crate) generate_hashes: bool,
-    pub(crate) setup_py: SetupPyStrategy,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -1898,7 +1888,6 @@ impl PipSettings {
             no_header,
             custom_compile_command,
             generate_hashes,
-            legacy_setup_py,
             config_settings,
             python_version,
             python_platform,
@@ -2025,15 +2014,6 @@ impl PipSettings {
                 .allow_empty_requirements
                 .combine(allow_empty_requirements)
                 .unwrap_or_default(),
-            setup_py: if args
-                .legacy_setup_py
-                .combine(legacy_setup_py)
-                .unwrap_or_default()
-            {
-                SetupPyStrategy::Setuptools
-            } else {
-                SetupPyStrategy::Pep517
-            },
             no_build_isolation: args
                 .no_build_isolation
                 .combine(no_build_isolation)

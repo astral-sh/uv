@@ -4,16 +4,6 @@ use pep508_rs::PackageName;
 
 use crate::{PackageNameSpecifier, PackageNameSpecifiers};
 
-/// The strategy to use when building source distributions that lack a `pyproject.toml`.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub enum SetupPyStrategy {
-    /// Perform a PEP 517 build.
-    #[default]
-    Pep517,
-    /// Perform a build by invoking `setuptools` directly.
-    Setuptools,
-}
-
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum BuildKind {
     /// A regular PEP 517 wheel build

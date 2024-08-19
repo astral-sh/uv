@@ -944,16 +944,6 @@ pub struct PipOptions {
         "#
     )]
     pub generate_hashes: Option<bool>,
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[option(
-        default = "false",
-        value_type = "bool",
-        example = r#"
-            legacy-setup-py = true
-        "#
-    )]
-    pub legacy_setup_py: Option<bool>,
     /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
     /// specified as `KEY=VALUE` pairs.
     #[option(

@@ -17,7 +17,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary,
-    NoBuild, SetupPyStrategy, SourceStrategy,
+    NoBuild, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::{Simplified, CWD};
@@ -274,7 +274,6 @@ async fn venv_impl(
         // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = [];
         let config_settings = ConfigSettings::default();
-        let setup_py = SetupPyStrategy::default();
         let sources = SourceStrategy::Disabled;
 
         // Do not allow builds
@@ -292,7 +291,6 @@ async fn venv_impl(
             &state.git,
             &state.in_flight,
             index_strategy,
-            setup_py,
             &config_settings,
             BuildIsolation::Isolated,
             link_mode,

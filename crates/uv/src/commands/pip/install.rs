@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Reinstall, SetupPyStrategy, SourceStrategy, Upgrade,
+    IndexStrategy, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -57,7 +57,6 @@ pub(crate) async fn pip_install(
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
-    setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
@@ -312,7 +311,6 @@ pub(crate) async fn pip_install(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_settings,
         build_isolation,
         link_mode,

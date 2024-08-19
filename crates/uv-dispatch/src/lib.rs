@@ -18,8 +18,7 @@ use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::Concurrency;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall,
-    SetupPyStrategy, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SourceStrategy,
 };
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
@@ -44,7 +43,6 @@ pub struct BuildDispatch<'a> {
     index: &'a InMemoryIndex,
     git: &'a GitResolver,
     in_flight: &'a InFlight,
-    setup_py: SetupPyStrategy,
     build_isolation: BuildIsolation<'a>,
     link_mode: install_wheel_rs::linker::LinkMode,
     build_options: &'a BuildOptions,
@@ -68,7 +66,6 @@ impl<'a> BuildDispatch<'a> {
         git: &'a GitResolver,
         in_flight: &'a InFlight,
         index_strategy: IndexStrategy,
-        setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
         link_mode: install_wheel_rs::linker::LinkMode,
@@ -88,7 +85,6 @@ impl<'a> BuildDispatch<'a> {
             git,
             in_flight,
             index_strategy,
-            setup_py,
             config_settings,
             build_isolation,
             link_mode,
@@ -326,7 +322,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self,
             self.source_build_context.clone(),
             version_id.to_string(),
-            self.setup_py,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,

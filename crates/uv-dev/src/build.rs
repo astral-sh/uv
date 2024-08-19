@@ -11,8 +11,7 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{
-    BuildKind, BuildOptions, Concurrency, ConfigSettings, IndexStrategy, SetupPyStrategy,
-    SourceStrategy,
+    BuildKind, BuildOptions, Concurrency, ConfigSettings, IndexStrategy, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_git::GitResolver;
@@ -67,7 +66,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let index = InMemoryIndex::default();
     let index_urls = IndexLocations::default();
     let index_strategy = IndexStrategy::default();
-    let setup_py = SetupPyStrategy::default();
     let sources = SourceStrategy::default();
     let python = PythonEnvironment::find(
         &PythonRequest::default(),
@@ -88,7 +86,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &git,
         &in_flight,
         index_strategy,
-        setup_py,
         &config_settings,
         BuildIsolation::Isolated,
         install_wheel_rs::linker::LinkMode::default(),
@@ -105,7 +102,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &build_dispatch,
         SourceBuildContext::default(),
         args.sdist.display().to_string(),
-        setup_py,
         config_settings.clone(),
         BuildIsolation::Isolated,
         build_kind,

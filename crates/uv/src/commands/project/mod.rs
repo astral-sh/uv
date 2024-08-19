@@ -11,7 +11,7 @@ use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, SetupPyStrategy, Upgrade};
+use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::Simplified;
@@ -445,7 +445,6 @@ pub(crate) async fn resolve_names(
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let hasher = HashStrategy::default();
-    let setup_py = SetupPyStrategy::default();
     let flat_index = FlatIndex::default();
     let build_constraints = [];
 
@@ -461,7 +460,6 @@ pub(crate) async fn resolve_names(
         &state.git,
         &state.in_flight,
         *index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         *link_mode,
@@ -570,7 +568,6 @@ pub(crate) async fn resolve_environment<'a>(
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
-    let setup_py = SetupPyStrategy::default();
     let build_constraints = [];
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls and
@@ -597,7 +594,6 @@ pub(crate) async fn resolve_environment<'a>(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         link_mode,
@@ -699,7 +695,6 @@ pub(crate) async fn sync_environment(
     let build_constraints = [];
     let dry_run = false;
     let hasher = HashStrategy::default();
-    let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -720,7 +715,6 @@ pub(crate) async fn sync_environment(
         &state.git,
         &state.in_flight,
         index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         link_mode,
@@ -893,7 +887,6 @@ pub(crate) async fn update_environment(
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
-    let setup_py = SetupPyStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -914,7 +907,6 @@ pub(crate) async fn update_environment(
         &state.git,
         &state.in_flight,
         *index_strategy,
-        setup_py,
         config_setting,
         build_isolation,
         *link_mode,

@@ -869,14 +869,6 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("generate_hashes"), hide = true)]
     pub no_generate_hashes: bool,
 
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub no_legacy_setup_py: bool,
-
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -1159,14 +1151,6 @@ pub struct PipSyncArgs {
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub no_legacy_setup_py: bool,
-
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -1448,14 +1432,6 @@ pub struct PipInstallArgs {
     /// non-portable.
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
-
-    /// Use legacy `setuptools` behavior when building source distributions without a
-    /// `pyproject.toml`.
-    #[arg(long, overrides_with("no_legacy_setup_py"))]
-    pub legacy_setup_py: bool,
-
-    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
-    pub no_legacy_setup_py: bool,
 
     /// Don't build source distributions.
     ///
