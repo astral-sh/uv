@@ -8,7 +8,6 @@ use tracing::debug;
 
 use distribution_types::{Diagnostic, Name};
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
@@ -23,7 +22,6 @@ pub(crate) fn pip_show(
     strict: bool,
     python: Option<&str>,
     system: bool,
-    _preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {

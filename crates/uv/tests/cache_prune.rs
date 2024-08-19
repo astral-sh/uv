@@ -91,7 +91,6 @@ fn prune_cached_env() {
     pytest 8.0.0
 
     ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]

@@ -12,7 +12,6 @@ use which::{which, which_all};
 
 use pep440_rs::{Version, VersionSpecifiers};
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 
@@ -1294,15 +1293,12 @@ impl PythonPreference {
         }
     }
 
-    /// Return a default [`PythonPreference`] based on the environment and preview mode.
-    pub fn default_from(preview: PreviewMode) -> Self {
+    /// Return the default [`PythonPreference`], respecting the `UV_TEST_PYTHON_PATH` variable.
+    pub fn default_from_env() -> Self {
         if env::var_os("UV_TEST_PYTHON_PATH").is_some() {
-            debug!("Only considering system interpreters due to `UV_TEST_PYTHON_PATH`");
             Self::OnlySystem
-        } else if preview.is_enabled() {
-            Self::default()
         } else {
-            Self::OnlySystem
+            Self::default()
         }
     }
 

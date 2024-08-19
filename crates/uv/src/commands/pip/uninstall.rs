@@ -11,7 +11,7 @@ use pypi_types::Requirement;
 use pypi_types::VerbatimParsedUrl;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{KeyringProviderType, PreviewMode};
+use uv_configuration::KeyringProviderType;
 use uv_fs::Simplified;
 use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
@@ -32,7 +32,6 @@ pub(crate) async fn pip_uninstall(
     cache: Cache,
     connectivity: Connectivity,
     native_tls: bool,
-    _preview: PreviewMode,
     keyring_provider: KeyringProviderType,
     printer: Printer,
 ) -> Result<ExitStatus> {

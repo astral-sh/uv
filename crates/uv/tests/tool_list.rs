@@ -35,7 +35,6 @@ fn tool_list() {
     - blackd
 
     ----- stderr -----
-    warning: `uv tool list` is experimental and may change without warning
     "###);
 }
 
@@ -65,7 +64,6 @@ fn tool_list_paths() {
     - blackd ([TEMP_DIR]/bin/blackd)
 
     ----- stderr -----
-    warning: `uv tool list` is experimental and may change without warning
     "###);
 }
 
@@ -83,7 +81,6 @@ fn tool_list_empty() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool list` is experimental and may change without warning
     No tools installed
     "###);
 }
@@ -113,7 +110,6 @@ fn tool_list_missing_receipt() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool list` is experimental and may change without warning
     warning: Ignoring malformed tool `black` (run `uv tool uninstall black` to remove)
     "###);
 }
@@ -163,7 +159,6 @@ fn tool_list_bad_environment() -> Result<()> {
     - ruff
 
     ----- stderr -----
-    warning: `uv tool list` is experimental and may change without warning
     Python interpreter not found at `[TEMP_DIR]/tools/black/[BIN]/python`
     "###
     );
@@ -228,7 +223,6 @@ fn tool_list_deprecated() -> Result<()> {
     - blackd
 
     ----- stderr -----
-    warning: `uv tool list` is experimental and may change without warning
     "###);
 
     // Replace with an invalid receipt.
@@ -253,7 +247,6 @@ fn tool_list_deprecated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv tool list` is experimental and may change without warning
     warning: Ignoring malformed tool `black` (run `uv tool uninstall black` to remove)
     "###);
 

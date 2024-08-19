@@ -7,11 +7,9 @@ use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
-use uv_configuration::PreviewMode;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::PythonRequest;
-use uv_warnings::warn_user_once;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::{elapsed, ExitStatus};
@@ -21,13 +19,9 @@ use crate::printer::Printer;
 pub(crate) async fn uninstall(
     targets: Vec<String>,
     all: bool,
-    preview: PreviewMode,
+
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv python uninstall` is experimental and may change without warning");
-    }
-
     let start = std::time::Instant::now();
 
     let installations = ManagedPythonInstallations::from_settings()?.init()?;

@@ -31,7 +31,6 @@ fn add_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -125,7 +124,6 @@ fn add_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 4 packages in [TIME]
     "###);
 
@@ -153,7 +151,6 @@ fn add_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -163,7 +160,6 @@ fn add_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -293,7 +289,6 @@ fn add_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 5 packages in [TIME]
     "###);
 
@@ -390,7 +385,6 @@ fn add_git_private_source() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -489,7 +483,6 @@ fn add_git_private_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -516,7 +509,6 @@ fn add_git_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 1 package in [TIME]
     "###);
 
@@ -526,7 +518,6 @@ fn add_git_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
@@ -576,7 +567,6 @@ fn add_git_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -586,7 +576,6 @@ fn add_git_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -704,7 +693,6 @@ fn add_git_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 5 packages in [TIME]
     "###);
 
@@ -732,7 +720,6 @@ fn add_git_implicit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -742,7 +729,6 @@ fn add_git_implicit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -892,7 +878,6 @@ fn add_unnamed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -919,7 +904,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1020,7 +1004,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 4 packages in [TIME]
     "###);
 
@@ -1031,7 +1014,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     warning: `anyio` is a development dependency; try calling `uv remove --dev`
     error: The dependency `anyio` could not be found in `dependencies`
     "###);
@@ -1043,7 +1025,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -1102,7 +1083,6 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 1 package in [TIME]
     "###);
 
@@ -1129,7 +1109,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1229,7 +1208,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Uninstalled 3 packages in [TIME]
      - anyio==3.7.0
      - idna==3.6
@@ -1243,7 +1221,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     warning: `anyio` is an optional dependency; try calling `uv remove --optional io`
     error: The dependency `anyio` could not be found in `dependencies`
     "###);
@@ -1255,7 +1232,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -1311,7 +1287,6 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 1 package in [TIME]
     "###);
 
@@ -1454,7 +1429,6 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -1465,7 +1439,6 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -1532,7 +1505,6 @@ fn add_remove_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 1 package in [TIME]
     "###);
 
@@ -1655,7 +1627,6 @@ fn add_workspace_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -1685,7 +1656,6 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###);
 
@@ -1695,7 +1665,6 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
@@ -1713,7 +1682,6 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -1747,7 +1715,6 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -1785,8 +1752,6 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -1944,7 +1909,6 @@ fn update() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 8 packages in [TIME]
     "###);
 
@@ -1972,7 +1936,6 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     "###);
 
@@ -1982,7 +1945,6 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + certifi==2024.2.2
@@ -2000,7 +1962,6 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2036,7 +1997,6 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 10 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2072,7 +2032,6 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 3 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -2113,7 +2072,6 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2152,7 +2110,6 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 6 packages in [TIME]
@@ -2209,8 +2166,6 @@ fn update_source_replace_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -2268,7 +2223,6 @@ fn add_no_clean() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -2278,7 +2232,6 @@ fn add_no_clean() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -2302,7 +2255,6 @@ fn add_no_clean() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -2373,7 +2325,6 @@ fn add_no_clean() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 2 packages in [TIME]
     "###);
 
@@ -2384,7 +2335,6 @@ fn add_no_clean() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Uninstalled 3 packages in [TIME]
      - anyio==3.7.0
      - idna==3.6
@@ -2414,7 +2364,6 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv lock` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -2424,7 +2373,6 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -2439,7 +2387,6 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -2495,7 +2442,6 @@ fn remove_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv sync` is experimental and may change without warning
     Audited 1 package in [TIME]
     "###);
 
@@ -2524,7 +2470,6 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -2580,7 +2525,6 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 8 packages in [TIME]
     Prepared 8 packages in [TIME]
     Installed 8 packages in [TIME]
@@ -2637,7 +2581,6 @@ fn add_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -2685,7 +2628,6 @@ fn add_no_sync() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     "###);
 
@@ -2802,7 +2744,6 @@ fn add_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
       help: If this is intentional, run `uv add --frozen` to skip the lock and sync steps.
@@ -2814,7 +2755,6 @@ fn add_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     "###);
 
     let lock = context.temp_dir.join("uv.lock");
@@ -2844,7 +2784,6 @@ fn add_lower_bound() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -2897,7 +2836,6 @@ fn add_lower_bound_existing() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -2949,7 +2887,6 @@ fn add_lower_bound_raw() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3001,7 +2938,6 @@ fn add_lower_bound_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3056,7 +2992,6 @@ fn add_lower_bound_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3171,7 +3106,6 @@ fn add_lower_bound_local() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -3252,7 +3186,6 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     error: Found a virtual workspace root, but virtual projects do not support production dependencies (instead, use: `uv add --dev`)
     "###);
 
@@ -3264,7 +3197,6 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     error: Found a virtual workspace root, but virtual projects do not support optional dependencies (instead, use: `uv add --dev`)
     "###);
 
@@ -3275,7 +3207,6 @@ fn add_virtual() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3348,7 +3279,6 @@ fn add_repeat() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3383,7 +3313,6 @@ fn add_repeat() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved 4 packages in [TIME]
     Audited 4 packages in [TIME]
     "###);
@@ -3434,7 +3363,6 @@ fn add_requirements_file() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -3479,7 +3407,6 @@ fn add_requirements_file() -> Result<()> {
 
     ----- stderr -----
     warning: `--raw-sources` is a no-op for `requirements.txt` files, which are always treated as raw sources
-    warning: `uv add` is experimental and may change without warning
     Resolved [N] packages in [TIME]
     Audited [N] packages in [TIME]
     "###);
@@ -3491,7 +3418,6 @@ fn add_requirements_file() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     error: Adding requirements from a `setup.py` is not supported in `uv add`
     "###);
 
@@ -3542,7 +3468,6 @@ fn add_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3594,7 +3519,6 @@ fn add_script_without_metadata_table() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3645,7 +3569,6 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3697,7 +3620,6 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv add` is experimental and may change without warning
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3757,7 +3679,6 @@ fn remove_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3815,7 +3736,6 @@ fn remove_last_dep_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv remove` is experimental and may change without warning
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;

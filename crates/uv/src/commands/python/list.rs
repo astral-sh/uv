@@ -5,14 +5,12 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::{
     find_python_installations, DiscoveryError, EnvironmentPreference, PythonDownloads,
     PythonInstallation, PythonNotFound, PythonPreference, PythonRequest, PythonSource,
 };
-use uv_warnings::warn_user_once;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -33,14 +31,9 @@ pub(crate) async fn list(
     all_platforms: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv python list` is experimental and may change without warning");
-    }
-
     let mut output = BTreeSet::new();
     if python_preference != PythonPreference::OnlySystem {
         let download_request = match kinds {

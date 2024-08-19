@@ -14,9 +14,7 @@ use pypi_types::Requirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    Concurrency, ExtrasSpecification, PreviewMode, Reinstall, SetupPyStrategy, Upgrade,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, Reinstall, SetupPyStrategy, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -30,7 +28,7 @@ use uv_resolver::{
     ResolverMarkers, SatisfiesResult,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
@@ -71,7 +69,7 @@ pub(crate) async fn lock(
     frozen: bool,
     python: Option<String>,
     settings: ResolverSettings,
-    preview: PreviewMode,
+
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -80,10 +78,6 @@ pub(crate) async fn lock(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv lock` is experimental and may change without warning");
-    }
-
     // Find the project requirements.
     let workspace = Workspace::discover(&CWD, &DiscoveryOptions::default()).await?;
 
@@ -109,7 +103,6 @@ pub(crate) async fn lock(
         &interpreter,
         settings.as_ref(),
         Box::new(DefaultResolveLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,
@@ -143,7 +136,7 @@ pub(super) async fn do_safe_lock(
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
     logger: Box<dyn ResolveLogger>,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -181,7 +174,6 @@ pub(super) async fn do_safe_lock(
             settings,
             &state,
             logger,
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -208,7 +200,6 @@ pub(super) async fn do_safe_lock(
             settings,
             &state,
             logger,
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -234,7 +225,7 @@ async fn do_lock(
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -385,18 +376,16 @@ async fn do_lock(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
-    let database =
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview);
+    let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
 
     // Annoyingly, we have to resolve any unnamed overrides upfront.
     let overrides = NamedRequirementsResolver::new(
         overrides,
         &hasher,
         &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
@@ -506,7 +495,6 @@ async fn do_lock(
                 options,
                 Box::new(SummaryResolveLogger),
                 printer,
-                preview,
             )
             .await?;
 

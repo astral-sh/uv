@@ -27,7 +27,7 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, PreviewMode};
+use uv_configuration::BuildKind;
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_types::{BuildContext, SourceBuildTrait};
@@ -46,7 +46,6 @@ mod revision;
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
-    preview_mode: PreviewMode,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -61,10 +60,9 @@ pub(crate) const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
-    pub(crate) fn new(build_context: &'a T, preview_mode: PreviewMode) -> Self {
+    pub(crate) fn new(build_context: &'a T) -> Self {
         Self {
             build_context,
-            preview_mode,
             reporter: None,
         }
     }
@@ -429,7 +427,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             project_root,
             project_root,
             self.build_context.sources(),
-            self.preview_mode,
         )
         .await?;
         Ok(requires_dist)
@@ -997,7 +994,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
                     self.build_context.sources(),
-                    self.preview_mode,
                 )
                 .await?,
             ));
@@ -1023,7 +1019,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.install_path.as_ref(),
                     resource.lock_path.as_ref(),
                     self.build_context.sources(),
-                    self.preview_mode,
                 )
                 .await?,
             ));
@@ -1056,7 +1051,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 resource.install_path.as_ref(),
                 resource.lock_path.as_ref(),
                 self.build_context.sources(),
-                self.preview_mode,
             )
             .await?,
         ))
@@ -1234,14 +1228,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(
-                        metadata,
-                        &path,
-                        &path,
-                        self.build_context.sources(),
-                        self.preview_mode,
-                    )
-                    .await?,
+                    Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
+                        .await?,
                 ));
             }
         }
@@ -1267,14 +1255,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             };
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(
-                    metadata,
-                    &path,
-                    &path,
-                    self.build_context.sources(),
-                    self.preview_mode,
-                )
-                .await?,
+                Metadata::from_workspace(metadata, &path, &path, self.build_context.sources())
+                    .await?,
             ));
         }
 
@@ -1305,7 +1287,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 fetch.path(),
                 fetch.path(),
                 self.build_context.sources(),
-                self.preview_mode,
             )
             .await?,
         ))
