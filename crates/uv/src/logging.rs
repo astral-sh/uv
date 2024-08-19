@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anstream::ColorChoice;
 use anyhow::Context;
-use chrono::Utc;
+use jiff::Timestamp;
 use owo_colors::OwoColorize;
 use tracing::{Event, Subscriber};
 #[cfg(feature = "tracing-durations-export")]
@@ -54,9 +54,9 @@ where
 
         if self.display_timestamp {
             if ansi {
-                write!(writer, "{} ", Utc::now().dimmed())?;
+                write!(writer, "{} ", Timestamp::now().dimmed())?;
             } else {
-                write!(writer, "{} ", Utc::now())?;
+                write!(writer, "{} ", Timestamp::now())?;
             }
         }
 

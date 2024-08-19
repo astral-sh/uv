@@ -740,7 +740,7 @@ fn sync_relative_wheel() -> Result<()> {
             requires-python = ">=3.12"
 
             [options]
-            exclude-newer = "2024-03-25 00:00:00 UTC"
+            exclude-newer = "2024-03-25T00:00:00Z"
 
             [[package]]
             name = "ok"

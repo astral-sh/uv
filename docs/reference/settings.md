@@ -92,7 +92,8 @@ specified as `KEY=VALUE` pairs.
 Limit candidate packages to those that were uploaded prior to the given date.
 
 Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).
+`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
+system's configured time zone.
 
 **Default value**: `None`
 
@@ -1328,7 +1329,8 @@ be correct.
 Limit candidate packages to those that were uploaded prior to the given date.
 
 Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).
+`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
+system's configured time zone.
 
 **Default value**: `None`
 

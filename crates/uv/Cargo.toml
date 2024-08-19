@@ -47,7 +47,6 @@ uv-workspace = { workspace = true }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 axoupdater = { workspace = true, features = ["github_releases", "tokio"], optional = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -56,6 +55,7 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
 owo-colors = { workspace = true }
 rayon = { workspace = true }
