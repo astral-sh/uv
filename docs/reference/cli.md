@@ -5568,7 +5568,15 @@ uv cache prune [OPTIONS]
 
 ### uv cache dir
 
-Show the cache directory
+Show the cache directory.
+
+By default, the cache is stored in  `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and `{FOLDERID_LocalAppData}\uv\cache` on Windows.
+
+When `--no-cache` is used, the cache is stored in a temporary directory and discarded when the process exits.
+
+An alternative cache directory may be specified via the `cache-dir` setting, the `--cache-dir` option, or the `$UV_CACHE_DIR` environment variable.
+
+Note that it is important for performance for the cache directory to be located on the same file system as the Python environment uv is operating on.
 
 <h3 class="cli-reference">Usage</h3>
 

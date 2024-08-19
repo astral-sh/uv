@@ -83,3 +83,25 @@ pre-built wheels from the cache but retains any wheels that were built from sour
 running `uv cache prune --ci` at the end of your continuous integration job to ensure maximum cache
 efficiency. For an example, see the
 [GitHub integration guide](../guides/integration/github.md#caching).
+
+## Cache directory
+
+uv determines the cache directory according to, in order:
+
+1. A temporary cache directory, if `--no-cache` was requested.
+2. The specific cache directory specified via `--cache-dir`, `UV_CACHE_DIR`, or
+   [`tool.uv.cache-dir`](../reference/settings.md#cache-dir).
+3. A system-appropriate cache directory, e.g., `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Unix and
+   `{FOLDERID_LocalAppData}\uv\cache` on Windows
+
+!!! note
+
+    uv _always_ requires a cache directory. When `--no-cache` is requested, uv will still use
+    a temporary cache for sharing data within that single invocation.
+
+    In most cases, `--refresh` should be used instead of `--no-cache` — as it will update the cache
+    for subsequent operations but not read from the cache.
+
+It is important for performance for the cache directory to be located on the same file system as the
+Python environment uv is operating on. Otherwise, uv will not be able to link files from the cache
+into the environment and will instead need to fallback to slow copy operations.
