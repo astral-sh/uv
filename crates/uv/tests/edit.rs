@@ -3536,13 +3536,14 @@ fn add_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.add(&["anyio"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3588,13 +3589,14 @@ fn add_script_without_metadata_table() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3639,13 +3641,14 @@ fn add_script_without_metadata_table_with_shebang() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3691,13 +3694,14 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.add(&["rich", "requests<3"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv add` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3751,13 +3755,14 @@ fn remove_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["anyio"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv remove` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3809,13 +3814,14 @@ fn remove_last_dep_script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.remove(&["rich"]).arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.remove(&["rich"]).arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv remove` is experimental and may change without warning
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;
@@ -3890,6 +3896,7 @@ fn add_git_to_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Updated `script.py`
     "###);
 
     let script_content = fs_err::read_to_string(context.temp_dir.join("script.py"))?;

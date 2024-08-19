@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -15,7 +16,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_fs::CWD;
+use uv_fs::{Simplified, CWD};
 use uv_git::GIT_STORE;
 use uv_normalize::PackageName;
 use uv_python::{
@@ -425,9 +426,17 @@ pub(crate) async fn add(
         }
     };
 
-    // If `--script`, exit early. There's no reason to lock and sync.
-    let Target::Project(project, venv) = target else {
-        return Ok(ExitStatus::Success);
+    let (project, venv) = match target {
+        Target::Project(project, venv) => (project, venv),
+        // If `--script`, exit early. There's no reason to lock and sync.
+        Target::Script(script, _) => {
+            writeln!(
+                printer.stderr(),
+                "Updated `{}`",
+                script.path.user_display().cyan()
+            )?;
+            return Ok(ExitStatus::Success);
+        }
     };
 
     // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
