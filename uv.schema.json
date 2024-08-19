@@ -18,6 +18,33 @@
         "null"
       ]
     },
+    "concurrent-builds": {
+      "description": "The maximum number of source distributions that uv will build concurrently at any given time.\n\nDefaults to the number of available CPU cores.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 1.0
+    },
+    "concurrent-downloads": {
+      "description": "The maximum number of in-flight concurrent downloads that uv will perform at any given time.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 1.0
+    },
+    "concurrent-installs": {
+      "description": "The number of threads used when installing and unzipping packages.\n\nDefaults to the number of available CPU cores.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 1.0
+    },
     "config-settings": {
       "description": "Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend, specified as `KEY=VALUE` pairs.",
       "anyOf": [
@@ -549,33 +576,6 @@
             "boolean",
             "null"
           ]
-        },
-        "concurrent-builds": {
-          "description": "The maximum number of source distributions that uv will build concurrently at any given time.\n\nDefaults to the number of available CPU cores.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 1.0
-        },
-        "concurrent-downloads": {
-          "description": "The maximum number of in-flight concurrent downloads that uv will perform at any given time.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 1.0
-        },
-        "concurrent-installs": {
-          "description": "The number of threads used when installing and unzipping packages.\n\nDefaults to the number of available CPU cores.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 1.0
         },
         "config-settings": {
           "description": "Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend, specified as `KEY=VALUE` pairs.",
