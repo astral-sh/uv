@@ -74,13 +74,13 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 Or, you can use `uv run` to run commands in the environment:
 
-```dockerfile
-RUN uv run /app/some_script.py
+```dockerfile title="Dockerfile"
+RUN uv run some_script.py
 ```
 
 And, to start your application by default:
 
-```dockerfile
+```dockerfile title="Dockerfile"
 # Presuming there is a `my_app` command provided by the project
 CMD ["uv", "run", "my_app"]
 ```
