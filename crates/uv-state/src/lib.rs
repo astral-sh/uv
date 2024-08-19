@@ -5,6 +5,7 @@ use std::{
 };
 
 use directories::ProjectDirs;
+use etcetera::BaseStrategy;
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 
@@ -83,9 +84,19 @@ impl StateStore {
     pub fn from_settings(state_dir: Option<PathBuf>) -> Result<Self, io::Error> {
         if let Some(state_dir) = state_dir {
             StateStore::from_path(state_dir)
-            // STOPSHIP: This should use XDG instead...
-        } else if let Some(project_dirs) = ProjectDirs::from("", "", "uv") {
-            StateStore::from_path(project_dirs.data_dir())
+        } else if let Some(data_dir) = ProjectDirs::from("", "", "uv")
+            .map(|dirs| dirs.data_dir().to_path_buf())
+            .filter(|dir| dir.exists())
+        {
+            // If the user has an existing directory at (e.g.) `/Users/user/Library/Application Support/uv`,
+            // respect it for backwards compatibility. Otherwise, prefer the XDG strategy, even on
+            // macOS.
+            StateStore::from_path(data_dir)
+        } else if let Some(data_dir) = etcetera::base_strategy::choose_base_strategy()
+            .ok()
+            .map(|dirs| dirs.data_dir().join("uv"))
+        {
+            StateStore::from_path(data_dir)
         } else {
             StateStore::from_path(".uv")
         }
