@@ -367,18 +367,22 @@ fn collapse_no_versions_of_workspace_members(
 
 /// Given a [`DerivationTree`], collapse `NoVersions` incompatibilities that are redundant children
 /// of a dependency. For example, if we have a tree like:
-///     
-///     A>=1,<2 depends on B
-///         A has no versions >1,<2
-///         C depends on A>=1,<2
+///
+/// ```text
+/// A>=1,<2 depends on B
+///     A has no versions >1,<2
+///     C depends on A>=1,<2
+/// ```
 ///
 /// We can simplify this to `C depends A>=1 and A>=1 depends on B so C depends on B` without
 /// explaining that there are no other versions of A. This is dependent on range of A in "A depends
 /// on" being a subset of range of A in "depends on A". For example, in a tree like:
 ///
-///     A>=1,<3 depends on B
-///         A has no versions >2,<3
-///         C depends on A>=2,<3
+/// ```text
+/// A>=1,<3 depends on B
+///     A has no versions >2,<3
+///     C depends on A>=2,<3
+/// ```
 ///
 /// We cannot say `C depends on A>=2 and A>=1 depends on B so C depends on B` because there is a
 /// hole in the range — `A>=1,<3` is not a subset of `A>=2,<3`.
@@ -444,7 +448,7 @@ fn collapse_redundant_depends_on_no_versions_inner(
                     DerivationTree::External(External::NoVersions(no_versions_package, _)),
                 )
                 // And these incompatibilities (and the parent incompatibility) all are referring to
-                // the same package... 
+                // the same package...
                 if no_versions_package == dependency_package
                     && package == no_versions_package
                 // And parent dependency versions are a subset of the versions in this tree...
