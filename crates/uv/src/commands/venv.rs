@@ -55,6 +55,7 @@ pub(crate) async fn venv(
     seed: bool,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
+    concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
@@ -75,6 +76,7 @@ pub(crate) async fn venv(
         python_downloads,
         allow_existing,
         exclude_newer,
+        concurrency,
         native_tls,
         cache,
         printer,
@@ -126,6 +128,7 @@ async fn venv_impl(
     python_downloads: PythonDownloads,
     allow_existing: bool,
     exclude_newer: Option<ExcludeNewer>,
+    concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
@@ -268,9 +271,8 @@ async fn venv_impl(
         // Initialize any shared state.
         let state = SharedState::default();
 
-        // For seed packages, assume a bunch of default settings and concurrency are sufficient.
+        // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = [];
-        let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let setup_py = SetupPyStrategy::default();
         let sources = SourceStrategy::Disabled;

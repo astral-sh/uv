@@ -52,6 +52,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -163,11 +168,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -188,6 +188,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -299,11 +304,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -325,6 +325,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -436,11 +441,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -494,6 +494,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -605,11 +610,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -632,6 +632,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -720,11 +725,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -756,6 +756,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -867,11 +872,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -917,6 +917,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1051,11 +1056,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1078,6 +1078,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1234,11 +1239,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1284,6 +1284,11 @@ fn resolve_find_links() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1395,11 +1400,6 @@ fn resolve_find_links() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1444,6 +1444,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1532,11 +1537,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1574,6 +1574,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1707,11 +1712,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1732,6 +1732,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -1865,11 +1870,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -1914,6 +1914,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2002,11 +2007,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2034,6 +2034,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2122,11 +2127,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2154,6 +2154,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2242,11 +2247,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2276,6 +2276,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2364,11 +2369,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2417,6 +2417,11 @@ fn resolve_tool() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2563,6 +2568,11 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2651,11 +2661,6 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2711,6 +2716,11 @@ fn resolve_both() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2822,11 +2832,6 @@ fn resolve_both() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -2874,6 +2879,11 @@ fn resolve_config_file() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -2985,11 +2995,6 @@ fn resolve_config_file() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -3112,6 +3117,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -3200,11 +3210,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
@@ -3235,6 +3240,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         verbose: 0,
         color: Auto,
         native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
         connectivity: Online,
         show_settings: true,
         preview: Disabled,
@@ -3323,11 +3333,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             hash_checking: None,
             upgrade: None,
             reinstall: None,
-            concurrency: Concurrency {
-                downloads: 50,
-                builds: 16,
-                installs: 8,
-            },
         },
     }
 
