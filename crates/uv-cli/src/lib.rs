@@ -609,6 +609,9 @@ pub enum ProjectCommand {
     ///
     /// uv will search for a project in the current directory or any parent
     /// directory. If a project cannot be found, uv will exit with an error.
+    ///
+    /// Note that, when installing from a lockfile, uv will not provide warnings for yanked package
+    /// versions.
     #[command(
         after_help = "Use `uv help sync` for more details.",
         after_long_help = ""
