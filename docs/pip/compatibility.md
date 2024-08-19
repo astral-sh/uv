@@ -395,3 +395,11 @@ will include all index URLs when `--emit-index-url` is passed, including the def
 By default, uv does not write any `--no-build` or `--only-binary` options to the output file, unlike
 `pip-compile`. To include these options in the output file, pass the `--emit-build-options` flag to
 `uv pip compile`.
+
+## Package priority
+
+There are usually many possible solutions given a set of requirements — a resolver must choose
+between the solutions. Unlike pip, uv's resolver uses the ordering provided of packages to determine
+the default priority. This means that uv's resolution can differ based on the order of the packages.
+For example, `uv pip install foo bar` would prioritize a newer version of `foo` over `bar`.
+Similarly, this applies to the ordering of requirements in input files to `uv pip compile`.

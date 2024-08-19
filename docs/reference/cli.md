@@ -3546,6 +3546,8 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>If <code>-</code> is provided, then requirements will be read from stdin.</p>
 
+<p>The order of the requirements files and the requirements in them is used to determine priority during resolution.</p>
+
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -4191,7 +4193,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>PACKAGE</code></dt><dd><p>Install all listed packages</p>
+<dl class="cli-reference"><dt><code>PACKAGE</code></dt><dd><p>Install all listed packages.</p>
+
+<p>The order of the packages is used to determine priority during resolution.</p>
 
 </dd></dl>
 

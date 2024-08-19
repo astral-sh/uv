@@ -692,10 +692,13 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
 pub struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     ///
-    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will
-    /// extract the requirements for the relevant project.
+    /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will extract the
+    /// requirements for the relevant project.
     ///
     /// If `-` is provided, then requirements will be read from stdin.
+    ///
+    /// The order of the requirements files and the requirements in them is used to determine
+    /// priority during resolution.
     #[arg(required(true), value_parser = parse_file_path)]
     pub src_file: Vec<PathBuf>,
 
@@ -1245,6 +1248,8 @@ pub struct PipSyncArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct PipInstallArgs {
     /// Install all listed packages.
+    ///
+    /// The order of the packages is used to determine priority during resolution.
     #[arg(group = "sources")]
     pub package: Vec<String>,
 
