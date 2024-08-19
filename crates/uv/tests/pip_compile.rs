@@ -9989,7 +9989,7 @@ fn dynamic_dependencies() -> Result<()> {
 #[cfg(target_os = "linux")]
 #[test]
 fn emit_marker_expression_exciting_linux() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12.1");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
 
@@ -10026,7 +10026,7 @@ fn emit_marker_expression_exciting_linux() -> Result<()> {
 #[cfg(target_os = "linux")]
 #[test]
 fn emit_marker_expression_direct() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12.1");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio ; sys_platform == 'linux'")?;
 
@@ -10106,7 +10106,7 @@ fn emit_marker_expression_conditional() -> Result<()> {
 #[cfg(target_os = "linux")]
 #[test]
 fn emit_marker_expression_pypy() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12.1");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("pendulum")?;
 
