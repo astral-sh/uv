@@ -14,5 +14,6 @@ workspace = true
 
 [dependencies]
 directories = { workspace = true }
+etcetera = { workspace = true }
 tempfile = { workspace = true }
 fs-err = { workspace = true }
