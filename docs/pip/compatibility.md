@@ -153,6 +153,27 @@ In the future, uv will support pinning packages to dedicated indexes (see:
 [PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to address the
 "dependency confusion" issue across package registries and installers.
 
+## PEP 517 build isolation
+
+uv uses [PEP 517](https://peps.python.org/pep-0517/) build isolation by default (akin to
+`pip install --use-pep517`), following `pypa/build` and in anticipation of `pip` defaulting to PEP
+517 builds in the future ([pypa/pip#9175](https://github.com/pypa/pip/issues/9175)).
+
+If a package fails to install due to a missing build-time dependency, try using a newer version of
+the package; if the problem persists, consider filing an issue with the package maintainer,
+requesting that they update the packaging setup to declare the correct PEP 517 build-time
+dependencies.
+
+As an escape hatch, you can preinstall a package's build dependencies, then run `uv pip install`
+with `--no-build-isolation`, as in:
+
+```shell
+uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
+```
+
+For a list of packages that are known to fail under PEP 517 build isolation, see
+[#2252](https://github.com/astral-sh/uv/issues/2252).
+
 ## Transitive direct URL dependencies for constraints and overrides
 
 While uv does support URL dependencies (e.g., `black @ https://...`), it does not support
@@ -316,6 +337,15 @@ package is "allowed" in such cases without building its metadata.
 Both pip and uv allow editables requirements to be built and installed even when `--only-binary` is
 provided. For example, `uv pip install -e . --only-binary :all:` is allowed.
 
+## `--no-binary` enforcement
+
+The `--no-binary` argument is used to restrict installation to source distributions. When
+`--no-binary` is provided, uv will refuse to install pre-built binary distributions, but _will_
+reuse any binary distributions that are already present in the local cache.
+
+Additionally, and in contrast to pip, uv's resolver will still read metadata from pre-built binary
+distributions when `--no-binary` is provided.
+
 ## Bytecode compilation
 
 Unlike pip, uv does not compile `.py` files to `.pyc` files during installation by default (i.e., uv
@@ -343,7 +373,6 @@ does support a large subset.
 Missing options and subcommands are prioritized based on user demand and the complexity of the
 implementation, and tend to be tracked in individual issues. For example:
 
-- [`--prefix`](https://github.com/astral-sh/uv/issues/3076)
 - [`--trusted-host`](https://github.com/astral-sh/uv/issues/1339)
 - [`--user`](https://github.com/astral-sh/uv/issues/2077)
 
@@ -374,6 +403,19 @@ Specifically, uv does not support installing new `.egg-info`- or `.egg-link`-sty
 but will respect any such existing distributions during resolution, list them with `uv pip list` and
 `uv pip freeze`, and uninstall them with `uv pip uninstall`.
 
+## Build constraints
+
+When constraints are provided via `--constraint` (or `UV_CONSTRAINT`), uv will _not_ apply the
+constraints when resolving build dependencies (i.e., to build a source distribution). Instead, build
+constraints should be provided via the dedicated `--build-constraint` (or `UV_BUILD_CONSTRAINT`)
+setting.
+
+pip, meanwhile, applies constraints to build dependencies when specified via `PIP_CONSTRAINT`, but
+not when provided via `--constraint` on the command line.
+
+For example, to ensure that `setuptools 60.0.0` is used to build any packages with a build
+dependency on `setuptools`, use `--build-constraint`, rather than `--constraint`.
+
 ## `pip compile` defaults
 
 There are a few small but notable differences in the default behaviors of `pip compile` and
@@ -392,9 +434,19 @@ By default, uv does not write any index URLs to the output file, while `pip-comp
 in the output file, pass the `--emit-index-url` flag to `uv pip compile`. Unlike `pip-compile`, uv
 will include all index URLs when `--emit-index-url` is passed, including the default index URL.
 
-By default, uv does not write any `--no-build` or `--only-binary` options to the output file, unlike
-`pip-compile`. To include these options in the output file, pass the `--emit-build-options` flag to
-`uv pip compile`.
+## `requires-python` enforcement
+
+When evaluating Python versions against `requires-python` specifiers, uv truncates the candidate
+version to the major, minor, and patch components, ignoring (e.g.) pre-release and post-release
+identifiers.
+
+For example, a project that declares `requires-python: >=3.13` will accept Python 3.13.0b1. While
+3.13.0b1 is not strictly greater than 3.13, it is greater than 3.13 when the pre-release identifier
+is omitted.
+
+While this is not strictly compliant with [PEP 440](https://peps.python.org/pep-0440/), it _is_
+consistent with
+[pip](https://github.com/pypa/pip/blob/24.1.1/src/pip/_internal/resolution/resolvelib/candidates.py#L540).
 
 ## Package priority
 
