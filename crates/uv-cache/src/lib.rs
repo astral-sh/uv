@@ -154,6 +154,11 @@ impl Cache {
         &self.root
     }
 
+    /// Return the [`Refresh`] policy for the cache.
+    pub fn refresh(&self) -> &Refresh {
+        &self.refresh
+    }
+
     /// The folder for a specific cache bucket
     pub fn bucket(&self, cache_bucket: CacheBucket) -> PathBuf {
         self.root.join(cache_bucket.to_str())

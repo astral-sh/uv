@@ -370,25 +370,6 @@ fn tool_run_from_install() {
      + platformdirs==4.2.0
     "###);
 
-    // Verify that `--upgrade` resolves a fresh isolated environment (but reuses the cached
-    // environment resolved in the previous step).
-    uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--upgrade")
-        .arg("black")
-        .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    black, 24.3.0 (compiled: yes)
-    Python (CPython) 3.12.[X]
-
-    ----- stderr -----
-    warning: `uv tool run` is experimental and may change without warning
-    Resolved [N] packages in [TIME]
-    "###);
-
     // Verify that `tool run black` at a different version installs the new version.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("black@24.1.1")
@@ -524,11 +505,11 @@ fn tool_run_cache() {
     Resolved [N] packages in [TIME]
     "###);
 
-    // Verify that `--reinstall` reinstalls everything.
+    // Verify that `--refresh` recreates everything.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
-        .arg("--reinstall")
+        .arg("--refresh")
         .arg("black")
         .arg("--version")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
@@ -552,11 +533,11 @@ fn tool_run_cache() {
      + platformdirs==4.2.0
     "###);
 
-    // Verify that `--reinstall-package` reinstalls everything. We may want to change this.
+    // Verify that `--refresh-package` recreates everything. We may want to change this.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
-        .arg("--reinstall-package")
+        .arg("--refresh-package")
         .arg("packaging")
         .arg("black")
         .arg("--version")
@@ -897,6 +878,37 @@ fn warn_no_executables_found() {
      + requests==2.31.0
      + urllib3==2.2.1
     warning: Package `requests` does not provide any executables.
+    "###);
+}
+
+/// Warn when a user passes `--upgrade` to `uv tool run`.
+#[test]
+fn tool_run_upgrade_warn() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--upgrade")
+        .arg("pytest")
+        .arg("--version")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    warning: Tools cannot be upgraded via `uv tool run`; use `uv tool upgrade --all` to upgrade all installed tools, or `uv tool run package@latest` to run the latest version of a tool
+    warning: `uv tool run` is experimental and may change without warning
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
     "###);
 }
 
