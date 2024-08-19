@@ -114,6 +114,7 @@ nav:
       - GitHub Actions: guides/integration/github.md
       - Pre-commit: guides/integration/pre-commit.md
       - Alternative indexes: guides/integration/alternative-indexes.md
+      - Dependency bots: guides/integration/dependency-bots.md
   - The pip interface:
       - pip/index.md
       - Using environments: pip/environments.md
