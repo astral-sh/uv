@@ -42,18 +42,44 @@ pub(crate) enum UnavailableVersion {
     Offline,
 }
 
+impl UnavailableVersion {
+    pub(crate) fn message(&self) -> String {
+        match self {
+            UnavailableVersion::IncompatibleDist(invalid_dist) => format!("{invalid_dist}"),
+            UnavailableVersion::MissingMetadata => "not include a `METADATA` file".into(),
+            UnavailableVersion::InvalidMetadata => "invalid metadata".into(),
+            UnavailableVersion::InconsistentMetadata => "inconsistent metadata".into(),
+            UnavailableVersion::InvalidStructure => "an invalid package format".into(),
+            UnavailableVersion::Offline => "to be downloaded from a registry".into(),
+        }
+    }
+
+    pub(crate) fn singular_message(&self) -> String {
+        match self {
+            UnavailableVersion::IncompatibleDist(invalid_dist) => invalid_dist.singular_message(),
+            UnavailableVersion::MissingMetadata => format!("does {self}"),
+            UnavailableVersion::InvalidMetadata => format!("has {self}"),
+            UnavailableVersion::InconsistentMetadata => format!("has {self}"),
+            UnavailableVersion::InvalidStructure => format!("has {self}"),
+            UnavailableVersion::Offline => format!("needs {self}"),
+        }
+    }
+
+    pub(crate) fn plural_message(&self) -> String {
+        match self {
+            UnavailableVersion::IncompatibleDist(invalid_dist) => invalid_dist.plural_message(),
+            UnavailableVersion::MissingMetadata => format!("do {self}"),
+            UnavailableVersion::InvalidMetadata => format!("have {self}"),
+            UnavailableVersion::InconsistentMetadata => format!("have {self}"),
+            UnavailableVersion::InvalidStructure => format!("have {self}"),
+            UnavailableVersion::Offline => format!("need {self}"),
+        }
+    }
+}
+
 impl Display for UnavailableVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnavailableVersion::IncompatibleDist(invalid_dist) => Display::fmt(invalid_dist, f),
-            UnavailableVersion::MissingMetadata => {
-                f.write_str("does not include a `METADATA` file")
-            }
-            UnavailableVersion::InvalidMetadata => f.write_str("has invalid metadata"),
-            UnavailableVersion::InconsistentMetadata => f.write_str("has inconsistent metadata"),
-            UnavailableVersion::InvalidStructure => f.write_str("has an invalid package format"),
-            UnavailableVersion::Offline => f.write_str("needs to be downloaded from a registry"),
-        }
+        f.write_str(&self.message())
     }
 }
 
@@ -75,21 +101,32 @@ pub(crate) enum UnavailablePackage {
 }
 
 impl UnavailablePackage {
-    pub(crate) fn as_str(&self) -> &'static str {
+    pub(crate) fn message(&self) -> &'static str {
         match self {
-            UnavailablePackage::NoIndex => "was not found in the provided package locations",
-            UnavailablePackage::Offline => "was not found in the cache",
-            UnavailablePackage::NotFound => "was not found in the package registry",
-            UnavailablePackage::MissingMetadata => "does not include a `METADATA` file",
-            UnavailablePackage::InvalidMetadata(_) => "has invalid metadata",
-            UnavailablePackage::InvalidStructure(_) => "has an invalid package format",
+            UnavailablePackage::NoIndex => "not found in the provided package locations",
+            UnavailablePackage::Offline => "not found in the cache",
+            UnavailablePackage::NotFound => "not found in the package registry",
+            UnavailablePackage::MissingMetadata => "not include a `METADATA` file",
+            UnavailablePackage::InvalidMetadata(_) => "invalid metadata",
+            UnavailablePackage::InvalidStructure(_) => "an invalid package format",
+        }
+    }
+
+    pub(crate) fn singular_message(&self) -> String {
+        match self {
+            UnavailablePackage::NoIndex => format!("was {self}"),
+            UnavailablePackage::Offline => format!("was {self}"),
+            UnavailablePackage::NotFound => format!("was {self}"),
+            UnavailablePackage::MissingMetadata => format!("does {self}"),
+            UnavailablePackage::InvalidMetadata(_) => format!("has {self}"),
+            UnavailablePackage::InvalidStructure(_) => format!("has {self}"),
         }
     }
 }
 
 impl Display for UnavailablePackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
+        f.write_str(self.message())
     }
 }
 

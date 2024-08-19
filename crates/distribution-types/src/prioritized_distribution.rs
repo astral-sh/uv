@@ -70,62 +70,116 @@ pub enum IncompatibleDist {
     Unavailable,
 }
 
+impl IncompatibleDist {
+    pub fn singular_message(&self) -> String {
+        match self {
+            Self::Wheel(incompatibility) => match incompatibility {
+                IncompatibleWheel::NoBinary => format!("has {self}"),
+                IncompatibleWheel::Tag(_) => format!("has {self}"),
+                IncompatibleWheel::Yanked(_) => format!("was {self}"),
+                IncompatibleWheel::ExcludeNewer(ts) => match ts {
+                    Some(_) => format!("was {self}"),
+                    None => format!("has {self}"),
+                },
+                IncompatibleWheel::RequiresPython(..) => format!("requires {self}"),
+            },
+            Self::Source(incompatibility) => match incompatibility {
+                IncompatibleSource::NoBuild => format!("has {self}"),
+                IncompatibleSource::Yanked(_) => format!("was {self}"),
+                IncompatibleSource::ExcludeNewer(ts) => match ts {
+                    Some(_) => format!("was {self}"),
+                    None => format!("has {self}"),
+                },
+                IncompatibleSource::RequiresPython(..) => {
+                    format!("requires {self}")
+                }
+            },
+            Self::Unavailable => format!("has {self}"),
+        }
+    }
+
+    pub fn plural_message(&self) -> String {
+        match self {
+            Self::Wheel(incompatibility) => match incompatibility {
+                IncompatibleWheel::NoBinary => format!("have {self}"),
+                IncompatibleWheel::Tag(_) => format!("have {self}"),
+                IncompatibleWheel::Yanked(_) => format!("were {self}"),
+                IncompatibleWheel::ExcludeNewer(ts) => match ts {
+                    Some(_) => format!("were {self}"),
+                    None => format!("have {self}"),
+                },
+                IncompatibleWheel::RequiresPython(..) => format!("require {self}"),
+            },
+            Self::Source(incompatibility) => match incompatibility {
+                IncompatibleSource::NoBuild => format!("have {self}"),
+                IncompatibleSource::Yanked(_) => format!("were {self}"),
+                IncompatibleSource::ExcludeNewer(ts) => match ts {
+                    Some(_) => format!("were {self}"),
+                    None => format!("have {self}"),
+                },
+                IncompatibleSource::RequiresPython(..) => {
+                    format!("require {self}")
+                }
+            },
+            Self::Unavailable => format!("have {self}"),
+        }
+    }
+}
+
 impl Display for IncompatibleDist {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => {
-                    f.write_str("has no source distribution and using wheels is disabled")
+                    f.write_str("no source distribution and using wheels is disabled")
                 }
                 IncompatibleWheel::Tag(tag) => match tag {
-                    IncompatibleTag::Invalid => f.write_str("has no wheels with valid tags"),
+                    IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
-                        f.write_str("has no wheels with a matching Python implementation tag")
+                        f.write_str("no wheels with a matching Python implementation tag")
                     }
-                    IncompatibleTag::Abi => {
-                        f.write_str("has no wheels with a matching Python ABI tag")
-                    }
+                    IncompatibleTag::Abi => f.write_str("no wheels with a matching Python ABI tag"),
                     IncompatibleTag::Platform => {
-                        f.write_str("has no wheels with a matching platform tag")
+                        f.write_str("no wheels with a matching platform tag")
                     }
                 },
                 IncompatibleWheel::Yanked(yanked) => match yanked {
-                    Yanked::Bool(_) => f.write_str("was yanked"),
+                    Yanked::Bool(_) => f.write_str("yanked"),
                     Yanked::Reason(reason) => write!(
                         f,
-                        "was yanked (reason: {})",
+                        "yanked (reason: {})",
                         reason.trim().trim_end_matches('.')
                     ),
                 },
                 IncompatibleWheel::ExcludeNewer(ts) => match ts {
-                    Some(_) => f.write_str("was published after the exclude newer time"),
-                    None => f.write_str("has no publish time"),
+                    Some(_) => f.write_str("published after the exclude newer time"),
+                    None => f.write_str("no publish time"),
                 },
                 IncompatibleWheel::RequiresPython(python, _) => {
-                    write!(f, "requires Python {python}")
+                    write!(f, "Python {python}")
                 }
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => {
-                    f.write_str("has no usable wheels and building from source is disabled")
+                    f.write_str("no usable wheels and building from source is disabled")
                 }
                 IncompatibleSource::Yanked(yanked) => match yanked {
-                    Yanked::Bool(_) => f.write_str("was yanked"),
+                    Yanked::Bool(_) => f.write_str("yanked"),
                     Yanked::Reason(reason) => write!(
                         f,
-                        "was yanked (reason: {})",
+                        "yanked (reason: {})",
                         reason.trim().trim_end_matches('.')
                     ),
                 },
                 IncompatibleSource::ExcludeNewer(ts) => match ts {
-                    Some(_) => f.write_str("was published after the exclude newer time"),
-                    None => f.write_str("has no publish time"),
+                    Some(_) => f.write_str("published after the exclude newer time"),
+                    None => f.write_str("no publish time"),
                 },
                 IncompatibleSource::RequiresPython(python, _) => {
-                    write!(f, "requires Python {python}")
+                    write!(f, "Python {python}")
                 }
             },
-            Self::Unavailable => f.write_str("has no available distributions"),
+            Self::Unavailable => f.write_str("no available distributions"),
         }
     }
 }

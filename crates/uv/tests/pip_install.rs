@@ -1931,7 +1931,7 @@ fn install_only_binary_all_and_no_binary_all() {
               anyio>=3.0.0,<=3.6.2
               anyio>=3.7.0,<=3.7.1
               anyio>=4.0.0
-          has no usable wheels and building from source is disabled, we can conclude that all of:
+          have no usable wheels and building from source is disabled, we can conclude that all of:
               anyio<1.1.0
               anyio>1.4.0,<2.0.0
               anyio>2.2.0,<3.0.0

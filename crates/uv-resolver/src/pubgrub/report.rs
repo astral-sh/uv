@@ -117,14 +117,21 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         UnavailableReason::Package(reason) => {
                             // While there may be a term attached, this error applies to the entire
                             // package, so we show it for the entire package
-                            format!("{}{reason}", Padded::new("", &package, " "))
+                            format!(
+                                "{}{}",
+                                Padded::new("", &package, " "),
+                                reason.singular_message()
+                            )
                         }
                         UnavailableReason::Version(reason) => {
                             let set = self.simplify_set(set, package);
-                            format!(
-                                "{}{reason}",
-                                Padded::new("", &self.compatible_range(package, &set), " ")
-                            )
+                            let range = self.compatible_range(package, &set);
+                            let reason = if range.plural() {
+                                reason.plural_message()
+                            } else {
+                                reason.singular_message()
+                            };
+                            format!("{}{reason}", Padded::new("", &range, " "))
                         }
                     }
                 }
