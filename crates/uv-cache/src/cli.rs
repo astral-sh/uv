@@ -1,10 +1,10 @@
 use std::io;
 use std::path::PathBuf;
 
+use crate::Cache;
 use clap::Parser;
 use directories::ProjectDirs;
-
-use crate::Cache;
+use etcetera::BaseStrategy;
 
 #[derive(Parser, Debug, Clone)]
 #[command(next_help_heading = "Cache options")]
@@ -39,13 +39,24 @@ impl Cache {
     /// Returns an absolute cache dir.
     pub fn from_settings(no_cache: bool, cache_dir: Option<PathBuf>) -> Result<Self, io::Error> {
         if no_cache {
-            Cache::temp()
+            Self::temp()
         } else if let Some(cache_dir) = cache_dir {
-            Ok(Cache::from_path(cache_dir))
-        } else if let Some(project_dirs) = ProjectDirs::from("", "", "uv") {
-            Ok(Cache::from_path(project_dirs.cache_dir()))
+            Ok(Self::from_path(cache_dir))
+        } else if let Some(cache_dir) = ProjectDirs::from("", "", "uv")
+            .map(|dirs| dirs.cache_dir().to_path_buf())
+            .filter(|dir| dir.exists())
+        {
+            // If the user has an existing directory at (e.g.) `/Users/user/Library/Caches/uv`,
+            // respect it for backwards compatibility. Otherwise, prefer the XDG strategy, even on
+            // macOS.
+            Ok(Self::from_path(cache_dir))
+        } else if let Some(cache_dir) = etcetera::base_strategy::choose_base_strategy()
+            .ok()
+            .map(|dirs| dirs.cache_dir().join("uv"))
+        {
+            Ok(Self::from_path(cache_dir))
         } else {
-            Ok(Cache::from_path(".uv_cache"))
+            Ok(Self::from_path(".uv_cache"))
         }
     }
 }

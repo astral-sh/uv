@@ -27,6 +27,28 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
         Err(err) => return Err(err.into()),
     };
 
+    // Perform the uninstallation.
+    do_uninstall(&installed_tools, name, printer).await?;
+
+    // Clean up any empty directories.
+    if uv_fs::directories(installed_tools.root()).all(|path| uv_fs::is_temporary(&path)) {
+        fs_err::tokio::remove_dir_all(&installed_tools.root()).await?;
+        if let Some(top_level) = installed_tools.root().parent() {
+            if uv_fs::directories(top_level).all(|path| uv_fs::is_temporary(&path)) {
+                fs_err::tokio::remove_dir_all(top_level).await?;
+            }
+        }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+/// Perform the uninstallation.
+async fn do_uninstall(
+    installed_tools: &InstalledTools,
+    name: Option<PackageName>,
+    printer: Printer,
+) -> Result<()> {
     let mut dangling = false;
     let mut entrypoints = if let Some(name) = name {
         let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
@@ -37,7 +59,7 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
                         printer.stderr(),
                         "Removed dangling environment for `{name}`"
                     )?;
-                    return Ok(ExitStatus::Success);
+                    return Ok(());
                 }
                 Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                     bail!("`{name}` is not installed");
@@ -48,7 +70,7 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
             }
         };
 
-        uninstall_tool(&name, &receipt, &installed_tools).await?
+        uninstall_tool(&name, &receipt, installed_tools).await?
     } else {
         let mut entrypoints = vec![];
         for (name, receipt) in installed_tools.tools()? {
@@ -72,7 +94,7 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
                 }
             };
 
-            entrypoints.extend(uninstall_tool(&name, &receipt, &installed_tools).await?);
+            entrypoints.extend(uninstall_tool(&name, &receipt, installed_tools).await?);
         }
         entrypoints
     };
@@ -83,7 +105,7 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
         if !dangling {
             writeln!(printer.stderr(), "Nothing to uninstall")?;
         }
-        return Ok(ExitStatus::Success);
+        return Ok(());
     }
 
     let s = if entrypoints.len() == 1 { "" } else { "s" };
@@ -97,7 +119,7 @@ pub(crate) async fn uninstall(name: Option<PackageName>, printer: Printer) -> Re
             .join(", ")
     )?;
 
-    Ok(ExitStatus::Success)
+    Ok(())
 }
 
 /// Uninstall a tool.
