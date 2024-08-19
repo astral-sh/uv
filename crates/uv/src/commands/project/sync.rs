@@ -192,7 +192,12 @@ pub(super) async fn do_sync(
     if !environments.is_empty() {
         if !environments.iter().any(|env| env.evaluate(&markers, &[])) {
             return Err(ProjectError::LockedPlatformIncompatibility(
-                environments
+                // For error reporting, we use the "simplified"
+                // supported environments, because these correspond to
+                // what the end user actually wrote. The non-simplified
+                // environments, by contrast, are explicitly
+                // constrained by `requires-python`.
+                lock.simplified_supported_environments()
                     .iter()
                     .filter_map(MarkerTree::contents)
                     .map(|env| format!("`{env}`"))

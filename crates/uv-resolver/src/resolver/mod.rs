@@ -562,6 +562,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     resolution.nodes.len()
                 );
             }
+        }
+        for resolution in &resolutions {
             Self::trace_resolution(resolution);
         }
         ResolutionGraph::from_state(
@@ -1329,7 +1331,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 name: name.clone(),
                                 extra: None,
                                 dev: None,
-                                marker: marker.cloned(),
+                                marker: marker.and_then(MarkerTree::contents),
                             }),
                             version: Range::singleton(version.clone()),
                             specifier: None,
@@ -1481,34 +1483,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         self.overrides
             .apply(dependencies)
             .filter_map(move |requirement| {
+                let python_marker = python_requirement.to_marker_tree();
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
-                let requirement = if requirement.marker.is_true() {
-                    requirement
-                } else {
-                    let requires_python = python_requirement.target();
-
-                    let marker = requirement.marker.clone().simplify_python_versions(
-                        Range::from(requires_python.range().clone()),
+                if python_marker.is_disjoint(&requirement.marker) {
+                    trace!(
+                        "skipping {requirement} because of Requires-Python: {requires_python}",
+                        requires_python = python_requirement.target(),
                     );
-
-                    if marker.is_false() {
-                        trace!("skipping {requirement} because of Requires-Python: {requires_python}");
-                        return None;
-                    }
-
-                    if marker == requirement.marker {
-                        requirement
-                    } else {
-                        Cow::Owned(Requirement {
-                            name: requirement.name.clone(),
-                            extras: requirement.extras.clone(),
-                            source: requirement.source.clone(),
-                            origin: requirement.origin.clone(),
-                            marker
-                        })
-                    }
-                };
+                    return None;
+                }
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
@@ -1572,10 +1556,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                             } else {
                                 let requires_python = python_requirement.target();
+                                let python_marker = python_requirement.to_marker_tree();
 
-                                let mut marker = constraint.marker.clone().simplify_python_versions(
-                                    Range::from(requires_python.range().clone()),
-                                );
+                                let mut marker = constraint.marker.clone();
                                 marker.and(requirement.marker.clone());
 
                                 // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
@@ -1583,6 +1566,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 // constraint should only apply when _both_ markers are true.
                                 if marker.is_false() {
                                     trace!("skipping {constraint} because of Requires-Python: {requires_python}");
+                                    return None;
+                                }
+                                if python_marker.is_disjoint(&marker) {
+                                    trace!(
+                                        "skipping constraint {requirement} because of Requires-Python: {requires_python}",
+                                        requires_python = python_requirement.target(),
+                                    );
                                     return None;
                                 }
 
@@ -2345,7 +2335,7 @@ impl ForkState {
                             to_url: to_url.cloned(),
                             to_extra: None,
                             to_dev: None,
-                            marker: MarkerTree::from(dependency_marker.clone()),
+                            marker: dependency_marker.clone(),
                         };
                         edges.insert(edge);
                     }
@@ -2685,6 +2675,8 @@ impl Forks {
         name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>>,
         python_requirement: &PythonRequirement,
     ) -> Forks {
+        let python_marker = python_requirement.to_marker_tree();
+
         let mut forks = vec![Fork {
             dependencies: vec![],
             markers: MarkerTree::TRUE,
@@ -2713,7 +2705,6 @@ impl Forks {
                 continue;
             }
             for dep in deps {
-                // We assume that the marker has already been Python-simplified.
                 let mut markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
                 if markers.is_false() {
                     // If the markers can never be satisfied, then we
@@ -2740,17 +2731,25 @@ impl Forks {
                         continue;
                     }
 
-                    let not_markers = simplify_python(markers.negate(), python_requirement);
+                    let not_markers = markers.negate();
                     let mut new_markers = markers.clone();
-                    new_markers.and(simplify_python(fork.markers.negate(), python_requirement));
+                    new_markers.and(fork.markers.negate());
                     if !fork.markers.is_disjoint(&not_markers) {
                         let mut new_fork = fork.clone();
                         new_fork.intersect(not_markers);
-                        new.push(new_fork);
+                        // Filter out any forks we created that are disjoint with our
+                        // Python requirement.
+                        if !new_fork.markers.is_disjoint(&python_marker) {
+                            new.push(new_fork);
+                        }
                     }
                     fork.dependencies.push(dep.clone());
                     fork.intersect(markers);
-                    new.push(fork);
+                    // Filter out any forks we created that are disjoint with our
+                    // Python requirement.
+                    if !fork.markers.is_disjoint(&python_marker) {
+                        new.push(fork);
+                    }
                     markers = new_markers;
                 }
                 forks = new;
@@ -2847,9 +2846,4 @@ impl PartialOrd for Fork {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
-}
-
-/// Simplify a [`MarkerTree`] based on a [`PythonRequirement`].
-fn simplify_python(marker: MarkerTree, python_requirement: &PythonRequirement) -> MarkerTree {
-    marker.simplify_python_versions(Range::from(python_requirement.target().range().clone()))
 }

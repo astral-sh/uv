@@ -62,7 +62,8 @@ impl<'env> TreeDisplay<'env> {
                     Cow::Owned(Dependency {
                         package_id: packages.id.clone(),
                         extra: dependency.extra.clone(),
-                        marker: dependency.marker.clone(),
+                        simplified_marker: dependency.simplified_marker.clone(),
+                        complexified_marker: dependency.complexified_marker.clone(),
                     })
                 } else {
                     Cow::Borrowed(dependency)
@@ -72,7 +73,10 @@ impl<'env> TreeDisplay<'env> {
 
                 // Skip dependencies that don't apply to the current environment.
                 if let Some(environment_markers) = markers {
-                    if !dependency.marker.evaluate(environment_markers, &[]) {
+                    if !dependency
+                        .complexified_marker
+                        .evaluate(environment_markers, &[])
+                    {
                         continue;
                     }
                 }
@@ -91,7 +95,8 @@ impl<'env> TreeDisplay<'env> {
                         Cow::Owned(Dependency {
                             package_id: packages.id.clone(),
                             extra: dependency.extra.clone(),
-                            marker: dependency.marker.clone(),
+                            simplified_marker: dependency.simplified_marker.clone(),
+                            complexified_marker: dependency.complexified_marker.clone(),
                         })
                     } else {
                         Cow::Borrowed(dependency)
@@ -101,7 +106,10 @@ impl<'env> TreeDisplay<'env> {
 
                     // Skip dependencies that don't apply to the current environment.
                     if let Some(environment_markers) = markers {
-                        if !dependency.marker.evaluate(environment_markers, &[]) {
+                        if !dependency
+                            .complexified_marker
+                            .evaluate(environment_markers, &[])
+                        {
                             continue;
                         }
                     }
@@ -126,7 +134,8 @@ impl<'env> TreeDisplay<'env> {
                         Cow::Owned(Dependency {
                             package_id: packages.id.clone(),
                             extra: dependency.extra.clone(),
-                            marker: dependency.marker.clone(),
+                            simplified_marker: dependency.simplified_marker.clone(),
+                            complexified_marker: dependency.complexified_marker.clone(),
                         })
                     } else {
                         Cow::Borrowed(dependency)
@@ -136,7 +145,10 @@ impl<'env> TreeDisplay<'env> {
 
                     // Skip dependencies that don't apply to the current environment.
                     if let Some(environment_markers) = markers {
-                        if !dependency.marker.evaluate(environment_markers, &[]) {
+                        if !dependency
+                            .complexified_marker
+                            .evaluate(environment_markers, &[])
+                        {
                             continue;
                         }
                     }

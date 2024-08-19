@@ -10,7 +10,10 @@ use pep508_rs::{split_scheme, MarkerTree, Scheme};
 use pypi_types::HashDigest;
 use uv_normalize::{ExtraName, PackageName};
 
-use crate::resolution::AnnotatedDist;
+use crate::{
+    requires_python::{RequiresPython, SimplifiedMarkerTree},
+    resolution::AnnotatedDist,
+};
 
 #[derive(Debug, Clone)]
 /// A pinned package with its resolved distribution and all the extras that were pinned for it.
@@ -31,6 +34,7 @@ impl RequirementsTxtDist {
     /// supported in `requirements.txt`).
     pub(crate) fn to_requirements_txt(
         &self,
+        requires_python: &RequiresPython,
         include_extras: bool,
         include_markers: bool,
     ) -> Cow<str> {
@@ -90,7 +94,9 @@ impl RequirementsTxtDist {
                 };
                 if let Some(given) = given {
                     return if let Some(markers) =
-                        self.markers.contents().filter(|_| include_markers)
+                        SimplifiedMarkerTree::new(requires_python, self.markers.clone())
+                            .try_to_string()
+                            .filter(|_| include_markers)
                     {
                         Cow::Owned(format!("{given} ; {markers}"))
                     } else {
@@ -101,7 +107,10 @@ impl RequirementsTxtDist {
         }
 
         if self.extras.is_empty() || !include_extras {
-            if let Some(markers) = self.markers.contents().filter(|_| include_markers) {
+            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers.clone())
+                .try_to_string()
+                .filter(|_| include_markers)
+            {
                 Cow::Owned(format!("{} ; {}", self.dist.verbatim(), markers))
             } else {
                 self.dist.verbatim()
@@ -110,7 +119,10 @@ impl RequirementsTxtDist {
             let mut extras = self.extras.clone();
             extras.sort_unstable();
             extras.dedup();
-            if let Some(markers) = self.markers.contents().filter(|_| include_markers) {
+            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers.clone())
+                .try_to_string()
+                .filter(|_| include_markers)
+            {
                 Cow::Owned(format!(
                     "{}[{}]{} ; {}",
                     self.name(),
