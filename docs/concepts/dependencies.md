@@ -60,6 +60,11 @@ sufficient. If the project depends on packages from Git, remote URLs, or local s
 `tool.uv.sources` can be used to enrich the dependency metadata without ejecting from the
 stands-compliant `project.dependencies` table.
 
+!!! tip
+
+    See the [projects](./projects.md#managing-dependencies) documentation to add, remove, or update
+    dependencies from the `pyproject.toml` from the CLI.
+
 ## Dependency sources
 
 During development, a project may rely on a package that isn't available on PyPI. The following
