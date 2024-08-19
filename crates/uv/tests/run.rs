@@ -173,7 +173,6 @@ fn run_args() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -188,7 +187,6 @@ fn run_args() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     "###);
@@ -453,7 +451,6 @@ fn run_managed_false() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     "###);
 
     Ok(())
@@ -486,7 +483,6 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -507,7 +503,6 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     "###);
@@ -519,7 +514,6 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
@@ -535,7 +529,6 @@ fn run_with() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
       × No solution found when resolving `--with` dependencies:
@@ -567,7 +560,6 @@ fn run_locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -594,7 +586,6 @@ fn run_locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     "###);
@@ -615,7 +606,6 @@ fn run_locked() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -648,7 +638,6 @@ fn run_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
     "###);
 
@@ -673,7 +662,6 @@ fn run_frozen() -> Result<()> {
     Python 3.12.[X]
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
@@ -716,7 +704,6 @@ fn run_empty_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -734,7 +721,6 @@ fn run_empty_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     warning: Requirements file requirements.txt does not contain any dependencies
@@ -773,7 +759,6 @@ fn run_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -796,7 +781,6 @@ fn run_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     "###);
@@ -810,7 +794,6 @@ fn run_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
@@ -833,7 +816,6 @@ fn run_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 2 packages in [TIME]
@@ -855,7 +837,6 @@ fn run_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     error: Reading requirements from stdin is not supported in `uv run`
     "###);
 
@@ -897,7 +878,6 @@ fn run_requirements_txt_arguments() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -953,7 +933,6 @@ fn run_editable() -> Result<()> {
     Hello, world!
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1052,7 +1031,6 @@ fn run_without_output() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Installed 4 packages in [TIME]
     Installed 1 package in [TIME]
     "###);
@@ -1064,7 +1042,6 @@ fn run_without_output() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     "###);
 
     Ok(())
@@ -1110,7 +1087,6 @@ fn run_isolated_python_version() -> Result<()> {
     (3, 8)
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Using Python 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtualenv at: .venv
     Resolved 6 packages in [TIME]
@@ -1131,7 +1107,6 @@ fn run_isolated_python_version() -> Result<()> {
     (3, 8)
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -1156,7 +1131,6 @@ fn run_isolated_python_version() -> Result<()> {
     (3, 12)
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1205,7 +1179,6 @@ fn run_no_project() -> Result<()> {
     [VENV]/[BIN]/python
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1224,7 +1197,6 @@ fn run_no_project() -> Result<()> {
     [VENV]/[BIN]/python
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     "###);
 
     // `run --no-project --isolated` should run in an entirely isolated environment.
@@ -1235,7 +1207,6 @@ fn run_no_project() -> Result<()> {
     [CACHE_DIR]/builds-v0/[TMP]/python
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     "###);
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
@@ -1247,7 +1218,6 @@ fn run_no_project() -> Result<()> {
     [VENV]/[BIN]/python
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     "###);
 
     // `run --no-project --locked` should fail.
@@ -1258,7 +1228,6 @@ fn run_no_project() -> Result<()> {
     [VENV]/[BIN]/python
 
     ----- stderr -----
-    warning: `uv run` is experimental and may change without warning
     warning: `--locked` has no effect when used alongside `--no-project`
     "###);
 

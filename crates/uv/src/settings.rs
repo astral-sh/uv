@@ -14,8 +14,8 @@ use uv_cli::{
     ToolUpgradeArgs,
 };
 use uv_cli::{
-    AddArgs, ColorChoice, Commands, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs,
-    Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
+    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
+    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs, ToolDirArgs,
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
@@ -56,29 +56,12 @@ pub(crate) struct GlobalSettings {
 
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        command: &Commands,
-        args: &GlobalArgs,
-        workspace: Option<&FilesystemOptions>,
-    ) -> Self {
+    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
         let preview = PreviewMode::from(
             flag(args.preview, args.no_preview)
                 .combine(workspace.and_then(|workspace| workspace.globals.preview))
                 .unwrap_or(false),
         );
-
-        // Always use preview mode python preferences during preview commands
-        // TODO(zanieb): There should be a cleaner way to do this, we should probably resolve
-        // force preview to true for these commands but it would break our experimental warning
-        // right now
-        let default_python_preference = if matches!(
-            command,
-            Commands::Project(_) | Commands::Python(_) | Commands::Tool(_)
-        ) {
-            PythonPreference::default_from(PreviewMode::Enabled)
-        } else {
-            PythonPreference::default_from(preview)
-        };
 
         Self {
             quiet: args.quiet,
@@ -116,7 +99,7 @@ impl GlobalSettings {
             python_preference: args
                 .python_preference
                 .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
-                .unwrap_or(default_python_preference),
+                .unwrap_or_else(PythonPreference::default_from_env),
             python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
                 .map(PythonDownloads::from)
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))

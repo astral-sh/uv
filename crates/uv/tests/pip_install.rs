@@ -5664,7 +5664,6 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `uv.sources` is experimental and may change without warning
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

@@ -3,9 +3,7 @@ use anyhow::{Context, Result};
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    Concurrency, ExtrasSpecification, HashCheckingMode, PreviewMode, SetupPyStrategy,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, HashCheckingMode, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_fs::CWD;
 use uv_installer::SitePackages;
@@ -13,7 +11,6 @@ use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -37,17 +34,13 @@ pub(crate) async fn sync(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv sync` is experimental and may change without warning");
-    }
-
     // Identify the project.
     let project = if let Some(package) = package {
         VirtualProject::Project(
@@ -80,7 +73,6 @@ pub(crate) async fn sync(
         venv.interpreter(),
         settings.as_ref().into(),
         Box::new(DefaultResolveLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,
@@ -114,7 +106,6 @@ pub(crate) async fn sync(
         settings.as_ref().into(),
         &state,
         Box::new(DefaultInstallLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,
@@ -137,7 +128,7 @@ pub(super) async fn do_sync(
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn InstallLogger>,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -241,7 +232,6 @@ pub(super) async fn do_sync(
         exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     let site_packages = SitePackages::from_environment(venv)?;
@@ -267,7 +257,6 @@ pub(super) async fn do_sync(
         logger,
         dry_run,
         printer,
-        preview,
     )
     .await?;
 

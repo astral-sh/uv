@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
+use uv_configuration::{Concurrency, ExtrasSpecification};
 use uv_fs::CWD;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::Pep723Script;
@@ -32,17 +32,13 @@ pub(crate) async fn remove(
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv remove` is experimental and may change without warning");
-    }
-
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
         if package.is_some() {
@@ -167,7 +163,6 @@ pub(crate) async fn remove(
         venv.interpreter(),
         settings.as_ref().into(),
         Box::new(DefaultResolveLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,
@@ -199,7 +194,6 @@ pub(crate) async fn remove(
         settings.as_ref().into(),
         &state,
         Box::new(DefaultInstallLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,

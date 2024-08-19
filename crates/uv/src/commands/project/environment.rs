@@ -4,7 +4,7 @@ use cache_key::{cache_digest, hash_digest};
 use distribution_types::Resolution;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_configuration::Concurrency;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::RequirementsSpecification;
 
@@ -34,7 +34,6 @@ impl CachedEnvironment {
         state: &SharedState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
-        preview: PreviewMode,
         connectivity: Connectivity,
         concurrency: Concurrency,
         native_tls: bool,
@@ -64,7 +63,6 @@ impl CachedEnvironment {
             settings.as_ref().into(),
             state,
             resolve,
-            preview,
             connectivity,
             concurrency,
             native_tls,
@@ -114,7 +112,6 @@ impl CachedEnvironment {
             settings.as_ref().into(),
             state,
             install,
-            preview,
             connectivity,
             concurrency,
             native_tls,

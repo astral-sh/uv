@@ -25,7 +25,6 @@ use uv_cache::{ArchiveId, ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, 
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::PreviewMode;
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_types::BuildContext;
@@ -61,11 +60,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         client: &'a RegistryClient,
         build_context: &'a Context,
         concurrent_downloads: usize,
-        preview_mode: PreviewMode,
     ) -> Self {
         Self {
             build_context,
-            builder: SourceDistributionBuilder::new(build_context, preview_mode),
+            builder: SourceDistributionBuilder::new(build_context),
             locks: Rc::new(Locks::default()),
             client: ManagedClient::new(client, concurrent_downloads),
             reporter: None,

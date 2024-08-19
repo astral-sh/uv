@@ -10,9 +10,7 @@ use tracing::debug;
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{
-    Concurrency, ExtrasSpecification, PreviewMode, SetupPyStrategy, SourceStrategy,
-};
+use uv_configuration::{Concurrency, ExtrasSpecification, SetupPyStrategy, SourceStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_fs::CWD;
@@ -60,17 +58,13 @@ pub(crate) async fn add(
     script: Option<PathBuf>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    preview: PreviewMode,
+
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() {
-        warn_user_once!("`uv add` is experimental and may change without warning");
-    }
-
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -292,7 +286,6 @@ pub(crate) async fn add(
         settings.exclude_newer,
         sources,
         concurrency,
-        preview,
     );
 
     // Resolve any unnamed requirements.
@@ -300,7 +293,7 @@ pub(crate) async fn add(
         requirements,
         &hasher,
         &state.index,
-        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads, preview),
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve()
@@ -452,7 +445,6 @@ pub(crate) async fn add(
         venv.interpreter(),
         settings.as_ref().into(),
         Box::new(DefaultResolveLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,
@@ -590,7 +582,6 @@ pub(crate) async fn add(
         settings.as_ref().into(),
         &state,
         Box::new(DefaultInstallLogger),
-        preview,
         connectivity,
         concurrency,
         native_tls,

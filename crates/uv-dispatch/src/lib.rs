@@ -16,11 +16,11 @@ use pypi_types::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
+use uv_configuration::Concurrency;
 use uv_configuration::{
     BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall,
     SetupPyStrategy, SourceStrategy,
 };
-use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution::DistributionDatabase;
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -54,7 +54,6 @@ pub struct BuildDispatch<'a> {
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: SourceStrategy,
     concurrency: Concurrency,
-    preview_mode: PreviewMode,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -77,7 +76,6 @@ impl<'a> BuildDispatch<'a> {
         exclude_newer: Option<ExcludeNewer>,
         sources: SourceStrategy,
         concurrency: Concurrency,
-        preview_mode: PreviewMode,
     ) -> Self {
         Self {
             client,
@@ -100,7 +98,6 @@ impl<'a> BuildDispatch<'a> {
             build_extra_env_vars: FxHashMap::default(),
             sources,
             concurrency,
-            preview_mode,
         }
     }
 
@@ -162,12 +159,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             &HashStrategy::None,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(
-                self.client,
-                self,
-                self.concurrency.downloads,
-                self.preview_mode,
-            ),
+            DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
@@ -250,12 +242,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 tags,
                 &HashStrategy::None,
                 self.build_options,
-                DistributionDatabase::new(
-                    self.client,
-                    self,
-                    self.concurrency.downloads,
-                    self.preview_mode,
-                ),
+                DistributionDatabase::new(self.client, self, self.concurrency.downloads),
             );
 
             debug!(
