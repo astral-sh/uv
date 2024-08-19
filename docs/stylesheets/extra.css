@@ -148,12 +148,13 @@ See https://github.com/astral-sh/uv/issues/5130 */
 }
 
 /* Increase the size of the sections headings, remove the bold */
-.md-nav__item--section>.md-nav__link {
+.md-nav__container > .md-nav__link:first-child {
   font-size: 16px;
   font-weight: normal;
+  margin-bottom: 0.1em;
 }
 /* Increase the size of the index nav item to match the sections */
-.md-nav__item:first-child {
+.md-nav_link:first-child {
   font-size: 16px;
   font-weight: normal;
 }
