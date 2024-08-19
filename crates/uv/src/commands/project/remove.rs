@@ -1,10 +1,13 @@
+use std::fmt::Write;
+
 use anyhow::{Context, Result};
 
+use owo_colors::OwoColorize;
 use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, ExtrasSpecification, PreviewMode};
-use uv_fs::CWD;
+use uv_fs::{Simplified, CWD};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
@@ -141,9 +144,17 @@ pub(crate) async fn remove(
         return Ok(ExitStatus::Success);
     }
 
-    // If `--script`, exit early. There's no reason to lock and sync.
-    let Target::Project(project) = target else {
-        return Ok(ExitStatus::Success);
+    let project = match target {
+        Target::Project(project) => project,
+        // If `--script`, exit early. There's no reason to lock and sync.
+        Target::Script(script) => {
+            writeln!(
+                printer.stderr(),
+                "Updated `{}`",
+                script.path.user_display().cyan()
+            )?;
+            return Ok(ExitStatus::Success);
+        }
     };
 
     // Discover or create the virtual environment.
