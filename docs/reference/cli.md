@@ -3678,8 +3678,6 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
-</dd><dt><code>--legacy-setup-py</code></dt><dd><p>Use legacy <code>setuptools</code> behavior when building source distributions without a <code>pyproject.toml</code></p>
-
 </dd><dt><code>--link-mode</code> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 
 <p>This option is only used when building source distributions.</p>
@@ -4021,8 +4019,6 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
-</dd><dt><code>--legacy-setup-py</code></dt><dd><p>Use legacy <code>setuptools</code> behavior when building source distributions without a <code>pyproject.toml</code></p>
-
 </dd><dt><code>--link-mode</code> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
@@ -4320,8 +4316,6 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul>
-</dd><dt><code>--legacy-setup-py</code></dt><dd><p>Use legacy <code>setuptools</code> behavior when building source distributions without a <code>pyproject.toml</code></p>
-
 </dd><dt><code>--link-mode</code> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>

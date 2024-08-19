@@ -1625,33 +1625,6 @@ use the `keyring` CLI to handle authentication.
 
 ---
 
-#### [`legacy-setup-py`](#pip_legacy-setup-py) {: #pip_legacy-setup-py }
-<span id="legacy-setup-py"></span>
-
-Use legacy `setuptools` behavior when building source distributions without a
-`pyproject.toml`.
-
-**Default value**: `false`
-
-**Type**: `bool`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    legacy-setup-py = true
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    legacy-setup-py = true
-    ```
-
----
-
 #### [`link-mode`](#pip_link-mode) {: #pip_link-mode }
 <span id="link-mode"></span>
 

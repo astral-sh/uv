@@ -28,7 +28,7 @@ use distribution_types::Resolution;
 use pep440_rs::Version;
 use pep508_rs::PackageName;
 use pypi_types::{Requirement, VerbatimParsedUrl};
-use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
+use uv_configuration::{BuildKind, ConfigSettings};
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
@@ -73,14 +73,6 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
     requirements: vec![Requirement::from(
         pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap(),
     )],
-});
-
-/// The requirements for `--legacy-setup-py` builds.
-static SETUP_PY_REQUIREMENTS: LazyLock<[Requirement; 2]> = LazyLock::new(|| {
-    [
-        Requirement::from(pep508_rs::Requirement::from_str("setuptools >= 40.8.0").unwrap()),
-        Requirement::from(pep508_rs::Requirement::from_str("wheel").unwrap()),
-    ]
 });
 
 #[derive(Error, Debug)]
@@ -359,8 +351,6 @@ impl Pep517Backend {
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
     default_resolution: Rc<Mutex<Option<Resolution>>>,
-    /// An in-memory resolution of the build requirements for `--legacy-setup-py` builds.
-    setup_py_resolution: Rc<Mutex<Option<Resolution>>>,
 }
 
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single setup.py
@@ -373,7 +363,7 @@ pub struct SourceBuild {
     source_tree: PathBuf,
     config_settings: ConfigSettings,
     /// If performing a PEP 517 build, the backend to use.
-    pep517_backend: Option<Pep517Backend>,
+    pep517_backend: Pep517Backend,
     /// The PEP 621 project metadata, if any.
     project: Option<Project>,
     /// The virtual environment in which to build the source distribution.
@@ -412,7 +402,6 @@ impl SourceBuild {
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         version_id: String,
-        setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
         build_kind: BuildKind,
@@ -431,8 +420,7 @@ impl SourceBuild {
 
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) =
-            Self::extract_pep517_backend(&source_tree, setup_py, &default_backend)
-                .map_err(|err| *err)?;
+            Self::extract_pep517_backend(&source_tree, &default_backend).map_err(|err| *err)?;
 
         let package_name = project.clone().map(|p| p.name);
 
@@ -457,7 +445,7 @@ impl SourceBuild {
                 build_context,
                 source_build_context,
                 &default_backend,
-                pep517_backend.as_ref(),
+                &pep517_backend,
             )
             .await?;
 
@@ -503,22 +491,20 @@ impl SourceBuild {
         // environment is already setup.
         let runner = PythonRunner::new(concurrent_builds);
         if build_isolation.is_isolated(package_name.as_ref()) {
-            if let Some(pep517_backend) = &pep517_backend {
-                create_pep517_build_environment(
-                    &runner,
-                    &source_tree,
-                    &venv,
-                    pep517_backend,
-                    build_context,
-                    &version_id,
-                    build_kind,
-                    &config_settings,
-                    &environment_variables,
-                    &modified_path,
-                    &temp_dir,
-                )
-                .await?;
-            }
+            create_pep517_build_environment(
+                &runner,
+                &source_tree,
+                &venv,
+                &pep517_backend,
+                build_context,
+                &version_id,
+                build_kind,
+                &config_settings,
+                &environment_variables,
+                &modified_path,
+                &temp_dir,
+            )
+            .await?;
         }
 
         Ok(Self {
@@ -541,9 +527,9 @@ impl SourceBuild {
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         default_backend: &Pep517Backend,
-        pep517_backend: Option<&Pep517Backend>,
+        pep517_backend: &Pep517Backend,
     ) -> Result<Resolution, Error> {
-        Ok(if let Some(pep517_backend) = pep517_backend {
+        Ok(
             if pep517_backend.requirements == default_backend.requirements {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
@@ -565,29 +551,15 @@ impl SourceBuild {
                     .map_err(|err| {
                         Error::RequirementsInstall("build-system.requires (resolve)", err)
                     })?
-            }
-        } else {
-            // Install default requirements for `setup.py`-based builds.
-            let mut resolution = source_build_context.setup_py_resolution.lock().await;
-            if let Some(resolved_requirements) = &*resolution {
-                resolved_requirements.clone()
-            } else {
-                let resolved_requirements = build_context
-                    .resolve(&*SETUP_PY_REQUIREMENTS)
-                    .await
-                    .map_err(|err| Error::RequirementsInstall("setup.py build (resolve)", err))?;
-                *resolution = Some(resolved_requirements.clone());
-                resolved_requirements
-            }
-        })
+            },
+        )
     }
 
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
     fn extract_pep517_backend(
         source_tree: &Path,
-        setup_py: SetupPyStrategy,
         default_backend: &Pep517Backend,
-    ) -> Result<(Option<Pep517Backend>, Option<Project>), Box<Error>> {
+    ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
                 let pyproject_toml: PyProjectToml =
@@ -616,7 +588,7 @@ impl SourceBuild {
                     // a PEP 517 build using the default backend, to match `pip` and `build`.
                     default_backend.clone()
                 };
-                Ok((Some(backend), pyproject_toml.project))
+                Ok((backend, pyproject_toml.project))
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // We require either a `pyproject.toml` or a `setup.py` file at the top level.
@@ -629,13 +601,9 @@ impl SourceBuild {
 
                 // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
-                // case (which we allow via `SetupPyStrategy::Setuptools`), but plans to make PEP
-                // 517 builds the default in the future.
+                // case,  but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                match setup_py {
-                    SetupPyStrategy::Pep517 => Ok((Some(default_backend.clone()), None)),
-                    SetupPyStrategy::Setuptools => Ok((None, None)),
-                }
+                Ok((default_backend.clone(), None))
             }
             Err(err) => Err(Box::new(err.into())),
         }
@@ -644,10 +612,6 @@ impl SourceBuild {
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
     /// actual build.
     pub async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
-        let Some(pep517_backend) = &self.pep517_backend else {
-            return Ok(None);
-        };
-
         // We've already called this method; return the existing result.
         if let Some(metadata_dir) = &self.metadata_directory {
             return Ok(Some(metadata_dir.clone()));
@@ -668,7 +632,7 @@ impl SourceBuild {
         // this is just an optimization.
         //
         // See: https://github.com/astral-sh/uv/issues/2130
-        if pep517_backend.backend == "hatchling.build" {
+        if self.pep517_backend.backend == "hatchling.build" {
             if self
                 .project
                 .as_ref()
@@ -694,7 +658,7 @@ impl SourceBuild {
 
         debug!(
             "Calling `{}.prepare_metadata_for_build_{}()`",
-            pep517_backend.backend, self.build_kind,
+            self.pep517_backend.backend, self.build_kind,
         );
         let script = formatdoc! {
             r#"
@@ -710,7 +674,7 @@ impl SourceBuild {
             with open("{}", "w") as fp:
                 fp.write(dirname or "")
             "#,
-            pep517_backend.backend_import(),
+            self.pep517_backend.backend_import(),
             self.build_kind,
             escape_path_for_python(&metadata_directory),
             self.config_settings.escape_for_python(),
@@ -760,55 +724,16 @@ impl SourceBuild {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
-        if let Some(pep517_backend) = &self.pep517_backend {
-            // Prevent clashes from two uv processes building wheels in parallel.
-            let tmp_dir = tempdir_in(&wheel_dir)?;
-            let filename = self.pep517_build(tmp_dir.path(), pep517_backend).await?;
+        // Prevent clashes from two uv processes building wheels in parallel.
+        let tmp_dir = tempdir_in(&wheel_dir)?;
+        let filename = self
+            .pep517_build(tmp_dir.path(), &self.pep517_backend)
+            .await?;
 
-            let from = tmp_dir.path().join(&filename);
-            let to = wheel_dir.join(&filename);
-            rename_with_retry(from, to).await?;
-            Ok(filename)
-        } else {
-            if self.build_kind != BuildKind::Wheel {
-                return Err(Error::EditableSetupPy);
-            }
-            // We checked earlier that setup.py exists.
-            let span = info_span!(
-                "run_python_script",
-                script="setup.py bdist_wheel",
-                python_version = %self.venv.interpreter().python_version()
-            );
-            let output = self
-                .runner
-                .run_setup_py(&self.venv, "bdist_wheel", &self.source_tree)
-                .instrument(span)
-                .await?;
-            if !output.status.success() {
-                return Err(Error::from_command_output(
-                    "Failed building wheel through setup.py".to_string(),
-                    &output,
-                    &self.version_id,
-                ));
-            }
-            let dist = fs::read_dir(self.source_tree.join("dist"))?;
-            let dist_dir = dist.collect::<io::Result<Vec<fs_err::DirEntry>>>()?;
-            let [dist_wheel] = dist_dir.as_slice() else {
-                return Err(Error::from_command_output(
-                    format!(
-                        "Expected exactly wheel in `dist/` after invoking setup.py, found {dist_dir:?}"
-                    ),
-                    &output,
-                    &self.version_id)
-                );
-            };
-
-            let from = dist_wheel.path();
-            let to = wheel_dir.join(dist_wheel.file_name());
-            fs_err::copy(from, to)?;
-
-            Ok(dist_wheel.file_name().to_string_lossy().to_string())
-        }
+        let from = tmp_dir.path().join(&filename);
+        let to = wheel_dir.join(&filename);
+        rename_with_retry(from, to).await?;
+        Ok(filename)
     }
 
     async fn pep517_build(
@@ -1068,28 +993,6 @@ impl PythonRunner {
             // Activate the venv
             .env("VIRTUAL_ENV", venv.root())
             .env("CLICOLOR_FORCE", "1")
-            .output()
-            .await
-            .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
-    }
-
-    /// Spawn a process that runs a `setup.py` script.
-    ///
-    /// If the concurrency limit has been reached this method will wait until a pending
-    /// script completes before spawning this one.
-    ///
-    /// Note: It is the caller's responsibility to create an informative span.
-    async fn run_setup_py(
-        &self,
-        venv: &PythonEnvironment,
-        script: &str,
-        source_tree: &Path,
-    ) -> Result<Output, Error> {
-        let _permit = self.control.acquire().await.unwrap();
-
-        Command::new(venv.python_executable())
-            .args(["setup.py", script])
-            .current_dir(source_tree.simplified())
             .output()
             .await
             .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
