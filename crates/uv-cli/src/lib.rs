@@ -2009,8 +2009,8 @@ pub struct VenvArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = "UV_EXCLUDE_NEWER")]
     pub exclude_newer: Option<ExcludeNewer>,
 
@@ -3314,8 +3314,8 @@ pub struct InstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
@@ -3488,8 +3488,8 @@ pub struct ResolverArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 
@@ -3660,8 +3660,8 @@ pub struct ResolverInstallerArgs {
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
-    /// format (e.g., `2006-12-02`).
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = "UV_EXCLUDE_NEWER", help_heading = "Resolver options")]
     pub exclude_newer: Option<ExcludeNewer>,
 

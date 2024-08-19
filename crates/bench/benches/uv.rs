@@ -82,7 +82,6 @@ mod resolver {
     use std::sync::LazyLock;
 
     use anyhow::Result;
-    use chrono::NaiveDate;
 
     use distribution_types::IndexLocations;
     use install_wheel_rs::linker::LinkMode;
@@ -144,11 +143,10 @@ mod resolver {
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let exclude_newer = Some(
-            NaiveDate::from_ymd_opt(2024, 8, 8)
+            jiff::civil::date(2024, 8, 8)
+                .to_zoned(jiff::tz::TimeZone::UTC)
                 .unwrap()
-                .and_hms_opt(0, 0, 0)
-                .unwrap()
-                .and_utc()
+                .timestamp()
                 .into(),
         );
         let flat_index = FlatIndex::default();

@@ -70,7 +70,6 @@ base64 = { version = "0.22.0" }
 boxcar = { version = "0.2.5" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.8" }
-chrono = { version = "0.4.31" }
 clap = { version = "4.5.9" }
 clap_complete_command = { version = "0.6.0" }
 configparser = { version = "3.0.4" }
@@ -98,6 +97,7 @@ indexmap = { version = "2.2.5" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
 itertools = { version = "0.13.0" }
+jiff = { version = "0.1.6", features = ["serde"] }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }

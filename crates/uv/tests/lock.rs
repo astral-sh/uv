@@ -52,7 +52,7 @@ fn lock_wheel_registry() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -267,7 +267,7 @@ fn lock_sdist_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -364,7 +364,7 @@ fn lock_sdist_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -422,7 +422,7 @@ fn lock_sdist_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -480,7 +480,7 @@ fn lock_sdist_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -542,7 +542,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "example-pkg-a"
@@ -629,7 +629,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -694,7 +694,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -748,7 +748,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -802,7 +802,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -863,7 +863,7 @@ fn lock_wheel_url() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1010,7 +1010,7 @@ fn lock_sdist_url() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1146,7 +1146,7 @@ fn lock_project_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -1411,7 +1411,7 @@ fn lock_dependency_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "blinker"
@@ -1616,7 +1616,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "certifi"
@@ -1898,7 +1898,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "blinker"
@@ -2082,7 +2082,7 @@ fn lock_upgrade_log() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2165,7 +2165,7 @@ fn lock_upgrade_log() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "markupsafe"
@@ -2257,7 +2257,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "markupsafe"
@@ -2340,7 +2340,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "markupsafe"
@@ -2414,7 +2414,7 @@ fn lock_preference() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2474,7 +2474,7 @@ fn lock_preference() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2521,7 +2521,7 @@ fn lock_preference() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -2575,7 +2575,7 @@ fn lock_git_sha() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -2626,7 +2626,7 @@ fn lock_git_sha() -> Result<()> {
         ----- stderr -----
         warning: `uv lock` is experimental and may change without warning
         Resolved 2 packages in [TIME]
-        "###);
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -2641,7 +2641,7 @@ fn lock_git_sha() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -2740,7 +2740,7 @@ fn lock_requires_python() -> Result<()> {
         requires-python = ">=3.7"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -2892,7 +2892,7 @@ fn lock_requires_python() -> Result<()> {
         requires-python = ">=3.7.9"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3034,7 +3034,7 @@ fn lock_requires_python() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3178,7 +3178,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         requires-python = "==3.12.*"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "frozenlist"
@@ -3263,7 +3263,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         requires-python = "==3.11.*"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "frozenlist"
@@ -3373,7 +3373,7 @@ fn lock_requires_python_star() -> Result<()> {
         requires-python = "==3.11.*"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3497,7 +3497,7 @@ fn lock_requires_python_pre() -> Result<()> {
         requires-python = ">=3.11"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3620,7 +3620,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         requires-python = "<=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -3718,7 +3718,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "attrs"
@@ -3824,7 +3824,7 @@ fn lock_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -3942,7 +3942,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -4021,7 +4021,7 @@ fn lock_multiple_markers() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -4140,7 +4140,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         requires-python = ">=3.11, <3.13"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "a"
@@ -4222,7 +4222,7 @@ fn lock_cycles() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "argparse"
@@ -4427,7 +4427,7 @@ fn lock_new_extras() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "certifi"
@@ -4552,7 +4552,7 @@ fn lock_new_extras() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "certifi"
@@ -4799,7 +4799,7 @@ fn lock_resolution_mode() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -4882,7 +4882,7 @@ fn lock_resolution_mode() -> Result<()> {
 
         [options]
         resolution-mode = "lowest-direct"
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -5047,7 +5047,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -5264,7 +5264,7 @@ fn lock_exclusion() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "child"
@@ -5383,7 +5383,7 @@ fn lock_dev_transitive() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -5506,7 +5506,7 @@ fn lock_redact_https() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "foo"
@@ -5657,7 +5657,7 @@ fn lock_redact_git() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "foo"
@@ -5746,7 +5746,7 @@ fn lock_relative_index() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "foo"
@@ -5854,7 +5854,7 @@ fn lock_no_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -5928,7 +5928,7 @@ fn lock_no_sources() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6013,7 +6013,7 @@ fn lock_migrate() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[distribution-term-we-dont-know]]
         name = "anyio"
@@ -6081,7 +6081,7 @@ fn lock_migrate() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6181,7 +6181,7 @@ fn lock_upgrade_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6278,7 +6278,7 @@ fn lock_upgrade_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6363,7 +6363,7 @@ fn lock_upgrade_package() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -6528,7 +6528,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -6620,7 +6620,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -6711,7 +6711,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "packaging"
@@ -6805,7 +6805,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "packaging"
@@ -7021,7 +7021,7 @@ fn lock_sources_url() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -7160,7 +7160,7 @@ fn lock_sources_archive() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -7314,7 +7314,7 @@ fn lock_sources_source_tree() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -7447,7 +7447,7 @@ fn lock_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -7530,7 +7530,7 @@ fn lock_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -7691,7 +7691,7 @@ fn lock_mixed_extras() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -7887,7 +7887,7 @@ fn lock_transitive_extra() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -8083,7 +8083,7 @@ fn lock_mismatched_versions() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -8204,7 +8204,7 @@ fn lock_change_index() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -8251,7 +8251,7 @@ fn lock_change_index() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -8347,7 +8347,7 @@ fn lock_remove_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -8472,7 +8472,7 @@ fn lock_remove_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -8530,7 +8530,7 @@ fn lock_add_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "project"
@@ -8641,7 +8641,7 @@ fn lock_add_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -8745,7 +8745,7 @@ fn lock_redundant_add_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -8852,7 +8852,7 @@ fn lock_redundant_add_member() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -8944,7 +8944,7 @@ fn lock_new_constraints() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -9053,7 +9053,7 @@ fn lock_new_constraints() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         constraints = [{ name = "anyio", specifier = "<4.3" }]
@@ -9154,7 +9154,7 @@ fn lock_remove_member_virtual() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
         members = [
@@ -9263,7 +9263,7 @@ fn lock_remove_member_virtual() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
         "###
         );
     });
@@ -9310,7 +9310,7 @@ fn lock_rename_project() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -9393,7 +9393,7 @@ fn lock_rename_project() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "iniconfig"
@@ -9445,7 +9445,7 @@ fn lock_missing_metadata() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -9496,7 +9496,7 @@ fn lock_missing_metadata() -> Result<()> {
         ----- stderr -----
         warning: `uv lock` is experimental and may change without warning
         Resolved 4 packages in [TIME]
-        "###);
+    "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -9509,7 +9509,7 @@ fn lock_missing_metadata() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -9597,7 +9597,7 @@ fn lock_reorder() -> Result<()> {
         requires-python = ">=3.12"
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
@@ -9750,7 +9750,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "dependency"
@@ -9854,7 +9854,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         ]
 
         [options]
-        exclude-newer = "2024-03-25 00:00:00 UTC"
+        exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
         name = "anyio"
