@@ -24,7 +24,7 @@ impl FromStr for ExcludeNewer {
 
     /// Parse an [`ExcludeNewer`] from a string.
     ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`).
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         // NOTE(burntsushi): Previously, when using Chrono, we tried
@@ -45,17 +45,9 @@ impl FromStr for ExcludeNewer {
         let date = input
             .parse::<jiff::civil::Date>()
             .map_err(|err| format!("`{input}` could not be parsed as a valid date: {err}"))?;
-        // Midnight that day is 00:00:00 the next day
-        //
-        // NOTE(burntsushi): This (and the above comment) is what this
-        // code used to do with Chrono, but I'm not clear as to why a
-        // day is being added here. Note also that it is suspicious to
-        // be parsing a date and automatically assuming UTC. We could
-        // instead use the user's time zone. But I left this as-is to
-        // preserve existing behavior.
         let timestamp = date
             .checked_add(1.day())
-            .and_then(|date| date.to_zoned(TimeZone::UTC))
+            .and_then(|date| date.to_zoned(TimeZone::system()))
             .map(|zdt| zdt.timestamp())
             .map_err(|err| {
                 format!(
@@ -89,7 +81,7 @@ impl schemars::JsonSchema for ExcludeNewer {
                 ..schemars::schema::StringValidation::default()
             })),
             metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same format (e.g., `2006-12-02`).".to_string()),
+                description: Some("Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).".to_string()),
               ..schemars::schema::Metadata::default()
             })),
             ..schemars::schema::SchemaObject::default()
