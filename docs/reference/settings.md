@@ -61,6 +61,87 @@ ignore errors.
 
 ---
 
+#### [`concurrent-builds`](#concurrent-builds) {: #concurrent-builds }
+
+The maximum number of source distributions that uv will build concurrently at any given
+time.
+
+Defaults to the number of available CPU cores.
+
+**Default value**: `None`
+
+**Type**: `int`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    concurrent-builds = 4
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    concurrent-builds = 4
+    ```
+
+---
+
+#### [`concurrent-downloads`](#concurrent-downloads) {: #concurrent-downloads }
+
+The maximum number of in-flight concurrent downloads that uv will perform at any given
+time.
+
+**Default value**: `50`
+
+**Type**: `int`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    concurrent-downloads = 4
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    concurrent-downloads = 4
+    ```
+
+---
+
+#### [`concurrent-installs`](#concurrent-installs) {: #concurrent-installs }
+
+The number of threads used when installing and unzipping packages.
+
+Defaults to the number of available CPU cores.
+
+**Default value**: `None`
+
+**Type**: `int`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    concurrent-installs = 4
+    ```
+=== "uv.toml"
+
+    ```toml
+    
+    concurrent-installs = 4
+    ```
+
+---
+
 #### [`config-settings`](#config-settings) {: #config-settings }
 
 Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend,
@@ -1044,90 +1125,6 @@ ignore errors.
     ```toml
     [pip]
     compile-bytecode = true
-    ```
-
----
-
-#### [`concurrent-builds`](#pip_concurrent-builds) {: #pip_concurrent-builds }
-<span id="concurrent-builds"></span>
-
-The maximum number of source distributions that uv will build concurrently at any given
-time.
-
-Defaults to the number of available CPU cores.
-
-**Default value**: `None`
-
-**Type**: `int`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    concurrent-builds = 4
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    concurrent-builds = 4
-    ```
-
----
-
-#### [`concurrent-downloads`](#pip_concurrent-downloads) {: #pip_concurrent-downloads }
-<span id="concurrent-downloads"></span>
-
-The maximum number of in-flight concurrent downloads that uv will perform at any given
-time.
-
-**Default value**: `50`
-
-**Type**: `int`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    concurrent-downloads = 4
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    concurrent-downloads = 4
-    ```
-
----
-
-#### [`concurrent-installs`](#pip_concurrent-installs) {: #pip_concurrent-installs }
-<span id="concurrent-installs"></span>
-
-The number of threads used when installing and unzipping packages.
-
-Defaults to the number of available CPU cores.
-
-**Default value**: `None`
-
-**Type**: `int`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    concurrent-installs = 4
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    concurrent-installs = 4
     ```
 
 ---
