@@ -75,6 +75,7 @@ impl StateStore {
     }
 
     /// Prefer, in order:
+    ///
     /// 1. The specific state directory specified by the user.
     /// 2. The system-appropriate user-level data directory.
     /// 3. A `.uv` directory in the current working directory.

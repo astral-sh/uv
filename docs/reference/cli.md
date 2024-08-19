@@ -3328,7 +3328,11 @@ uv python pin [OPTIONS] [REQUEST]
 
 ### uv python dir
 
-Show the uv Python installation directory
+Show the uv Python installation directory.
+
+By default, Python installations are stored in the uv data directory at `$XDG_DATA_HOME/uv/python` or `$HOME/.local/share/uv/python` on Unix and `{FOLDERID_RoamingAppData}\uv\data\python` on Windows.
+
+The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
 
 <h3 class="cli-reference">Usage</h3>
 
