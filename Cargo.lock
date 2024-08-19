@@ -2466,7 +2466,6 @@ name = "pep508_rs"
 version = "0.6.0"
 dependencies = [
  "boxcar",
- "derivative",
  "indexmap",
  "insta",
  "itertools 0.13.0",
