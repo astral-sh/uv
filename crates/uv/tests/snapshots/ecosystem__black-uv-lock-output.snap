@@ -8,4 +8,4 @@ exit_code: 0
 
 ----- stderr -----
 warning: `uv lock` is experimental and may change without warning
-Resolved 40 packages in [TIME]
+Resolved 39 packages in [TIME]
