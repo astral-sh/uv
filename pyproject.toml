@@ -68,6 +68,7 @@ version_files = [
   "crates/uv/Cargo.toml",
   "crates/uv-version/Cargo.toml",
   "docs/guides/integration/pre-commit.md",
+  "docs/guides/integration/github.md",
 ]
 
 [tool.uv]

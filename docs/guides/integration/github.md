@@ -2,46 +2,123 @@
 
 ## Installation
 
-uv installation differs depending on the platform.
+uv installation differs depending on the platform:
 
-### Unix
+=== "Unix"
 
-```yaml title="example.yml"
-name: Example on Unix
+    ```yaml title="example.yml"
+    name: Example on Unix
 
-jobs:
-  uv-example-linux:
-    name: python-linux
-    runs-on: ubuntu-latest
+    jobs:
+      uv-example-linux:
+        name: python-linux
+        runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+        steps:
+          - uses: actions/checkout@v4
 
-      - name: Set up uv
-        # Install uv using the standalone installer
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+          - name: Set up uv
+            # Install latest uv version using the installer
+            run: curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
 
-### Windows
+=== "macOS"
 
-```yaml title="example.yml"
-name: Example on Windows
+    ```yaml title="example.yml"
+    name: Example on macOS
 
-jobs:
-  uv-example-windows:
-    name: python-windows
-    runs-on: windows-latest
+    jobs:
+      uv-example-macos:
+        name: python-macos
+        runs-on: macos-latest
 
-    steps:
-      - uses: actions/checkout@v4
+        steps:
+          - uses: actions/checkout@v4
 
-      - name: Set up uv
-        # Install uv using the standalone installer
-        run: irm https://astral.sh/uv/install.ps1 | iex
-        shell: powershell
-```
+          - name: Set up uv
+            # Install latest uv version using the installer
+            run: curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```yaml title="example.yml"
+    name: Example on Windows
+
+    jobs:
+      uv-example-windows:
+        name: python-windows
+        runs-on: windows-latest
+
+        steps:
+          - uses: actions/checkout@v4
+
+          - name: Set up uv
+            # Install latest uv version using the installer
+            run: irm https://astral.sh/uv/install.ps1 | iex
+            shell: powershell
+    ```
+
+It is considered best practice to pin to a specific uv version, e.g., with:
+
+=== "Unix"
+
+    ```yaml title="example.yml"
+    name: Example on Unix
+
+    jobs:
+      uv-example-linux:
+        name: python-linux
+        runs-on: ubuntu-latest
+
+        steps:
+          - uses: actions/checkout@v4
+
+          - name: Set up uv
+            # Install a specific uv version using the installer
+            run: curl -LsSf https://astral.sh/uv/0.2.37/install.sh | sh
+    ```
+
+=== "macOS"
+
+    ```yaml title="example.yml"
+    name: Example on macOS
+
+    jobs:
+      uv-example-macos:
+        name: python-macos
+        runs-on: macos-latest
+
+        steps:
+          - uses: actions/checkout@v4
+
+          - name: Set up uv
+            # Install a specific uv version using the installer
+            run: curl -LsSf https://astral.sh/uv/0.2.37/install.sh | sh
+    ```
+
+=== "Windows"
+
+    ```yaml title="example.yml"
+    name: Example on Windows
+
+    jobs:
+      uv-example-windows:
+        name: python-windows
+        runs-on: windows-latest
+
+        steps:
+          - uses: actions/checkout@v4
+
+          - name: Set up uv
+            # Install a specific uv version using the installer
+            run: irm https://astral.sh/uv/0.2.37/install.ps1 | iex
+            shell: powershell
+    ```
 
 ### Using a matrix
+
+If you need to support multiple platforms, you can use a matrix:
 
 ```yaml title="example.yml"
 name: Example
